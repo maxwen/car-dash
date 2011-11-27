@@ -142,6 +142,8 @@ class CANMonitor(QMainWindow):
         lcd.setDigitCount(8)
         if mode==QLCDNumber.Bin:
             lcd.display("00000000")
+        else:
+            lcd.display(0)
         lcd.setSegmentStyle(QLCDNumber.Flat)
         lcd.setAutoFillBackground(True)
         palette = lcd.palette()
@@ -236,7 +238,7 @@ class CANMonitor(QMainWindow):
 #        exitAction = QAction(QIcon(), 'Exit', self)
 #        exitAction.setShortcut('Ctrl+Q')
 #        exitAction.setStatusTip('Exit application')
-#        exitAction.triggered.connect(self.close)
+#        exitAction.triggered.connectTo(self.close)
 
         self.statusbar=self.statusBar()
 
@@ -250,15 +252,21 @@ class CANMonitor(QMainWindow):
         self.connectedIcon=QIcon("images/network-connect.png")
         self.disconnectIcon=QIcon("images/network-disconnect.png")
         self.connectAction = QAction(self.disconnectIcon , 'Connect', self)
-        self.connectAction.triggered.connect(self._connectToDataSource)
+        self.connectAction.triggered.connect(self._connect1)
         self.connectAction.setCheckable(True)
 #        self.connectAction.setChecked(True)
         
         toolbar.addAction(self.connectAction)
         
+        mainWidget=QWidget()
+        self.setCentralWidget(mainWidget)
+        top=QVBoxLayout(mainWidget)
+#        self.setCentralWidget(top)
+#        self.setLayout(top)
+        
         tabs = QTabWidget(self)
-        self.setCentralWidget(tabs)
-
+        top.addWidget(tabs)
+        
         tab1 = QWidget()
         tab2 = QWidget() 
         tab3=QWidget()
@@ -416,6 +424,10 @@ class CANMonitor(QMainWindow):
          
         self.createCANIdValueEntry(vbox1, 0x353, "0", QLCDNumber.Dec)
 
+        self.connectButton = QCheckBox('Connect')
+        self.connectButton.clicked.connect(self._connect2)
+        top.addWidget(self.connectButton)
+        
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
         self.show()
@@ -483,19 +495,20 @@ class CANMonitor(QMainWindow):
 #            print("ui update")
         
     def matchFilter(self, canId, line):
-        idMatch=self.matchIdFilter(canId)
-        
-        if idMatch==False:
-            return False
-        
-        if self.filterAll.isChecked():
-            return idMatch
-        
-        isKnownId=self.canIdIsInKnownList(canId)
-        if self.filterKnown.isChecked():
-            return isKnownId==False
-        if self.filterUnknown.isChecked():
-            return isKnownId==True
+        if self.filter==True:
+            idMatch=self.matchIdFilter(canId)
+            
+            if idMatch==False:
+                return False
+            
+            if self.filterAll.isChecked():
+                return idMatch
+            
+            isKnownId=self.canIdIsInKnownList(canId)
+            if self.filterKnown.isChecked():
+                return isKnownId==False
+            if self.filterUnknown.isChecked():
+                return isKnownId==True
         return True
     
     def matchIdFilter(self, canId):        
@@ -604,10 +617,11 @@ class CANMonitor(QMainWindow):
         
     @pyqtSlot()
     def _enableFilter(self):
-        if self.filter==True:
-            self.filter=False
-        else:
-            self.filter=True
+        self.filter=self.filterButton.isChecked()
+#        if self.filter==True:
+#            self.filter=False
+#        else:
+#            self.filter=True
             
         self.filterEdit.setDisabled(self.filter==False)
         self.applyFilterButton.setDisabled(self.filter==False)
@@ -670,20 +684,30 @@ class CANMonitor(QMainWindow):
         self._enableLogFile()
     
     @pyqtSlot()
-    def _connectToDataSource(self):
-        #self.connectEnable=self.connectButton.checkState()==Qt.Checked
+    def _connect1(self):
         self.connectEnable=self.connectAction.isChecked()
+        self.connectTo()
+        
+    @pyqtSlot()
+    def _connect2(self):
+        self.connectEnable=self.connectButton.isChecked()
+        self.connectTo()
+    
+    def connectTo(self):
         if self.connectEnable==True:
             self._clearTable()
             self.thread.connectCANDevice()
         else:
             self.thread.disconnectCANDevice()
             self.update=False
+            self.connectAction.setIcon(self.disconnectIcon)
             
         self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
         self.pauseButton.setDisabled(self.update==False or self.connectEnable==False)
         self.continueButton.setDisabled(self.update==True or self.connectEnable==False)
-        
+        self.connectAction.setChecked(self.connectEnable==True)
+        self.connectButton.setChecked(self.connectEnable==True)
+    
     def connectEnabled(self):
         return self.connectEnable
     
