@@ -30,23 +30,23 @@ class CANDecoder:
         return canId, dlc, data[:dlc]
     
     def calcVolt(self, data):
-        return (int(data[0]) / 2 + 50)/10
+        return (data[0] / 2 + 50)/10
     
     def calcRpm(self, data):
-        rpm=int(((data[2] << 8) + data[1]) / 4)
+        rpm=int((((data[2] << 8) + data[1]) / 4)/10)*10
         self.rpmValueList.append(rpm)
         rpmValue=self.rpmValueList[0]+self.rpmValueList[1]+self.rpmValueList[2]
         rpmValueAverage=int(rpmValue/len(self.rpmValueList))
         return rpmValueAverage
     
     def calcOilTemp(self, data):
-        return int(data[3]) - 80
+        return data[3] - 80
     
     def calcVelocity(self, data):
-        return int(((data[2] << 8) + data[1] - 1) / 190)
+        return ((data[2] << 8) + data[1] - 1) / 190
     
     def calcOuterTemp(self, data):
-        return (int(data[5])) / 2 - 50
+        return data[5] / 2 - 50
 
     # pretty print can_frame struct
     def scan_can_frame(self, can_frame):
@@ -55,14 +55,14 @@ class CANDecoder:
         self.widget.addToLogView([canId, dlc, data])
         
         if canId == 0x571:
-            self.widget.displayValueWithFormat("0x571", "0", self.calcVolt(data), "%.2f")            
+            self.widget.displayFloatValue(canId, "0", self.calcVolt(data), "%.2f")            
         elif canId == 0x623:
             hour=str(hex(data[1])).lstrip("0x") if data[1]!=0 else "0"
             minutes=str(hex(data[2])).lstrip("0x") if data[2]!=0 else "0"
             seconds=str(hex(data[3])).lstrip("0x") if data[3]!=0 else "0"
-            self.widget.displayValueWithFormat("0x623","0", int(hour, 10), "%02d")
-            self.widget.displayValueWithFormat("0x623","1", int(minutes, 10), "%02d")
-            self.widget.displayValueWithFormat("0x623","2", int(seconds, 10), "%02d")
+            self.widget.displayIntValue(canId,"0", int(hour, 10), "%02d")
+            self.widget.displayIntValue(canId,"1", int(minutes, 10), "%02d")
+            self.widget.displayIntValue(canId,"2", int(seconds, 10), "%02d")
         elif canId == 0x371:
         #ID 0x371, 3 Bytes
         #Byte 1:
@@ -79,9 +79,9 @@ class CANDecoder:
         #- Bit 1: Links
         #- Bit 2: Rechts
         #88/8F: Alternierend bei Warnblinker ein 
-            self.widget.displayValue("0x371", "0", self.hex2binary(data[0]))
-            self.widget.displayValue("0x371", "1", self.hex2binary(data[1]))
-            self.widget.displayValue("0x371", "2", self.hex2binary(data[2]))
+            self.widget.displayBinValue(canId, "0", self.hex2binary(data[0]), "%8s")
+            self.widget.displayBinValue(canId, "1", self.hex2binary(data[1]), "%8s")
+            self.widget.displayBinValue(canId, "2", self.hex2binary(data[2]), "%8s")
         elif canId == 0x271:
         #0x271 Zuendung, 1 byte, Meldung ca. alle 100ms
         #Status in Byte 1:
@@ -92,11 +92,11 @@ class CANDecoder:
         #0x07: Fzg. unverschlossen, Schluessel steckt in Pos. 3, Zuendung an
         #0x0B: Fzg. unverschlossen, Schluessel steckt in Pos. 4, Zuendung an, Anlasser an
         #0x87: Fzg. unverschlossen, Schluessel steckt in Pos. 3, Zuendung an, Motor läuft 
-            self.widget.displayValue("0x271", "0", data[0])    
+            self.widget.displayIntValue(canId, "0", data[0], "%d")    
         elif canId == 0x635:
         #die ID 0x635 enthält in Byte 1 die Instrumentenhelligkeit bei eingeschaltetem Licht, ansonsten ist der Wert 0. Der Wertebereich liegt zwischen ca. 13 und 5D.
         #Byte 2 enthält immer FF.
-            self.widget.displayValue("0x635", "0", data[0])
+            self.widget.displayIntValue(canId, "0", data[0], "%d")
         elif canId == 0x353: 
         #       ID 0x353, 6 Bytes
         #Byte 1:
@@ -112,9 +112,9 @@ class CANDecoder:
         #Byte 6:
         #- Unbekannt, jedoch zählt der Wert im Stand hoch auf 32 und geht bei Fahrt langsam und abhängig von der Standzeit auf 19 
             rpm=self.calcRpm(data)
-            self.widget.displayValue("0x353", "0", rpm)
+            self.widget.displayIntValue(canId, "0", rpm, "%d")
             self.widget.setValueDashDisplayRPM(rpm)
-            self.widget.displayValue("0x353", "1", self.calcOilTemp(data))
+            self.widget.displayIntValue(canId, "1", self.calcOilTemp(data), "%d")
 
         elif canId == 0x351:
         #ID 0x351, 8 Bytes
@@ -139,9 +139,9 @@ class CANDecoder:
         #Byte 8:
         #- Schaltstufe bei Automatikgetriebe ? 
             vel=self.calcVelocity(data)
-            self.widget.displayValue("0x351", "0", vel)
+            self.widget.displayIntValue(canId, "0", vel, "%d")
             self.widget.setValueDashDisplayVel(vel)
-            self.widget.displayValueWithFormat("0x351", "1", self.calcOuterTemp(data), "%.1f")
+            self.widget.displayFloatValue(canId, "1", self.calcOuterTemp(data), "%.1f")
             
         #else:
         #   print(self.dump(canId, dlc, data))
@@ -260,28 +260,28 @@ class CANSocketWorker(QThread):
                 for x in self.replayLines:
                     self.canDecoder.scan_can_frame(x);
 #                    self.app.processEvents()
-                    self.sleep(0.1)
+                    self.usleep(1000)
                 self.replayMode=False
                 #self.replayLines=list()
                 self.canMonitor.replayModeDone()
             if self.connected==True:
                 if self.test==True:#
-                    cf = struct.pack("IIBBBBBBBB", 0x353, 6, 0x0f, 0x0, 0x7b, 0x7b, 0x0, 0x0, 0x0, 0x0)
+                    cf = struct.pack("IIBBBBBBBB", 0x353, 6, 0x0f, 0xd0, 0x1f, 0xb0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
-                    cf = struct.pack("IIBBBBBBBB", 0x351, 8, 0x75, 0x01, 0xa0, 0x0, 0x0, 0x0, 0x0, 0x0)
+                    cf = struct.pack("IIBBBBBBBB", 0x351, 8, 0x75, 0xad, 0x45, 0x0, 0x0, 0x7d, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x635, 3, 0x0, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x271, 2, 0x01, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
-                    cf = struct.pack("IIBBBBBBBB", 0x371, 3, 0xff, 0xff, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0)
+                    cf = struct.pack("IIBBBBBBBB", 0x371, 3, 0xc0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x623, 8, 0x04, 0x07, 0x08, 0x09, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x571, 6, 0x94, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
 #                    self.app.processEvents()
-                    self.sleep(0.1)
+                    self.usleep(1000)
                 elif self.s!=None:
                     try:
                         cf, addr = self.s.recvfrom(16)
@@ -293,7 +293,7 @@ class CANSocketWorker(QThread):
                         continue
                     self.canDecoder.scan_can_frame(cf)
 #                    self.app.processEvents()
-                    self.sleep(0.1)
+                    self.usleep(1000)
             else:
                 self.canMonitor.clearAllLCD()
                 self.sleep(1) 
