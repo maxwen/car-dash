@@ -9,7 +9,7 @@ import fnmatch
 from canutils import CANDecoder, CANSocketWorker
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
-from PyQt4.QtGui import QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView, QAction, QIcon
+from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView, QAction, QIcon
 
 from collections import deque
 from gaugepng import QtPngDialGauge
@@ -21,6 +21,24 @@ ID_COL=2
 SIZE_COL=3
 DATA_COL=4
 
+#class CANMonitorUpateUIWorker(QThread):
+#    def __init__(self, parent=None): 
+#        QThread.__init__(self, parent)
+#        self.exiting = False
+#        
+#    def __del__(self):
+#        self.exiting = True
+#        self.wait()
+#        
+#    def setup(self, canMonitor):
+#        self.canMonitor=canMonitor
+#        self.start()
+#            
+#    def run(self):
+#        while not self.exiting and True:
+#            self.canMonitor.updateValuesDisplay()
+#            self.msleep(500) 
+                
 class CANLogViewTableModel(QAbstractTableModel):
     def __init__(self, canMonitor, logBuffer, canIdList, parent=None):
         QAbstractTableModel.__init__(self, parent)
@@ -29,6 +47,7 @@ class CANLogViewTableModel(QAbstractTableModel):
         self.canMonitor=canMonitor
         self.redBackground=QBrush(QColor(255, 0, 0))
         self.greenBackground=QBrush(QColor(0, 255, 0))
+        self.blackForeground=QBrush(QColor(0, 0, 0))
         
     def rowCount(self, parent): 
         return self.logBuffer.maxlen
@@ -57,6 +76,10 @@ class CANLogViewTableModel(QAbstractTableModel):
             if self.canMonitor.canIdIsInKnownList(self.logBuffer[index.row()][ID_COL]): 
                 return self.greenBackground
             return self.redBackground
+        elif role==Qt.TextColorRole:
+            if index.row() >= len(self.logBuffer):
+                return None
+            return self.blackForeground
         elif role != Qt.DisplayRole:
             return None
         
@@ -111,17 +134,17 @@ class CANMonitor(QMainWindow):
         self.logEntryCount=1
         self.maxLogEntryCount=65353
         self.tableUpdateCouter=0
-        self.displayUpdateCouter=0
         self.update=False
         self.filter=False
         self.filterValue=""
+        self.filterRingIds=True
         self.logFile=None
-        self.logFileEnable=False
         self.test=test
         self.logFileName="/tmp/candash.log"
         self.connectEnable=False
         self.replayMode=False
-        self.canIdList=[0x353, 0x353, 0x351, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571]
+        self.canIdList=[0x353, 0x353, 0x351, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5]
+        self.updateThread=None
         self.initUI()
     
     def clearAllLCD(self):
@@ -139,6 +162,7 @@ class CANMonitor(QMainWindow):
         lcd = QLCDNumber(self)
         lcd.setMode(mode)
         lcd.setMinimumHeight(60)
+        lcd.setMinimumWidth(160)
         lcd.setDigitCount(8)
         if mode==QLCDNumber.Bin:
             lcd.display("00000000")
@@ -259,8 +283,11 @@ class CANMonitor(QMainWindow):
         toolbar.addAction(self.connectAction)
         
         mainWidget=QWidget()
+        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)
+
 #        self.setCentralWidget(top)
 #        self.setLayout(top)
         
@@ -271,6 +298,7 @@ class CANMonitor(QMainWindow):
         tab2 = QWidget() 
         tab3=QWidget()
         tab4=QWidget()
+        tab5=QWidget()
         
         tab1Layout = QFormLayout(tab1)
 #        tab1Layout.setLabelAlignment(Qt.AlignCenter)
@@ -278,11 +306,16 @@ class CANMonitor(QMainWindow):
 #        tab2Layout.setLabelAlignment(Qt.AlignCenter)
         tab3Layout = QVBoxLayout(tab3)
         tab4Layout = QVBoxLayout(tab4)
-        
+        tab5Layout = QFormLayout(tab5)
+
+
         tabs.addTab(tab1, "Main")
         tabs.addTab(tab2, "Misc") 
         tabs.addTab(tab3, "Log") 
         tabs.addTab(tab4, "Dash") 
+        tabs.addTab(tab5, "Zuheizer") 
+
+        tabs.setCurrentIndex(3)
         
 
         self.createCANIdEntry(tab1Layout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
@@ -296,6 +329,15 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntrySingleLine(tab1Layout, 0x623, ["0", "1", "2"], "Uhrzeit (Stunden)", QLCDNumber.Dec)        
         self.createCANIdEntry(tab1Layout, 0x571, "0", "Batteriespannung", QLCDNumber.Dec)
         
+        self.createCANIdEntry(tab5Layout, 0x3e5, "0", "Zuheizer 1", QLCDNumber.Bin)
+        self.createCANIdEntry(tab5Layout, 0x3e5, "1", "Zuheizer 2", QLCDNumber.Bin)
+        self.createCANIdEntry(tab5Layout, 0x3e5, "2", "Zuheizer 3", QLCDNumber.Bin)
+        self.createCANIdEntry(tab5Layout, 0x3e5, "3", "Zuheizer 4", QLCDNumber.Bin)
+        self.createCANIdEntry(tab5Layout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
+        
+        self.createCANIdEntry(tab2Layout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
+
+
         self.createLogView(tab3Layout)
         
         hbox = QHBoxLayout()
@@ -337,6 +379,13 @@ class CANMonitor(QMainWindow):
         self.filterAll.setChecked(True)
         hbox.addWidget(self.filterAll)
 
+        self.filterRingIdsButton=QCheckBox("Filter Ring Ids", self)
+        self.filterRingIdsButton.resize(self.filterButton.sizeHint())
+        self.filterRingIdsButton.clicked.connect(self._enableFilterRingIds)
+        self.filterRingIdsButton.setDisabled(self.filter==False)
+        self.filterRingIdsButton.setChecked(self.filterRingIds)
+        hbox.addWidget(self.filterRingIdsButton)
+        
         hbox2 = QHBoxLayout()
         tab3Layout.addLayout(hbox2)
         hbox2.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
@@ -345,14 +394,14 @@ class CANMonitor(QMainWindow):
         self.pauseButton.setToolTip('Toggle live update of Log')
         self.pauseButton.resize(self.pauseButton.sizeHint())
         self.pauseButton.clicked.connect(self._disableUpdate)
-        self.pauseButton.setDisabled(self.update==False or self.connectEnable==False)
+        self.pauseButton.setDisabled(self.update==False or self.replayMode==False)
         hbox2.addWidget(self.pauseButton)
         
         self.continueButton = QPushButton('Start', self)
         self.continueButton.setToolTip('Continue live update of Log')
         self.continueButton.resize(self.continueButton.sizeHint())
         self.continueButton.clicked.connect(self._enableUpdate)
-        self.continueButton.setDisabled(self.update==True or self.connectEnable==False)
+        self.continueButton.setDisabled(self.update==True or self.replayMode==True)
         hbox2.addWidget(self.continueButton)
         
         self.clearTableButton = QPushButton('Clear', self)
@@ -372,71 +421,80 @@ class CANMonitor(QMainWindow):
         self.logFileButton.clicked.connect(self._enableLogFile)
         hbox3.addWidget(self.logFileButton)
         
-        self.replayButton = QPushButton('Replay Log', self)
-        self.replayButton.resize(self.replayButton.sizeHint())
-        self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
-        self.replayButton.clicked.connect(self._startReplayMode)
-        hbox3.addWidget(self.replayButton)
-        
         self.clearLogButton = QPushButton('Clear Log', self)
         self.clearLogButton.resize(self.clearLogButton.sizeHint())
         self.clearLogButton.setDisabled(not self.logFileAvailable() or self.replayMode==True)
         self.clearLogButton.clicked.connect(self._clearLogFile)
         hbox3.addWidget(self.clearLogButton)
 
-#        hbox4 = QHBoxLayout()
-#        hbox4.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+        self.replayButton = QPushButton('Replay Log', self)
+        self.replayButton.resize(self.replayButton.sizeHint())
+        self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
+        self.replayButton.clicked.connect(self._startReplayMode)
+        hbox3.addWidget(self.replayButton)
 
-#        self.connectButton=QCheckBox("Connect", self)
-#        self.connectButton.resize(self.connectButton.sizeHint())
-#        self.connectButton.clicked.connect(self._connectToDataSource)
-#        self.connectButton.setCheckState(Qt.Checked)
-#        hbox3.addWidget(self.connectButton)
-                      
-                      
+        self.stopReplayButton = QPushButton('Stop Replay', self)
+        self.stopReplayButton.resize(self.stopReplayButton.sizeHint())
+        self.stopReplayButton.setDisabled(self.replayMode==False)
+        self.stopReplayButton.clicked.connect(self._stopReplayMode)
+        hbox3.addWidget(self.stopReplayButton)
+                              
         hbox4 = QHBoxLayout()
+        hbox4.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
+
         tab4Layout.addLayout(hbox4)
         
         vbox = QVBoxLayout()
         hbox4.addLayout(vbox)
-        vbox.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
+#        vbox.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
         
         self.velGauge=QtPngDialGauge(self, "tacho3", "tacho3.png")
         self.velGauge.setMinimum(20)
         self.velGauge.setMaximum(220)
         self.velGauge.setStartAngle(135)
         self.velGauge.setValue(0)
-        self.velGauge.setMaximumSize(300, 300)
+        self.velGauge.setMaximumSize(320, 320)
         vbox.addWidget(self.velGauge)
 
         self.createCANIdValueEntry(vbox, 0x351, "0", QLCDNumber.Dec)
         
         vbox1 = QVBoxLayout()
+        vbox1.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
+
         hbox4.addLayout(vbox1)
-        vbox1.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
+        self.createCANIdValueEntry(vbox1, 0x353, "1", QLCDNumber.Dec)
+        self.createCANIdValueEntry(vbox1, 0x351, "1", QLCDNumber.Dec)
+        self.createCANIdValueEntry(vbox1, 0x571, "0", QLCDNumber.Dec)
+ 
+        vbox2 = QVBoxLayout()
+        hbox4.addLayout(vbox2)
+#        vbox2.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
         self.rpmGauge=QtPngDialGauge(self, "rpm", "rpm.png")
         self.rpmGauge.setMinimum(0)
         self.rpmGauge.setMaximum(8000)
         self.rpmGauge.setStartAngle(120)
         self.rpmGauge.setValue(0)
-        self.rpmGauge.setMaximumSize(300, 300)
-        vbox1.addWidget(self.rpmGauge)     
+        self.rpmGauge.setMaximumSize(320, 320)
+        vbox2.addWidget(self.rpmGauge)     
          
-        self.createCANIdValueEntry(vbox1, 0x353, "0", QLCDNumber.Dec)
+        self.createCANIdValueEntry(vbox2, 0x353, "0", QLCDNumber.Dec)
 
-        self.connectButton = QCheckBox('Connect')
-        self.connectButton.clicked.connect(self._connect2)
-        top.addWidget(self.connectButton)
+#        self.connectButton = QCheckBox('Connect')
+#        self.connectButton.clicked.connect(self._connect2)
+#        top.addWidget(self.connectButton)
         
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
         self.show()
         
-        self.thread = CANSocketWorker()
-        canDecoder = CANDecoder(self)
-                
+        self.canDecoder = CANDecoder(self)
+
+        self.thread = CANSocketWorker()        
         self.connect(self.thread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-        self.thread.setup(self.app, self, canDecoder, self.test)
+        self.thread.setup(self.app, self, self.canDecoder, self.test)
+        
+#        self.updateThread=CANMonitorUpateUIWorker()
+#        self.updateThread.setup(self)
                
     def getWidget(self, canId, subId):
         try:
@@ -447,52 +505,32 @@ class CANMonitor(QMainWindow):
     def setValueDashDisplayRPM(self, value):
         if value!=self.rpmGauge.value():
             self.rpmGauge.setValue(value)
-            self.updateValuesDisplay()
 
     def setValueDashDisplayVel(self, value):
         if value!=self.velGauge.value():
             self.velGauge.setValue(value)
-            self.updateValuesDisplay()
         
     def displayIntValue(self, canId, subId, value, formatString):
         lcdList=self.getWidget(canId, subId)
-        changed=False
         for lcdItem in lcdList:
             if lcdItem.intValue()!=int(value):
-                changed=True
                 lcdItem.display(formatString % value)
-            
-        if changed==True:
-            self.updateValuesDisplay()
-       
+                   
     def displayBinValue(self, canId, subId, value, formatString):
         lcdList=self.getWidget(canId, subId)
-        changed=False
         for lcdItem in lcdList:
             if lcdItem.intValue()!=int(value):
-                changed=True
                 lcdItem.display(formatString % value)
-            
-        if changed==True:
-            self.updateValuesDisplay()
-            
+                        
     def displayFloatValue(self, canId, subId, value, formatString):
         lcdList=self.getWidget(canId, subId)
-        changed=False
         for lcdItem in lcdList:
             if lcdItem.value()!=value:
-                changed=True
                 lcdItem.display(formatString % value)
-            
-        if changed==True:
-            self.updateValuesDisplay()
-                 
-    def updateValuesDisplay(self):
-        self.displayUpdateCouter=self.displayUpdateCouter+1
-        if self.displayUpdateCouter==10:
-            self.app.processEvents()
-            self.displayUpdateCouter=0
-#            print("ui update")
+                             
+#    def updateValuesDisplay(self):
+#        self.app.processEvents()
+#        print("ui update")
         
     def matchFilter(self, canId, line):
         if self.filter==True:
@@ -511,15 +549,21 @@ class CANMonitor(QMainWindow):
                 return isKnownId==True
         return True
     
-    def matchIdFilter(self, canId):        
-        if self.filter==True and len(self.filterValue)!=0:
-            if not fnmatch.fnmatch(hex(canId), self.filterValue):
-                return False
+    def matchIdFilter(self, canId):     
+        if self.filter==True:
+            # filter ring ids
+            if self.filterRingIds==True:
+                if canId>=0x400 and canId <=0x43F:
+                    return False
+              
+            if len(self.filterValue)!=0:
+                if not fnmatch.fnmatch(hex(canId), self.filterValue):
+                    return False
         
         return True
     
     def addToLogView(self, line):
-        if self.update==True or self.replayMode==True:
+        if self.update==True:
             tableEntry=[self.logEntryCount, self.createTimeStamp()]
             tableEntry.extend(line[0:])
         
@@ -605,29 +649,26 @@ class CANMonitor(QMainWindow):
     @pyqtSlot()
     def _disableUpdate(self):
         self.update=False
-        self.pauseButton.setDisabled(True)
-        self.continueButton.setDisabled(False)
+        self.continueButton.setDisabled(self.update==True and self.replayMode==True)
+        self.pauseButton.setDisabled(self.update==False or self.replayMode==False)
             
     @pyqtSlot()
     def _enableUpdate(self):
         self.update=True
         self.logViewModel.update()
-        self.continueButton.setDisabled(True)
-        self.pauseButton.setDisabled(False)
+        self.continueButton.setDisabled(self.update==True or self.replayMode==True)
+        self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
         
     @pyqtSlot()
     def _enableFilter(self):
         self.filter=self.filterButton.isChecked()
-#        if self.filter==True:
-#            self.filter=False
-#        else:
-#            self.filter=True
             
         self.filterEdit.setDisabled(self.filter==False)
         self.applyFilterButton.setDisabled(self.filter==False)
         self.filterAll.setDisabled(self.filter==False)
         self.filterKnown.setDisabled(self.filter==False)
         self.filterUnknown.setDisabled(self.filter==False)
+        self.filterRingIdsButton.setDisabled(self.filter==False)
 
     @pyqtSlot()
     def _applyFilter(self):
@@ -642,8 +683,7 @@ class CANMonitor(QMainWindow):
         
     @pyqtSlot()
     def _enableLogFile(self):
-        self.logFileEnable=self.logFileButton.checkState()==Qt.Checked
-        if self.logFileEnable==True:
+        if self.logFileButton.isChecked()==True:
             if self.logFile==None:
                 self.setupLogFile(self.logFileName)
         else:
@@ -654,27 +694,31 @@ class CANMonitor(QMainWindow):
     @pyqtSlot()
     def _startReplayMode(self):
         self.closeLogFile()
-        self.logFileButton.setCheckState(Qt.Unchecked)
-        #self.connectButton.setCheckState(Qt.Unchecked)
-        #self.connectAction.setChecked(False)
-        #self._connectToDataSource()
+        self.logFileButton.setChecked(False)
         self.replayButton.setDisabled(True)
         self.replayMode=True
         
+        self.stopReplayButton.setDisabled(self.replayMode==False)
         self.logFileButton.setDisabled(self.replayMode==True)
         self.clearLogButton.setDisabled(not self.logFileAvailable() or self.replayMode==True)
         
         replayLines=self.readLogFile()
         self._clearTable()
-        if len(replayLines)!=0:
-            self.thread.setReplayMode(replayLines)
-        
+        self.thread.startReplayMode(replayLines)
+        self._enableUpdate()
+            
+    @pyqtSlot()
+    def _stopReplayMode(self):
+        self.thread.stopReplayMode()
+        self.replayModeDone()
+
     def replayModeDone(self):
         self.replayMode=False
+        self.stopReplayButton.setDisabled(self.replayMode==False)
         self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
         self.logFileButton.setDisabled(self.replayMode==True)
         self.clearLogButton.setDisabled(not self.logFileAvailable() or self.replayMode==True)
-
+        
     @pyqtSlot()
     def _clearLogFile(self):
         if self.logFileAvailable():                        
@@ -689,41 +733,43 @@ class CANMonitor(QMainWindow):
         self.connectTo()
         
     @pyqtSlot()
-    def _connect2(self):
-        self.connectEnable=self.connectButton.isChecked()
-        self.connectTo()
+    def _enableFilterRingIds(self):
+        self.filterRingIds=self.filterRingIdsButton.isChecked()
     
     def connectTo(self):
+        if self.replayMode==True:
+            self._stopReplayMode()
+            
         if self.connectEnable==True:
             self._clearTable()
             self.thread.connectCANDevice()
         else:
             self.thread.disconnectCANDevice()
-            self.update=False
             self.connectAction.setIcon(self.disconnectIcon)
             
         self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
-        self.pauseButton.setDisabled(self.update==False or self.connectEnable==False)
-        self.continueButton.setDisabled(self.update==True or self.connectEnable==False)
-        self.connectAction.setChecked(self.connectEnable==True)
-        self.connectButton.setChecked(self.connectEnable==True)
+        self.updateConnectButtons()
     
     def connectEnabled(self):
         return self.connectEnable
     
+    def updateConnectButtons(self):
+        self.connectAction.setChecked(self.connectEnable==True)
+#        self.connectButton.setChecked(self.connectEnable==True)
+        
     def connectFailed(self):
-        #self.connectButton.setCheckState(Qt.Unchecked)
-        self.connectAction.setChecked(False)
         self.connectEnable=False
         self.connectAction.setIcon(self.disconnectIcon)
+        self.updateConnectButtons()
         
     def updateStatusBarLabel(self, text):
         self.statusbar.showMessage(text)
         
     def connectSuccessful(self):
-        self.connectAction.setChecked(True)
         self.connectEnable=True
         self.connectAction.setIcon(self.connectedIcon)
+        self.updateConnectButtons()
+
         
     def canIdIsInKnownList(self, canId):
         return canId in self.canIdList
@@ -742,6 +788,10 @@ def main(argv):
     
     ex = CANMonitor(app, test)
     app.aboutToQuit.connect(ex._cleanup)
+    
+#    print(ex.canDecoder.hex2binary(0x02))
+#    print(int(ex.canDecoder.hex2binary(0x02)[:-1]))
+
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

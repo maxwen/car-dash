@@ -15,8 +15,11 @@ class CANDecoder:
         return bin(hexValue)[2:].rjust(8, '0')
 
     def testBit(self, hexValue, bit):
-        return self.hex2binary(hexValue)[bit] != '0'
-        
+        return self.hex2binary(hexValue)[:-bit] != '0'
+
+    def getBit(self, hexValue, bit):
+        return int(self.hex2binary(hexValue)[:-bit])
+    
 #    def dump(self, id, dlc, data):
 #        line="%04X:%04X:"% (id, dlc)
 #        dataLine="".join(["%02X " % x for x in data])
@@ -33,10 +36,10 @@ class CANDecoder:
         return (data[0] / 2 + 50)/10
     
     def calcRpm(self, data):
-        rpm=int((((data[2] << 8) + data[1]) / 4)/10)*10
+        rpm=((data[2] << 8) + data[1]) / 4
         self.rpmValueList.append(rpm)
         rpmValue=self.rpmValueList[0]+self.rpmValueList[1]+self.rpmValueList[2]
-        rpmValueAverage=int(rpmValue/len(self.rpmValueList))
+        rpmValueAverage=int((rpmValue/len(self.rpmValueList))/10)*10
         return rpmValueAverage
     
     def calcOilTemp(self, data):
@@ -143,6 +146,63 @@ class CANDecoder:
             self.widget.setValueDashDisplayVel(vel)
             self.widget.displayFloatValue(canId, "1", self.calcOuterTemp(data), "%.1f")
             
+        elif canId==0x3e5:
+#            Byte 1
+#            Bit 0: SH/SL via Funk eingeschaltet (Der Moment des Einschaltens! Wird 5x gesendet).
+#            Bit 1: SH/SL via Funk ausgeschaltet (Der Moment des Ausschaltens! Wird 5x gesendet)
+#            Bit 2: Explizit SH via Funk einschalten (Der Moment des Einschaltens! Wird 5x gesendet)
+#            Bit 3: Explizit SL via Funk einschalten (Der Moment des Einschaltens! Wird 5x gesendet)
+#            Bit 4: Befehl "Klimaanlage ausschalten"
+#            Bit 5: SH-modus wird gerade aktiviert
+#            Bit 6: SH wird gerade programmiert
+#            Bit 7: Komfort CAN aufwecken
+#                      
+#            Byte 2
+#            Bit 0: Fzg.- Gebläse einschalten. (0=Geb. aus; 1=Geb. an)
+#            Bit 1: Kontroll LED einschalten.
+#            Bit 2: Verbrennungszuheizer einschalten (0=Aus; 1=an)
+#            Bit 3: Wasserpumpe einschalten (Nur der befehl zur Climatic / Climatronic um die Pumpe einzuschalten. Klimaanlage regelt den Rest ohne CAN )
+#            Bit 4 bis 6: Fehlerstatus der SH: 0=Kein Fehler; 1=Battrie Leer; 2=Wenig Sprit im Tank; 3=Heizgerät defekt; 4=Crash erkannt; 5=sonstige Störung; 6=Überhitzung;
+#            Bit 7: Fehler im Fehlerspeicher abgelegt.
+#            
+#            Byte 3 und Byte 4
+#            Bit 0 bis 7 (Byte3) und Bit 0 bis 5 (Byte 4):Kraftstoffvorrat / Kraftstoffverbrauch.
+#            Anmerkung: Kraftstoffvorrat / Verbrauch in 1ml Schritten. Ist echt sau genau das Teil.
+#            
+#            Byte 4
+#            Bit 6: SH Status: 1 = Steuergerät ist Standheizung (Kann auch ohne Klemme 15 betrieben werden); 0 = Steuergerät ist ein Zuheizer und kann ausschließlich mit Klemme 15 Betrieben werden.
+#            Bit 7: Standard = 0; Wenn 1, liegt ein Fehler vor (Kemme 30 war kurz weg)
+#            
+#            Byte 5
+#            Bit 0 bis Bit 7: Heizleistung in 1 Watt Schritten.
+#            
+#            
+#            Byte 6
+#            Bit 0: Heizkreistemperatur -> Bereich von Minus 48°C bis Plus 142,5°C, Teilung 0,75 °C; Wird 0xFF gesendet, so liegt ein Fehler vor.
+#            Bit 1 bis 7: Nicht verwendet.
+#            
+#            Byte 7
+#            Bit 0: Kraftstoffpumpe eingeschaltet.
+#            Bit 1: Wasser wurde erwärmt und ist nun warm.
+#            Bit 2 bis Bit 7: Nicht verwendet
+#            
+#            Byte 8
+#            Bit 0: 1 = SL ist aktiv; 0 = SL nicht aktiv.
+#            Bit 1 bis 7: Nicht verwendet
+#            self.widget.displayIntValue(canId, "0", data[1], "%d")
+            self.widget.displayBinValue(canId, "0", self.hex2binary(data[0]), "%8s")
+            self.widget.displayBinValue(canId, "1", self.hex2binary(data[1]), "%8s")
+            self.widget.displayBinValue(canId, "2", self.hex2binary(data[2]), "%8s")
+            self.widget.displayBinValue(canId, "3", self.hex2binary(data[3]), "%8s")
+            self.widget.displayBinValue(canId, "4", self.hex2binary(data[4]), "%8s")
+            self.widget.displayIntValue(canId, "5", self.getBit(data[1], 1), "%d")
+
+#            self.widget.displayIntValue(canId, "2", data[4], "%d")
+#            self.widget.displayIntValue(canId, "3", data[5], "%d")
+#            self.widget.displayIntValue(canId, "4", self.testBit(data[6], 0), "%d")
+#            self.widget.displayIntValue(canId, "5", self.testBit(data[6], 1), "%d")
+
+
         #else:
         #   print(self.dump(canId, dlc, data))
            
@@ -194,10 +254,13 @@ class CANSocketWorker(QThread):
         self.reconnecting=0
         self.canMonitor.forceConnectDisabled()
     
-    def setReplayMode(self, replayLines):
+    def startReplayMode(self, replayLines):
         self.replayMode=True
         self.replayLines=replayLines
     
+    def stopReplayMode(self):
+        self.replayMode=False
+        
     def disconnectCANDevice(self):
         if self.connected==True:
             if self.test==False:
@@ -259,8 +322,9 @@ class CANSocketWorker(QThread):
             if self.replayMode==True:
                 for x in self.replayLines:
                     self.canDecoder.scan_can_frame(x);
-#                    self.app.processEvents()
-                    self.usleep(1000)
+                    self.msleep(10)
+                    if self.replayMode==False:
+                        break
                 self.replayMode=False
                 #self.replayLines=list()
                 self.canMonitor.replayModeDone()
@@ -280,8 +344,9 @@ class CANSocketWorker(QThread):
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x571, 6, 0x94, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
-#                    self.app.processEvents()
-                    self.usleep(1000)
+                    cf = struct.pack("IIBBBBBBBB", 0x3e5, 5, 0xe0, 0x04, 0x4e, 0xc1, 0x27, 0x0, 0x0, 0x0)
+                    self.canDecoder.scan_can_frame(cf);
+                    self.msleep(10)
                 elif self.s!=None:
                     try:
                         cf, addr = self.s.recvfrom(16)
@@ -292,8 +357,7 @@ class CANSocketWorker(QThread):
                         self.reconnectCANDevice()                        
                         continue
                     self.canDecoder.scan_can_frame(cf)
-#                    self.app.processEvents()
-                    self.usleep(1000)
+                    #self.msleep(10)
             else:
                 self.canMonitor.clearAllLCD()
                 self.sleep(1) 
