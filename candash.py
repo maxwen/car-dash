@@ -11,9 +11,10 @@ from canutils import CANDecoder, CANSocketWorker
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
 from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView, QAction, QIcon
 
-from collections import deque
+from collections import deque, OrderedDict
 from gaugepng import QtPngDialGauge
 import signal
+import operator
         
 NUMBER_COL=0
 TIME_COL=1
@@ -70,16 +71,16 @@ class CANLogViewTableModel(QAbstractTableModel):
                 return Qt.AlignCenter|Qt.AlignVCenter
             elif index.column()==DATA_COL:
                 return Qt.AlignLeft|Qt.AlignVCenter
-        elif role==Qt.BackgroundColorRole:
-            if index.row() >= len(self.logBuffer):
-                return None
-            if self.canMonitor.canIdIsInKnownList(self.logBuffer[index.row()][ID_COL]): 
-                return self.greenBackground
-            return self.redBackground
-        elif role==Qt.TextColorRole:
-            if index.row() >= len(self.logBuffer):
-                return None
-            return self.blackForeground
+#        elif role==Qt.BackgroundColorRole:
+#            if index.row() >= len(self.logBuffer):
+#                return None
+#            if self.canMonitor.canIdIsInKnownList(self.logBuffer[index.row()][ID_COL]): 
+#                return self.greenBackground
+#            return self.redBackground
+#        elif role==Qt.TextColorRole:
+#            if index.row() >= len(self.logBuffer):
+#                return None
+#            return self.blackForeground
         elif role != Qt.DisplayRole:
             return None
         
@@ -122,22 +123,317 @@ class CANLogViewTableModel(QAbstractTableModel):
                     return Qt.AlignLeft
         return None
     
-    def update(self):
+    def update(self, logBuffer, logBufferInit):
         self.reset()
 
+class CANLogViewTableModel2(QAbstractTableModel):
+    def __init__(self, canMonitor, canIdList, parent=None):
+        QAbstractTableModel.__init__(self, parent)
+        self.logBuffer=list()
+        self.canIdList=canIdList
+        self.canMonitor=canMonitor
+        self.redBackground=QBrush(QColor(255, 0, 0))
+        self.greenBackground=QBrush(QColor(0, 255, 0))
+        self.blackForeground=QBrush(QColor(0, 0, 0))
+        
+    def rowCount(self, parent): 
+        return len(self.logBuffer)
+    
+    def columnCount(self, parent): 
+        return 10
+      
+    def data(self, index, role):
+#        if not index.isValid():
+#            return None
+        if role == Qt.TextAlignmentRole:
+            if index.column()==0:
+                return Qt.AlignCenter|Qt.AlignVCenter
+            elif index.column()==1:
+                return Qt.AlignCenter|Qt.AlignVCenter
+            elif index.column()>=2:
+                return Qt.AlignLeft|Qt.AlignVCenter
+
+        elif role==Qt.BackgroundColorRole:
+            if index.row() >= len(self.logBuffer):
+                return None
+            
+            if index.column()<2:
+                return None
+            
+            item=self.logBuffer[index.row()]
+            canId=item[0]
+            dataLen=item[1]
+
+            itemInit=self.logBufferInit[canId]
+
+            if index.column()>=2 and index.column()-2 >= dataLen:
+                return None
+        
+            if item[2][index.column()-2]!=itemInit[2][index.column()-2]:
+                return self.redBackground
+            
+            return None
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.logBuffer):
+            return ""
+        item=self.logBuffer[index.row()]
+        dataLen=item[1]
+        if index.column()>=2 and index.column()-2 >= dataLen:
+            return ""
+
+        if index.column()==0:
+            return hex(item[0])
+        elif index.column()==1:
+            return item[1]
+        elif index.column()==2:
+            return hex(item[2][0])
+        elif index.column()==3:
+            return hex(item[2][1])
+        elif index.column()==4:
+            return hex(item[2][2])
+        elif index.column()==5:
+            return hex(item[2][3])
+        elif index.column()==6:
+            return hex(item[2][4])
+        elif index.column()==7:
+            return hex(item[2][5])
+        elif index.column()==8:
+            return hex(item[2][6])
+        elif index.column()==9:
+            return hex(item[2][7])
+    
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Id"
+                elif col==1:
+                    return "Size"
+                elif col>=2:
+                    return "Data["+str(col-2)+"]"
+            elif role == Qt.TextAlignmentRole:
+                if col==0:
+                    return Qt.AlignCenter
+                elif col==1:
+                    return Qt.AlignCenter
+                elif col>=2:
+                    return Qt.AlignLeft
+        return None
+    
+    def update(self, logBuffer, logBufferInit):
+        self.logBuffer=logBuffer
+        self.logBufferInit=logBufferInit
+        
+        self.localSort(0, Qt.AscendingOrder)
+        self.reset()
+        
+    def localSort(self, col, order):
+        self.logBuffer = sorted(self.logBuffer, key=operator.itemgetter(col))        
+        if order == Qt.DescendingOrder:
+            self.logBuffer.reverse()
+            
+#        self.logBufferInit = sorted(self.logBufferInit, key=operator.itemgetter(col))        
+#        if order == Qt.DescendingOrder:
+#            self.logBufferInit.reverse()
+#        self.reset()
+
+class CANFilterBox():
+    def __init__(self, canMonitor, withChanged):
+        self.canMonitor=canMonitor
+        self.filter=False
+        self.filterValue=""
+        self.filterRingIds=False
+        self.withChanged=withChanged
+        self.filterChanged=False
+        
+    def addFilterBox(self, layout):
+        hbox = QHBoxLayout()
+        layout.addLayout(hbox)
+#        hbox.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+                
+        self.filterButton=QCheckBox("Filter", self.canMonitor)
+        self.filterButton.setToolTip('Enable filter')
+        self.filterButton.resize(self.filterButton.sizeHint())
+        self.filterButton.clicked.connect(self._enableFilter)
+        hbox.addWidget(self.filterButton)
+        
+        self.filterEdit=QLineEdit(self.canMonitor)
+        self.filterEdit.setToolTip('Id Filter')
+        self.filterEdit.setDisabled(self.filter==False)
+        self.filterEdit.returnPressed.connect(self._applyFilter)
+        hbox.addWidget(self.filterEdit)
+        
+        self.applyFilterButton = QPushButton('Apply', self.canMonitor)
+        self.applyFilterButton.setToolTip('Use Id filter')
+        self.applyFilterButton.resize(self.applyFilterButton.sizeHint())
+        self.applyFilterButton.clicked.connect(self._applyFilter)
+        self.applyFilterButton.setDisabled(self.filter==False)
+        hbox.addWidget(self.applyFilterButton)
+        
+        self.filterKnown=QRadioButton("Known", self.canMonitor)
+        self.filterKnown.clicked.connect(self._applyFilter)
+        self.filterKnown.setDisabled(self.filter==False)
+        hbox.addWidget(self.filterKnown)
+        
+        self.filterUnknown=QRadioButton("Unknown", self.canMonitor)
+        self.filterUnknown.clicked.connect(self._applyFilter)
+        self.filterUnknown.setDisabled(self.filter==False)
+        hbox.addWidget(self.filterUnknown)
+        
+        self.filterAll=QRadioButton("All", self.canMonitor)
+        self.filterAll.clicked.connect(self._applyFilter)
+        self.filterAll.setDisabled(self.filter==False)
+        self.filterAll.setChecked(True)
+        hbox.addWidget(self.filterAll)
+
+        self.filterRingIdsButton=QCheckBox("Ring Ids", self.canMonitor)
+        self.filterRingIdsButton.resize(self.filterRingIdsButton.sizeHint())
+        self.filterRingIdsButton.clicked.connect(self._enableFilterRingIds)
+        self.filterRingIdsButton.setDisabled(self.filter==False)
+        self.filterRingIdsButton.setChecked(self.filterRingIds)
+        hbox.addWidget(self.filterRingIdsButton)
+        
+        if self.withChanged==True:
+            self.filterChangedButton=QCheckBox("Changed", self.canMonitor)
+            self.filterChangedButton.resize(self.filterChangedButton.sizeHint())
+            self.filterChangedButton.clicked.connect(self._enableFilterChanged)
+            self.filterChangedButton.setDisabled(self.filter==False)
+            self.filterChangedButton.setChecked(self.filterChanged)
+            hbox.addWidget(self.filterChangedButton)
+        
+    def matchFilter(self, canId, line, lineInit):
+        if self.filter==True:
+            idMatch=self.matchIdFilter(canId)
+            if idMatch==False:
+                return False
+            
+            changedMatched=self.matchChangedFilter(line, lineInit)
+            if changedMatched==False:
+                return False
+            
+            if self.filterAll.isChecked():
+                return idMatch
+            
+            isKnownId=self.canMonitor.canIdIsInKnownList(canId)
+            if self.filterKnown.isChecked():
+                return isKnownId==False
+            if self.filterUnknown.isChecked():
+                return isKnownId==True
+        return True
+    
+    def matchIdFilter(self, canId):     
+        if self.filter==True:
+            # filter ring ids
+            if self.filterRingIds==True:
+                if canId>=0x400 and canId <=0x43F:
+                    return False
+              
+            if len(self.filterValue)!=0:
+                if not fnmatch.fnmatch(hex(canId), self.filterValue):
+                    return False
+        
+        return True
+    
+    def matchChangedFilter(self, line, lineInit):
+        if self.filter==True:
+            if self.filterChanged==True:
+                if line!=lineInit:
+                    return True
+                return False
+        return True
+    
+    @pyqtSlot()
+    def _applyFilter(self):
+        if self.filter==True:
+            self.filterValue=self.filterEdit.text()
+        else:
+            self.filterValue=""
+          
+                  
+    @pyqtSlot()
+    def _enableFilter(self):
+        self.filter=self.filterButton.isChecked()
+        self.filterEdit.setDisabled(self.filter==False)
+        self.applyFilterButton.setDisabled(self.filter==False)
+        self.filterAll.setDisabled(self.filter==False)
+        self.filterKnown.setDisabled(self.filter==False)
+        self.filterUnknown.setDisabled(self.filter==False)
+        self.filterRingIdsButton.setDisabled(self.filter==False)
+        if self.withChanged==True:
+            self.filterChangedButton.setDisabled(self.filter==False)
+    
+    @pyqtSlot()
+    def _enableFilterRingIds(self):
+        self.filterRingIds=self.filterRingIdsButton.isChecked()
+
+    @pyqtSlot()
+    def _enableFilterChanged(self):
+        self.filterChanged=self.filterChangedButton.isChecked()
+        
+class CANLogTableBox():
+    def __init__(self, canMonitor, logViewModel, logBuffer, logBufferInit):
+        self.canMonitor=canMonitor
+        self.update=False
+        self.logViewModel=logViewModel
+        self.logBuffer=logBuffer
+        self.logBufferInit=logBufferInit
+        
+    def addTableBox(self, layout):
+        hbox = QHBoxLayout()
+        layout.addLayout(hbox)
+        self.pauseButton = QPushButton('Pause', self.canMonitor)
+        self.pauseButton.setToolTip('Toggle live update of Log')
+        self.pauseButton.resize(self.pauseButton.sizeHint())
+        self.pauseButton.clicked.connect(self._disableUpdate)
+        self.pauseButton.setDisabled(self.update==False or self.canMonitor.replayMode==False)
+        hbox.addWidget(self.pauseButton)
+        
+        self.continueButton = QPushButton('Start', self.canMonitor)
+        self.continueButton.setToolTip('Continue live update of Log')
+        self.continueButton.resize(self.continueButton.sizeHint())
+        self.continueButton.clicked.connect(self._enableUpdate)
+        self.continueButton.setDisabled(self.update==True or self.canMonitor.replayMode==True)
+        hbox.addWidget(self.continueButton)
+        
+        self.clearTableButton = QPushButton('Clear', self.canMonitor)
+        self.clearTableButton.setToolTip('Clear Table')
+        self.clearTableButton.resize(self.clearTableButton.sizeHint())
+        self.clearTableButton.clicked.connect(self._clearTable)
+        hbox.addWidget(self.clearTableButton)
+    
+    @pyqtSlot()
+    def _clearTable(self):
+        self.logBuffer.clear();
+        if self.logBufferInit!=None:        
+            self.logBufferInit.clear()
+        self.logViewModel.update(self.logBuffer, self.logBufferInit)
+                
+    @pyqtSlot()
+    def _disableUpdate(self):
+        self.update=False
+        self.continueButton.setDisabled(self.update==True and self.replayMode==True)
+        self.pauseButton.setDisabled(self.update==False or self.replayMode==False)
+            
+    @pyqtSlot()
+    def _enableUpdate(self):
+        self.update=True
+        self.continueButton.setDisabled(self.update==True or self.replayMode==True)
+        self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
+        self._clearTable()
+        
 class CANMonitor(QMainWindow):
     def __init__(self, app, test):
         super(CANMonitor, self).__init__()
         self.app = app
         self.lcdDict=dict()
         self.logBuffer=deque("", 1000)
+        self.logBuffer2=dict()
+        self.logBufferInit=dict()
         self.logEntryCount=1
         self.maxLogEntryCount=65353
         self.tableUpdateCouter=0
-        self.update=False
-        self.filter=False
-        self.filterValue=""
-        self.filterRingIds=True
         self.logFile=None
         self.test=test
         self.logFileName="/tmp/candash.log"
@@ -258,6 +554,27 @@ class CANMonitor(QMainWindow):
         self.logView.setColumnWidth(ID_COL, 80)
         self.logView.setColumnWidth(SIZE_COL, 50)
         
+    def createLogView2(self, vbox):
+        self.logView2=QTableView(self)
+        vbox.addWidget(self.logView2)
+        
+        self.logViewModel2=CANLogViewTableModel2(self, self.canIdList)
+        self.logView2.setModel(self.logViewModel2)
+#        self.logView2.setSortingEnabled(True)
+        
+        header=QHeaderView(Qt.Horizontal, self.logView2)
+#        header.setStretchLastSection(True)
+#        header.setClickable(True)
+        header.setResizeMode(0, QHeaderView.Fixed)
+        header.setResizeMode(1, QHeaderView.Fixed)
+
+        self.logView2.setHorizontalHeader(header)
+        
+        self.logView2.setColumnWidth(0, 80)
+        self.logView2.setColumnWidth(1, 50)
+        for i in range(2, 10):
+            self.logView2.setColumnWidth(i, 60)
+        
     def initUI(self):  
 #        exitAction = QAction(QIcon(), 'Exit', self)
 #        exitAction.setShortcut('Ctrl+Q')
@@ -299,6 +616,7 @@ class CANMonitor(QMainWindow):
         tab3=QWidget()
         tab4=QWidget()
         tab5=QWidget()
+        tab6=QWidget()
         
         tab1Layout = QFormLayout(tab1)
 #        tab1Layout.setLabelAlignment(Qt.AlignCenter)
@@ -307,13 +625,14 @@ class CANMonitor(QMainWindow):
         tab3Layout = QVBoxLayout(tab3)
         tab4Layout = QVBoxLayout(tab4)
         tab5Layout = QFormLayout(tab5)
-
+        tab6Layout=QVBoxLayout(tab6)
 
         tabs.addTab(tab1, "Main")
         tabs.addTab(tab2, "Misc") 
         tabs.addTab(tab3, "Log") 
         tabs.addTab(tab4, "Dash") 
         tabs.addTab(tab5, "Zuheizer") 
+        tabs.addTab(tab6, "Log2")
 
         tabs.setCurrentIndex(3)
         
@@ -325,7 +644,7 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntry(tab2Layout, 0x635, "0", "Licht, Klemme 58d", QLCDNumber.Dec)
         self.createCANIdEntry(tab2Layout, 0x271, "0", "Zuendung", QLCDNumber.Dec)
         self.createCANIdEntrySingleLine(tab2Layout, 0x371, ["0", "1"], "Tuerstatus", QLCDNumber.Bin)
-        self.createCANIdEntry(tab2Layout, 0x371, "2", "Blinkerstatus", QLCDNumber.Bin)
+        self.createCANIdEntry(tab2Layout, 0x371, "2", "Blinker, Retoursgang", QLCDNumber.Bin)
         self.createCANIdEntrySingleLine(tab1Layout, 0x623, ["0", "1", "2"], "Uhrzeit (Stunden)", QLCDNumber.Dec)        
         self.createCANIdEntry(tab1Layout, 0x571, "0", "Batteriespannung", QLCDNumber.Dec)
         
@@ -337,82 +656,17 @@ class CANMonitor(QMainWindow):
         
         self.createCANIdEntry(tab2Layout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
 
-
         self.createLogView(tab3Layout)
         
-        hbox = QHBoxLayout()
-        tab3Layout.addLayout(hbox)
-        hbox.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
-                
-        self.filterButton=QCheckBox("Filter", self)
-        self.filterButton.setToolTip('Enable filter')
-        self.filterButton.resize(self.filterButton.sizeHint())
-        self.filterButton.clicked.connect(self._enableFilter)
-        hbox.addWidget(self.filterButton)
+        self.logViewFilerBox1=CANFilterBox(self, False)
+        self.logViewFilerBox1.addFilterBox(tab3Layout)
         
-        self.filterEdit=QLineEdit(self)
-        self.filterEdit.setToolTip('Id Filter')
-        self.filterEdit.setDisabled(self.filter==False)
-        self.filterEdit.returnPressed.connect(self._applyFilter)
-        hbox.addWidget(self.filterEdit)
-        
-        self.applyFilterButton = QPushButton('Apply', self)
-        self.applyFilterButton.setToolTip('Use Id filter')
-        self.applyFilterButton.resize(self.applyFilterButton.sizeHint())
-        self.applyFilterButton.clicked.connect(self._applyFilter)
-        self.applyFilterButton.setDisabled(self.filter==False)
-        hbox.addWidget(self.applyFilterButton)
-        
-        self.filterKnown=QRadioButton("Known", self)
-        self.filterKnown.clicked.connect(self._applyFilter)
-        self.filterKnown.setDisabled(self.filter==False)
-        hbox.addWidget(self.filterKnown)
-        
-        self.filterUnknown=QRadioButton("Unknown", self)
-        self.filterUnknown.clicked.connect(self._applyFilter)
-        self.filterUnknown.setDisabled(self.filter==False)
-        hbox.addWidget(self.filterUnknown)
-        
-        self.filterAll=QRadioButton("All", self)
-        self.filterAll.clicked.connect(self._applyFilter)
-        self.filterAll.setDisabled(self.filter==False)
-        self.filterAll.setChecked(True)
-        hbox.addWidget(self.filterAll)
-
-        self.filterRingIdsButton=QCheckBox("Filter Ring Ids", self)
-        self.filterRingIdsButton.resize(self.filterButton.sizeHint())
-        self.filterRingIdsButton.clicked.connect(self._enableFilterRingIds)
-        self.filterRingIdsButton.setDisabled(self.filter==False)
-        self.filterRingIdsButton.setChecked(self.filterRingIds)
-        hbox.addWidget(self.filterRingIdsButton)
-        
-        hbox2 = QHBoxLayout()
-        tab3Layout.addLayout(hbox2)
-        hbox2.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
-        
-        self.pauseButton = QPushButton('Pause', self)
-        self.pauseButton.setToolTip('Toggle live update of Log')
-        self.pauseButton.resize(self.pauseButton.sizeHint())
-        self.pauseButton.clicked.connect(self._disableUpdate)
-        self.pauseButton.setDisabled(self.update==False or self.replayMode==False)
-        hbox2.addWidget(self.pauseButton)
-        
-        self.continueButton = QPushButton('Start', self)
-        self.continueButton.setToolTip('Continue live update of Log')
-        self.continueButton.resize(self.continueButton.sizeHint())
-        self.continueButton.clicked.connect(self._enableUpdate)
-        self.continueButton.setDisabled(self.update==True or self.replayMode==True)
-        hbox2.addWidget(self.continueButton)
-        
-        self.clearTableButton = QPushButton('Clear', self)
-        self.clearTableButton.setToolTip('Clear Table')
-        self.clearTableButton.resize(self.clearTableButton.sizeHint())
-        self.clearTableButton.clicked.connect(self._clearTable)
-        hbox2.addWidget(self.clearTableButton)
-                
+        self.logViewTableBox1=CANLogTableBox(self, self.logViewModel, self.logBuffer, None)
+        self.logViewTableBox1.addTableBox(tab3Layout)
+                        
         hbox3 = QHBoxLayout()
         tab3Layout.addLayout(hbox3)
-        hbox3.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+#        hbox3.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
         
         self.logFileButton=QCheckBox("Log to File", self)
         self.logFileButton.setToolTip('Enable file logging')
@@ -479,6 +733,14 @@ class CANMonitor(QMainWindow):
          
         self.createCANIdValueEntry(vbox2, 0x353, "0", QLCDNumber.Dec)
 
+        self.createLogView2(tab6Layout)
+
+        self.logViewFilterBox2=CANFilterBox(self, True)
+        self.logViewFilterBox2.addFilterBox(tab6Layout)
+        
+        self.logViewTableBox2=CANLogTableBox(self, self.logViewModel2, self.logBuffer2, self.logBufferInit)
+        self.logViewTableBox2.addTableBox(tab6Layout)
+        
 #        self.connectButton = QCheckBox('Connect')
 #        self.connectButton.clicked.connect(self._connect2)
 #        top.addWidget(self.connectButton)
@@ -527,50 +789,18 @@ class CANMonitor(QMainWindow):
         for lcdItem in lcdList:
             if lcdItem.value()!=value:
                 lcdItem.display(formatString % value)
-                             
-#    def updateValuesDisplay(self):
-#        self.app.processEvents()
-#        print("ui update")
-        
-    def matchFilter(self, canId, line):
-        if self.filter==True:
-            idMatch=self.matchIdFilter(canId)
-            
-            if idMatch==False:
-                return False
-            
-            if self.filterAll.isChecked():
-                return idMatch
-            
-            isKnownId=self.canIdIsInKnownList(canId)
-            if self.filterKnown.isChecked():
-                return isKnownId==False
-            if self.filterUnknown.isChecked():
-                return isKnownId==True
-        return True
-    
-    def matchIdFilter(self, canId):     
-        if self.filter==True:
-            # filter ring ids
-            if self.filterRingIds==True:
-                if canId>=0x400 and canId <=0x43F:
-                    return False
-              
-            if len(self.filterValue)!=0:
-                if not fnmatch.fnmatch(hex(canId), self.filterValue):
-                    return False
-        
-        return True
-    
+                                 
     def addToLogView(self, line):
-        if self.update==True:
-            tableEntry=[self.logEntryCount, self.createTimeStamp()]
-            tableEntry.extend(line[0:])
+        tableEntry=[self.logEntryCount, self.createTimeStamp()]
+        tableEntry.extend(line[0:])
         
-            if self.logFile!=None:
-                self.addToLogFile(tableEntry)
+        if self.logFile!=None:
+            self.addToLogFile(tableEntry)
+            
+        if self.logViewTableBox1.update==True:
 
-            if not self.matchFilter(line[0], line):
+            canId=line[0]
+            if not self.logViewFilerBox1.matchFilter(canId, line, None):
                 return
         
             self.logBuffer.appendleft(tableEntry)
@@ -580,10 +810,25 @@ class CANMonitor(QMainWindow):
         
             self.tableUpdateCouter=self.tableUpdateCouter+1
             if self.tableUpdateCouter==10:
-                self.logViewModel.update()
+                self.logViewModel.update(self.logBuffer, None)
                 self.tableUpdateCouter=0
                 
+    def addToLogView2(self, line):  
+        if self.logViewTableBox2.update==True:
+            canId=line[0]    
+            if not canId in self.logBufferInit.keys():
+                self.logBufferInit[canId]=line
+                
+            if not self.logViewFilterBox2.matchFilter(canId, line, self.logBufferInit[canId]):
+                try:
+                    del self.logBuffer2[canId]
+                except KeyError:
+                    None
+            else:
+                self.logBuffer2[canId]=line
         
+                self.logViewModel2.update(list(self.logBuffer2.values()), self.logBufferInit)
+                     
     def createTimeStamp(self):
         stamp=datetime.fromtimestamp(time.time())
         return "".join(["%02d:%02d:%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
@@ -638,27 +883,7 @@ class CANMonitor(QMainWindow):
             return logFileEntries
         except IOError:
             return list()
-                
-    @pyqtSlot()
-    def _clearTable(self):
-        self.logBuffer.clear();
-        self.logEntryCount=1
-        self.tableUpdateCouter=0
-        self.logViewModel.update()
-        
-    @pyqtSlot()
-    def _disableUpdate(self):
-        self.update=False
-        self.continueButton.setDisabled(self.update==True and self.replayMode==True)
-        self.pauseButton.setDisabled(self.update==False or self.replayMode==False)
-            
-    @pyqtSlot()
-    def _enableUpdate(self):
-        self.update=True
-        self.logViewModel.update()
-        self.continueButton.setDisabled(self.update==True or self.replayMode==True)
-        self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
-        
+                        
     @pyqtSlot()
     def _enableFilter(self):
         self.filter=self.filterButton.isChecked()
@@ -703,9 +928,10 @@ class CANMonitor(QMainWindow):
         self.clearLogButton.setDisabled(not self.logFileAvailable() or self.replayMode==True)
         
         replayLines=self.readLogFile()
-        self._clearTable()
+        self.logViewTableBox1._clearTable()
+        self.logViewTableBox2._clearTable()
         self.thread.startReplayMode(replayLines)
-        self._enableUpdate()
+#        self._enableUpdate()
             
     @pyqtSlot()
     def _stopReplayMode(self):
@@ -741,7 +967,9 @@ class CANMonitor(QMainWindow):
             self._stopReplayMode()
             
         if self.connectEnable==True:
-            self._clearTable()
+            self.logViewTableBox1._clearTable()
+            self.logViewTableBox2._clearTable()
+
             self.thread.connectCANDevice()
         else:
             self.thread.disconnectCANDevice()
@@ -789,8 +1017,20 @@ def main(argv):
     ex = CANMonitor(app, test)
     app.aboutToQuit.connect(ex._cleanup)
     
+
 #    print(ex.canDecoder.hex2binary(0x02))
-#    print(int(ex.canDecoder.hex2binary(0x02)[:-1]))
+#    print(ex.canDecoder.hex2binary(0x04))
+#
+#    print(int(ex.canDecoder.getBit(0x02, 0)))
+#    print(int(ex.canDecoder.getBit(0x02, 1)))
+#    print(int(ex.canDecoder.getBit(0x02, 2)))
+#    print(int(ex.canDecoder.getBit(0x04, 0)))
+#    print(int(ex.canDecoder.getBit(0x04, 1)))
+#    print(int(ex.canDecoder.getBit(0x04, 2)))
+#    print(int(ex.canDecoder.getBit(0x04, 1) + ex.canDecoder.getBit(0x04, 2)))
+#    print(int(ex.canDecoder.getBit(0x02, 1) + ex.canDecoder.getBit(0x02, 2)))
+
+#    print(int(ex.canDecoder.getBit(0x04, 3)))
 
     sys.exit(app.exec_())
 

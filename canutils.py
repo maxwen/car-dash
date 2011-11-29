@@ -14,11 +14,12 @@ class CANDecoder:
     def hex2binary(self, hexValue):
         return bin(hexValue)[2:].rjust(8, '0')
 
-    def testBit(self, hexValue, bit):
-        return self.hex2binary(hexValue)[:-bit] != '0'
+#    def testBit(self, hexValue, bit):
+#        return self.hex2binary(hexValue)[:-bit] != '0'
 
     def getBit(self, hexValue, bit):
-        return int(self.hex2binary(hexValue)[:-bit])
+        b=self.hex2binary(hexValue);
+        return int(b[len(b)-1-bit])
     
 #    def dump(self, id, dlc, data):
 #        line="%04X:%04X:"% (id, dlc)
@@ -56,7 +57,8 @@ class CANDecoder:
         canId, dlc, data = self.unpack_can_frame(can_frame)
         
         self.widget.addToLogView([canId, dlc, data])
-        
+        self.widget.addToLogView2([canId, dlc, data])
+       
         if canId == 0x571:
             self.widget.displayFloatValue(canId, "0", self.calcVolt(data), "%.2f")            
         elif canId == 0x623:
@@ -195,7 +197,9 @@ class CANDecoder:
             self.widget.displayBinValue(canId, "2", self.hex2binary(data[2]), "%8s")
             self.widget.displayBinValue(canId, "3", self.hex2binary(data[3]), "%8s")
             self.widget.displayBinValue(canId, "4", self.hex2binary(data[4]), "%8s")
-            self.widget.displayIntValue(canId, "5", self.getBit(data[1], 1), "%d")
+            
+            value=self.getBit(data[1], 1) + self.getBit(data[1], 2)
+            self.widget.displayIntValue(canId, "5", value, "%d")
 
 #            self.widget.displayIntValue(canId, "2", data[4], "%d")
 #            self.widget.displayIntValue(canId, "3", data[5], "%d")
@@ -242,7 +246,7 @@ class CANSocketWorker(QThread):
         while self.reconnecting<42 and self.s==None and self.connected==False:
             self.sleep(1)
             self.s=None
-            self.updateStatusLabel("reconnect try "+str(self.reconnecting))
+#            self.updateStatusLabel("reconnect try "+str(self.reconnecting))
             self.connectCANDevice()
             if self.s!=None and self.connected==True:
                 self.reconnecting=0
@@ -266,7 +270,7 @@ class CANSocketWorker(QThread):
             if self.test==False:
                 if self.s!=None:
                     try:
-                        self.updateStatusLabel("disconnect")
+#                        self.updateStatusLabel("disconnect")
                         self.s.close()
                         self.s=None
                         self.updateStatusLabel("disconnect ok")
@@ -284,7 +288,7 @@ class CANSocketWorker(QThread):
     def connectCANDevice(self):
         if self.s==None:
             if self.test==False:
-                self.updateStatusLabel("connect")
+#                self.updateStatusLabel("connect")
                 try:
                     # create CAN socket
                     self.s = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
@@ -307,7 +311,10 @@ class CANSocketWorker(QThread):
                     self.connected=True
                     self.canMonitor.connectSuccessful()
                 except socket.error:
-                    self.updateStatusLabel("connect error ")
+                    if self.reconnecting!=0:
+                        self.updateStatusLabel("reconnect try "+str(self.reconnecting))
+                    else:
+                        self.updateStatusLabel("connect error")
                     self.s=None
                     self.connected=False
                     self.canMonitor.connectFailed()
@@ -344,14 +351,14 @@ class CANSocketWorker(QThread):
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x571, 6, 0x94, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
-                    cf = struct.pack("IIBBBBBBBB", 0x3e5, 5, 0xe0, 0x04, 0x4e, 0xc1, 0x27, 0x0, 0x0, 0x0)
+                    cf = struct.pack("IIBBBBBBBB", 0x3e5, 5, 0xe0, 0x04 , 0x4e, 0xc1, 0x27, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     self.msleep(10)
                 elif self.s!=None:
                     try:
                         cf, addr = self.s.recvfrom(16)
                     except socket.error:
-                        self.updateStatusLabel("connect error")
+                        self.updateStatusLabel("connection lost")
                         self.s=None
                         self.connected=False
                         self.reconnectCANDevice()                        
