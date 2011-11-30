@@ -206,7 +206,30 @@ class CANDecoder:
 #            self.widget.displayIntValue(canId, "4", self.testBit(data[6], 0), "%d")
 #            self.widget.displayIntValue(canId, "5", self.testBit(data[6], 1), "%d")
 
+        elif canId==0x591:
+            value=0
+            if data[1]==0x02:
+                value=1
+            if data[1]==0x04:
+                value=2
 
+            self.widget.displayIntValue(canId, "0", value, "%d")
+
+        elif 0x5d1:
+            # scheibnwischer
+            # byte 1 
+            # 0x0 
+            # 0x1 interval
+            # 0x5 inormale geschwindigkeit
+            # 0x9 schnelle geschwindigkeit
+            value=0
+            if data[0]==0x01:
+                value=1
+            if data[0]==0x05:
+                value=2
+            if data[0]==0x09:
+                value=2
+            self.widget.displayIntValue(canId, "0", value, "%d")
         #else:
         #   print(self.dump(canId, dlc, data))
            
@@ -352,6 +375,10 @@ class CANSocketWorker(QThread):
                     cf = struct.pack("IIBBBBBBBB", 0x571, 6, 0x94, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     cf = struct.pack("IIBBBBBBBB", 0x3e5, 5, 0xe0, 0x04 , 0x4e, 0xc1, 0x27, 0x0, 0x0, 0x0)
+                    self.canDecoder.scan_can_frame(cf);
+                    cf = struct.pack("IIBBBBBBBB", 0x591, 3, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
+                    self.canDecoder.scan_can_frame(cf);
+                    cf = struct.pack("IIBBBBBBBB", 0x5d1, 2, 0x5, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
                     self.canDecoder.scan_can_frame(cf);
                     self.msleep(10)
                 elif self.s!=None:

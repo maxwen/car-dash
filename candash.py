@@ -7,11 +7,13 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANDecoder, CANSocketWorker
+from gps import gps
+import socket
 
-from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
+from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot, QThread
 from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView, QAction, QIcon
 
-from collections import deque, OrderedDict
+from collections import deque
 from gaugepng import QtPngDialGauge
 import signal
 import operator
@@ -22,23 +24,41 @@ ID_COL=2
 SIZE_COL=3
 DATA_COL=4
 
-#class CANMonitorUpateUIWorker(QThread):
-#    def __init__(self, parent=None): 
-#        QThread.__init__(self, parent)
-#        self.exiting = False
-#        
-#    def __del__(self):
-#        self.exiting = True
-#        self.wait()
-#        
-#    def setup(self, canMonitor):
-#        self.canMonitor=canMonitor
-#        self.start()
-#            
-#    def run(self):
-#        while not self.exiting and True:
-#            self.canMonitor.updateValuesDisplay()
-#            self.msleep(500) 
+class GPSMonitorUpateUIWorker(QThread):
+    def __init__(self, parent=None): 
+        QThread.__init__(self, parent)
+        self.exiting = False
+        
+    def __del__(self, session):
+        self.exiting = True
+        self.wait()
+        
+    def setup(self, canMonitor):
+        self.canMonitor=canMonitor
+        self.session=None
+        self.start()
+            
+    def connectToGPS(self):
+        try:
+            self.session = gps.gps()
+            self.session.stream(gps.WATCH_ENABLE)
+        except socket.error:
+            self.session=None
+            
+    def run(self):
+        while not self.exiting and True:
+            if self.session==None:
+                self.sleep(1)
+                self.connectToGPS()
+                continue
+            try:
+                self.session.__next__()
+                self.canMonitor.updateGPSDisplay(self.session)
+            except StopIteration:
+                self.session=None
+                self.canMonitor.updateGPSDisplay(None)
+
+            self.msleep(500) 
                 
 class CANLogViewTableModel(QAbstractTableModel):
     def __init__(self, canMonitor, logBuffer, canIdList, parent=None):
@@ -46,9 +66,9 @@ class CANLogViewTableModel(QAbstractTableModel):
         self.logBuffer=logBuffer
         self.canIdList=canIdList
         self.canMonitor=canMonitor
-        self.redBackground=QBrush(QColor(255, 0, 0))
-        self.greenBackground=QBrush(QColor(0, 255, 0))
-        self.blackForeground=QBrush(QColor(0, 0, 0))
+#        self.redBackground=QBrush(QColor(255, 0, 0))
+#        self.greenBackground=QBrush(QColor(0, 255, 0))
+#        self.blackForeground=QBrush(QColor(0, 0, 0))
         
     def rowCount(self, parent): 
         return self.logBuffer.maxlen
@@ -133,7 +153,6 @@ class CANLogViewTableModel2(QAbstractTableModel):
         self.canIdList=canIdList
         self.canMonitor=canMonitor
         self.redBackground=QBrush(QColor(255, 0, 0))
-        self.greenBackground=QBrush(QColor(0, 255, 0))
         self.blackForeground=QBrush(QColor(0, 0, 0))
         
     def rowCount(self, parent): 
@@ -157,20 +176,15 @@ class CANLogViewTableModel2(QAbstractTableModel):
             if index.row() >= len(self.logBuffer):
                 return None
             
-            if index.column()<2:
-                return None
-            
-            item=self.logBuffer[index.row()]
-            canId=item[0]
-            dataLen=item[1]
-
-            itemInit=self.logBufferInit[canId]
-
-            if index.column()>=2 and index.column()-2 >= dataLen:
-                return None
-        
-            if item[2][index.column()-2]!=itemInit[2][index.column()-2]:
+            if self.dataColChanged(index):
                 return self.redBackground
+            
+            return None
+        elif role==Qt.TextColorRole:
+            if index.row() >= len(self.logBuffer):
+                return None
+            if self.dataColChanged(index):
+                return self.blackForeground
             
             return None
         elif role != Qt.DisplayRole:
@@ -238,6 +252,22 @@ class CANLogViewTableModel2(QAbstractTableModel):
 #        if order == Qt.DescendingOrder:
 #            self.logBufferInit.reverse()
 #        self.reset()
+
+    def dataColChanged(self, index):
+        if index.column()<2:
+            return False
+            
+        item=self.logBuffer[index.row()]
+        canId=item[0]
+        dataLen=item[1]
+
+        itemInit=self.logBufferInit[canId]
+
+        if index.column()>=2 and index.column()-2 >= dataLen:
+            return False
+    
+        if item[2][index.column()-2]!=itemInit[2][index.column()-2]:
+            return True
 
 class CANFilterBox():
     def __init__(self, canMonitor, withChanged):
@@ -423,6 +453,56 @@ class CANLogTableBox():
         self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
         self._clearTable()
         
+class GPSMonitor():
+    def __init__(self, canMonitor):
+        self.canMonitor=canMonitor
+        self.valueLabelList=list()
+        
+    def createGPSLabel(self, form, key, value):
+        lbl = QLabel(self.canMonitor)
+        lbl.setMinimumHeight(20)
+        font = lbl.font()
+        font.setPointSize(10)
+        lbl.setFont(font)
+        lbl.setText(key)
+        
+        lbl2 = QLabel(self.canMonitor)
+        lbl2.setMinimumHeight(20)
+        font = lbl2.font()
+        font.setPointSize(10)
+        lbl2.setFont(font)
+        lbl2.setText(value)
+        self.valueLabelList.append(lbl2)
+
+        form.addRow(lbl, lbl2)
+        
+    def addGPSBox(self, form):
+        self.createGPSLabel(form, "status", "Not connected")
+        self.createGPSLabel(form, "latitude", "")
+        self.createGPSLabel(form, "longitude", "")
+        self.createGPSLabel(form, "time utc", "")
+        self.createGPSLabel(form, "altitude", "")
+        self.createGPSLabel(form, "speed", "")
+        self.createGPSLabel(form, "climb", "")
+                
+    def update(self, session):
+        if session!=None:
+            self.valueLabelList[0].setText("Connected")
+            self.valueLabelList[1].setText(str(session.fix.latitude))
+            self.valueLabelList[2].setText(str(session.fix.longitude))
+            self.valueLabelList[3].setText("%s %s"%(session.utc, session.fix.time))
+            self.valueLabelList[4].setText(str(session.fix.altitude))
+            self.valueLabelList[5].setText(str(session.fix.speed))
+            self.valueLabelList[6].setText(str(session.fix.climb))
+        else:
+            self.valueLabelList[0].setText("Not connected")
+            self.valueLabelList[1].setText("")
+            self.valueLabelList[2].setText("")
+            self.valueLabelList[3].setText("")
+            self.valueLabelList[4].setText("")
+            self.valueLabelList[5].setText("")
+            self.valueLabelList[6].setText("")
+        
 class CANMonitor(QMainWindow):
     def __init__(self, app, test):
         super(CANMonitor, self).__init__()
@@ -439,7 +519,7 @@ class CANMonitor(QMainWindow):
         self.logFileName="/tmp/candash.log"
         self.connectEnable=False
         self.replayMode=False
-        self.canIdList=[0x353, 0x353, 0x351, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5]
+        self.canIdList=[0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
         self.updateThread=None
         self.initUI()
     
@@ -457,7 +537,7 @@ class CANMonitor(QMainWindow):
     def createLCD(self, mode):
         lcd = QLCDNumber(self)
         lcd.setMode(mode)
-        lcd.setMinimumHeight(60)
+        lcd.setMinimumHeight(50)
         lcd.setMinimumWidth(160)
         lcd.setDigitCount(8)
         if mode==QLCDNumber.Bin:
@@ -491,9 +571,9 @@ class CANMonitor(QMainWindow):
 #        hbox = QHBoxLayout()
 
         lbl = QLabel(self)
-        lbl.setMinimumHeight(60)
+        lbl.setMinimumHeight(50)
         font = lbl.font()
-        font.setPointSize(20)
+        font.setPointSize(14)
         lbl.setFont(font)
         
         if label!=None:
@@ -513,9 +593,9 @@ class CANMonitor(QMainWindow):
 #        hbox = QHBoxLayout()
 
         lbl = QLabel(self)
-        lbl.setMinimumHeight(60)
+        lbl.setMinimumHeight(50)
         font = lbl.font()
-        font.setPointSize(20)
+        font.setPointSize(14)
         lbl.setFont(font)
         if label!=None:
             lbl.setText(label)
@@ -617,6 +697,7 @@ class CANMonitor(QMainWindow):
         tab4=QWidget()
         tab5=QWidget()
         tab6=QWidget()
+        tab7=QWidget()
         
         tab1Layout = QFormLayout(tab1)
 #        tab1Layout.setLabelAlignment(Qt.AlignCenter)
@@ -626,6 +707,7 @@ class CANMonitor(QMainWindow):
         tab4Layout = QVBoxLayout(tab4)
         tab5Layout = QFormLayout(tab5)
         tab6Layout=QVBoxLayout(tab6)
+        tab7Layout=QFormLayout(tab7)
 
         tabs.addTab(tab1, "Main")
         tabs.addTab(tab2, "Misc") 
@@ -633,6 +715,7 @@ class CANMonitor(QMainWindow):
         tabs.addTab(tab4, "Dash") 
         tabs.addTab(tab5, "Zuheizer") 
         tabs.addTab(tab6, "Log2")
+        tabs.addTab(tab7, "GPS")
 
         tabs.setCurrentIndex(3)
         
@@ -655,6 +738,8 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntry(tab5Layout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
         
         self.createCANIdEntry(tab2Layout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
+        self.createCANIdEntry(tab2Layout, 0x591, "0", "ZV", QLCDNumber.Dec)
+        self.createCANIdEntry(tab2Layout, 0x5d1, "0", "Scheibenwischer", QLCDNumber.Dec)
 
         self.createLogView(tab3Layout)
         
@@ -745,6 +830,9 @@ class CANMonitor(QMainWindow):
 #        self.connectButton.clicked.connect(self._connect2)
 #        top.addWidget(self.connectButton)
         
+        self.gpsBox=GPSMonitor(self)
+        self.gpsBox.addGPSBox(tab7Layout)
+        
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
         self.show()
@@ -755,8 +843,9 @@ class CANMonitor(QMainWindow):
         self.connect(self.thread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self.thread.setup(self.app, self, self.canDecoder, self.test)
         
-#        self.updateThread=CANMonitorUpateUIWorker()
-#        self.updateThread.setup(self)
+        self.updateThread=GPSMonitorUpateUIWorker()
+        self.updateThread.setup(self)
+
                
     def getWidget(self, canId, subId):
         try:
@@ -1002,6 +1091,9 @@ class CANMonitor(QMainWindow):
     def canIdIsInKnownList(self, canId):
         return canId in self.canIdList
 
+    def updateGPSDisplay(self, session):
+        self.gpsBox.update(session)
+        
 def main(argv): 
     test=False
     try:
