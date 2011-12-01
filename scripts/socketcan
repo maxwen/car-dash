@@ -1,0 +1,64 @@
+#!/bin/sh
+#
+# socketcan Starts/stop the "socketcan" daemon
+#
+# chkconfig:   2345 99 1 
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+prog="socketcan"
+
+start() {
+    echo -n $"Starting $prog: "
+    /opt/socketcan/can-setup.sh && success || failure
+    retval=$?
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    /opt/socketcan/can-shutdown.sh && success || failure
+    retval=$?
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    restart
+}
+
+force_reload() {
+    restart
+}
+
+case "$1" in
+    start)
+        $1
+        ;;
+    stop)
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        ;;
+    condrestart|try-restart)
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?

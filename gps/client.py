@@ -1,7 +1,15 @@
 # This file is Copyright (c) 2010 by the GPSD project
 # BSD terms apply: see the file COPYING in the distribution root for details.
 #
-import time, socket, sys
+import time
+import socket
+import sys
+#import select
+
+if sys.hexversion >= 0x2060000:
+    import json                 # For Python 2.6
+else:
+    import simplejson as json   # For Python 2.4 and 2.5
 
 GPSD_PORT="2947"
 

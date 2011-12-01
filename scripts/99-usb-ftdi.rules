@@ -1,0 +1,4 @@
+# For FTDI FT232 & FT245 USB devices with Vendor ID = 0x0403, Product ID = 0xfa24
+ATTR{idProduct}=="fa24", ATTR{idVendor}=="0403", RUN+="/sbin/modprobe ftdi-sio product=0xfa24 vendor=0x0403"
+ENV{STARTUP}!="1", ATTR{idProduct}=="ffa8", ATTR{idVendor}=="0403", ACTION=="add", RUN+="/opt/socketcan/can-setup-udev.sh" 
+ENV{STARTUP}!="1", ENV{ID_MODEL_ID}=="ffa8", ENV{ID_VENDOR_ID}=="0403", ACTION=="remove", RUN+="/opt/socketcan/can-shutdown-udev.sh" 

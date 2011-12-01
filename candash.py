@@ -15,6 +15,8 @@ from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPus
 
 from collections import deque
 from gaugepng import QtPngDialGauge
+from gaugecompass import QtPngCompassGauge
+
 import signal
 import operator
         
@@ -44,11 +46,11 @@ class GPSMonitorUpateUIWorker(QThread):
             self.session.stream(gps.WATCH_ENABLE)
         except socket.error:
             self.session=None
+            self.sleep(1)
             
     def run(self):
         while not self.exiting and True:
             if self.session==None:
-                self.sleep(1)
                 self.connectToGPS()
                 continue
             try:
@@ -460,40 +462,65 @@ class GPSMonitor():
         
     def createGPSLabel(self, form, key, value):
         lbl = QLabel(self.canMonitor)
-        lbl.setMinimumHeight(20)
+        lbl.setMinimumHeight(40)
         font = lbl.font()
-        font.setPointSize(10)
+        font.setPointSize(12)
         lbl.setFont(font)
         lbl.setText(key)
         
         lbl2 = QLabel(self.canMonitor)
-        lbl2.setMinimumHeight(20)
+        lbl2.setMinimumHeight(40)
         font = lbl2.font()
-        font.setPointSize(10)
+        font.setPointSize(12)
         lbl2.setFont(font)
         lbl2.setText(value)
         self.valueLabelList.append(lbl2)
 
         form.addRow(lbl, lbl2)
         
-    def addGPSBox(self, form):
-        self.createGPSLabel(form, "status", "Not connected")
-        self.createGPSLabel(form, "latitude", "")
-        self.createGPSLabel(form, "longitude", "")
-        self.createGPSLabel(form, "time utc", "")
-        self.createGPSLabel(form, "altitude", "")
-        self.createGPSLabel(form, "speed", "")
-        self.createGPSLabel(form, "climb", "")
-                
+    def addGPSBox(self, hbox):
+        form=QFormLayout()
+        hbox.addLayout(form)
+        
+        self.createGPSLabel(form, "Status", "Not connected")
+        self.createGPSLabel(form, "Latitude", "")
+        self.createGPSLabel(form, "Longitude", "")
+        self.createGPSLabel(form, "Time UTC", "")
+        self.createGPSLabel(form, "Altitude", "")
+        self.createGPSLabel(form, "Speed", "")
+        self.createGPSLabel(form, "Climb", "")
+        self.createGPSLabel(form, "Track", "")
+        
+        vbox=QVBoxLayout()
+        self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass.png")
+        self.compassGauge.setValue(0)
+        self.compassGauge.setMaximumSize(320, 320)
+        vbox.addWidget(self.compassGauge)
+
+        self.speedDisplay=self.canMonitor.createLCD(QLCDNumber.Dec)
+        self.speedDisplay.display(0)
+        vbox.addWidget(self.speedDisplay)
+        
+        hbox.addLayout(vbox)
+                        
     def update(self, session):
         if session!=None:
-            self.valueLabelList[0].setText("Connected")
+            self.valueLabelList[0].setText("Connected ("+str(session.satellites_used)+" satelites)")
             self.valueLabelList[1].setText(str(session.fix.latitude))
             self.valueLabelList[2].setText(str(session.fix.longitude))
-            self.valueLabelList[3].setText("%s %s"%(session.utc, session.fix.time))
+            self.valueLabelList[3].setText(str(session.utc))
             self.valueLabelList[4].setText(str(session.fix.altitude))
             self.valueLabelList[5].setText(str(session.fix.speed))
             self.valueLabelList[6].setText(str(session.fix.climb))
+            self.valueLabelList[7].setText(str(session.fix.track))
+            if not gps.isnan(session.fix.track):
+                self.compassGauge.setValue(int(session.fix.track))
+            else:
+                self.compassGauge.setValue(0)
+            if not gps.isnan(session.fix.speed):
+                self.speedDisplay.display(int(session.fix.speed*3.6))
+            else:
+                self.speedDisplay.display(0)
         else:
             self.valueLabelList[0].setText("Not connected")
             self.valueLabelList[1].setText("")
@@ -502,6 +529,10 @@ class GPSMonitor():
             self.valueLabelList[4].setText("")
             self.valueLabelList[5].setText("")
             self.valueLabelList[6].setText("")
+            self.valueLabelList[7].setText("")
+            self.compassGauge.setValue(0)
+            self.speedDisplay.display(0)
+
         
 class CANMonitor(QMainWindow):
     def __init__(self, app, test):
@@ -691,147 +722,148 @@ class CANMonitor(QMainWindow):
         tabs = QTabWidget(self)
         top.addWidget(tabs)
         
-        tab1 = QWidget()
-        tab2 = QWidget() 
-        tab3=QWidget()
-        tab4=QWidget()
-        tab5=QWidget()
-        tab6=QWidget()
-        tab7=QWidget()
+        mainTab = QWidget()
+        miscTab = QWidget() 
+        zuheizerTab=QWidget()
+        logTab=QWidget()
+        dashTab=QWidget()
+        gpsTab=QWidget()
         
-        tab1Layout = QFormLayout(tab1)
-#        tab1Layout.setLabelAlignment(Qt.AlignCenter)
-        tab2Layout = QFormLayout(tab2)
-#        tab2Layout.setLabelAlignment(Qt.AlignCenter)
-        tab3Layout = QVBoxLayout(tab3)
-        tab4Layout = QVBoxLayout(tab4)
-        tab5Layout = QFormLayout(tab5)
-        tab6Layout=QVBoxLayout(tab6)
-        tab7Layout=QFormLayout(tab7)
+        mainTabLayout = QFormLayout(mainTab)
+        miscTabLayout = QFormLayout(miscTab)
+        zuheizerTabLayout = QFormLayout(zuheizerTab)
+        logTabLayout = QVBoxLayout(logTab)
+        dashTabLayout = QHBoxLayout(dashTab)
+        gpsTabLayout=QHBoxLayout(gpsTab)
 
-        tabs.addTab(tab1, "Main")
-        tabs.addTab(tab2, "Misc") 
-        tabs.addTab(tab3, "Log") 
-        tabs.addTab(tab4, "Dash") 
-        tabs.addTab(tab5, "Zuheizer") 
-        tabs.addTab(tab6, "Log2")
-        tabs.addTab(tab7, "GPS")
+        tabs.addTab(dashTab, "Dash") 
+        tabs.addTab(mainTab, "Main")
+        tabs.addTab(miscTab, "Misc") 
+        tabs.addTab(zuheizerTab, "Zuheizer") 
+        tabs.addTab(logTab, "Log") 
+        tabs.addTab(gpsTab, "GPS")
 
-        tabs.setCurrentIndex(3)
+#        tabs.setCurrentIndex(4)
         
-
-        self.createCANIdEntry(tab1Layout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
-        self.createCANIdEntry(tab1Layout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
-        self.createCANIdEntry(tab1Layout, 0x351, "0", "Geschwindigkeit", QLCDNumber.Dec)
-        self.createCANIdEntry(tab1Layout, 0x351, "1", "Außentemperatur", QLCDNumber.Dec)
-        self.createCANIdEntry(tab2Layout, 0x635, "0", "Licht, Klemme 58d", QLCDNumber.Dec)
-        self.createCANIdEntry(tab2Layout, 0x271, "0", "Zuendung", QLCDNumber.Dec)
-        self.createCANIdEntrySingleLine(tab2Layout, 0x371, ["0", "1"], "Tuerstatus", QLCDNumber.Bin)
-        self.createCANIdEntry(tab2Layout, 0x371, "2", "Blinker, Retoursgang", QLCDNumber.Bin)
-        self.createCANIdEntrySingleLine(tab1Layout, 0x623, ["0", "1", "2"], "Uhrzeit (Stunden)", QLCDNumber.Dec)        
-        self.createCANIdEntry(tab1Layout, 0x571, "0", "Batteriespannung", QLCDNumber.Dec)
+        self.createCANIdEntry(mainTabLayout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
+        self.createCANIdEntry(mainTabLayout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
+        self.createCANIdEntry(mainTabLayout, 0x351, "0", "Geschwindigkeit", QLCDNumber.Dec)
+        self.createCANIdEntry(mainTabLayout, 0x351, "1", "Außentemperatur", QLCDNumber.Dec)
+        self.createCANIdEntry(miscTabLayout, 0x635, "0", "Licht, Klemme 58d", QLCDNumber.Dec)
+        self.createCANIdEntry(miscTabLayout, 0x271, "0", "Zuendung", QLCDNumber.Dec)
+        self.createCANIdEntrySingleLine(miscTabLayout, 0x371, ["0", "1"], "Tuerstatus", QLCDNumber.Bin)
+        self.createCANIdEntry(miscTabLayout, 0x371, "2", "Blinker, Retoursgang", QLCDNumber.Bin)
+        self.createCANIdEntrySingleLine(mainTabLayout, 0x623, ["0", "1", "2"], "Uhrzeit (Stunden)", QLCDNumber.Dec)        
+        self.createCANIdEntry(mainTabLayout, 0x571, "0", "Batteriespannung", QLCDNumber.Dec)
         
-        self.createCANIdEntry(tab5Layout, 0x3e5, "0", "Zuheizer 1", QLCDNumber.Bin)
-        self.createCANIdEntry(tab5Layout, 0x3e5, "1", "Zuheizer 2", QLCDNumber.Bin)
-        self.createCANIdEntry(tab5Layout, 0x3e5, "2", "Zuheizer 3", QLCDNumber.Bin)
-        self.createCANIdEntry(tab5Layout, 0x3e5, "3", "Zuheizer 4", QLCDNumber.Bin)
-        self.createCANIdEntry(tab5Layout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
+        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "0", "Zuheizer 1", QLCDNumber.Bin)
+        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "1", "Zuheizer 2", QLCDNumber.Bin)
+        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "2", "Zuheizer 3", QLCDNumber.Bin)
+        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "3", "Zuheizer 4", QLCDNumber.Bin)
+        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
         
-        self.createCANIdEntry(tab2Layout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
-        self.createCANIdEntry(tab2Layout, 0x591, "0", "ZV", QLCDNumber.Dec)
-        self.createCANIdEntry(tab2Layout, 0x5d1, "0", "Scheibenwischer", QLCDNumber.Dec)
+        self.createCANIdEntry(miscTabLayout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
+        self.createCANIdEntry(miscTabLayout, 0x591, "0", "ZV", QLCDNumber.Dec)
+        self.createCANIdEntry(miscTabLayout, 0x5d1, "0", "Scheibenwischer", QLCDNumber.Dec)
 
-        self.createLogView(tab3Layout)
+        
+        logTabs = QTabWidget(self)
+        logTabLayout.addWidget(logTabs)
+        
+        logTabWidget1=QWidget()
+        logTabWidget2=QWidget()
+
+        logTabs.addTab(logTabWidget1, "Time")
+        logTabs.addTab(logTabWidget2, "Change") 
+        
+        logTab1Layout = QVBoxLayout(logTabWidget1)
+        self.createLogView(logTab1Layout)
         
         self.logViewFilerBox1=CANFilterBox(self, False)
-        self.logViewFilerBox1.addFilterBox(tab3Layout)
+        self.logViewFilerBox1.addFilterBox(logTab1Layout)
         
         self.logViewTableBox1=CANLogTableBox(self, self.logViewModel, self.logBuffer, None)
-        self.logViewTableBox1.addTableBox(tab3Layout)
-                        
-        hbox3 = QHBoxLayout()
-        tab3Layout.addLayout(hbox3)
-#        hbox3.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+        self.logViewTableBox1.addTableBox(logTab1Layout)
+        
+        logTab2Layout = QVBoxLayout(logTabWidget2)
+        self.createLogView2(logTab2Layout)
+
+        self.logViewFilterBox2=CANFilterBox(self, True)
+        self.logViewFilterBox2.addFilterBox(logTab2Layout)
+        
+        self.logViewTableBox2=CANLogTableBox(self, self.logViewModel2, self.logBuffer2, self.logBufferInit)
+        self.logViewTableBox2.addTableBox(logTab2Layout)
+        
+        logButtonBox = QHBoxLayout()
+        logTabLayout.addLayout(logButtonBox)
         
         self.logFileButton=QCheckBox("Log to File", self)
         self.logFileButton.setToolTip('Enable file logging')
         self.logFileButton.resize(self.logFileButton.sizeHint())
         self.logFileButton.setDisabled(self.replayMode==True)
         self.logFileButton.clicked.connect(self._enableLogFile)
-        hbox3.addWidget(self.logFileButton)
+        logButtonBox.addWidget(self.logFileButton)
         
         self.clearLogButton = QPushButton('Clear Log', self)
         self.clearLogButton.resize(self.clearLogButton.sizeHint())
         self.clearLogButton.setDisabled(not self.logFileAvailable() or self.replayMode==True)
         self.clearLogButton.clicked.connect(self._clearLogFile)
-        hbox3.addWidget(self.clearLogButton)
+        logButtonBox.addWidget(self.clearLogButton)
 
         self.replayButton = QPushButton('Replay Log', self)
         self.replayButton.resize(self.replayButton.sizeHint())
         self.replayButton.setDisabled(not self.logFileAvailable() or self.connectEnable==True)
         self.replayButton.clicked.connect(self._startReplayMode)
-        hbox3.addWidget(self.replayButton)
+        logButtonBox.addWidget(self.replayButton)
 
         self.stopReplayButton = QPushButton('Stop Replay', self)
         self.stopReplayButton.resize(self.stopReplayButton.sizeHint())
         self.stopReplayButton.setDisabled(self.replayMode==False)
         self.stopReplayButton.clicked.connect(self._stopReplayMode)
-        hbox3.addWidget(self.stopReplayButton)
-                              
-        hbox4 = QHBoxLayout()
-        hbox4.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
-
-        tab4Layout.addLayout(hbox4)
-        
-        vbox = QVBoxLayout()
-        hbox4.addLayout(vbox)
-#        vbox.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
-        
+        logButtonBox.addWidget(self.stopReplayButton)
+                    
+                    
+        velBox = QVBoxLayout()
+        dashTabLayout.addLayout(velBox)
+                                  
         self.velGauge=QtPngDialGauge(self, "tacho3", "tacho3.png")
         self.velGauge.setMinimum(20)
         self.velGauge.setMaximum(220)
         self.velGauge.setStartAngle(135)
         self.velGauge.setValue(0)
         self.velGauge.setMaximumSize(320, 320)
-        vbox.addWidget(self.velGauge)
+        velBox.addWidget(self.velGauge)
 
-        self.createCANIdValueEntry(vbox, 0x351, "0", QLCDNumber.Dec)
+        self.createCANIdValueEntry(velBox, 0x351, "0", QLCDNumber.Dec)
         
-        vbox1 = QVBoxLayout()
-        vbox1.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
+        valuesBox = QVBoxLayout()
+        valuesBox.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
 
-        hbox4.addLayout(vbox1)
-        self.createCANIdValueEntry(vbox1, 0x353, "1", QLCDNumber.Dec)
-        self.createCANIdValueEntry(vbox1, 0x351, "1", QLCDNumber.Dec)
-        self.createCANIdValueEntry(vbox1, 0x571, "0", QLCDNumber.Dec)
+        dashTabLayout.addLayout(valuesBox)
+        self.createCANIdValueEntry(valuesBox, 0x353, "1", QLCDNumber.Dec)
+        self.createCANIdValueEntry(valuesBox, 0x351, "1", QLCDNumber.Dec)
+        self.createCANIdValueEntry(valuesBox, 0x571, "0", QLCDNumber.Dec)
  
-        vbox2 = QVBoxLayout()
-        hbox4.addLayout(vbox2)
-#        vbox2.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
+        rpmBox = QVBoxLayout()
+        dashTabLayout.addLayout(rpmBox)
+#        rpmBox.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
         self.rpmGauge=QtPngDialGauge(self, "rpm", "rpm.png")
         self.rpmGauge.setMinimum(0)
         self.rpmGauge.setMaximum(8000)
         self.rpmGauge.setStartAngle(120)
         self.rpmGauge.setValue(0)
         self.rpmGauge.setMaximumSize(320, 320)
-        vbox2.addWidget(self.rpmGauge)     
+        rpmBox.addWidget(self.rpmGauge)     
          
-        self.createCANIdValueEntry(vbox2, 0x353, "0", QLCDNumber.Dec)
+        self.createCANIdValueEntry(rpmBox, 0x353, "0", QLCDNumber.Dec)
 
-        self.createLogView2(tab6Layout)
-
-        self.logViewFilterBox2=CANFilterBox(self, True)
-        self.logViewFilterBox2.addFilterBox(tab6Layout)
-        
-        self.logViewTableBox2=CANLogTableBox(self, self.logViewModel2, self.logBuffer2, self.logBufferInit)
-        self.logViewTableBox2.addTableBox(tab6Layout)
         
 #        self.connectButton = QCheckBox('Connect')
 #        self.connectButton.clicked.connect(self._connect2)
 #        top.addWidget(self.connectButton)
         
         self.gpsBox=GPSMonitor(self)
-        self.gpsBox.addGPSBox(tab7Layout)
+        self.gpsBox.addGPSBox(gpsTabLayout)
         
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
