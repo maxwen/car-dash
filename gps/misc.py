@@ -82,13 +82,16 @@ def MeterOffset(xxx_todo_changeme2, xxx_todo_changeme3):
 def isotime(s):
     "Convert timestamps in ISO8661 format to and from Unix time."
     if type(s) == type(1):
-        return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(s))
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(s))
     elif type(s) == type(1.0):
         date = int(s)
         msec = s - date
-        date = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(s))
-        return date + "." + repr(msec)[3:]
+        date = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(s))
+        #return date + "." + repr(msec)[3:]
+        return date
     elif type(s) == type("") or type(s) == type(""):
+        if len(s)==0:
+            return s
         if s[-1] == "Z":
             s = s[:-1]
         if "." in s:
@@ -97,9 +100,10 @@ def isotime(s):
             date = s
             msec = "0"
         # Note: no leap-second correction! 
-        return calendar.timegm(time.strptime(date, "%Y-%m-%dT%H:%M:%S")) + float("0." + msec)
+        return calendar.timegm(time.strptime(date, "%Y-%m-%d %H:%M:%S")) + float("0." + msec)
     else:
-        raise TypeError
+        return s
+        #raise TypeError
 
 # End
 

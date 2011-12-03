@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANDecoder, CANSocketWorker
-from gps import gps
+from gps import gps, misc
 import socket
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot, QThread
@@ -26,7 +26,7 @@ ID_COL=2
 SIZE_COL=3
 DATA_COL=4
 
-class GPSMonitorUpateUIWorker(QThread):
+class GPSMonitorUpateWorker(QThread):
     def __init__(self, parent=None): 
         QThread.__init__(self, parent)
         self.exiting = False
@@ -40,14 +40,23 @@ class GPSMonitorUpateUIWorker(QThread):
         self.session=None
         self.start()
             
+    def updateStatusLabel(self, text):
+        self.emit(SIGNAL("updateStatus(QString)"), text)
+
     def connectToGPS(self):
         try:
             self.session = gps.gps()
+            self.updateStatusLabel("Connect GPS ok")
             self.session.stream(gps.WATCH_ENABLE)
         except socket.error:
+            self.updateStatusLabel("Connect GPS failed")
             self.session=None
             self.sleep(1)
             
+    def reconnectGPS(self):
+        if self.session!=None:
+            self.session=None
+        
     def run(self):
         while not self.exiting and True:
             if self.session==None:
@@ -462,16 +471,16 @@ class GPSMonitor():
         
     def createGPSLabel(self, form, key, value):
         lbl = QLabel(self.canMonitor)
-        lbl.setMinimumHeight(40)
+        lbl.setMinimumHeight(50)
         font = lbl.font()
-        font.setPointSize(12)
+        font.setPointSize(14)
         lbl.setFont(font)
         lbl.setText(key)
         
         lbl2 = QLabel(self.canMonitor)
-        lbl2.setMinimumHeight(40)
+        lbl2.setMinimumHeight(50)
         font = lbl2.font()
-        font.setPointSize(12)
+        font.setPointSize(14)
         lbl2.setFont(font)
         lbl2.setText(value)
         self.valueLabelList.append(lbl2)
@@ -488,7 +497,6 @@ class GPSMonitor():
         self.createGPSLabel(form, "Time UTC", "")
         self.createGPSLabel(form, "Altitude", "")
         self.createGPSLabel(form, "Speed", "")
-        self.createGPSLabel(form, "Climb", "")
         self.createGPSLabel(form, "Track", "")
         
         vbox=QVBoxLayout()
@@ -508,11 +516,23 @@ class GPSMonitor():
             self.valueLabelList[0].setText("Connected ("+str(session.satellites_used)+" satelites)")
             self.valueLabelList[1].setText(str(session.fix.latitude))
             self.valueLabelList[2].setText(str(session.fix.longitude))
-            self.valueLabelList[3].setText(str(session.utc))
+            
+#            print(session.utc)
+            if type(session.utc)==type(1.0):
+                try:
+                    timeString=misc.isotime(session.utc)
+                except IndexError:
+                    timeString=""
+                except ValueError:
+                    timeString=""
+            else:
+                timeString=str(session.utc)
+                
+            self.valueLabelList[3].setText(timeString)
             self.valueLabelList[4].setText(str(session.fix.altitude))
             self.valueLabelList[5].setText(str(session.fix.speed))
-            self.valueLabelList[6].setText(str(session.fix.climb))
-            self.valueLabelList[7].setText(str(session.fix.track))
+            #self.valueLabelList[6].setText(str(session.fix.climb))
+            self.valueLabelList[6].setText(str(session.fix.track))
             if not gps.isnan(session.fix.track):
                 self.compassGauge.setValue(int(session.fix.track))
             else:
@@ -529,7 +549,6 @@ class GPSMonitor():
             self.valueLabelList[4].setText("")
             self.valueLabelList[5].setText("")
             self.valueLabelList[6].setText("")
-            self.valueLabelList[7].setText("")
             self.compassGauge.setValue(0)
             self.speedDisplay.display(0)
 
@@ -551,7 +570,7 @@ class CANMonitor(QMainWindow):
         self.connectEnable=False
         self.replayMode=False
         self.canIdList=[0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
-        self.updateThread=None
+        self.updateGPSThread=None
         self.initUI()
     
     def clearAllLCD(self):
@@ -706,18 +725,19 @@ class CANMonitor(QMainWindow):
         self.connectAction = QAction(self.disconnectIcon , 'Connect', self)
         self.connectAction.triggered.connect(self._connect1)
         self.connectAction.setCheckable(True)
-#        self.connectAction.setChecked(True)
         
         toolbar.addAction(self.connectAction)
+        
+        self.gpsIcon=QIcon("images/icon_gps.gif")
+        self.reconnectGPSAction = QAction(self.gpsIcon, 'Reconnect GPS', self)
+        self.reconnectGPSAction.triggered.connect(self._reconnectGPS)
+        toolbar.addAction(self.reconnectGPSAction)
         
         mainWidget=QWidget()
         mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)
-
-#        self.setCentralWidget(top)
-#        self.setLayout(top)
         
         tabs = QTabWidget(self)
         top.addWidget(tabs)
@@ -875,8 +895,9 @@ class CANMonitor(QMainWindow):
         self.connect(self.thread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self.thread.setup(self.app, self, self.canDecoder, self.test)
         
-        self.updateThread=GPSMonitorUpateUIWorker()
-        self.updateThread.setup(self)
+        self.updateGPSThread=GPSMonitorUpateWorker()
+        self.updateGPSThread.setup(self)
+        self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
 
                
     def getWidget(self, canId, subId):
@@ -1125,6 +1146,10 @@ class CANMonitor(QMainWindow):
 
     def updateGPSDisplay(self, session):
         self.gpsBox.update(session)
+        
+    @pyqtSlot()
+    def _reconnectGPS(self):
+        self.updateGPSThread.reconnectGPS()
         
 def main(argv): 
     test=False
