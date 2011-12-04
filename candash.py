@@ -16,6 +16,7 @@ from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPus
 from collections import deque
 from gaugepng import QtPngDialGauge
 from gaugecompass import QtPngCompassGauge
+from osmmapviewer import OSMWidget
 
 import signal
 import operator
@@ -68,7 +69,7 @@ class GPSMonitorUpateWorker(QThread):
             except StopIteration:
                 self.session=None
                 self.canMonitor.updateGPSDisplay(None)
-
+            
             self.msleep(500) 
                 
 class CANLogViewTableModel(QAbstractTableModel):
@@ -541,6 +542,9 @@ class GPSMonitor():
                 self.speedDisplay.display(int(session.fix.speed*3.6))
             else:
                 self.speedDisplay.display(0)
+                
+            self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
+
         else:
             self.valueLabelList[0].setText("Not connected")
             self.valueLabelList[1].setText("")
@@ -748,6 +752,7 @@ class CANMonitor(QMainWindow):
         logTab=QWidget()
         dashTab=QWidget()
         gpsTab=QWidget()
+        osmTab=QWidget()
         
         mainTabLayout = QFormLayout(mainTab)
         miscTabLayout = QFormLayout(miscTab)
@@ -755,6 +760,7 @@ class CANMonitor(QMainWindow):
         logTabLayout = QVBoxLayout(logTab)
         dashTabLayout = QHBoxLayout(dashTab)
         gpsTabLayout=QHBoxLayout(gpsTab)
+        osmTabLayout=QVBoxLayout(osmTab)
 
         tabs.addTab(dashTab, "Dash") 
         tabs.addTab(mainTab, "Main")
@@ -762,6 +768,7 @@ class CANMonitor(QMainWindow):
         tabs.addTab(zuheizerTab, "Zuheizer") 
         tabs.addTab(logTab, "Log") 
         tabs.addTab(gpsTab, "GPS")
+        tabs.addTab(osmTab, "OSM")
 
 #        tabs.setCurrentIndex(4)
         
@@ -884,6 +891,10 @@ class CANMonitor(QMainWindow):
         
         self.gpsBox=GPSMonitor(self)
         self.gpsBox.addGPSBox(gpsTabLayout)
+        
+        self.osmWidget=OSMWidget(self)
+        self.osmWidget.addToWidget(osmTabLayout)
+        self.osmWidget.init()
         
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
