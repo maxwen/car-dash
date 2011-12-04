@@ -9,7 +9,7 @@ import math
 import os
 import signal
 from PyQt4.QtCore import Qt, QSize, QPoint, QRect, pyqtSlot
-from PyQt4.QtGui import QColor, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -71,12 +71,15 @@ class QtOSMWidget(QWidget):
         self.gpsLatitude=0.0
         self.gpsLongitude=0.0
         self.osmutils=OSMUtils()
-        self.init()
+#        self.init()
         self.tileCache=dict()
 
     def init(self):
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(300)
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)        
         self.updateGeometry()
+        self.update()
         
     def osm_gps_map_set_center(self, latitude, longitude):
         self.center_rlat = self.osmutils.deg2rad(latitude)
@@ -88,14 +91,14 @@ class QtOSMWidget(QWidget):
         pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.center_rlat)
 #        print("%d %d"%(pixel_x, pixel_y))
 
-        self.map_x = int(pixel_x - displayWidth/2)
-        self.map_y = int(pixel_y - displayHeight/2)
+        self.map_x = int(pixel_x - self.width()/2)
+        self.map_y = int(pixel_y - self.height()/2)
         
 #        print("after center %f %f %d %d %d"%(latitude, longitude, self.map_x, self.map_y, self.map_zoom))
         
     def osm_gps_map_set_zoom (self, zoom):
-        width_center  = displayWidth / 2
-        height_center = displayHeight / 2
+        width_center  = self.width() / 2
+        height_center = self.height() / 2
 
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
         self.map_x = self.osmutils.lon2pixel(self.map_zoom, self.center_rlon) - width_center
@@ -111,7 +114,7 @@ class QtOSMWidget(QWidget):
         return x
 
     def osm_gps_map_fill_tiles_pixel (self):
-        print("Fill tiles: %d,%d z:%d"% (self.map_x, self.map_y, self.map_zoom))
+#        print("Fill tiles: %d,%d z:%d"% (self.map_x, self.map_y, self.map_zoom))
 
         offset_x = - self.map_x % TILESIZE;
         offset_y = - self.map_y % TILESIZE;
@@ -124,8 +127,8 @@ class QtOSMWidget(QWidget):
         offset_xn = offset_x + EXTRA_BORDER
         offset_yn = offset_y + EXTRA_BORDER
                 
-        tiles_nx = int((displayWidth  - offset_x) / TILESIZE + 1)
-        tiles_ny = int((displayHeight - offset_y) / TILESIZE + 1)
+        tiles_nx = int((self.width()  - offset_x) / TILESIZE + 1)
+        tiles_ny = int((self.height() - offset_y) / TILESIZE + 1)
 
         tile_x0 =  int(math.floor(self.map_x / TILESIZE))
         tile_y0 =  int(math.floor(self.map_y / TILESIZE))
@@ -155,7 +158,6 @@ class QtOSMWidget(QWidget):
             i=i+1
             j=tile_y0
     
-
     def osm_gps_get_tile(self, zoom, x, y, offset_x, offset_y):
         tileHome="/home/maxl/mapnik/tiles/"
         fileName=tileHome+str(zoom)+"/"+str(x)+"/"+str(y)+".png"
@@ -195,8 +197,8 @@ class QtOSMWidget(QWidget):
         pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude)
         x = pixel_x - self.map_x
         y = pixel_y - self.map_y
-        width = displayWidth
-        height = displayHeight
+        width = self.width()
+        height = self.height()
         if x < (width/2 - width/8) or x > (width/2 + width/8) or y < (height/2 - height/8) or y > (height/2 + height/8):
             self.map_x = pixel_x - width/2;
             self.map_y = pixel_y - height/2;
@@ -209,19 +211,23 @@ class QtOSMWidget(QWidget):
         self.update()
        
     def paintEvent(self, event):
+#        print(self.rect())
+#        print(self.geometry())
+        
         self.painter=QPainter(self) 
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
+        self.painter.end()
                     
     def minimumSizeHint(self):
-        return QSize(displayWidth, displayHeight)
+        return QSize(800, 300)
 
-    #def sizeHint(self):
-    #    return QSize(displayWidth, displayHeight)
+    def sizeHint(self):
+        return QSize(800, 300)
 
     def center_coord_update(self):
-        pixel_x = self.map_x + displayWidth/2
-        pixel_y = self.map_y + displayHeight/2
+        pixel_x = self.map_x + self.width()/2
+        pixel_y = self.map_y + self.height()/2
 
         self.center_rlon = self.osmutils.pixel2lon(self.map_zoom, pixel_x)
         self.center_rlat = self.osmutils.pixel2lat(self.map_zoom, pixel_y)
@@ -261,13 +267,11 @@ class OSMWidget(QWidget):
         self.zoom=1
         self.startLat=0.0
         self.startLon=0.0
+        self.autocenterGPS=False
         
-    def init(self):
-        self.mapView.show(self.zoom, self.startLat, self.startLon)
-
     def addToWidget(self, parent):
-        self.mapView=QtOSMWidget(self)
-        parent.addWidget(self.mapView)
+        self.mapWidgetQt=QtOSMWidget(self)
+        parent.addWidget(self.mapWidgetQt)
         
         hbox=QHBoxLayout()
         parent.addLayout(hbox)
@@ -295,10 +299,23 @@ class OSMWidget(QWidget):
         self.stepRightButton.clicked.connect(self._stepRight)
         hbox.addWidget(self.stepRightButton)
         
-        self.centerGPSButton=QPushButton("GPS", self)
+        self.centerGPSButton=QPushButton("Center GPS", self)
         self.centerGPSButton.clicked.connect(self._centerGPS)
         hbox.addWidget(self.centerGPSButton)
         
+        self.followGPSButton=QCheckBox("Follow GPS", self)
+        self.followGPSButton.clicked.connect(self._followGPS)
+        hbox.addWidget(self.followGPSButton)
+
+    def init(self):
+        self.zoom=1
+        self.startLat=47.8
+        self.startLon=13.0
+        
+        self.mapWidgetQt.init()
+        self.mapWidgetQt.updateGPSLocation(self.startLat, self.startLon)
+        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
+
     def initUI(self):
         vbox = QVBoxLayout()
         vbox.setAlignment(Qt.AlignCenter)
@@ -306,61 +323,94 @@ class OSMWidget(QWidget):
         self.addToWidget(vbox)
         self.setLayout(vbox)
         
-        self.zoom=1
-        self.startLat=47.8
-        self.startLon=13.0
-        self.mapView.updateGPSLocation(self.startLat, self.startLon)
-        self.mapView.show(self.zoom, self.startLat, self.startLon)
+        self.init()
 
 #        self.setGeometry(0, 0, 860, 500)
         self.setWindowTitle('OSM Test')
         self.show()
-
+        
     @pyqtSlot()
     def _zoomIn(self):
         self.zoom=self.zoom+1
         if self.zoom>MAX_ZOOM:
             self.zoom=MAX_ZOOM
-        self.mapView.show(self.zoom, self.startLat, self.startLon)
+        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
         
     @pyqtSlot()
     def _zoomOut(self):
         self.zoom=self.zoom-1
         if self.zoom<MIN_ZOOM:
             self.zoom=MIN_ZOOM
-        self.mapView.show(self.zoom, self.startLat, self.startLon)
+        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
 
     @pyqtSlot()
     def _stepUp(self):
-        self.mapView.stepUp(MAP_SCROLL_STEP)
+        self.mapWidgetQt.stepUp(MAP_SCROLL_STEP)
 
     @pyqtSlot()
     def _stepDown(self):
-        self.mapView.stepDown(MAP_SCROLL_STEP)
+        self.mapWidgetQt.stepDown(MAP_SCROLL_STEP)
         
     @pyqtSlot()
     def _stepLeft(self):
-        self.mapView.stepLeft(MAP_SCROLL_STEP)
+        self.mapWidgetQt.stepLeft(MAP_SCROLL_STEP)
         
     @pyqtSlot()
     def _stepRight(self):
-        self.mapView.stepRight(MAP_SCROLL_STEP)  
+        self.mapWidgetQt.stepRight(MAP_SCROLL_STEP)  
     
     @pyqtSlot()
     def _centerGPS(self):
-        self.mapView.updateGPSLocation(self.startLat, self.startLon)
-        self.mapView.osm_autocenter_map()   
+        self.mapWidgetQt.osm_autocenter_map()   
     
+    @pyqtSlot()
+    def _followGPS(self):
+        self.autocenterGPS=self.followGPSButton.isChecked()
+        if self.autocenterGPS==True:
+            self.mapWidgetQt.osm_autocenter_map()   
+                    
     def updateGPSPosition(self, lat, lon):
-        self.mapView.updateGPSLocation(lat, lon)
-        self.mapView.osm_autocenter_map()   
-          
+        self.mapWidgetQt.updateGPSLocation(lat, lon)
+        if self.autocenterGPS==True:
+            self.mapWidgetQt.osm_autocenter_map()   
+        
+class OSMWindow(QMainWindow):
+    def __init__(self):
+        super(OSMWindow, self).__init__()
+        self.initUI()
+
+    def initUI(self):
+        mainWidget=QWidget()
+        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+
+        self.setCentralWidget(mainWidget)
+        top=QVBoxLayout(mainWidget)        
+        tabs = QTabWidget(self)
+        top.addWidget(tabs)
+        
+        osmTab = QWidget()
+        osmTabLayout=QVBoxLayout(osmTab)
+
+        tabs.addTab(osmTab, "OSM")
+
+        self.mapWidget=OSMWidget(self)
+        self.mapWidget.addToWidget(osmTabLayout)
+        
+        self.mapWidget.init()
+
+#        self.setGeometry(0, 0, 800, 400)
+        self.setWindowTitle('OSM Test')
+        self.show()
+        
 def main(argv): 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
     widget = OSMWidget(None)
     widget.initUI()
+
+    widget1 = OSMWindow()
+    widget1.initUI()
     
     sys.exit(app.exec_())
 
