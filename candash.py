@@ -47,10 +47,10 @@ class GPSMonitorUpateWorker(QThread):
     def connectToGPS(self):
         try:
             self.session = gps.gps()
-            self.updateStatusLabel("Connect GPS ok")
+            self.updateStatusLabel("GPS connect ok")
             self.session.stream(gps.WATCH_ENABLE)
         except socket.error:
-            self.updateStatusLabel("Connect GPS failed")
+            self.updateStatusLabel("GPS connect error")
             self.session=None
             self.sleep(1)
             
@@ -67,10 +67,11 @@ class GPSMonitorUpateWorker(QThread):
                 self.session.__next__()
                 self.canMonitor.updateGPSDisplay(self.session)
             except StopIteration:
+                self.updateStatusLabel("GPS connection lost")
                 self.session=None
                 self.canMonitor.updateGPSDisplay(None)
             
-            self.msleep(500) 
+#            self.msleep(500) 
                 
 class CANLogViewTableModel(QAbstractTableModel):
     def __init__(self, canMonitor, logBuffer, canIdList, parent=None):
@@ -760,7 +761,7 @@ class CANMonitor(QMainWindow):
         logTabLayout = QVBoxLayout(logTab)
         dashTabLayout = QHBoxLayout(dashTab)
         gpsTabLayout=QHBoxLayout(gpsTab)
-        osmTabLayout=QVBoxLayout(osmTab)
+        osmTabLayout=QHBoxLayout(osmTab)
 
         tabs.addTab(dashTab, "Dash") 
         tabs.addTab(mainTab, "Main")
@@ -893,11 +894,13 @@ class CANMonitor(QMainWindow):
         self.gpsBox.addGPSBox(gpsTabLayout)
         
         self.osmWidget=OSMWidget(self)
-        osmTabLayout.setAlignment(Qt.AlignCenter)
+        osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
         self.osmWidget.addToWidget(osmTabLayout)
-        self.osmWidget.init()
+        self.osmWidget.initHome()
         
+        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+
         self.setGeometry(10, 10, 860, 500)
         self.setWindowTitle("candash")
         self.show()

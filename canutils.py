@@ -269,7 +269,6 @@ class CANSocketWorker(QThread):
         while self.reconnecting<42 and self.s==None and self.connected==False:
             self.sleep(1)
             self.s=None
-#            self.updateStatusLabel("reconnect try "+str(self.reconnecting))
             self.connectCANDevice()
             if self.s!=None and self.connected==True:
                 self.reconnecting=0
@@ -293,25 +292,23 @@ class CANSocketWorker(QThread):
             if self.test==False:
                 if self.s!=None:
                     try:
-#                        self.updateStatusLabel("disconnect")
                         self.s.close()
                         self.s=None
-                        self.updateStatusLabel("disconnect ok")
+                        self.updateStatusLabel("CAN disconnect ok")
                         self.canMonitor.connectFailed()
                     except socket.error:
-                        self.updateStatusLabel("disconnect error")
+                        self.updateStatusLabel("CAN disconnect error")
                          
                     self.s=None
                     self.connected=False         
             else:
                 self.connected=False
-                self.updateStatusLabel("test disconnect")
+                self.updateStatusLabel("CAN test disconnect")
                 self.canMonitor.connectFailed()
                  
     def connectCANDevice(self):
         if self.s==None:
             if self.test==False:
-#                self.updateStatusLabel("connect")
                 try:
                     # create CAN socket
                     self.s = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
@@ -330,21 +327,21 @@ class CANSocketWorker(QThread):
                     # bind to interface "canX" or "any")
                     # tuple is (interface, reserved(can_addr))
                     self.s.bind(("slcan0",))
-                    self.updateStatusLabel("connect ok")
+                    self.updateStatusLabel("CAN connect ok")
                     self.connected=True
                     self.canMonitor.connectSuccessful()
                 except socket.error:
                     if self.reconnecting!=0:
-                        self.updateStatusLabel("reconnect try "+str(self.reconnecting))
+                        self.updateStatusLabel("CAN reconnect try "+str(self.reconnecting))
                     else:
-                        self.updateStatusLabel("connect error")
+                        self.updateStatusLabel("CAN connect error")
                     self.s=None
                     self.connected=False
                     self.canMonitor.connectFailed()
                     return
             else:
                 self.connected=True
-                self.updateStatusLabel("test connect")
+                self.updateStatusLabel("CAN test connect")
                 self.canMonitor.connectSuccessful()
         
     def run(self):
@@ -385,7 +382,7 @@ class CANSocketWorker(QThread):
                     try:
                         cf, addr = self.s.recvfrom(16)
                     except socket.error:
-                        self.updateStatusLabel("connection lost")
+                        self.updateStatusLabel("CAN connection lost")
                         self.s=None
                         self.connected=False
                         self.reconnectCANDevice()                        

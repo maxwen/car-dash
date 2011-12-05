@@ -8,18 +8,23 @@ import sys
 import math
 import os
 import signal
-from PyQt4.QtCore import Qt, QSize, QPoint, QRect, pyqtSlot
+import http.client
+import io
+import socket
+
+from PyQt4.QtCore import Qt, QSize, pyqtSlot, SIGNAL, QRect, QPoint
 from PyQt4.QtGui import QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
-displayWidth=800
-displayHeight=350
-#EXTRA_BORDER=(TILESIZE / 2)
+minWidth=500
+minHeight=300
 EXTRA_BORDER=0
 MIN_ZOOM=1
 MAX_ZOOM=18
 MAP_SCROLL_STEP=10
+tileHome="/Maps/osm/tiles/"
+tileServer="tile.openstreetmap.org"
 
 class OSMUtils():
     def deg2rad(self, deg):
@@ -73,13 +78,21 @@ class QtOSMWidget(QWidget):
         self.osmutils=OSMUtils()
 #        self.init()
         self.tileCache=dict()
+        self.withMapnik=False
+        self.withDownload=False
+        self.serverChecked=False
+        self.autocenterGPS=False
+        self.crossHair=QPixmap("images/gps-point.png")
 
+    def getTileHome(self):
+        return os.environ['HOME']+tileHome
+    
     def init(self):
-        self.setMinimumWidth(800)
-        self.setMinimumHeight(300)
-        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)        
+        self.setMinimumWidth(minWidth)
+        self.setMinimumHeight(minHeight)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
         self.updateGeometry()
-        self.update()
+        #self.update()
         
     def osm_gps_map_set_center(self, latitude, longitude):
         self.center_rlat = self.osmutils.deg2rad(latitude)
@@ -104,6 +117,13 @@ class QtOSMWidget(QWidget):
         self.map_x = self.osmutils.lon2pixel(self.map_zoom, self.center_rlon) - width_center
         self.map_y = self.osmutils.lat2pixel(self.map_zoom, self.center_rlat) - height_center
         
+    def osm_gps_map_handle_resize (self):
+        width_center  = self.width() / 2
+        height_center = self.height() / 2
+
+        self.map_x = self.osmutils.lon2pixel(self.map_zoom, self.center_rlon) - width_center
+        self.map_y = self.osmutils.lat2pixel(self.map_zoom, self.center_rlat) - height_center
+
 #        print("after zoom %d %d %d"%(self.map_x, self.map_y, self.map_zoom))
 
     def CLAMP(self, x, low, high):
@@ -115,6 +135,7 @@ class QtOSMWidget(QWidget):
 
     def osm_gps_map_fill_tiles_pixel (self):
 #        print("Fill tiles: %d,%d z:%d"% (self.map_x, self.map_y, self.map_zoom))
+#        print(self.geometry())
 
         offset_x = - self.map_x % TILESIZE;
         offset_y = - self.map_y % TILESIZE;
@@ -158,24 +179,37 @@ class QtOSMWidget(QWidget):
             i=i+1
             j=tile_y0
     
-    def osm_gps_get_tile(self, zoom, x, y, offset_x, offset_y):
-        tileHome="/home/maxl/mapnik/tiles/"
-        fileName=tileHome+str(zoom)+"/"+str(x)+"/"+str(y)+".png"
-        if os.path.exists(fileName):
-#            print("draw %s at %d %d"%(fileName, offset_x, offset_y))
-            if not fileName in self.tileCache:
-                pixbuf = QPixmap(fileName)
-                self.tileCache[fileName]=pixbuf
-            else:
-                pixbuf=self.tileCache[fileName]
-                
-            self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
+    def drawTile(self, fileName, offset_x, offset_y):
+#        print("draw %s at %d %d"%(fileName, offset_x, offset_y))
+
+        if not fileName in self.tileCache:
+            pixbuf = QPixmap(fileName)
+            self.tileCache[fileName]=pixbuf
         else:
-            pen=QPen()
-            palette=QPalette()
-            pen.setColor(palette.color(QPalette.Normal, QPalette.Background))
-            self.painter.setPen(pen)
-            self.painter.drawRect(offset_x, offset_y, TILESIZE, TILESIZE)
+            pixbuf=self.tileCache[fileName]
+            
+        self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
+
+    def osm_gps_get_tile(self, zoom, x, y, offset_x, offset_y):
+        fileName=self.getTileHome()+str(zoom)+"/"+str(x)+"/"+str(y)+".png"
+        if os.path.exists(fileName):
+            self.drawTile(fileName, offset_x, offset_y)
+        else:
+            if self.withDownload==True:
+                self.callDownloadForTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName)
+                if os.path.exists(fileName):
+                    self.drawTile(fileName, offset_x, offset_y)
+                    
+            elif self.withMapnik==True:
+                self.callMapnikForTile()
+                if os.path.exists(fileName):
+                    self.drawTile(fileName, offset_x, offset_y)
+            else:
+                pen=QPen()
+                palette=QPalette()
+                pen.setColor(palette.color(QPalette.Normal, QPalette.Background))
+                self.painter.setPen(pen)
+                self.painter.drawRect(offset_x, offset_y, TILESIZE, TILESIZE)
             
     def osm_gps_show_location(self):
         if self.gpsLongitude==0.0 and self.gpsLatitude==0.0:
@@ -190,40 +224,50 @@ class QtOSMWidget(QWidget):
         x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude) - map_x0
         y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude) - map_y0
 
-        self.painter.drawPoint(x, y)
+        self.painter.drawPixmap(x-self.crossHair.width()/2, y-self.crossHair.height()/2, self.crossHair)
+#        self.painter.drawPoint(x, y)
         
     def osm_autocenter_map(self):
-        pixel_x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude)
-        pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude)
-        x = pixel_x - self.map_x
-        y = pixel_y - self.map_y
-        width = self.width()
-        height = self.height()
-        if x < (width/2 - width/8) or x > (width/2 + width/8) or y < (height/2 - height/8) or y > (height/2 + height/8):
-            self.map_x = pixel_x - width/2;
-            self.map_y = pixel_y - height/2;
-            self.center_coord_update();
+        if self.gpsLatitude!=0.0 and self.gpsLongitude!=0.0:
+            pixel_x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude)
+            pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude)
+            x = pixel_x - self.map_x
+            y = pixel_y - self.map_y
+            width = self.width()
+            height = self.height()
+            if x < (width/2 - width/8) or x > (width/2 + width/8) or y < (height/2 - height/8) or y > (height/2 + height/8):
+                self.map_x = pixel_x - width/2;
+                self.map_y = pixel_y - height/2;
+                self.center_coord_update();
             self.update()
         
     def show(self, zoom, lat, lon):
         self.osm_gps_map_set_center(lat, lon)
         self.osm_gps_map_set_zoom(zoom)
         self.update()
+    
+    def zoom(self, zoom):
+        self.osm_gps_map_set_zoom(zoom)
+        self.update()
        
+    def resizeEvent(self, event):
+        self.osm_gps_map_handle_resize()
+             
     def paintEvent(self, event):
-#        print(self.rect())
-#        print(self.geometry())
-        
+#        print("%d-%d"%(self.width(), self.height()))
+#        print(self.pos())
+#        self.updateGeometry()
         self.painter=QPainter(self) 
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
+        self.showControlOverlay()
         self.painter.end()
                     
     def minimumSizeHint(self):
-        return QSize(800, 300)
+        return QSize(minWidth, minHeight)
 
-    def sizeHint(self):
-        return QSize(800, 300)
+#    def sizeHint(self):
+#        return QSize(800, 300)
 
     def center_coord_update(self):
         pixel_x = self.map_x + self.width()/2
@@ -253,14 +297,99 @@ class QtOSMWidget(QWidget):
         self.update()
 
     def updateGPSLocation(self, lat, lon):
-#        print(lat)
-#        print(lon)
-        self.gpsLatitude=self.osmutils.deg2rad(lat)
-        self.gpsLongitude=self.osmutils.deg2rad(lon)
+#        print("%f-%f"%(lat,lon))
+        if lat!=0.0 and lon!=0.0:
+            gpsLatitudeNew=self.osmutils.deg2rad(lat)
+            gpsLongitudeNew=self.osmutils.deg2rad(lon)
+            
+            if self.gpsLatitude!=gpsLatitudeNew or self.gpsLongitude!=gpsLongitudeNew:
+                self.gpsLatitude=gpsLatitudeNew
+                self.gpsLongitude=gpsLongitudeNew
+                if self.autocenterGPS==True:
+                    self.osm_autocenter_map()
+                else:
+                    self.update()   
     
     def cleanImageCache(self):
         self.tileCache.clear()
+            
+    def callMapnikForTile(self):
+        lat=self.osmutils.rad2deg(self.center_rlat)
+        lon=self.osmutils.rad2deg(self.center_rlon)
+
+        exexStr=os.getcwd()+"/mapnik_wrapper.sh "+ str(lon-0.005)+ " "+str(lat-0.005)+" "+str(lon+0.005)+" "+str(lat+0.005)+" "+str(self.map_zoom)
+        print(exexStr)
+        os.system(exexStr)
         
+    def checkDownloadServer(self):
+        self.serverChecked=True
+        try:
+            x=socket.gethostbyname(tileServer)
+#            print(x)
+        except socket.error:
+            print("Check tile download server failed. Disabling")
+            self.withDownload=True
+    
+    
+    def callDownloadForTile(self, tilePath, fileName):
+        if self.serverChecked==False:
+            self.checkDownloadServer()
+            
+        if self.withDownload==True:
+            try:
+                httpConn = http.client.HTTPConnection(tileServer)
+                httpConn.connect()
+                httpConn.request("GET", tilePath)
+                response = httpConn.getresponse()
+                if response.status==http.client.OK:
+                    self.updateStatusLabel("downloaded "+fileName)
+                    data = response.read()
+                    try:
+                        os.makedirs(os.path.dirname(fileName))
+                    except OSError:
+                        #ignore
+                        None
+                    try:
+                        stream=io.open(fileName, "wb")
+                        stream.write(data)
+                    except IOError:
+                        #ignore
+                        None
+        
+                httpConn.close()
+            except socket.error:
+                print("disable download")
+                self.withDownload=False
+                
+    def setDownloadTiles(self, value):
+        self.withDownload=value
+        if value==True:
+            self.update()
+        
+    def setAutocenterGPS(self, value):
+        self.autocenterGPS=value
+        if value==True:
+            self.osm_autocenter_map()
+        
+    def updateStatusLabel(self, text):
+        self.emit(SIGNAL("updateStatus(QString)"), text)
+
+    def mouseReleaseEvent(self, event ):
+#        print(event.x())
+#        print(event.y())
+        if self.controlWidgetRect.contains(event.x(), event.y()):
+            print("inside control")
+        else:
+            print("outside control")
+            
+    def showControlOverlay(self):
+        pen=QPen()
+        pen.setColor(Qt.green)
+        pen.setWidth(20)
+        self.painter.setPen(pen)
+        self.painter.drawPoint(10, 10)
+        self.controlWidgetRect=QRect(0, 0, 20, 20)
+
 class OSMWidget(QWidget):
     def __init__(self, parent):
         QWidget.__init__(self, parent)
@@ -268,47 +397,65 @@ class OSMWidget(QWidget):
         self.startLat=0.0
         self.startLon=0.0
         self.autocenterGPS=False
+        self.withDownload=False
         
     def addToWidget(self, parent):
-        self.mapWidgetQt=QtOSMWidget(self)
-        parent.addWidget(self.mapWidgetQt)
         
-        hbox=QHBoxLayout()
-        parent.addLayout(hbox)
+        vbox=QVBoxLayout()
+        vbox.setAlignment(Qt.AlignTop)
+
+        parent.addLayout(vbox)
         self.zoomInButton=QPushButton("+", self)
         self.zoomInButton.clicked.connect(self._zoomIn)
-        hbox.addWidget(self.zoomInButton)
+        vbox.addWidget(self.zoomInButton)
         
         self.zoomOutButton=QPushButton("-", self)
         self.zoomOutButton.clicked.connect(self._zoomOut)
-        hbox.addWidget(self.zoomOutButton)
+        vbox.addWidget(self.zoomOutButton)
         
         self.stepUpButton=QPushButton("Up", self)
         self.stepUpButton.clicked.connect(self._stepUp)
-        hbox.addWidget(self.stepUpButton)
+        vbox.addWidget(self.stepUpButton)
         
         self.stepDownButton=QPushButton("Down", self)
         self.stepDownButton.clicked.connect(self._stepDown)
-        hbox.addWidget(self.stepDownButton)
+        vbox.addWidget(self.stepDownButton)
         
         self.stepLeftButton=QPushButton("Left", self)
         self.stepLeftButton.clicked.connect(self._stepLeft)
-        hbox.addWidget(self.stepLeftButton)
+        vbox.addWidget(self.stepLeftButton)
         
         self.stepRightButton=QPushButton("Right", self)
         self.stepRightButton.clicked.connect(self._stepRight)
-        hbox.addWidget(self.stepRightButton)
+        vbox.addWidget(self.stepRightButton)
         
         self.centerGPSButton=QPushButton("Center GPS", self)
         self.centerGPSButton.clicked.connect(self._centerGPS)
-        hbox.addWidget(self.centerGPSButton)
+        vbox.addWidget(self.centerGPSButton)
         
         self.followGPSButton=QCheckBox("Follow GPS", self)
         self.followGPSButton.clicked.connect(self._followGPS)
-        hbox.addWidget(self.followGPSButton)
+        vbox.addWidget(self.followGPSButton)
+        
+        self.downloadTilesButton=QCheckBox("Download", self)
+        self.downloadTilesButton.clicked.connect(self._downloadTiles)
+        vbox.addWidget(self.downloadTilesButton)
+        
+        self.mapWidgetQt=QtOSMWidget(self)
+        parent.addWidget(self.mapWidgetQt)
 
-    def init(self):
-        self.zoom=1
+
+    def init(self, lat, lon, zoom):        
+        self.zoom=zoom
+        self.startLat=lat
+        self.startLon=lon
+        
+        self.mapWidgetQt.init()
+        self.mapWidgetQt.updateGPSLocation(self.startLat, self.startLon)
+        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
+
+    def initHome(self):        
+        self.zoom=9
         self.startLat=47.8
         self.startLon=13.0
         
@@ -317,13 +464,13 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
 
     def initUI(self):
-        vbox = QVBoxLayout()
-        vbox.setAlignment(Qt.AlignCenter)
+        hbox = QHBoxLayout()
+        hbox.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
-        self.addToWidget(vbox)
-        self.setLayout(vbox)
+        self.addToWidget(hbox)
+        self.setLayout(hbox)
         
-        self.init()
+        self.initHome()
 
 #        self.setGeometry(0, 0, 860, 500)
         self.setWindowTitle('OSM Test')
@@ -334,14 +481,14 @@ class OSMWidget(QWidget):
         self.zoom=self.zoom+1
         if self.zoom>MAX_ZOOM:
             self.zoom=MAX_ZOOM
-        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
+        self.mapWidgetQt.zoom(self.zoom)
         
     @pyqtSlot()
     def _zoomOut(self):
         self.zoom=self.zoom-1
         if self.zoom<MIN_ZOOM:
             self.zoom=MIN_ZOOM
-        self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
+        self.mapWidgetQt.zoom(self.zoom)
 
     @pyqtSlot()
     def _stepUp(self):
@@ -366,13 +513,16 @@ class OSMWidget(QWidget):
     @pyqtSlot()
     def _followGPS(self):
         self.autocenterGPS=self.followGPSButton.isChecked()
-        if self.autocenterGPS==True:
-            self.mapWidgetQt.osm_autocenter_map()   
+        self.mapWidgetQt.setAutocenterGPS(self.autocenterGPS)   
                     
     def updateGPSPosition(self, lat, lon):
         self.mapWidgetQt.updateGPSLocation(lat, lon)
-        if self.autocenterGPS==True:
-            self.mapWidgetQt.osm_autocenter_map()   
+
+    @pyqtSlot()
+    def _downloadTiles(self):
+        self.withDownload=self.downloadTilesButton.isChecked()
+        self.mapWidgetQt.setDownloadTiles(self.withDownload)   
+
         
 class OSMWindow(QMainWindow):
     def __init__(self):
@@ -389,25 +539,48 @@ class OSMWindow(QMainWindow):
         top.addWidget(tabs)
         
         osmTab = QWidget()
-        osmTabLayout=QVBoxLayout(osmTab)
+        osmTabLayout=QHBoxLayout(osmTab)
+        osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
         tabs.addTab(osmTab, "OSM")
 
         self.mapWidget=OSMWidget(self)
         self.mapWidget.addToWidget(osmTabLayout)
+        self.connect(self.mapWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+
         
-        self.mapWidget.init()
+        self.zoom=9
+        self.startLat=47.8
+        self.startLon=13.0
+        self.mapWidget.initHome()
+
+        self.incLat=47.8
+        self.incLon=13.0
+        self.testGPSButton=QPushButton("Test GPS", self)
+        self.testGPSButton.clicked.connect(self._testGPS)
+        top.addWidget(self.testGPSButton)
 
 #        self.setGeometry(0, 0, 800, 400)
         self.setWindowTitle('OSM Test')
         self.show()
         
+    @pyqtSlot()
+    def _testGPS(self):
+        self.incLat=self.incLat+0.001
+        self.incLon=self.incLon+0.001
+        self.mapWidget.updateGPSPosition(self.incLat, self.incLon)   
+
+    def updateStatusBarLabel(self, text):
+        print(text)
+
+#        os.execl(os.getcwd()+"/mapnik_wrapper.sh", "9", "46", "17", "49", "2")
+
 def main(argv): 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
-    widget = OSMWidget(None)
-    widget.initUI()
+#    widget = OSMWidget(None)
+#    widget.initUI()
 
     widget1 = OSMWindow()
     widget1.initUI()
