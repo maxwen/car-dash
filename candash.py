@@ -761,7 +761,7 @@ class CANMonitor(QMainWindow):
         logTabLayout = QVBoxLayout(logTab)
         dashTabLayout = QHBoxLayout(dashTab)
         gpsTabLayout=QHBoxLayout(gpsTab)
-        osmTabLayout=QHBoxLayout(osmTab)
+        osmTabLayout=QVBoxLayout(osmTab)
 
         tabs.addTab(dashTab, "Dash") 
         tabs.addTab(mainTab, "Main")

@@ -82,8 +82,18 @@ class QtOSMWidget(QWidget):
         self.withDownload=False
         self.serverChecked=False
         self.autocenterGPS=False
-        self.crossHair=QPixmap("images/gps-point.png")
-
+        self.gpsPointImage=QPixmap("images/gps-point.png")
+        self.osmControlImage=QPixmap("images/osm-control.png")
+        self.controlWidgetRect=QRect(0, 0, self.osmControlImage.width(), self.osmControlImage.height())
+        self.zoomRect=QRect(0, 70, 70, 50)
+        self.minusRect=QRect(5, 70, 22, 22)
+        self.plusRect=QRect(35, 70, 22, 22)
+        self.moveRect=QRect(0, 0, 70, 61)
+        self.leftRect=QRect(0, 20, 20, 20)
+        self.rightRect=QRect(40, 20, 20, 20)
+        self.upRect=QRect(20, 0, 20, 20)
+        self.downRect=QRect(20, 40, 20, 20)
+        
     def getTileHome(self):
         return os.environ['HOME']+tileHome
     
@@ -224,7 +234,7 @@ class QtOSMWidget(QWidget):
         x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude) - map_x0
         y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude) - map_y0
 
-        self.painter.drawPixmap(x-self.crossHair.width()/2, y-self.crossHair.height()/2, self.crossHair)
+        self.painter.drawPixmap(x-self.gpsPointImage.width()/2, y-self.gpsPointImage.height()/2, self.gpsPointImage)
 #        self.painter.drawPoint(x, y)
         
     def osm_autocenter_map(self):
@@ -375,20 +385,46 @@ class QtOSMWidget(QWidget):
         self.emit(SIGNAL("updateStatus(QString)"), text)
 
     def mouseReleaseEvent(self, event ):
-#        print(event.x())
-#        print(event.y())
         if self.controlWidgetRect.contains(event.x(), event.y()):
-            print("inside control")
-        else:
-            print("outside control")
+            self.pointInsideMoveOverlay(event.x(), event.y())
+            self.pointInsideZoomOverlay(event.x(), event.y())
+#        else:
+#            print("outside control")
             
+    def pointInsideMoveOverlay(self, x, y):
+        if self.moveRect.contains(x, y):
+            if self.leftRect.contains(x, y):
+#                print("left")
+                self.stepLeft(MAP_SCROLL_STEP)
+            if self.rightRect.contains(x, y):
+#                print("right")
+                self.stepRight(MAP_SCROLL_STEP)
+            if self.upRect.contains(x, y):
+#                print("up")
+                self.stepUp(MAP_SCROLL_STEP)
+            if self.downRect.contains(x, y):
+#                print("down")
+                self.stepDown(MAP_SCROLL_STEP)
+        
+    def pointInsideZoomOverlay(self, x, y):
+        if self.zoomRect.contains(x, y):
+            if self.minusRect.contains(x, y):
+#                print("zoom -")
+                zoom=self.map_zoom-1
+                if zoom<MIN_ZOOM:
+                    zoom=MIN_ZOOM
+                self.zoom(zoom)
+                
+            if self.plusRect.contains(x,y):
+#                print("zoom +")
+                zoom=self.map_zoom+1
+                if zoom>MAX_ZOOM:
+                    zoom=MAX_ZOOM
+                self.zoom(zoom)
+        
     def showControlOverlay(self):
-        pen=QPen()
-        pen.setColor(Qt.green)
-        pen.setWidth(20)
-        self.painter.setPen(pen)
-        self.painter.drawPoint(10, 10)
-        self.controlWidgetRect=QRect(0, 0, 20, 20)
+        self.painter.drawPixmap(0, 0, self.osmControlImage)
+
 
 class OSMWidget(QWidget):
     def __init__(self, parent):
@@ -399,35 +435,37 @@ class OSMWidget(QWidget):
         self.autocenterGPS=False
         self.withDownload=False
         
-    def addToWidget(self, parent):
+    def addToWidget(self, parent):       
+        self.mapWidgetQt=QtOSMWidget(self)
+        parent.addWidget(self.mapWidgetQt)
         
-        vbox=QVBoxLayout()
-        vbox.setAlignment(Qt.AlignTop)
-
+        vbox=QHBoxLayout()
+        vbox.setAlignment(Qt.AlignLeft)
         parent.addLayout(vbox)
-        self.zoomInButton=QPushButton("+", self)
-        self.zoomInButton.clicked.connect(self._zoomIn)
-        vbox.addWidget(self.zoomInButton)
-        
-        self.zoomOutButton=QPushButton("-", self)
-        self.zoomOutButton.clicked.connect(self._zoomOut)
-        vbox.addWidget(self.zoomOutButton)
-        
-        self.stepUpButton=QPushButton("Up", self)
-        self.stepUpButton.clicked.connect(self._stepUp)
-        vbox.addWidget(self.stepUpButton)
-        
-        self.stepDownButton=QPushButton("Down", self)
-        self.stepDownButton.clicked.connect(self._stepDown)
-        vbox.addWidget(self.stepDownButton)
-        
-        self.stepLeftButton=QPushButton("Left", self)
-        self.stepLeftButton.clicked.connect(self._stepLeft)
-        vbox.addWidget(self.stepLeftButton)
-        
-        self.stepRightButton=QPushButton("Right", self)
-        self.stepRightButton.clicked.connect(self._stepRight)
-        vbox.addWidget(self.stepRightButton)
+ 
+#        self.zoomInButton=QPushButton("+", self)
+#        self.zoomInButton.clicked.connect(self._zoomIn)
+#        vbox.addWidget(self.zoomInButton)
+#        
+#        self.zoomOutButton=QPushButton("-", self)
+#        self.zoomOutButton.clicked.connect(self._zoomOut)
+#        vbox.addWidget(self.zoomOutButton)
+#        
+#        self.stepUpButton=QPushButton("Up", self)
+#        self.stepUpButton.clicked.connect(self._stepUp)
+#        vbox.addWidget(self.stepUpButton)
+#        
+#        self.stepDownButton=QPushButton("Down", self)
+#        self.stepDownButton.clicked.connect(self._stepDown)
+#        vbox.addWidget(self.stepDownButton)
+#        
+#        self.stepLeftButton=QPushButton("Left", self)
+#        self.stepLeftButton.clicked.connect(self._stepLeft)
+#        vbox.addWidget(self.stepLeftButton)
+#        
+#        self.stepRightButton=QPushButton("Right", self)
+#        self.stepRightButton.clicked.connect(self._stepRight)
+#        vbox.addWidget(self.stepRightButton)
         
         self.centerGPSButton=QPushButton("Center GPS", self)
         self.centerGPSButton.clicked.connect(self._centerGPS)
@@ -440,9 +478,6 @@ class OSMWidget(QWidget):
         self.downloadTilesButton=QCheckBox("Download", self)
         self.downloadTilesButton.clicked.connect(self._downloadTiles)
         vbox.addWidget(self.downloadTilesButton)
-        
-        self.mapWidgetQt=QtOSMWidget(self)
-        parent.addWidget(self.mapWidgetQt)
 
 
     def init(self, lat, lon, zoom):        
@@ -464,8 +499,7 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.show(self.zoom, self.startLat, self.startLon)
 
     def initUI(self):
-        hbox = QHBoxLayout()
-        hbox.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+        hbox = QVBoxLayout()
 
         self.addToWidget(hbox)
         self.setLayout(hbox)
@@ -476,35 +510,35 @@ class OSMWidget(QWidget):
         self.setWindowTitle('OSM Test')
         self.show()
         
-    @pyqtSlot()
-    def _zoomIn(self):
-        self.zoom=self.zoom+1
-        if self.zoom>MAX_ZOOM:
-            self.zoom=MAX_ZOOM
-        self.mapWidgetQt.zoom(self.zoom)
-        
-    @pyqtSlot()
-    def _zoomOut(self):
-        self.zoom=self.zoom-1
-        if self.zoom<MIN_ZOOM:
-            self.zoom=MIN_ZOOM
-        self.mapWidgetQt.zoom(self.zoom)
-
-    @pyqtSlot()
-    def _stepUp(self):
-        self.mapWidgetQt.stepUp(MAP_SCROLL_STEP)
-
-    @pyqtSlot()
-    def _stepDown(self):
-        self.mapWidgetQt.stepDown(MAP_SCROLL_STEP)
-        
-    @pyqtSlot()
-    def _stepLeft(self):
-        self.mapWidgetQt.stepLeft(MAP_SCROLL_STEP)
-        
-    @pyqtSlot()
-    def _stepRight(self):
-        self.mapWidgetQt.stepRight(MAP_SCROLL_STEP)  
+#    @pyqtSlot()
+#    def _zoomIn(self):
+#        self.zoom=self.zoom+1
+#        if self.zoom>MAX_ZOOM:
+#            self.zoom=MAX_ZOOM
+#        self.mapWidgetQt.zoom(self.zoom)
+#        
+#    @pyqtSlot()
+#    def _zoomOut(self):
+#        self.zoom=self.zoom-1
+#        if self.zoom<MIN_ZOOM:
+#            self.zoom=MIN_ZOOM
+#        self.mapWidgetQt.zoom(self.zoom)
+#
+#    @pyqtSlot()
+#    def _stepUp(self):
+#        self.mapWidgetQt.stepUp(MAP_SCROLL_STEP)
+#
+#    @pyqtSlot()
+#    def _stepDown(self):
+#        self.mapWidgetQt.stepDown(MAP_SCROLL_STEP)
+#        
+#    @pyqtSlot()
+#    def _stepLeft(self):
+#        self.mapWidgetQt.stepLeft(MAP_SCROLL_STEP)
+#        
+#    @pyqtSlot()
+#    def _stepRight(self):
+#        self.mapWidgetQt.stepRight(MAP_SCROLL_STEP)  
     
     @pyqtSlot()
     def _centerGPS(self):
@@ -539,7 +573,7 @@ class OSMWindow(QMainWindow):
         top.addWidget(tabs)
         
         osmTab = QWidget()
-        osmTabLayout=QHBoxLayout(osmTab)
+        osmTabLayout=QVBoxLayout(osmTab)
         osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
         tabs.addTab(osmTab, "OSM")
