@@ -241,7 +241,8 @@ class CANSocketWorker(QThread):
         self.replayMode=False
         self.replayLines=None
         self.connected=False
-        self.reconnecting=0
+        self.reconnectTry=0
+        self.reconnecting=False
         
     def __del__(self):
         self.exiting = True
@@ -253,32 +254,32 @@ class CANSocketWorker(QThread):
         self.canMonitor=canMonitor
         self.test=test
         self.s=None
-        self.connected=self.canMonitor.connectEnabled()
-        if self.connected:
+        if self.canMonitor.connectCANEnabled():
             self.connectCANDevice()
-            if self.s==None:
-                #initially failed
-                self.canMonitor.connectFailed()
         self.start()
     
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
         
     def reconnectCANDevice(self):
-        #self.disconnectCANDevice()
-        while self.reconnecting<42 and self.s==None and self.connected==False:
+        self.reconnecting=True
+        while self.reconnectTry<42 and self.s==None and self.connected==False:
             self.sleep(1)
             self.s=None
             self.connectCANDevice()
             if self.s!=None and self.connected==True:
-                self.reconnecting=0
+                self.reconnectTry=0
+                self.reconnecting=False
                 return
-            self.reconnecting=self.reconnecting+1
+            self.reconnectTry=self.reconnectTry+1
 
         self.connected=False
         self.s=None
-        self.reconnecting=0
-        self.canMonitor.forceConnectDisabled()
+        self.reconnectTry=0
+        self.reconnecting=False
+        self.canMonitor.connectCANFailed()
+        self.canMonitor.clearAllLCD()
+        self.updateStatusLabel("CAN reconnect failed")
     
     def startReplayMode(self, replayLines):
         self.replayMode=True
@@ -295,7 +296,7 @@ class CANSocketWorker(QThread):
                         self.s.close()
                         self.s=None
                         self.updateStatusLabel("CAN disconnect ok")
-                        self.canMonitor.connectFailed()
+                        self.canMonitor.connectCANFailed()
                     except socket.error:
                         self.updateStatusLabel("CAN disconnect error")
                          
@@ -304,7 +305,7 @@ class CANSocketWorker(QThread):
             else:
                 self.connected=False
                 self.updateStatusLabel("CAN test disconnect")
-                self.canMonitor.connectFailed()
+                self.canMonitor.connectCANFailed()
                  
     def connectCANDevice(self):
         if self.s==None:
@@ -329,20 +330,21 @@ class CANSocketWorker(QThread):
                     self.s.bind(("slcan0",))
                     self.updateStatusLabel("CAN connect ok")
                     self.connected=True
-                    self.canMonitor.connectSuccessful()
+                    self.canMonitor.connectCANSuccessful()
                 except socket.error:
-                    if self.reconnecting!=0:
-                        self.updateStatusLabel("CAN reconnect try "+str(self.reconnecting))
+                    if self.reconnecting==True:
+                        self.updateStatusLabel("CAN reconnect try "+str(self.reconnectTry))
+                        self.s=None
+                        self.connected=False
                     else:
                         self.updateStatusLabel("CAN connect error")
-                    self.s=None
-                    self.connected=False
-                    self.canMonitor.connectFailed()
-                    return
+                        self.s=None
+                        self.connected=False
+                        self.canMonitor.connectCANFailed()
             else:
                 self.connected=True
                 self.updateStatusLabel("CAN test connect")
-                self.canMonitor.connectSuccessful()
+                self.canMonitor.connectCANSuccessful()
         
     def run(self):
         while not self.exiting and True:
