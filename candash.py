@@ -7,16 +7,15 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANDecoder, CANSocketWorker
-from gps import gps, misc
-import socket
+from gpsutils import GPSMonitor, GPSMonitorUpateWorker
 from config import Config
+from log import Log
 
-from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot, QThread
-from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView, QAction, QIcon
+from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
+from PyQt4.QtGui import QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
 
 from collections import deque
 from gaugepng import QtPngDialGauge
-from gaugecompass import QtPngCompassGauge
 from osmmapviewer import OSMWidget
 
 import signal
@@ -28,96 +27,7 @@ ID_COL=2
 SIZE_COL=3
 DATA_COL=4
 
-class GPSMonitorUpateWorker(QThread):
-    def __init__(self, parent=None): 
-        QThread.__init__(self, parent)
-        self.exiting = False
-        self.connected=False
-        self.reconnecting=False
-        self.reconnectTry=0
-        
-    def __del__(self, session):
-        self.exiting = True
-        self.wait()
-        
-    def setup(self, canMonitor):
-        self.canMonitor=canMonitor
-        self.session=None
 
-        if self.canMonitor.connectGPSEnabled()==True:
-            self.connectGPS()
-
-        self.start()
-                
-    def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
-
-    def connectGPS(self):
-        if self.session==None:
-            try:
-                self.session = gps.gps()
-                self.updateStatusLabel("GPS connect ok")
-                self.canMonitor.connectGPSSuccesful()
-                self.session.stream(gps.WATCH_ENABLE)
-                self.connected=True
-            except socket.error:
-                if self.reconnecting==True:
-                    self.updateStatusLabel("GPS reconnect try "+str(self.reconnectTry))
-                    self.connected=False
-                    self.session=None
-                else:
-                    self.updateStatusLabel("GPS connect error")
-                    self.connected=False
-                    self.session=None
-                    self.canMonitor.connectGPSFailed()
-          
-    def disconnectGPS(self):
-        if self.connected==True:
-            self.connected=False
-            if self.session!=None:
-                self.session.close()
-            self.session=None
-            self.updateStatusLabel("GPS disconnect ok")
-            self.canMonitor.updateGPSDisplay(None)
-          
-    def reconnectGPS(self):
-        self.reconnecting=True
-        while self.reconnectTry<42 and self.connected==False:
-            self.sleep(1)
-            self.connectGPS()
-            if self.connected==True:
-                self.reconnectTry=0
-                self.reconnecting=False
-                return
-            self.reconnectTry=self.reconnectTry+1
-
-        self.connected=False
-        self.reconnectTry=0
-        self.reconnecting=False
-        self.session=None
-        self.canMonitor.updateGPSDisplay(None)
-        self.canMonitor.connectGPSFailed()
-        self.updateStatusLabel("GPS reconnect failed")
-        
-    def isConnected(self):
-        return self.connected
-       
-    def run(self):
-        while not self.exiting and True:
-            if self.connected==True:
-                try:
-                    self.session.__next__()
-                    self.canMonitor.updateGPSDisplay(self.session)
-                except StopIteration:
-                    self.updateStatusLabel("GPS connection lost")
-                    self.connected=False
-                    self.session=None
-                    self.canMonitor.updateGPSDisplay(None)
-                    self.reconnectGPS()
-            else:
-                self.sleep(1)
-            
-#            self.msleep(500) 
                 
 class CANLogViewTableModel(QAbstractTableModel):
     def __init__(self, canMonitor, logBuffer, canIdList, parent=None):
@@ -511,97 +421,6 @@ class CANLogTableBox():
         self.continueButton.setDisabled(self.update==True or self.replayMode==True)
         self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
         self._clearTable()
-        
-class GPSMonitor():
-    def __init__(self, canMonitor):
-        self.canMonitor=canMonitor
-        self.valueLabelList=list()
-        
-    def createGPSLabel(self, form, key, value):
-        lbl = QLabel(self.canMonitor)
-        lbl.setMinimumHeight(50)
-        font = lbl.font()
-        font.setPointSize(14)
-        lbl.setFont(font)
-        lbl.setText(key)
-        
-        lbl2 = QLabel(self.canMonitor)
-        lbl2.setMinimumHeight(50)
-        font = lbl2.font()
-        font.setPointSize(14)
-        lbl2.setFont(font)
-        lbl2.setText(value)
-        self.valueLabelList.append(lbl2)
-
-        form.addRow(lbl, lbl2)
-        
-    def addGPSBox(self, hbox):
-        form=QFormLayout()
-        hbox.addLayout(form)
-        
-        self.createGPSLabel(form, "Status", "Not connected")
-        self.createGPSLabel(form, "Latitude", "")
-        self.createGPSLabel(form, "Longitude", "")
-        self.createGPSLabel(form, "Time UTC", "")
-        self.createGPSLabel(form, "Altitude", "")
-        self.createGPSLabel(form, "Speed", "")
-        self.createGPSLabel(form, "Track", "")
-        
-        vbox=QVBoxLayout()
-        self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass.png")
-        self.compassGauge.setValue(0)
-        self.compassGauge.setMaximumSize(320, 320)
-        vbox.addWidget(self.compassGauge)
-
-        self.speedDisplay=self.canMonitor.createLCD(QLCDNumber.Dec)
-        self.speedDisplay.display(0)
-        vbox.addWidget(self.speedDisplay)
-        
-        hbox.addLayout(vbox)
-                        
-    def update(self, session):
-        if session!=None:
-            self.valueLabelList[0].setText("Connected ("+str(session.satellites_used)+" satelites)")
-            self.valueLabelList[1].setText(str(session.fix.latitude))
-            self.valueLabelList[2].setText(str(session.fix.longitude))
-            
-#            print(session.utc)
-            if type(session.utc)==type(1.0):
-                try:
-                    timeString=misc.isotime(session.utc)
-                except IndexError:
-                    timeString=""
-                except ValueError:
-                    timeString=""
-            else:
-                timeString=str(session.utc)
-                
-            self.valueLabelList[3].setText(timeString)
-            self.valueLabelList[4].setText(str(session.fix.altitude))
-            self.valueLabelList[5].setText(str(session.fix.speed))
-            #self.valueLabelList[6].setText(str(session.fix.climb))
-            self.valueLabelList[6].setText(str(session.fix.track))
-            if not gps.isnan(session.fix.track):
-                self.compassGauge.setValue(int(session.fix.track))
-            else:
-                self.compassGauge.setValue(0)
-            if not gps.isnan(session.fix.speed):
-                self.speedDisplay.display(int(session.fix.speed*3.6))
-            else:
-                self.speedDisplay.display(0)
-                
-            self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
-
-        else:
-            self.valueLabelList[0].setText("Not connected")
-            self.valueLabelList[1].setText("")
-            self.valueLabelList[2].setText("")
-            self.valueLabelList[3].setText("")
-            self.valueLabelList[4].setText("")
-            self.valueLabelList[5].setText("")
-            self.valueLabelList[6].setText("")
-            self.compassGauge.setValue(0)
-            self.speedDisplay.display(0)
 
         
 class CANMonitor(QMainWindow):
@@ -618,12 +437,13 @@ class CANMonitor(QMainWindow):
         self.logFile=None
         self.test=test
         self.logFileName="/tmp/candash.log"
-        self.connectCANEnable=False
-        self.connectGPSEnable=False
+        self.connectCANEnable=True
+        self.connectGPSEnable=True
         self.replayMode=False
         self.canIdList=[0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
         self.updateGPSThread=None
         self.config=Config()
+        self.log=Log(True)
 
         self.initUI()
     
@@ -935,31 +755,33 @@ class CANMonitor(QMainWindow):
         self.createCANIdValueEntry(rpmBox, 0x353, "0", QLCDNumber.Dec)
         
         self.gpsBox=GPSMonitor(self)
-        self.gpsBox.addGPSBox(gpsTabLayout)
-        
+        self.gpsBox.addToWidget(gpsTabLayout)
+        self.gpsBox.loadConfig(self.config)
+
         self.osmWidget=OSMWidget(self)
         osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
         self.osmWidget.addToWidget(osmTabLayout)
-        self.osmWidget.setZoomValue(self.config.getDefaultSection().getint("zoom", 9))
-        self.osmWidget.setAutocenterGPSValue(self.config.getDefaultSection().getboolean("autocenterGPS", False))
-        self.osmWidget.setWithDownloadValue(self.config.getDefaultSection().getboolean("withDownload", False))
+        self.osmWidget.loadConfig(self.config)
+                
+        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+        self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+        self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
 
         self.osmWidget.initHome()
         
-        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-        self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-
         connectBox=QHBoxLayout()
         top.addLayout(connectBox)
         
         self.connectCANButton = QCheckBox('CAN Connect')
         self.connectCANButton.clicked.connect(self._connectCAN)
+        self.connectCANEnable=self.config.getDefaultSection().getboolean("CANconnect", False)
         self.connectCANButton.setChecked(self.connectCANEnable)
         connectBox.addWidget(self.connectCANButton)
 
         self.connectGPSButton = QCheckBox('GPS Connect')
         self.connectGPSButton.clicked.connect(self._connectGPS)
+        self.connectGPSEnable=self.config.getDefaultSection().getboolean("GPSconnect", False)
         self.connectGPSButton.setChecked(self.connectGPSEnable)
         connectBox.addWidget(self.connectGPSButton)
         
@@ -969,15 +791,15 @@ class CANMonitor(QMainWindow):
         
         self.canDecoder = CANDecoder(self)
 
-        self.thread = CANSocketWorker()        
-        self.connect(self.thread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-        self.thread.setup(self.app, self, self.canDecoder, self.test)
+        self.updateCANThread = CANSocketWorker()        
+        self.connect(self.updateCANThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+        self._connectCAN()
         
         self.updateGPSThread=GPSMonitorUpateWorker()
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-        self.updateGPSThread.setup(self)
-
-               
+        self._connectGPS()
+        
+    
     def getWidget(self, canId, subId):
         try:
             return self.lcdDict[hex(canId)+":"+subId]
@@ -1125,11 +947,14 @@ class CANMonitor(QMainWindow):
     @pyqtSlot()
     def _cleanup(self):
         self.closeLogFile()
-        self.config.getDefaultSection()["zoom"]=str(self.osmWidget.getZoomValue())
-        self.config.getDefaultSection()["autocenterGPS"]=str(self.osmWidget.getAutocenterGPSValue())
-        self.config.getDefaultSection()["withDownload"]=str(self.osmWidget.getWithDownloadValue())
+        self.config.getDefaultSection()["canConnect"]=str(self.connectCANEnable)
+        self.config.getDefaultSection()["gpsConnect"]=str(self.connectGPSEnable)
+        
+        self.osmWidget.saveConfig(self.config)
+        self.gpsBox.saveConfig(self.config)
 
         self.config.writeConfig()
+        self.log.writeLogtoFile()
         
     @pyqtSlot()
     def _enableLogFile(self):
@@ -1155,12 +980,11 @@ class CANMonitor(QMainWindow):
         replayLines=self.readLogFile()
         self.logViewTableBox1._clearTable()
         self.logViewTableBox2._clearTable()
-        self.thread.startReplayMode(replayLines)
-#        self._enableUpdate()
+        self.updateCANThread.setup(self.app, self, self.canDecoder, self.test, True, replayLines)
             
     @pyqtSlot()
     def _stopReplayMode(self):
-        self.thread.stopReplayMode()
+        self.updateCANThread.stop()
         self.replayModeDone()
 
     def replayModeDone(self):
@@ -1180,81 +1004,82 @@ class CANMonitor(QMainWindow):
     
     @pyqtSlot()
     def _connectCAN(self):
-#        self.connectCANEnable=self.connectAction.isChecked()
         self.connectCANEnable=self.connectCANButton.isChecked()
-        self.connectToCAN()
-        
+        if self.replayMode==True:
+            self._stopReplayMode()
+            
+        if self.connectCANEnable==True:
+            self.connectCANButton.setDisabled(True)
+            self.logViewTableBox1._clearTable()
+            self.logViewTableBox2._clearTable()
+            self.updateCANThread.setup(self.app, self, self.canDecoder, self.test, False, None)
+
+        else:
+            if self.updateCANThread.isRunning():
+                self.connectCANButton.setDisabled(True)
+                self.updateCANThread.stop()
+            
+        self.replayButton.setDisabled(not self.logFileAvailable() or self.connectCANEnable==True)
+        self.connectCANButton.setChecked(self.connectCANEnable==True)
+                
     @pyqtSlot()
     def _connectGPS(self):
         self.connectGPSEnable=self.connectGPSButton.isChecked()
         if self.connectGPSEnable==True:
-            self.updateGPSThread.connectGPS()
+            self.connectGPSButton.setDisabled(True)
+            self.updateGPSThread.setup(self)
         else:
-            self.updateGPSThread.disconnectGPS()
+            if self.updateGPSThread.isRunning():
+                self.connectGPSButton.setDisabled(True)
+                self.updateGPSThread.stop()
+
         
     @pyqtSlot()
     def _enableFilterRingIds(self):
         self.filterRingIds=self.filterRingIdsButton.isChecked()
     
-    def connectToCAN(self):
-        if self.replayMode==True:
-            self._stopReplayMode()
-            
-        if self.connectCANEnable==True:
-            self.logViewTableBox1._clearTable()
-            self.logViewTableBox2._clearTable()
-
-            self.thread.connectCANDevice()
-        else:
-            self.thread.disconnectCANDevice()
-#            self.connectAction.setIcon(self.disconnectIcon)
-            
-        self.replayButton.setDisabled(not self.logFileAvailable() or self.connectCANEnable==True)
-        self.connectCANButton.setChecked(self.connectCANEnable==True)
-    
     def connectCANEnabled(self):
         return self.connectCANEnable
-    
-#    def updateConnectCANButtons(self):
-#        self.connectAction.setChecked(self.connectCANEnable==True)
-#        self.connectCANButton.setChecked(self.connectCANEnable==True)
-#        
+         
     def connectCANFailed(self):
         self.connectCANEnable=False
-#        self.connectAction.setIcon(self.disconnectIcon)
         self.connectCANButton.setChecked(False)
+        self.connectCANButton.setDisabled(False)
         
     def updateStatusBarLabel(self, text):
         self.statusbar.showMessage(text)
-#        print(text)
+        if self.log!=None:
+            self.log.addLineToLog(text)
         
     def connectCANSuccessful(self):
         self.connectCANEnable=True
         self.connectCANButton.setChecked(True)
+        self.connectCANButton.setDisabled(False)
 
-#        self.connectAction.setIcon(self.connectedIcon)
-#        self.updateConnectCANButtons()
-
+    def stopCANSuccesful(self):
+        self.connectCANButton.setDisabled(False)
+        
     def canIdIsInKnownList(self, canId):
         return canId in self.canIdList
 
     def updateGPSDisplay(self, session):
         self.gpsBox.update(session)
         
-#    @pyqtSlot()
-#    def _reconnectGPS(self):
-#        self.updateGPSThread.reconnectGPS()
-        
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)
         self.connectGPSEnable=False
+        self.connectGPSButton.setDisabled(False)
     
     def connectGPSSuccesful(self):
         self.connectGPSButton.setChecked(True)
         self.connectGPSEnable=True
+        self.connectGPSButton.setDisabled(False)
         
     def connectGPSEnabled(self):
         return self.connectGPSEnable
+    
+    def stopGPSSuccesful(self):
+        self.connectGPSButton.setDisabled(False)
                 
 def main(argv): 
     test=False
@@ -1270,21 +1095,6 @@ def main(argv):
     
     ex = CANMonitor(app, test)
     app.aboutToQuit.connect(ex._cleanup)
-    
-
-#    print(ex.canDecoder.hex2binary(0x02))
-#    print(ex.canDecoder.hex2binary(0x04))
-#
-#    print(int(ex.canDecoder.getBit(0x02, 0)))
-#    print(int(ex.canDecoder.getBit(0x02, 1)))
-#    print(int(ex.canDecoder.getBit(0x02, 2)))
-#    print(int(ex.canDecoder.getBit(0x04, 0)))
-#    print(int(ex.canDecoder.getBit(0x04, 1)))
-#    print(int(ex.canDecoder.getBit(0x04, 2)))
-#    print(int(ex.canDecoder.getBit(0x04, 1) + ex.canDecoder.getBit(0x04, 2)))
-#    print(int(ex.canDecoder.getBit(0x02, 1) + ex.canDecoder.getBit(0x02, 2)))
-
-#    print(int(ex.canDecoder.getBit(0x04, 3)))
 
     sys.exit(app.exec_())
 

@@ -49,6 +49,7 @@ class gpscommon:
             af, socktype, proto, canonname, sa = res
             try:
                 self.sock = socket.socket(af, socktype, proto)
+                self.sock.settimeout(3.0) 
                 #if self.debuglevel > 0: print 'connect:', (host, port)
                 self.sock.connect(sa)
             except socket.error as msg:
@@ -61,6 +62,9 @@ class gpscommon:
 
     def close(self):
         if self.sock:
+            if self.verbose > 1:
+                sys.stderr.write("close socket...\n")
+            
             self.sock.close()
         self.sock = None
 

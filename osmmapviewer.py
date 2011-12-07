@@ -14,7 +14,7 @@ import socket
 from collections import deque
 
 from PyQt4.QtCore import QEvent, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QToolTip, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QLabel, QToolTip, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -54,8 +54,12 @@ class OSMDownloadTilesWorker(QThread):
 
     def addTile(self, tilePath, fileName):
         self.downloadQueue.append([tilePath, fileName])
+        if not self.isRunning():
+            self.setup()
         
     def downloadTile(self, tilePath, fileName):
+        if os.path.exists(fileName):
+            return
         try:
             httpConn = http.client.HTTPConnection(tileServer)
             httpConn.connect()
@@ -64,22 +68,21 @@ class OSMDownloadTilesWorker(QThread):
             if response.status==http.client.OK:
                 self.updateStatusLabel("OSM downloaded "+fileName)
                 data = response.read()
-                try:
-                    os.makedirs(os.path.dirname(fileName))
-                except OSError:
-                    #ignore
-                    None
+                if not os.path.exists(os.path.dirname(fileName)):
+                    try:
+                        os.makedirs(os.path.dirname(fileName))
+                    except OSError:
+                        self.updateStatusLabel("OSM download OSError makedirs")
                 try:
                     stream=io.open(fileName, "wb")
                     stream.write(data)
                     self.updateMap()
                 except IOError:
-                    #ignore
-                    None
+                    self.updateStatusLabel("OSM download IOError write")
     
             httpConn.close()
         except socket.error:
-            self.updateStatusLabel("OSM download error")
+            self.updateStatusLabel("OSM download error socket.error")
                 
     def run(self):
         while not self.exiting and True:
@@ -87,10 +90,12 @@ class OSMDownloadTilesWorker(QThread):
                 entry=self.downloadQueue.popleft()
                 self.downloadTile(entry[0], entry[1])
                 continue
-            
-            self.msleep(500) 
+            self.updateStatusLabel("OSM download thread idle")
+            self.msleep(1000) 
+            if len(self.downloadQueue)==0:
+                self.exiting=True
         
-        self.updateStatusLabel("OSM stoping download thread")
+        self.updateStatusLabel("OSM download thread stopped")
 
 
 class OSMUtils():
@@ -148,7 +153,6 @@ class QtOSMWidget(QWidget):
         self.tileCache=dict()
         self.withMapnik=False
         self.withDownload=False
-        self.serverChecked=False
         self.autocenterGPS=False
         self.gpsPointImage=QPixmap("images/gps-point-big.png")
         self.osmControlImage=QPixmap("images/osm-control.png")
@@ -264,23 +268,70 @@ class QtOSMWidget(QWidget):
             j=tile_y0
     
     def drawTile(self, fileName, offset_x, offset_y):
-#        print("draw %s at %d %d"%(fileName, offset_x, offset_y))
+        pixbuf=self.getCachedTile(fileName)
+        self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
 
+    def getCachedTile(self, fileName):
         if not fileName in self.tileCache:
             pixbuf = QPixmap(fileName)
             self.tileCache[fileName]=pixbuf
         else:
             pixbuf=self.tileCache[fileName]
             
-        self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
-
-    def drawEmptyTile(self, zoom, x, y, offset_x, offset_y):
+        return pixbuf
+    
+    def drawEmptyTile(self, zoom, offset_x, offset_y):
         pen=QPen()
         palette=QPalette()
         pen.setColor(palette.color(QPalette.Normal, QPalette.Background))
         self.painter.setPen(pen)
         self.painter.drawRect(offset_x, offset_y, TILESIZE, TILESIZE)
 
+    def osm_gps_map_find_bigger_tile (self, zoom, x, y):
+        while zoom > 0:
+            zoom = zoom - 1
+            next_x = int(x / 2)
+            next_y = int(y / 2)
+#            print("search for bigger map for zoom "+str(zoom))
+
+            pixbuf=self.osm_gps_get_exising_tile(zoom, next_x, next_y)
+            if pixbuf!=None:
+                return (pixbuf, zoom)
+            else:
+                x=next_x
+                y=next_y
+        return (None, None)
+
+    def osm_gps_map_render_tile_upscaled(self, zoom, x, y):
+#        print("search for bigger map for zoom "+str(zoom))
+        (pixbuf, zoom_big)=self.osm_gps_map_find_bigger_tile(zoom, x, y)
+        if pixbuf!=None:
+#            print("found exisiting tile on zoom "+str(zoom_big))
+            zoom_diff = zoom - zoom_big
+
+#            print("Upscaling by %d levels into tile %d,%d"%( zoom_diff, x, y))
+
+            area_size = TILESIZE >> zoom_diff
+            modulo = 1 << zoom_diff
+            area_x = (x % modulo) * area_size
+            area_y = (y % modulo) * area_size
+            
+            pixmapNew=pixbuf.copy(area_x, area_y, area_size, area_size)
+            pixmapNew.scaled(TILESIZE, TILESIZE)
+#            area = gdk_pixbuf_new_subpixbuf (big, area_x, area_y,
+#                                     area_size, area_size)
+#            pixbuf = gdk_pixbuf_scale_simple (area, TILESIZE, TILESIZE,
+#                                      GDK_INTERP_NEAREST)
+            return pixmapNew
+        return None
+        
+    def osm_gps_get_exising_tile(self, zoom, x, y):
+        fileName=self.getTileHome()+str(zoom)+"/"+str(x)+"/"+str(y)+".png"
+        if os.path.exists(fileName):
+            return self.getCachedTile(fileName)
+
+        return None
+    
     def osm_gps_get_tile(self, zoom, x, y, offset_x, offset_y):
         fileName=self.getTileHome()+str(zoom)+"/"+str(x)+"/"+str(y)+".png"
         if os.path.exists(fileName):
@@ -288,7 +339,7 @@ class QtOSMWidget(QWidget):
         else:
             if self.withDownload==True:
                 self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName)
-                self.drawEmptyTile(zoom, x, y, offset_x, offset_y)
+                self.drawEmptyTile(zoom, offset_x, offset_y)
 #                self.callDownloadForTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName)
 #                if os.path.exists(fileName):
 #                    self.drawTile(fileName, offset_x, offset_y)
@@ -298,8 +349,12 @@ class QtOSMWidget(QWidget):
                 if os.path.exists(fileName):
                     self.drawTile(fileName, offset_x, offset_y)
             else:
-                # TODO upscale lower zoom version
-                self.drawEmptyTile(zoom, x, y, offset_x, offset_y)
+                # try upscale lower zoom version
+                pixbuf=self.osm_gps_map_render_tile_upscaled(zoom, x, y)
+                if pixbuf!=None:
+                    self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
+                else:
+                    self.drawEmptyTile(zoom, offset_x, offset_y)
             
     def osm_gps_show_location(self):
         if self.gpsLongitude==0.0 and self.gpsLatitude==0.0:
@@ -314,7 +369,7 @@ class QtOSMWidget(QWidget):
         x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude) - map_x0
         y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude) - map_y0
 
-        self.painter.drawPixmap(x-self.gpsPointImage.width()/2, y-self.gpsPointImage.height()/2, self.gpsPointImage)
+        self.painter.drawPixmap(int(x-self.gpsPointImage.width()/2), int(y-self.gpsPointImage.height()/2), self.gpsPointImage)
 #        self.painter.drawPoint(x, y)
         
     def osm_autocenter_map(self):
@@ -356,6 +411,7 @@ class QtOSMWidget(QWidget):
     def zoom(self, zoom):
         self.osm_gps_map_set_zoom(zoom)
         self.update()
+        self.emit(SIGNAL("updateZoom(int)"), zoom)
        
     def resizeEvent(self, event):
         self.osm_gps_map_handle_resize()
@@ -427,21 +483,10 @@ class QtOSMWidget(QWidget):
         exexStr=os.getcwd()+"/mapnik_wrapper.sh "+ str(lon-0.005)+ " "+str(lat-0.005)+" "+str(lon+0.005)+" "+str(lat+0.005)+" "+str(self.map_zoom)
         print(exexStr)
         os.system(exexStr)
-        
-    def checkDownloadServer(self):
-        self.serverChecked=True
-        try:
-            x=socket.gethostbyname(tileServer)
-#            print(x)
-            self.updateStatusLabel("OSM download server ok")
-        except socket.error:
-            self.updateStatusLabel("OSM download server failed. Disabling")
-            self.withDownload=False
                 
     def setDownloadTiles(self, value):
         self.withDownload=value
         if value==True:
-            self.checkDownloadServer()
             self.update()
         
     def setAutocenterGPS(self, value):
@@ -502,6 +547,8 @@ class QtOSMWidget(QWidget):
 #            print("press %d-%d"%(event.x(), event.y()))
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
+        else:
+            self.moving=False
             
     def mouseMoveEvent(self, event):
         if self.moving==True:
@@ -512,9 +559,14 @@ class QtOSMWidget(QWidget):
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
         else:
-            self.posStr=self.showPosition(event.x(), event.y())
+            self.updateMousePosition(event.x(), event.y())
+#            self.posStr=self.showPosition(event.x(), event.y())
 #            print(self.posStr)
             
+    def updateMousePosition(self, x, y):
+        (lat, lon)=self.getMousePosition(x, y)
+        self.emit(SIGNAL("updateMousePosition(float, float)"), lat, lon)
+
     def addContectMenu(self, menu):
         testAction = QAction("Test", self)
         testAction.triggered.connect(self._testAction)
@@ -523,16 +575,17 @@ class QtOSMWidget(QWidget):
     @pyqtSlot()
     def _testAction(self, x, y):
         print("foo")
-        self.showPosition(x, y)
+#        self.showPosition(x, y)
         
     def contextMenuEvent(self, event):
-        print("%d-%d"%(event.x(), event.y()))
+#        print("%d-%d"%(event.x(), event.y()))
         menu = QMenu(self)
         testAction = QAction("Test", self)
         menu.addAction(testAction)
         action = menu.exec_(self.mapToGlobal(event.pos()))
         if action==testAction:
             self._testAction(event.x(), event.y())
+            self.moving=False
         
 #    def point_new_degrees(self, lat, lon):
 #        rlat = self.osmutils.deg2rad(lat);
@@ -544,31 +597,34 @@ class QtOSMWidget(QWidget):
         rlon = self.osmutils.pixel2lon(self.map_zoom, self.map_x + pixel_x);
         return (rlat, rlon)
     
-    def showPosition(self, x, y):
+    def getMousePosition(self, x, y):
         p=self.convert_screen_to_geographic(x, y)
         mouseLat = self.osmutils.rad2deg(p[0])
         mouseLon = self.osmutils.rad2deg(p[1])
-        return "+%.4f , +%.4f" % (mouseLat, mouseLon)
+        return (mouseLat, mouseLon)
        
-    def event(self, event):
-        if event.type() == QEvent.ToolTip:
-#            print(self.posStr)
-            QToolTip.showText(event.globalPos(), self.posStr)
-#            event.ignore()
-            return True
-     
-        return super(QtOSMWidget, self).event(event)
+#    def event(self, event):
+#        if event.type() == QEvent.ToolTip:
+##            print(self.posStr)
+#            QToolTip.showText(event.globalPos(), self.posStr)
+##            event.ignore()
+#            return True
+#     
+#        return super(QtOSMWidget, self).event(event)
          
 class OSMWidget(QWidget):
     def __init__(self, parent):
         QWidget.__init__(self, parent)
+        self.startLat=47.8
+        self.startLon=13.0
+        #self.serverChecked=False
         
     def addToWidget(self, parent):       
         self.mapWidgetQt=QtOSMWidget(self)
         parent.addWidget(self.mapWidgetQt)
         
         vbox=QHBoxLayout()
-        vbox.setAlignment(Qt.AlignLeft)
+        vbox.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
         parent.addLayout(vbox)
         
         self.centerGPSButton=QPushButton("Center GPS", self)
@@ -583,18 +639,44 @@ class OSMWidget(QWidget):
         self.downloadTilesButton.clicked.connect(self._downloadTiles)
         vbox.addWidget(self.downloadTilesButton)
 
+        self.zoomLabel=QLabel("", self)
+        self.zoomLabel.setText("z=%d"%(self.getZoomValue()))
+        vbox.addWidget(self.zoomLabel)
+        
+        self.posLabelLat=QLabel("", self)
+        self.posLabelLat.setText("+%.4f"%(0.0))
+        vbox.addWidget(self.posLabelLat)
 
-    def init(self, lat, lon, zoom):        
-        self.mapWidgetQt.init()
-        self.mapWidgetQt.updateGPSLocation(lat, lon)
-        self.mapWidgetQt.show(zoom, lat, lon)
+        self.posLabelLong=QLabel("", self)
+        self.posLabelLong.setText("+%.4f"%(0.0))
+        vbox.addWidget(self.posLabelLong)
         
         self.downloadThread=OSMDownloadTilesWorker(self)
         self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-        self.connect(self.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.mapWidgetQt, SIGNAL("updateMousePosition(float, float)"), self.updateMousePosition)
+        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
 
+    def updateMousePosition(self, lat, lon):
+        self.posLabelLat.setText("+%.4f"%(lat))
+        self.posLabelLong.setText("+%.4f"%(lon)) 
+        
+    def updateZoom(self, zoom):
+        self.zoomLabel.setText("z=%d"%(zoom))
+            
+    def init(self, lat, lon, zoom):        
+        self.mapWidgetQt.init()
+        self.mapWidgetQt.updateGPSLocation(lat, lon)
+        self.mapWidgetQt.show(zoom, lat, lon)  
+        self._downloadTiles()
+
+    def setStartLongitude(self, lon):
+        self.startLon=lon
+    
+    def setStartLatitude(self, lat):
+        self.startLat=lat
+        
     def initHome(self):                
-        self.init(47.8, 13.0, self.getZoomValue())
+        self.init(self.startLat, self.startLon, self.getZoomValue())
         
     def initUI(self):
         hbox = QVBoxLayout()
@@ -619,13 +701,28 @@ class OSMWidget(QWidget):
     def updateGPSPosition(self, lat, lon):
         self.mapWidgetQt.updateGPSLocation(lat, lon)
 
+    def checkDownloadServer(self):
+        #if self.serverChecked==False:
+        #   self.serverChecked=True
+        try:
+            socket.gethostbyname(tileServer)
+            self.updateStatusLabel("OSM download server ok")
+            return True
+        except socket.error:
+            self.updateStatusLabel("OSM download server failed. Disabling")
+            self.downloadTilesButton.setChecked(False)
+            return False
+            
     @pyqtSlot()
     def _downloadTiles(self):
         withDownload=self.downloadTilesButton.isChecked()
-        if withDownload==True:
-            self.downloadThread.setup()
-        elif self.downloadThread!=None:
-            self.downloadThread.stop()
+#        if withDownload==True:
+#            withDownload=self.checkDownloadServer()
+#            if  withDownload==True:
+#                self.downloadThread.setup()
+#        else:
+#            if self.downloadThread.isRunning():
+#                self.downloadThread.stop()
         self.mapWidgetQt.setDownloadTiles(withDownload)   
 
     def updateStatusLabel(self, text):
@@ -636,6 +733,7 @@ class OSMWidget(QWidget):
 
     def setZoomValue(self, value):
         self.mapWidgetQt.map_zoom=value
+        self.updateZoom(value)
 
     def getAutocenterGPSValue(self):
         return self.mapWidgetQt.autocenterGPS
@@ -651,6 +749,22 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.withDownload=value
         self.downloadTilesButton.setChecked(value)
         
+    def loadConfig(self, config):
+        self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
+        self.setAutocenterGPSValue(config.getDefaultSection().getboolean("autocenterGPS", False))
+        self.setWithDownloadValue(config.getDefaultSection().getboolean("withDownload", False))
+        self.setStartLatitude(config.getDefaultSection().getfloat("lat", self.startLat))
+        self.setStartLongitude(config.getDefaultSection().getfloat("lon", self.startLon))
+
+    def saveConfig(self, config):
+        config.getDefaultSection()["zoom"]=str(self.getZoomValue())
+        config.getDefaultSection()["autocenterGPS"]=str(self.getAutocenterGPSValue())
+        config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())
+        if self.mapWidgetQt.gpsLatitude!=0.0:
+            config.getDefaultSection()["lat"]=str(self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gpsLatitude))
+        if self.mapWidgetQt.gpsLongitude!=0.0:    
+            config.getDefaultSection()["lon"]=str(self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gpsLongitude))
+
 class OSMWindow(QMainWindow):
     def __init__(self):
         super(OSMWindow, self).__init__()
@@ -681,6 +795,7 @@ class OSMWindow(QMainWindow):
 
         self.connect(self.mapWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.mapWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.mapWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
 
         self.incLat=47.8
         self.incLon=13.0
