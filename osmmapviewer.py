@@ -13,8 +13,8 @@ import io
 import socket
 from collections import deque
 
-from PyQt4.QtCore import Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtCore import QEvent, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtGui import QToolTip, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -162,6 +162,12 @@ class QtOSMWidget(QWidget):
         self.upRect=QRect(20, 0, 20, 20)
         self.downRect=QRect(20, 40, 20, 20)
         
+        self.setContextMenuPolicy(Qt.DefaultContextMenu)
+        self.moving=False
+        self.setMouseTracking(True)
+        self.posStr="+%.4f , +%.4f" % (0.0, 0.0)
+
+        
     def getTileHome(self):
         return os.environ['HOME']+tileHome
     
@@ -292,6 +298,7 @@ class QtOSMWidget(QWidget):
                 if os.path.exists(fileName):
                     self.drawTile(fileName, offset_x, offset_y)
             else:
+                # TODO upscale lower zoom version
                 self.drawEmptyTile(zoom, x, y, offset_x, offset_y)
             
     def osm_gps_show_location(self):
@@ -453,7 +460,8 @@ class QtOSMWidget(QWidget):
         if self.controlWidgetRect.contains(event.x(), event.y()):
             self.pointInsideMoveOverlay(event.x(), event.y())
             self.pointInsideZoomOverlay(event.x(), event.y())
-            
+        self.moving=False
+        
     def pointInsideMoveOverlay(self, x, y):
         if self.moveRect.contains(x, y):
             if self.leftRect.contains(x, y):
@@ -503,7 +511,54 @@ class QtOSMWidget(QWidget):
             self.osm_gps_map_scroll(dx, dy)
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
+        else:
+            self.posStr=self.showPosition(event.x(), event.y())
+#            print(self.posStr)
+            
+    def addContectMenu(self, menu):
+        testAction = QAction("Test", self)
+        testAction.triggered.connect(self._testAction)
+        menu.addAction(testAction)        
+            
+    @pyqtSlot()
+    def _testAction(self, x, y):
+        print("foo")
+        self.showPosition(x, y)
         
+    def contextMenuEvent(self, event):
+        print("%d-%d"%(event.x(), event.y()))
+        menu = QMenu(self)
+        testAction = QAction("Test", self)
+        menu.addAction(testAction)
+        action = menu.exec_(self.mapToGlobal(event.pos()))
+        if action==testAction:
+            self._testAction(event.x(), event.y())
+        
+#    def point_new_degrees(self, lat, lon):
+#        rlat = self.osmutils.deg2rad(lat);
+#        rlon = self.osmutils.deg2rad(lon);
+#        return (rlat, rlon)
+    
+    def convert_screen_to_geographic(self, pixel_x, pixel_y):
+        rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y + pixel_y);
+        rlon = self.osmutils.pixel2lon(self.map_zoom, self.map_x + pixel_x);
+        return (rlat, rlon)
+    
+    def showPosition(self, x, y):
+        p=self.convert_screen_to_geographic(x, y)
+        mouseLat = self.osmutils.rad2deg(p[0])
+        mouseLon = self.osmutils.rad2deg(p[1])
+        return "+%.4f , +%.4f" % (mouseLat, mouseLon)
+       
+    def event(self, event):
+        if event.type() == QEvent.ToolTip:
+#            print(self.posStr)
+            QToolTip.showText(event.globalPos(), self.posStr)
+#            event.ignore()
+            return True
+     
+        return super(QtOSMWidget, self).event(event)
+         
 class OSMWidget(QWidget):
     def __init__(self, parent):
         QWidget.__init__(self, parent)
@@ -595,7 +650,7 @@ class OSMWidget(QWidget):
     def setWithDownloadValue(self, value):
         self.mapWidgetQt.withDownload=value
         self.downloadTilesButton.setChecked(value)
-   
+        
 class OSMWindow(QMainWindow):
     def __init__(self):
         super(OSMWindow, self).__init__()
