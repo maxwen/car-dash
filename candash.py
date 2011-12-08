@@ -424,7 +424,19 @@ class CANLogTableBox(QWidget):
         self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
         self._clearTable()
 
+class MyTabWidget(QTabWidget):
+    def __init__(self, parent):
+        QTabWidget.__init__(self, parent)
+#        self.setTabShape(QTabWidget.Rounded)
+#        self.setTabsClosable(True)
+        self.setTabPosition(QTabWidget.East)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
         
+#    def mousePressEvent(self, event):
+#        print("MyTabWidget mousePressEvent")
+
 class CANMonitor(QMainWindow):
     def __init__(self, app, test, parent):
         QMainWindow.__init__(self, parent)
@@ -442,12 +454,12 @@ class CANMonitor(QMainWindow):
         self.connectCANEnable=True
         self.connectGPSEnable=True
         self.replayMode=False
-        self.canIdList=[0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
+        self.canIdList=[0x621, 0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
         self.updateGPSThread=None
         self.config=Config()
         self.log=Log(True)
 
-        self.initUI()
+        self.initUI(parent)
     
     def clearAllLCD(self):
         for lcdList in self.lcdDict.values():
@@ -581,7 +593,7 @@ class CANMonitor(QMainWindow):
         for i in range(2, 10):
             self.logView2.setColumnWidth(i, 60)
         
-    def initUI(self):  
+    def initUI(self, parent):  
 #        exitAction = QAction(QIcon(), 'Exit', self)
 #        exitAction.setShortcut('Ctrl+Q')
 #        exitAction.setStatusTip('Exit application')
@@ -609,40 +621,40 @@ class CANMonitor(QMainWindow):
 #        self.reconnectGPSAction.triggered.connect(self._reconnectGPS)
 #        toolbar.addAction(self.reconnectGPSAction)
         
-        mainWidget=QWidget()
+        mainWidget=QWidget(self)
         mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)
         
-        tabs = QTabWidget(self)
-        top.addWidget(tabs)
+        self.tabs = MyTabWidget(self)
+        top.addWidget(self.tabs)
         
-        mainTab = QWidget()
-        miscTab = QWidget() 
-        zuheizerTab=QWidget()
-        logTab=QWidget()
-        dashTab=QWidget()
-        gpsTab=QWidget()
-        osmTab=QWidget()
+        mainTab = QWidget(self)
+        miscTab = QWidget(self) 
+        misc2Tab=QWidget(self)
+        logTab=QWidget(self)
+        dashTab=QWidget(self)
+        gpsTab=QWidget(self)
+        osmTab=QWidget(self)
         
         mainTabLayout = QFormLayout(mainTab)
         miscTabLayout = QFormLayout(miscTab)
-        zuheizerTabLayout = QFormLayout(zuheizerTab)
+        misc2TabLayout = QFormLayout(misc2Tab)
         logTabLayout = QVBoxLayout(logTab)
         dashTabLayout = QHBoxLayout(dashTab)
         gpsTabLayout=QHBoxLayout(gpsTab)
         osmTabLayout=QVBoxLayout(osmTab)
 
-        tabs.addTab(dashTab, "Dash12345") 
-        tabs.addTab(mainTab, "Main12345")
-        tabs.addTab(miscTab, "Misc") 
-        tabs.addTab(zuheizerTab, "Zuheizer") 
-        tabs.addTab(logTab, "Log") 
-        tabs.addTab(gpsTab, "GPS")
-        tabs.addTab(osmTab, "OSM")
+        self.tabs.addTab(dashTab, "Dash") 
+        self.tabs.addTab(mainTab, "Main")
+        self.tabs.addTab(miscTab, "Misc 1") 
+        self.tabs.addTab(misc2Tab, "Misc 2") 
+        self.tabs.addTab(logTab, "Log") 
+        self.tabs.addTab(gpsTab, "GPS")
+        self.tabs.addTab(osmTab, "OSM")
 
-#        tabs.setCurrentIndex(4)
+        self.tabs.setCurrentIndex(0)
         
         self.createCANIdEntry(mainTabLayout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
         self.createCANIdEntry(mainTabLayout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
@@ -655,17 +667,19 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntrySingleLine(mainTabLayout, 0x623, ["0", "1", "2"], "Uhrzeit (Stunden)", QLCDNumber.Dec)        
         self.createCANIdEntry(mainTabLayout, 0x571, "0", "Batteriespannung", QLCDNumber.Dec)
         
-        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "0", "Zuheizer 1", QLCDNumber.Bin)
-        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "1", "Zuheizer 2", QLCDNumber.Bin)
-        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "2", "Zuheizer 3", QLCDNumber.Bin)
-        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "3", "Zuheizer 4", QLCDNumber.Bin)
-        self.createCANIdEntry(zuheizerTabLayout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
+        self.createCANIdEntry(misc2TabLayout, 0x3e5, "0", "Zuheizer 1", QLCDNumber.Bin)
+        self.createCANIdEntry(misc2TabLayout, 0x3e5, "1", "Zuheizer 2", QLCDNumber.Bin)
+        self.createCANIdEntry(misc2TabLayout, 0x3e5, "2", "Zuheizer 3", QLCDNumber.Bin)
+        self.createCANIdEntry(misc2TabLayout, 0x3e5, "3", "Zuheizer 4", QLCDNumber.Bin)
+        self.createCANIdEntry(misc2TabLayout, 0x3e5, "4", "Zuheizer 5", QLCDNumber.Bin)
         
         self.createCANIdEntry(miscTabLayout, 0x3e5, "5", "Zuheizer", QLCDNumber.Dec)
         self.createCANIdEntry(miscTabLayout, 0x591, "0", "ZV", QLCDNumber.Dec)
         self.createCANIdEntry(miscTabLayout, 0x5d1, "0", "Scheibenwischer", QLCDNumber.Dec)
 
-        self.createCANIdEntrySingleLine(mainTabLayout, 0x351, ["2", "3"], "Wegstreckenimpuls", QLCDNumber.Hex)
+        self.createCANIdEntrySingleLine(mainTabLayout, 0x351, ["2", "3"], "Wegstreckenimpuls", QLCDNumber.Dec)
+        self.createCANIdEntrySingleLine(misc2TabLayout, 0x621, ["0"], "0x621", QLCDNumber.Bin)
+        self.createCANIdEntrySingleLine(misc2TabLayout, 0x621, ["1", "2"], "0x621", QLCDNumber.Dec)
         
         logTabs = QTabWidget(self)
         logTabLayout.addWidget(logTabs)
@@ -725,13 +739,14 @@ class CANMonitor(QMainWindow):
                     
         velBox = QVBoxLayout()
         dashTabLayout.addLayout(velBox)
-                                  
+        dashTabLayout.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
+             
         self.velGauge=QtPngDialGauge(self, "tacho3", "tacho3.png")
         self.velGauge.setMinimum(20)
         self.velGauge.setMaximum(220)
         self.velGauge.setStartAngle(135)
         self.velGauge.setValue(0)
-        self.velGauge.setMaximumSize(320, 320)
+#        self.velGauge.setMaximumSize(400, 400)
         velBox.addWidget(self.velGauge)
 
         self.createCANIdValueEntry(velBox, 0x351, "0", QLCDNumber.Dec)
@@ -750,14 +765,16 @@ class CANMonitor(QMainWindow):
         self.rpmGauge=QtPngDialGauge(self, "rpm", "rpm.png")
         self.rpmGauge.setMinimum(0)
         self.rpmGauge.setMaximum(8000)
-        self.rpmGauge.setStartAngle(120)
-        self.rpmGauge.setValue(0)
-        self.rpmGauge.setMaximumSize(320, 320)
+        self.rpmGauge.setStartAngle(125)
+        self.rpmGauge.setValue(2500)
+#        self.rpmGauge.setMaximumSize(400, 400)
         rpmBox.addWidget(self.rpmGauge)     
          
         self.createCANIdValueEntry(rpmBox, 0x353, "0", QLCDNumber.Dec)
         
         self.gpsBox=GPSMonitor(self)
+        gpsTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+
         self.gpsBox.addToWidget(gpsTabLayout)
         self.gpsBox.loadConfig(self.config)
 
@@ -776,19 +793,19 @@ class CANMonitor(QMainWindow):
         connectBox=QHBoxLayout()
         top.addLayout(connectBox)
         
-        self.connectCANButton = QCheckBox('CAN Connect')
+        self.connectCANButton = QCheckBox('CAN Connect', self)
         self.connectCANButton.clicked.connect(self._connectCAN)
         self.connectCANEnable=self.config.getDefaultSection().getboolean("CANconnect", False)
         self.connectCANButton.setChecked(self.connectCANEnable)
         connectBox.addWidget(self.connectCANButton)
 
-        self.connectGPSButton = QCheckBox('GPS Connect')
+        self.connectGPSButton = QCheckBox('GPS Connect', self)
         self.connectGPSButton.clicked.connect(self._connectGPS)
         self.connectGPSEnable=self.config.getDefaultSection().getboolean("GPSconnect", False)
         self.connectGPSButton.setChecked(self.connectGPSEnable)
         connectBox.addWidget(self.connectGPSButton)
         
-        self.setGeometry(10, 10, 860, 500)
+        self.setGeometry(10, 10, 850, 500)
         self.setWindowTitle("candash")
         self.show()
         
@@ -804,7 +821,8 @@ class CANMonitor(QMainWindow):
         
     
     def mousePressEvent(self, event):
-        print("mousePressEvent")
+        print("CANMonitor mousePressEvent")
+        self.tabs.mousePressEvent(event)
 
     def getWidget(self, canId, subId):
         try:

@@ -217,7 +217,7 @@ class CANDecoder:
 
             self.widget.displayIntValue(canId, "0", value, "%d")
 
-        elif 0x5d1:
+        elif canId==0x5d1:
             # scheibnwischer
             # byte 1 
             # 0x0 
@@ -232,6 +232,11 @@ class CANDecoder:
             if data[0]==0x09:
                 value=2
             self.widget.displayIntValue(canId, "0", value, "%d")
+        
+        elif canId==0x621:
+            self.widget.displayBinValue(canId, "0", self.hex2binary(data[0]), "%8s")
+            self.widget.displayIntValue(canId, "1", data[1], "%d")
+            self.widget.displayIntValue(canId, "2", data[2], "%d")
         #else:
         #   print(self.dump(canId, dlc, data))
            

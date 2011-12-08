@@ -7,7 +7,7 @@ Created on Dec 7, 2011
 from gps import gps, misc
 import socket
 
-from PyQt4.QtCore import SIGNAL, QThread
+from PyQt4.QtCore import SIGNAL, QThread, Qt
 from PyQt4.QtGui import QWidget, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from gaugecompass import QtPngCompassGauge
 
@@ -147,6 +147,8 @@ class GPSMonitor(QWidget):
         
     def addToWidget(self, hbox):
         form=QFormLayout()
+        form.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+
         hbox.addLayout(form)
         
         self.createGPSLabel(form, "Status", "Not connected")
@@ -158,9 +160,11 @@ class GPSMonitor(QWidget):
         self.createGPSLabel(form, "Track", "")
         
         vbox=QVBoxLayout()
+        vbox.setAlignment(Qt.AlignRight|Qt.AlignTop)
+
         self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass.png")
         self.compassGauge.setValue(0)
-        self.compassGauge.setMaximumSize(320, 320)
+        self.compassGauge.setMaximumSize(300, 300)
         vbox.addWidget(self.compassGauge)
 
         self.speedDisplay=self.canMonitor.createLCD(QLCDNumber.Dec)

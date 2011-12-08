@@ -4,7 +4,7 @@ Created on Nov 24, 2011
 @author: maxl
 '''
 
-from PyQt4.QtCore import Qt, QSize, QPoint
+from PyQt4.QtCore import Qt, QSize, QPoint, QRect
 from PyQt4.QtGui import QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 import sys
@@ -20,11 +20,11 @@ class QtPngCompassGauge(QWidget):
         self.backgroundPic = QPixmap("images/"+self.m_skin+"/"+self.tachoImage)
 
         self.init()
-        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         
     def init(self):
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
         self.updateGeometry()
-        self.update()        
+#        self.update()        
 
     def setValue(self, value):
         self.m_value = value
@@ -37,7 +37,10 @@ class QtPngCompassGauge(QWidget):
     def paintEvent(self, event):
         painter=QPainter(self) 
 
-        painter.drawPixmap(self.rect(), self.backgroundPic, self.backgroundPic.rect())
+        minSize=min(self.rect().width(), self.rect().height())
+        myRect=QRect(self.rect().x(), self.rect().y(), minSize, minSize)
+        
+        painter.drawPixmap(myRect, self.backgroundPic, self.backgroundPic.rect())
 
         pen=QPen()
         pen.setCapStyle(Qt.RoundCap);
@@ -46,7 +49,7 @@ class QtPngCompassGauge(QWidget):
         pen.setJoinStyle(Qt.RoundJoin)
         painter.setPen(pen)
         spacing = 30
-        contentRect = self.rect().adjusted(spacing, spacing, -spacing, -spacing)
+        contentRect = myRect.adjusted(spacing, spacing, -spacing, -spacing)
 
         math_pi = 3.14159265358979323846
         degree = self.m_value -90
@@ -57,10 +60,10 @@ class QtPngCompassGauge(QWidget):
         painter.drawLine(contentRect.center(), contentRect.center() + vec)
                     
     def minimumSizeHint(self):
-        return QSize(100, 100)
+        return QSize(200, 200)
 
-    def sizeHint(self):
-        return QSize(400, 400)
+#    def sizeHint(self):
+#        return QSize(400, 400)
 
     def setShowOverlay(self, show):
         self.m_showOverlay = show
@@ -77,19 +80,19 @@ class Example(QWidget):
         hbox = QHBoxLayout()
         gauge=QtPngCompassGauge(self, "compass", "compass.png")
         gauge.setValue(0)
-        gauge.setMaximumSize(300, 300)
+#        gauge.setMaximumSize(300, 300)
         #gauge.setShowOverlay(False)
         hbox.addWidget(gauge)
 
         gauge=QtPngCompassGauge(self, "compass", "compass.png")
         gauge.setValue(45)
-        gauge.setMaximumSize(300, 300)
+#        gauge.setMaximumSize(300, 300)
         #gauge.setShowOverlay(F2lse)
         hbox.addWidget(gauge)
 #        
         gauge=QtPngCompassGauge(self, "compass", "compass.png")
-        gauge.setValue(360)
-        gauge.setMaximumSize(300, 300)
+        gauge.setValue(180)
+#        gauge.setMaximumSize(300, 300)
         #gauge.setShowOverlay(False)
         hbox.addWidget(gauge)
         self.setLayout(hbox)

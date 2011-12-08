@@ -4,7 +4,7 @@ Created on Nov 24, 2011
 @author: maxl
 '''
 
-from PyQt4.QtCore import Qt, QSize, QPoint
+from PyQt4.QtCore import Qt, QSize, QPoint, QRect
 from PyQt4.QtGui import QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 import sys
@@ -23,11 +23,11 @@ class QtPngDialGauge(QWidget):
         self.backgroundPic = QPixmap("images/"+self.m_skin+"/"+self.tachoImage)
 
         self.init()
-        self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         
     def init(self):
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
         self.updateGeometry()
-        self.update()        
+#        self.update()        
 
     def setValue(self, value):
         if value < self.m_minimum:
@@ -70,8 +70,10 @@ class QtPngDialGauge(QWidget):
     def paintEvent(self, event):
         painter=QPainter(self) 
 
-        painter.drawPixmap(self.rect(), self.backgroundPic, self.backgroundPic.rect())
-
+        minSize=min(self.rect().width(), self.rect().height())
+        myRect=QRect(self.rect().x(), self.rect().y(), minSize, minSize)
+        painter.drawPixmap(myRect, self.backgroundPic, self.backgroundPic.rect())
+        
         pen=QPen()
         pen.setCapStyle(Qt.RoundCap);
         pen.setWidthF(4.0)
@@ -79,7 +81,7 @@ class QtPngDialGauge(QWidget):
         pen.setJoinStyle(Qt.RoundJoin)
         painter.setPen(pen)
         spacing = 15
-        contentRect = self.rect().adjusted(spacing, spacing, -spacing, -spacing)
+        contentRect = myRect.adjusted(spacing, spacing, -spacing, -spacing)
 
         valueInPercent = (self.m_value - self.m_minimum) / (self.m_maximum - self.m_minimum)
         math_pi = 3.14159265358979323846
@@ -91,10 +93,8 @@ class QtPngDialGauge(QWidget):
         painter.drawLine(contentRect.center(), contentRect.center() + vec)
                     
     def minimumSizeHint(self):
-        return QSize(100, 100)
+        return QSize(200, 200)
 
-    def sizeHint(self):
-        return QSize(400, 400)
 
     def setShowOverlay(self, show):
         self.m_showOverlay = show
@@ -109,35 +109,35 @@ class Example(QWidget):
         
     def initUI(self):
         hbox = QHBoxLayout()
-        gauge=QtPngDialGauge(self, "compass", "compass.png")
-        gauge.setMinimum(0)
-        gauge.setMaximum(360)
-        gauge.setStartAngle(-180)
-        gauge.setValue(abs(180-180))
-        gauge.setMaximumSize(300, 300)
+        gauge=QtPngDialGauge(self, "tacho3", "tacho3.png")
+        gauge.setMinimum(20)
+        gauge.setMaximum(220)
+        gauge.setStartAngle(135)
+        gauge.setValue(20)
+#        gauge.setMaximumSize(300, 300)
         #gauge.setShowOverlay(False)
         hbox.addWidget(gauge)
 
-        gauge=QtPngDialGauge(self, "compass", "compass.png")
-        gauge.setMinimum(0)
-        gauge.setMaximum(360)
-        gauge.setStartAngle(-180)
-        gauge.setValue(abs(0-180))
-        gauge.setMaximumSize(300, 300)
+        gauge1=QtPngDialGauge(self, "rpm", "rpm.png")
+        gauge1.setMinimum(0)
+        gauge1.setMaximum(8000)
+        gauge1.setStartAngle(125)
+        gauge1.setValue(4000)
+#        gauge.setMaximumSize(300, 300)
         #gauge.setShowOverlay(F2lse)
-        hbox.addWidget(gauge)
+        hbox.addWidget(gauge1)
 #        
-        gauge=QtPngDialGauge(self, "compass", "compass.png")
-        gauge.setMinimum(0)
-        gauge.setMaximum(360)
-        gauge.setStartAngle(-180)
-        gauge.setValue(245)
-        gauge.setMaximumSize(300, 300)
-        #gauge.setShowOverlay(False)
-        hbox.addWidget(gauge)
+#        gauge=QtPngDialGauge(self, "compass", "compass.png")
+#        gauge.setMinimum(0)
+#        gauge.setMaximum(360)
+#        gauge.setStartAngle(-180)
+#        gauge.setValue(245)
+##        gauge.setMaximumSize(300, 300)
+#        #gauge.setShowOverlay(False)
+#        hbox.addWidget(gauge)
         self.setLayout(hbox)
         
-        self.setGeometry(0, 0, 900, 400)
+        self.setGeometry(0, 0, 600, 300)
         self.setWindowTitle('Tacho Test')
         self.show()
         
