@@ -8,11 +8,11 @@ from gps import gps, misc
 import socket
 
 from PyQt4.QtCore import SIGNAL, QThread
-from PyQt4.QtGui import QVBoxLayout, QFormLayout, QLCDNumber, QLabel
+from PyQt4.QtGui import QWidget, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from gaugecompass import QtPngCompassGauge
 
 class GPSMonitorUpateWorker(QThread):
-    def __init__(self, parent=None): 
+    def __init__(self, parent): 
         QThread.__init__(self, parent)
         self.exiting = False
         self.connected=False
@@ -24,11 +24,14 @@ class GPSMonitorUpateWorker(QThread):
         self.wait()
         
     def stop(self):
-        self.disconnectGPS()
+        if self.connected==True:
+            self.disconnectGPS()
         self.exiting = True
         self.wait()
         
     def setup(self, canMonitor):
+        self.updateStatusLabel("GPS thread setup")
+
         self.canMonitor=canMonitor
         self.session=None
         self.exiting = False
@@ -118,9 +121,10 @@ class GPSMonitorUpateWorker(QThread):
         self.updateStatusLabel("GPS thread stopped")
         self.canMonitor.stopGPSSuccesful()
         
-class GPSMonitor():
-    def __init__(self, canMonitor):
-        self.canMonitor=canMonitor
+class GPSMonitor(QWidget):
+    def __init__(self, parent):
+        QWidget.__init__(self, parent)
+        self.canMonitor=parent
         self.valueLabelList=list()
         
     def createGPSLabel(self, form, key, value):

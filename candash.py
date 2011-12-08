@@ -30,11 +30,11 @@ DATA_COL=4
 
                 
 class CANLogViewTableModel(QAbstractTableModel):
-    def __init__(self, canMonitor, logBuffer, canIdList, parent=None):
+    def __init__(self, logBuffer, canIdList, parent):
         QAbstractTableModel.__init__(self, parent)
         self.logBuffer=logBuffer
         self.canIdList=canIdList
-        self.canMonitor=canMonitor
+        self.canMonitor=parent
 #        self.redBackground=QBrush(QColor(255, 0, 0))
 #        self.greenBackground=QBrush(QColor(0, 255, 0))
 #        self.blackForeground=QBrush(QColor(0, 0, 0))
@@ -116,11 +116,11 @@ class CANLogViewTableModel(QAbstractTableModel):
         self.reset()
 
 class CANLogViewTableModel2(QAbstractTableModel):
-    def __init__(self, canMonitor, canIdList, parent=None):
+    def __init__(self, canIdList, parent):
         QAbstractTableModel.__init__(self, parent)
         self.logBuffer=list()
         self.canIdList=canIdList
-        self.canMonitor=canMonitor
+        self.canMonitor=parent
         self.redBackground=QBrush(QColor(255, 0, 0))
         self.blackForeground=QBrush(QColor(0, 0, 0))
         
@@ -238,9 +238,10 @@ class CANLogViewTableModel2(QAbstractTableModel):
         if item[2][index.column()-2]!=itemInit[2][index.column()-2]:
             return True
 
-class CANFilterBox():
-    def __init__(self, canMonitor, withChanged):
-        self.canMonitor=canMonitor
+class CANFilterBox(QWidget):
+    def __init__(self, withChanged, parent):
+        QWidget.__init__(self, parent)
+        self.canMonitor=parent
         self.filter=False
         self.filterValue=""
         self.filterRingIds=False
@@ -371,9 +372,10 @@ class CANFilterBox():
     def _enableFilterChanged(self):
         self.filterChanged=self.filterChangedButton.isChecked()
         
-class CANLogTableBox():
-    def __init__(self, canMonitor, logViewModel, logBuffer, logBufferInit):
-        self.canMonitor=canMonitor
+class CANLogTableBox(QWidget):
+    def __init__(self, logViewModel, logBuffer, logBufferInit, parent):
+        QWidget.__init__(self, parent)
+        self.canMonitor=parent
         self.update=False
         self.logViewModel=logViewModel
         self.logBuffer=logBuffer
@@ -424,8 +426,8 @@ class CANLogTableBox():
 
         
 class CANMonitor(QMainWindow):
-    def __init__(self, app, test):
-        super(CANMonitor, self).__init__()
+    def __init__(self, app, test, parent):
+        QMainWindow.__init__(self, parent)
         self.app = app
         self.lcdDict=dict()
         self.logBuffer=deque("", 1000)
@@ -542,7 +544,7 @@ class CANMonitor(QMainWindow):
         self.logView=QTableView(self)
         vbox.addWidget(self.logView)
         
-        self.logViewModel=CANLogViewTableModel(self, self.logBuffer, self.canIdList)
+        self.logViewModel=CANLogViewTableModel(self.logBuffer, self.canIdList, self)
         self.logView.setModel(self.logViewModel)
         
         header=QHeaderView(Qt.Horizontal, self.logView)
@@ -562,7 +564,7 @@ class CANMonitor(QMainWindow):
         self.logView2=QTableView(self)
         vbox.addWidget(self.logView2)
         
-        self.logViewModel2=CANLogViewTableModel2(self, self.canIdList)
+        self.logViewModel2=CANLogViewTableModel2(self.canIdList, self)
         self.logView2.setModel(self.logViewModel2)
 #        self.logView2.setSortingEnabled(True)
         
@@ -632,8 +634,8 @@ class CANMonitor(QMainWindow):
         gpsTabLayout=QHBoxLayout(gpsTab)
         osmTabLayout=QVBoxLayout(osmTab)
 
-        tabs.addTab(dashTab, "Dash") 
-        tabs.addTab(mainTab, "Main")
+        tabs.addTab(dashTab, "Dash12345") 
+        tabs.addTab(mainTab, "Main12345")
         tabs.addTab(miscTab, "Misc") 
         tabs.addTab(zuheizerTab, "Zuheizer") 
         tabs.addTab(logTab, "Log") 
@@ -663,6 +665,7 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntry(miscTabLayout, 0x591, "0", "ZV", QLCDNumber.Dec)
         self.createCANIdEntry(miscTabLayout, 0x5d1, "0", "Scheibenwischer", QLCDNumber.Dec)
 
+        self.createCANIdEntrySingleLine(mainTabLayout, 0x351, ["2", "3"], "Wegstreckenimpuls", QLCDNumber.Hex)
         
         logTabs = QTabWidget(self)
         logTabLayout.addWidget(logTabs)
@@ -676,19 +679,19 @@ class CANMonitor(QMainWindow):
         logTab1Layout = QVBoxLayout(logTabWidget1)
         self.createLogView(logTab1Layout)
         
-        self.logViewFilerBox1=CANFilterBox(self, False)
+        self.logViewFilerBox1=CANFilterBox(False, self)
         self.logViewFilerBox1.addFilterBox(logTab1Layout)
         
-        self.logViewTableBox1=CANLogTableBox(self, self.logViewModel, self.logBuffer, None)
+        self.logViewTableBox1=CANLogTableBox(self.logViewModel, self.logBuffer, None, self)
         self.logViewTableBox1.addTableBox(logTab1Layout)
         
         logTab2Layout = QVBoxLayout(logTabWidget2)
         self.createLogView2(logTab2Layout)
 
-        self.logViewFilterBox2=CANFilterBox(self, True)
+        self.logViewFilterBox2=CANFilterBox(True, self)
         self.logViewFilterBox2.addFilterBox(logTab2Layout)
         
-        self.logViewTableBox2=CANLogTableBox(self, self.logViewModel2, self.logBuffer2, self.logBufferInit)
+        self.logViewTableBox2=CANLogTableBox(self.logViewModel2, self.logBuffer2, self.logBufferInit, self)
         self.logViewTableBox2.addTableBox(logTab2Layout)
         
         logButtonBox = QHBoxLayout()
@@ -791,15 +794,18 @@ class CANMonitor(QMainWindow):
         
         self.canDecoder = CANDecoder(self)
 
-        self.updateCANThread = CANSocketWorker()        
+        self.updateCANThread = CANSocketWorker(self)        
         self.connect(self.updateCANThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self._connectCAN()
         
-        self.updateGPSThread=GPSMonitorUpateWorker()
+        self.updateGPSThread=GPSMonitorUpateWorker(self)
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self._connectGPS()
         
     
+    def mousePressEvent(self, event):
+        print("mousePressEvent")
+
     def getWidget(self, canId, subId):
         try:
             return self.lcdDict[hex(canId)+":"+subId]
@@ -819,7 +825,7 @@ class CANMonitor(QMainWindow):
         for lcdItem in lcdList:
             if lcdItem.intValue()!=int(value):
                 lcdItem.display(formatString % value)
-                   
+                  
     def displayBinValue(self, canId, subId, value, formatString):
         lcdList=self.getWidget(canId, subId)
         for lcdItem in lcdList:
@@ -1093,7 +1099,7 @@ def main(argv):
 
     app = QApplication(sys.argv)
     
-    ex = CANMonitor(app, test)
+    ex = CANMonitor(app, test, None)
     app.aboutToQuit.connect(ex._cleanup)
 
     sys.exit(app.exec_())

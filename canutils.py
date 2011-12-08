@@ -134,9 +134,9 @@ class CANDecoder:
         #Byte 3:
         #- Geschwindigkeit oberer Wert OW
         #Byte 4
-        #- Unbekannt
+        #- Unbekannt, evtl. Wegstreckenimpuls unter Wert
         #Byte 5:
-        #- Unbekannt
+        #- Unbekannt, evtl. Wegstreckenimpuls oberer Wert
         #Byte 6:
         #- Außentemperatur 1 -> Dezimalwert von Byte 6 geteilt durch 2 minus 40
         #Byte 7:
@@ -147,6 +147,8 @@ class CANDecoder:
             self.widget.displayIntValue(canId, "0", vel, "%d")
             self.widget.setValueDashDisplayVel(vel)
             self.widget.displayFloatValue(canId, "1", self.calcOuterTemp(data), "%.1f")
+            self.widget.displayIntValue(canId, "2", data[3], "%d")
+            self.widget.displayIntValue(canId, "3", data[4], "%d")
             
         elif canId==0x3e5:
 #            Byte 1
@@ -234,7 +236,7 @@ class CANDecoder:
         #   print(self.dump(canId, dlc, data))
            
 class CANSocketWorker(QThread):
-    def __init__(self, parent=None): 
+    def __init__(self, parent): 
         QThread.__init__(self, parent)
         self.exiting = False
         self.test=False
@@ -249,11 +251,14 @@ class CANSocketWorker(QThread):
         self.wait()
         
     def stop(self):
-        self.disconnectCANDevice()
+        if self.connected==True:
+            self.disconnectCANDevice()
         self.exiting = True
         self.wait()
         
     def setup(self, app, canMonitor, canDecoder, test, replayMode, replayLines):
+        self.updateStatusLabel("CAN thread setup")
+
         self.exiting = False
         self.app = app
         self.canDecoder = canDecoder
@@ -370,7 +375,7 @@ class CANSocketWorker(QThread):
 #                        break
                 self.updateStatusLabel("CAN replay stopped")
                 self.replayMode=False
-                #self.replayLines=list()
+                self.replayLines=list()
                 self.canMonitor.replayModeDone()
                 self.exiting=True
             if self.connected==True:

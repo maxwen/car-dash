@@ -102,8 +102,8 @@ class QtPngDialGauge(QWidget):
 
 class Example(QWidget):
     
-    def __init__(self):
-        super(Example, self).__init__()
+    def __init__(self, parent):
+        QWidget.__init__(self, parent)
         
         self.initUI()
         
@@ -145,7 +145,7 @@ def main(argv):
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
-    _ = Example()
+    _ = Example(None)
 
     sys.exit(app.exec_())
 
