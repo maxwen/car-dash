@@ -256,9 +256,9 @@ class CANSocketWorker(QThread):
         self.wait()
         
     def stop(self):
+        self.exiting=True
         if self.connected==True:
             self.disconnectCANDevice()
-        self.exiting = True
         self.wait()
         
     def setup(self, app, canMonitor, canDecoder, test, replayMode, replayLines):
@@ -298,6 +298,7 @@ class CANSocketWorker(QThread):
         self.s=None
         self.reconnectTry=0
         self.reconnecting=False
+        self.exiting=True
         self.canMonitor.connectCANFailed()
         self.canMonitor.clearAllLCD()
         self.updateStatusLabel("CAN reconnect failed")
@@ -315,7 +316,7 @@ class CANSocketWorker(QThread):
                 if self.s!=None:
                     try:
                         self.s.close()
-                        self.s=None
+                        #self.s=None
                         self.updateStatusLabel("CAN disconnect ok")
                     except socket.error:
                         self.updateStatusLabel("CAN disconnect error")
@@ -334,7 +335,7 @@ class CANSocketWorker(QThread):
                 try:
                     # create CAN socket
                     self.s = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
-                    #self.s.settimeout(3)
+                    self.s.settimeout(3)
                     # setup canId filter
                     canId = 0
                     mask = 0
@@ -409,6 +410,10 @@ class CANSocketWorker(QThread):
                 elif self.s!=None:
                     try:
                         cf, addr = self.s.recvfrom(16)
+                    except socket.timeout:
+                        self.updateStatusLabel("CAN thread socket.timeout")
+                        continue
+ 
                     except socket.error:
                         if self.exiting==True:
                             self.updateStatusLabel("CAN thread stop request")

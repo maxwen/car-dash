@@ -458,6 +458,9 @@ class CANMonitor(QMainWindow):
         self.updateGPSThread=None
         self.config=Config()
         self.log=Log(True)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
 
         self.initUI(parent)
     
@@ -681,7 +684,7 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntrySingleLine(misc2TabLayout, 0x621, ["0"], "0x621", QLCDNumber.Bin)
         self.createCANIdEntrySingleLine(misc2TabLayout, 0x621, ["1", "2"], "0x621", QLCDNumber.Dec)
         
-        logTabs = QTabWidget(self)
+        logTabs = MyTabWidget(self)
         logTabLayout.addWidget(logTabs)
         
         logTabWidget1=QWidget()
@@ -820,9 +823,9 @@ class CANMonitor(QMainWindow):
         self._connectGPS()
         
     
-    def mousePressEvent(self, event):
-        print("CANMonitor mousePressEvent")
-        self.tabs.mousePressEvent(event)
+    #def mousePressEvent(self, event):
+    #    print("CANMonitor mousePressEvent")
+    #    self.tabs.mousePressEvent(event)
 
     def getWidget(self, canId, subId):
         try:

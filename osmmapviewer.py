@@ -158,6 +158,18 @@ class OSMUtils():
         lat = math.asin(math.tanh(lat_m))
         return lat
     
+    def distance(self, oldLat, oldLon, newLat, newLon):
+        R = 6371;
+        dLat = self.deg2rad(oldLat-newLat)
+        dLon = self.deg2rad(oldLon-newLon)
+        lat1 = self.deg2rad(oldLat)
+        lat2 = self.deg2rad(newLat)
+
+        a = math.sin(dLat/2) * math.sin(dLat/2) + math.sin(dLon/2) * math.sin(dLon/2) * math.cos(lat1) * math.cos(lat2) 
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        d = (R * c)*1000
+        return d
+    
 class QtOSMWidget(QWidget):
     def __init__(self, parent):
         QWidget.__init__(self, parent)
@@ -770,15 +782,15 @@ class OSMWidget(QWidget):
     @pyqtSlot()
     def _downloadTiles(self):
         withDownload=self.downloadTilesButton.isChecked()
-#        if withDownload==True:
-#            withDownload=self.checkDownloadServer()
-#            if  withDownload==True:
+        if withDownload==True:
+            withDownload=self.checkDownloadServer()
+#            if  withDownload==False:
 #                self.downloadThread.setup()
 #        else:
 #            if self.downloadThread.isRunning():
 #                self.downloadThread.stop()
         self.mapWidgetQt.setDownloadTiles(withDownload)   
-#        self.forceDownloadTilesButton.setDisabled(withDownload==False)
+        self.downloadTilesButton.setChecked(withDownload==True)
 
 #    @pyqtSlot()
 #    def _forceDownloadTiles(self):
@@ -827,6 +839,9 @@ class OSMWidget(QWidget):
 class OSMWindow(QMainWindow):
     def __init__(self, parent):
         QMainWindow.__init__(self, parent)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
         self.initUI()
         self.incLat=0.0
         self.incLon=0.0
@@ -846,17 +861,17 @@ class OSMWindow(QMainWindow):
 
         tabs.addTab(osmTab, "OSM")
 
-        self.mapWidget=OSMWidget(self)
-        self.mapWidget.addToWidget(osmTabLayout)
+        self.gpsWidget=OSMWidget(self)
+        self.gpsWidget.addToWidget(osmTabLayout)
 
         self.zoom=9
         self.startLat=47.8
         self.startLon=13.0
-        self.mapWidget.initHome()
+        self.gpsWidget.initHome()
 
-        self.connect(self.mapWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.mapWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.mapWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.gpsWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.gpsWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.gpsWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
 
         self.testGPSButton=QPushButton("Test GPS", self)
         self.testGPSButton.clicked.connect(self._testGPS)
@@ -875,7 +890,9 @@ class OSMWindow(QMainWindow):
             
         self.incLat=self.incLat+0.001
         self.incLon=self.incLon+0.001
-        self.mapWidget.updateGPSPosition(self.incLat, self.incLon)   
+        self.gpsWidget.updateGPSPosition(self.incLat, self.incLon) 
+        
+        print("%.0f meter"%(self.gpsWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
 
     def updateStatusLabel(self, text):
         print(text)
