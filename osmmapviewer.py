@@ -510,7 +510,11 @@ class QtOSMWidget(QWidget):
                     self.osm_autocenter_map()
                 else:
                     self.update()   
-    
+        else:
+            self.gpsLatitude=0.0
+            self.gpsLongitude=0.0
+            self.update()
+            
     def cleanImageCache(self):
         self.tileCache.clear()
             
