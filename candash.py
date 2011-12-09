@@ -777,9 +777,9 @@ class CANMonitor(QMainWindow):
         
         self.gpsBox=GPSMonitor(self)
         gpsTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+        self.gpsBox.loadConfig(self.config)
 
         self.gpsBox.addToWidget(gpsTabLayout)
-        self.gpsBox.loadConfig(self.config)
 
         self.osmWidget=OSMWidget(self)
         osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
@@ -1108,6 +1108,9 @@ class CANMonitor(QMainWindow):
     def stopGPSSuccesful(self):
         self.connectGPSButton.setDisabled(False)
                 
+    def hasOSMWidget(self):
+        return self.osmWidget!=None
+    
 def main(argv): 
     test=False
     try:

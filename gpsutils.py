@@ -13,6 +13,7 @@ from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
 from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from gaugecompass import QtPngCompassGauge
 from osmmapviewer import OSMUtils
+from config import Config
 
 class GPSMonitorUpateWorker(QThread):
     def __init__(self, parent): 
@@ -95,6 +96,7 @@ class GPSMonitorUpateWorker(QThread):
         self.reconnectTry=0
         self.reconnecting=False
         self.session=None
+        self.exiting=True
         self.canMonitor.updateGPSDisplay(None)
         self.canMonitor.connectGPSFailed()
         self.updateStatusLabel("GPS reconnect failed")
@@ -130,7 +132,8 @@ class GPSMonitor(QWidget):
         QWidget.__init__(self, parent)
         self.canMonitor=parent
         self.valueLabelList=list()
-        self.distance=0.0
+        self.globalDistance=0
+        self.localDistance=0
         self.lastLat=0.0
         self.lastLon=0.0
         self.osmUtils=OSMUtils()
@@ -186,7 +189,7 @@ class GPSMonitor(QWidget):
         self.createGPSLabel(form, "Track", "")
         
         vbox=QVBoxLayout()
-        vbox.setAlignment(Qt.AlignRight|Qt.AlignTop)
+        vbox.setAlignment(Qt.AlignTop|Qt.AlignRight)
 
         self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass.png")
         self.compassGauge.setValue(0)
@@ -204,12 +207,15 @@ class GPSMonitor(QWidget):
         resetDistanceButton.clicked.connect(self._resetDistance)
         distanceBox.addWidget(resetDistanceButton)
 
-        self.distanceDisplay=self.createLCD(QLCDNumber.Dec)
-        self.distanceDisplay.display(self.distance)
-        distanceBox.addWidget(self.distanceDisplay)
+        self.distanceLocalDisplay=self.createLCD(QLCDNumber.Dec)
+        self.distanceLocalDisplay.display(self.localDistance)
+        distanceBox.addWidget(self.distanceLocalDisplay)
         
         vbox.addLayout(distanceBox)
 
+        self.distanceGlobalDisplay=self.createLCD(QLCDNumber.Dec)
+        self.distanceGlobalDisplay.display(self.globalDistance)
+        vbox.addWidget(self.distanceGlobalDisplay)
         hbox.addLayout(vbox)
     
     def updateDistanceDisplay(self, lat, lon):
@@ -222,18 +228,15 @@ class GPSMonitor(QWidget):
             return
             
         #print("%f-%f:%f-%f"%(self.lastLat, self.lastLon, lat, lon))      
-        self.distance=self.distance+self.osmUtils.distance(self.lastLat, self.lastLon, lat, lon)
-        self.distanceDisplay.display("%.0f"%(self.distance))
+        distance=self.osmUtils.distance(self.lastLat, self.lastLon, lat, lon)
+        self.globalDistance=self.globalDistance+int(distance)
+        self.distanceGlobalDisplay.display("%d"%(self.globalDistance))
+
+        self.localDistance=self.localDistance+int(distance)
+        self.distanceLocalDisplay.display("%d"%(self.localDistance))
 
         self.lastLat=lat
         self.lastLon=lon
-    
-    def distance(self):
-        return self.distance
-              
-    def setDistance(self, distance):
-        print(distance)
-        self.distanceDisplay.display(distance)
         
     def updateGPSPosition(self, lat,lon):
             self.valueLabelList[0].setText("Connected test")
@@ -243,7 +246,7 @@ class GPSMonitor(QWidget):
             if not gps.isnan(lat) and not gps.isnan(lon):
                 self.updateDistanceDisplay(lat, lon)
 #            else:
-#                self.distanceDisplay.setValue(0)
+#                self.distanceLocalDisplay.setValue(0)
 
     def update(self, session):
         if session!=None:
@@ -276,10 +279,11 @@ class GPSMonitor(QWidget):
             else:
                 self.speedDisplay.display(0)
                 
-            if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
-            else:
-                self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+            if self.canMonitor.hasOSMWidget():
+                if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
+                    self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
+                else:
+                    self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
 
             if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
                 self.updateDistanceDisplay(session.fix.latitude, session.fix.longitude)
@@ -296,20 +300,24 @@ class GPSMonitor(QWidget):
             self.valueLabelList[6].setText("")
             self.compassGauge.setValue(0)
             self.speedDisplay.display(0)
-            self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+            
+            if self.canMonitor.hasOSMWidget():
+                self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
 
     def loadConfig(self, config):
-        self.distance=config.getDefaultSection().getfloat("distance", 0.0)
+        self.globalDistance=config.getDefaultSection().getint("globalDistance", 0)
+        self.localDistance=config.getDefaultSection().getint("localDistance", 0)
             
     def saveConfig(self, config):
-        config.getDefaultSection()["distance"]=str(self.distance)
+        config.getDefaultSection()["globalDistance"]=str(self.globalDistance)
+        config.getDefaultSection()["localDistance"]=str(self.localDistance)
 
     @pyqtSlot()
     def _resetDistance(self):
         self.lastLat=0.0
         self.lastLon=0.0
-        self.distance=0.0
-        self.distanceDisplay.display("%.0f"%(self.distance))
+        self.localDistance=0
+        self.distanceLocalDisplay.display("%d"%(self.localDistance))
         
 class GPSWindow(QMainWindow):
     def __init__(self, parent):
@@ -320,6 +328,8 @@ class GPSWindow(QMainWindow):
         self.incLat=0.0
         self.incLon=0.0
         self.connectGPSEnable=False
+        self.config=Config()
+
         self.initUI()
 
     def initUI(self):
@@ -338,8 +348,10 @@ class GPSWindow(QMainWindow):
         tabs.addTab(gpsTab, "GSM")
 
         self.gpsWidget=GPSMonitor(self)
-        self.gpsWidget.addToWidget(gpsTabLayout)
+        self.gpsWidget.loadConfig(self.config)
 
+        self.gpsWidget.addToWidget(gpsTabLayout)
+        
         self.zoom=9
         self.startLat=47.8
         self.startLon=13.0
@@ -355,7 +367,7 @@ class GPSWindow(QMainWindow):
         self.connectGPSButton.clicked.connect(self._connectGPS)
         self.connectGPSButton.setChecked(self.connectGPSEnable)
         connectBox.addWidget(self.connectGPSButton)
-#        self.setGeometry(0, 0, 800, 400)
+        self.setGeometry(0, 0, 800, 400)
         self.setWindowTitle('GPS Test')
         self.updateGPSThread=GPSMonitorUpateWorker(self)
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
@@ -408,6 +420,14 @@ class GPSWindow(QMainWindow):
         self.connectGPSButton.setDisabled(False)
 #        os.execl(os.getcwd()+"/mapnik_wrapper.sh", "9", "46", "17", "49", "2")
 
+    def hasOSMWidget(self):
+        return False
+    
+    @pyqtSlot()
+    def _cleanup(self):
+        self.gpsWidget.saveConfig(self.config)
+        self.config.writeConfig()
+
 def main(argv): 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
@@ -417,7 +437,8 @@ def main(argv):
 
     widget1 = GPSWindow(None)
     widget1.initUI()
-    
+    app.aboutToQuit.connect(widget1._cleanup)
+
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
