@@ -24,6 +24,7 @@ EXTRA_BORDER=0
 MIN_ZOOM=1
 MAX_ZOOM=18
 MAP_SCROLL_STEP=10
+RADIUS_EARTH = 6371;
 tileHome="/Maps/osm/tiles/"
 tileServer="tile.openstreetmap.org"
 
@@ -159,15 +160,14 @@ class OSMUtils():
         return lat
     
     def distance(self, oldLat, oldLon, newLat, newLon):
-        R = 6371;
         dLat = self.deg2rad(oldLat-newLat)
         dLon = self.deg2rad(oldLon-newLon)
         lat1 = self.deg2rad(oldLat)
         lat2 = self.deg2rad(newLat)
 
-        a = math.sin(dLat/2) * math.sin(dLat/2) + math.sin(dLon/2) * math.sin(dLon/2) * math.cos(lat1) * math.cos(lat2) 
+        a = math.pow(math.sin(dLat/2), 2) + math.pow(math.sin(dLon/2),2) * math.cos(lat1) * math.cos(lat2) 
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-        d = (R * c)*1000
+        d = (RADIUS_EARTH * c)*1000
         return d
     
 class QtOSMWidget(QWidget):
