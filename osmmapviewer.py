@@ -13,8 +13,8 @@ import io
 import socket
 from collections import deque
 
-from PyQt4.QtCore import QEvent, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QLabel, QToolTip, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtCore import Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtGui import QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -190,17 +190,21 @@ class QtOSMWidget(QWidget):
         self.withDownload=False
         self.autocenterGPS=False
         self.forceDownload=False
+        
         self.gpsPointImage=QPixmap("images/gps-point-big.png")
+        self.gpsPointImageStop=QPixmap("images/gps-point-big-stop.png")
+
         self.osmControlImage=QPixmap("images/osm-control.png")
         self.controlWidgetRect=QRect(0, 0, self.osmControlImage.width(), self.osmControlImage.height())
-        self.zoomRect=QRect(0, 70, 70, 50)
-        self.minusRect=QRect(5, 70, 22, 22)
-        self.plusRect=QRect(35, 70, 22, 22)
-        self.moveRect=QRect(0, 0, 70, 61)
-        self.leftRect=QRect(0, 20, 20, 20)
-        self.rightRect=QRect(40, 20, 20, 20)
-        self.upRect=QRect(20, 0, 20, 20)
-        self.downRect=QRect(20, 40, 20, 20)
+        self.zoomRect=QRect(0, 105, 95, 45)
+        self.minusRect=QRect(7, 110, 35, 35)
+        self.plusRect=QRect(53, 110, 35, 35)
+        
+        self.moveRect=QRect(0, 0, 95, 95)
+        self.leftRect=QRect(5, 35, 25, 25)
+        self.rightRect=QRect(65, 35, 25, 25)
+        self.upRect=QRect(35, 5, 25, 25)
+        self.downRect=QRect(35, 65, 25, 25)
         
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
         self.moving=False
@@ -306,7 +310,7 @@ class QtOSMWidget(QWidget):
     def drawTile(self, fileName, offset_x, offset_y):
         pixbuf=self.getCachedTile(fileName)
         self.painter.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)
-
+        
     def getCachedTile(self, fileName):
         if not fileName in self.tileCache:
             pixbuf = QPixmap(fileName)
@@ -405,7 +409,10 @@ class QtOSMWidget(QWidget):
         x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude) - map_x0
         y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude) - map_y0
 
-        self.painter.drawPixmap(int(x-self.gpsPointImage.width()/2), int(y-self.gpsPointImage.height()/2), self.gpsPointImage)
+        if self.stop==True:
+            self.painter.drawPixmap(int(x-self.gpsPointImageStop.width()/2), int(y-self.gpsPointImageStop.height()/2), self.gpsPointImageStop)
+        else:
+            self.painter.drawPixmap(int(x-self.gpsPointImage.width()/2), int(y-self.gpsPointImage.height()/2), self.gpsPointImage)
 #        self.painter.drawPoint(x, y)
         
     def osm_autocenter_map(self):
@@ -459,11 +466,19 @@ class QtOSMWidget(QWidget):
 #        print(self.pos())
 #        self.updateGeometry()
         self.painter=QPainter(self) 
+        self.painter.setRenderHint(QPainter.Antialiasing)
+        self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
         self.showControlOverlay()
         self.painter.end()
-                    
+              
+#    def setRotation(self, r):
+#        self.painter.save()
+#        self.painter.translate(TILESIZE/2,TILESIZE/2)
+#        self.painter.rotate(90)
+#        self.painter.translate(-TILESIZE/2,-TILESIZE/2);
+    
     def minimumSizeHint(self):
         return QSize(minWidth, minHeight)
 
@@ -504,12 +519,19 @@ class QtOSMWidget(QWidget):
             gpsLongitudeNew=self.osmutils.deg2rad(lon)
             
             if self.gpsLatitude!=gpsLatitudeNew or self.gpsLongitude!=gpsLongitudeNew:
+                self.stop=False
                 self.gpsLatitude=gpsLatitudeNew
                 self.gpsLongitude=gpsLongitudeNew
                 if self.autocenterGPS==True:
                     self.osm_autocenter_map()
                 else:
                     self.update()   
+            else:
+                self.stop=True
+                if self.autocenterGPS==True:
+                    self.osm_autocenter_map()
+                else:
+                    self.update()           
         else:
             self.gpsLatitude=0.0
             self.gpsLongitude=0.0
@@ -589,6 +611,14 @@ class QtOSMWidget(QWidget):
         
     def showControlOverlay(self):
         self.painter.drawPixmap(0, 0, self.osmControlImage)
+#        self.painter.drawRect(self.zoomRect)
+#        self.painter.drawRect(self.minusRect)
+#        self.painter.drawRect(self.plusRect)
+#        self.painter.drawRect(self.moveRect)
+#        self.painter.drawRect(self.leftRect)
+#        self.painter.drawRect(self.rightRect)
+#        self.painter.drawRect(self.upRect)
+#        self.painter.drawRect(self.downRect)
 
     def mousePressEvent(self, event):
 #        print("mousePressEvent")

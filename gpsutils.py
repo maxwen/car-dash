@@ -33,17 +33,16 @@ class GPSMonitorUpateWorker(QThread):
         self.exiting = True
         self.wait()
         
-    def setup(self, canMonitor):
+    def setup(self, connect):
         self.updateStatusLabel("GPS thread setup")
 
-        self.canMonitor=canMonitor
         self.session=None
         self.exiting = False
         self.connected=False
         self.reconnecting=False
         self.reconnectTry=0
         
-        if self.canMonitor.connectGPSEnabled()==True:
+        if connect==True:
             self.connectGPS()
 
         if self.connected==True:
@@ -52,13 +51,21 @@ class GPSMonitorUpateWorker(QThread):
                 
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
+        
+    def updateGPSThreadState(self, state):
+        self.emit(SIGNAL("updateGPSThreadState(QString)"), state)
 
+    def connectGPSFailed(self):
+        self.emit(SIGNAL("connectGPSFailed()"))
+    
+    def updateGPSDisplay(self, session):
+        self.emit(SIGNAL("updateGPSDisplay(PyQt_PyObject)"), session)
+        
     def connectGPS(self):
         if self.session==None:
             try:
                 self.session = gps.gps()
                 self.updateStatusLabel("GPS connect ok")
-                self.canMonitor.connectGPSSuccesful()
                 self.session.stream(gps.WATCH_ENABLE)
                 self.connected=True
             except socket.error:
@@ -70,7 +77,7 @@ class GPSMonitorUpateWorker(QThread):
                     self.updateStatusLabel("GPS connect error")
                     self.connected=False
                     self.session=None
-                    self.canMonitor.connectGPSFailed()
+                    self.connectGPSFailed()
           
     def disconnectGPS(self):
         if self.connected==True:
@@ -79,7 +86,6 @@ class GPSMonitorUpateWorker(QThread):
                 self.session.close()
             self.session=None
             self.updateStatusLabel("GPS disconnect ok")
-            self.canMonitor.updateGPSDisplay(None)
           
     def reconnectGPS(self):
         self.reconnecting=True
@@ -97,24 +103,26 @@ class GPSMonitorUpateWorker(QThread):
         self.reconnecting=False
         self.session=None
         self.exiting=True
-        self.canMonitor.updateGPSDisplay(None)
-        self.canMonitor.connectGPSFailed()
-        self.updateStatusLabel("GPS reconnect failed")
+        self.connectGPSFailed()
+        self.updateStatusLabel("GPS reconnect failed - exiting thread")
         
     def run(self):
+        self.updateGPSThreadState("run")
+
         while not self.exiting and True:
             if self.connected==True and self.session!=None:
                 try:
                     self.session.__next__()
-                    self.canMonitor.updateGPSDisplay(self.session)
+                    self.updateGPSDisplay(self.session)
+                    self.updateGPSThreadState("run")
                 except StopIteration:
                     self.updateStatusLabel("GPS connection lost")
                     self.connected=False
                     self.session=None
-                    self.canMonitor.updateGPSDisplay(None)
                     self.reconnectGPS()
                 except socket.timeout:
                     self.updateStatusLabel("GPS thread socket.timeout")
+                    self.updateGPSThreadState("idle")
                     continue
                 except socket.error:
                     if self.exiting==True:
@@ -125,7 +133,8 @@ class GPSMonitorUpateWorker(QThread):
                 self.msleep(1000)
             
         self.updateStatusLabel("GPS thread stopped")
-        self.canMonitor.stopGPSSuccesful()
+        self.updateGPSThreadState("stopped")
+        self.updateGPSDisplay(None)
         
 class GPSMonitor(QWidget):
     def __init__(self, parent):
@@ -238,15 +247,13 @@ class GPSMonitor(QWidget):
         self.lastLat=lat
         self.lastLon=lon
         
-    def updateGPSPosition(self, lat,lon):
-            self.valueLabelList[0].setText("Connected test")
-            self.valueLabelList[1].setText(str(lat))
-            self.valueLabelList[2].setText(str(lon))
-       
-            if not gps.isnan(lat) and not gps.isnan(lon):
-                self.updateDistanceDisplay(lat, lon)
-#            else:
-#                self.distanceLocalDisplay.setValue(0)
+    def updateGPSPositionTest(self, lat,lon):
+        self.valueLabelList[0].setText("Connected test")
+        self.valueLabelList[1].setText(str(lat))
+        self.valueLabelList[2].setText(str(lon))
+   
+        if not gps.isnan(lat) and not gps.isnan(lon):
+            self.updateDistanceDisplay(lat, lon)
 
     def update(self, session):
         if session!=None:
@@ -369,8 +376,11 @@ class GPSWindow(QMainWindow):
         connectBox.addWidget(self.connectGPSButton)
         self.setGeometry(0, 0, 800, 400)
         self.setWindowTitle('GPS Test')
+        
         self.updateGPSThread=GPSMonitorUpateWorker(self)
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
+        self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         self._connectGPS()
         
         self.show()
@@ -384,7 +394,7 @@ class GPSWindow(QMainWindow):
             
         self.incLat=self.incLat+0.001
         self.incLon=self.incLon+0.001
-        self.gpsWidget.updateGPSPosition(self.incLat, self.incLon) 
+        self.gpsWidget.updateGPSPositionTest(self.incLat, self.incLon) 
         
     def updateStatusLabel(self, text):
         print(text)
@@ -393,11 +403,11 @@ class GPSWindow(QMainWindow):
     def _connectGPS(self):
         self.connectGPSEnable=self.connectGPSButton.isChecked()
         if self.connectGPSEnable==True:
-            self.connectGPSButton.setDisabled(True)
-            self.updateGPSThread.setup(self)
+#            self.connectGPSButton.setDisabled(True)
+            self.updateGPSThread.setup(self.connectGPSEnable)
         else:
             if self.updateGPSThread.isRunning():
-                self.connectGPSButton.setDisabled(True)
+#                self.connectGPSButton.setDisabled(True)
                 self.updateGPSThread.stop()
                 
     def updateGPSDisplay(self, session):
@@ -406,23 +416,22 @@ class GPSWindow(QMainWindow):
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)
         self.connectGPSEnable=False
-        self.connectGPSButton.setDisabled(False)
+#        self.connectGPSButton.setDisabled(False)
     
     def connectGPSSuccesful(self):
         self.connectGPSButton.setChecked(True)
         self.connectGPSEnable=True
-        self.connectGPSButton.setDisabled(False)
+#        self.connectGPSButton.setDisabled(False)
         
     def connectGPSEnabled(self):
         return self.connectGPSEnable
     
-    def stopGPSSuccesful(self):
-        self.connectGPSButton.setDisabled(False)
-#        os.execl(os.getcwd()+"/mapnik_wrapper.sh", "9", "46", "17", "49", "2")
+#    def stopGPSSuccesful(self):
+#        self.connectGPSButton.setDisabled(False)
 
     def hasOSMWidget(self):
         return False
-    
+        
     @pyqtSlot()
     def _cleanup(self):
         self.gpsWidget.saveConfig(self.config)
