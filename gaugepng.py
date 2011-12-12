@@ -80,7 +80,7 @@ class QtPngDialGauge(QWidget):
         pen.setColor(Qt.red)
         pen.setJoinStyle(Qt.RoundJoin)
         painter.setPen(pen)
-        spacing = 15
+        spacing = 40
         contentRect = myRect.adjusted(spacing, spacing, -spacing, -spacing)
 
         valueInPercent = (self.m_value - self.m_minimum) / (self.m_maximum - self.m_minimum)

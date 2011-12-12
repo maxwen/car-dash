@@ -6,6 +6,10 @@ import socket
 from PyQt4.QtCore import QThread, SIGNAL
 from collections import deque
 
+canIdleState="idle"
+canRunState="run"
+canStoppedState="stopped"
+        
 class CANDecoder:
     def __init__(self, widget):
         self.widget = widget
@@ -203,11 +207,6 @@ class CANDecoder:
             value=self.getBit(data[1], 1) + self.getBit(data[1], 2)
             self.widget.displayIntValue(canId, "5", value, "%d")
 
-#            self.widget.displayIntValue(canId, "2", data[4], "%d")
-#            self.widget.displayIntValue(canId, "3", data[5], "%d")
-#            self.widget.displayIntValue(canId, "4", self.testBit(data[6], 0), "%d")
-#            self.widget.displayIntValue(canId, "5", self.testBit(data[6], 1), "%d")
-
         elif canId==0x591:
             value=0
             if data[1]==0x02:
@@ -261,12 +260,11 @@ class CANSocketWorker(QThread):
             self.disconnectCANDevice()
         self.wait()
         
-    def setup(self, app, canDecoder, connect, test, replayMode, replayLines):
+    def setup(self, app, connect, test, replayMode, replayLines):
         self.updateStatusLabel("CAN thread setup")
 
         self.exiting = False
         self.app = app
-        self.canDecoder = canDecoder
         self.test=test
         self.replayMode=replayMode
         self.replayLines=replayLines
@@ -280,6 +278,7 @@ class CANSocketWorker(QThread):
     
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
+#        print(text)
         
     def updateCANThreadState(self, state):
         self.emit(SIGNAL("updateCANThreadState(QString)"), state)
@@ -292,7 +291,10 @@ class CANSocketWorker(QThread):
 
     def replayModeDone(self):
         self.emit(SIGNAL("replayModeDone()"))
-                          
+                 
+    def processCANData(self, can_frame):
+        self.emit(SIGNAL("processCANData(PyQt_PyObject)"), can_frame)        
+         
     def reconnectCANDevice(self):
         self.reconnecting=True
         while self.reconnectTry<42 and self.s==None and self.connected==False and self.exiting==False:
@@ -368,15 +370,16 @@ class CANSocketWorker(QThread):
                 self.updateStatusLabel("CAN test connect")
         
     def run(self):
-        self.updateCANThreadState("run")
+        self.updateCANThreadState(canRunState)
 
         while not self.exiting and True:
             if self.replayMode==True:
                 self.updateStatusLabel("CAN replay started")
-                self.updateCANThreadState("run")
+                self.updateCANThreadState(canRunState)
 
                 for x in self.replayLines:
-                    self.canDecoder.scan_can_frame(x);
+                    self.processCANData(x)
+#                    self.canDecoder.scan_can_frame(x);
                     self.msleep(10)
                     if self.exiting==True:
                         break
@@ -390,34 +393,54 @@ class CANSocketWorker(QThread):
             if self.connected==True:
                 if self.test==True:
                     cf = struct.pack("IIBBBBBBBB", 0x353, 6, 0x0f, 0xd0, 0x1f, 0xb0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x351, 8, 0x75, 0xad, 0x45, 0x0, 0x0, 0x7d, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x635, 3, 0x0, 0xff, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x271, 2, 0x01, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x371, 3, 0xc0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x623, 8, 0x04, 0x07, 0x08, 0x09, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x571, 6, 0x94, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x3e5, 5, 0xe0, 0x04 , 0x4e, 0xc1, 0x27, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x591, 3, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+
                     cf = struct.pack("IIBBBBBBBB", 0x5d1, 2, 0x5, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0)
-                    self.canDecoder.scan_can_frame(cf);
+#                    self.canDecoder.scan_can_frame(cf);
+                    self.processCANData(cf)
+                    
                     self.msleep(10)
-                    self.updateCANThreadState("idle")
+                    self.updateCANThreadState(canIdleState)
                 elif self.s!=None:
                     try:
                         cf, addr = self.s.recvfrom(16)
-                        self.updateCANThreadState("run")
+                        self.updateCANThreadState(canRunState)
                     except socket.timeout:
                         self.updateStatusLabel("CAN thread socket.timeout")
-                        self.updateCANThreadState("idle")
+                        self.updateCANThreadState(canIdleState)
                         continue
  
                     except socket.error:
@@ -425,18 +448,20 @@ class CANSocketWorker(QThread):
                             self.updateStatusLabel("CAN thread stop request")
                             continue
                         self.updateStatusLabel("CAN connection lost")
+                        self.updateCANThreadState(canIdleState)
                         self.s=None
                         self.connected=False
                         self.reconnectCANDevice()                        
                         continue
-                    self.canDecoder.scan_can_frame(cf)
+#                    self.canDecoder.scan_can_frame(cf)
+                    self.processCANData(cf)
                     #self.msleep(10)
             else:
                 self.updateStatusLabel("CAN thread idle")
-                self.updateCANThreadState("idle")
+                self.updateCANThreadState(canIdleState)
                 self.clearAllLCD()
                 self.msleep(1000) 
 
         self.updateStatusLabel("CAN thread stopped")
-        self.updateCANThreadState("stopped")
+        self.updateCANThreadState(canStoppedState)
         self.clearAllLCD()

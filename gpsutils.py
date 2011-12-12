@@ -15,6 +15,10 @@ from gaugecompass import QtPngCompassGauge
 from osmmapviewer import OSMUtils
 from config import Config
 
+gpsIdleState="idle"
+gpsRunState="run"
+gpsStoppedState="stopped"
+
 class GPSMonitorUpateWorker(QThread):
     def __init__(self, parent): 
         QThread.__init__(self, parent)
@@ -51,6 +55,7 @@ class GPSMonitorUpateWorker(QThread):
                 
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
+#        print(text)
         
     def updateGPSThreadState(self, state):
         self.emit(SIGNAL("updateGPSThreadState(QString)"), state)
@@ -107,22 +112,23 @@ class GPSMonitorUpateWorker(QThread):
         self.updateStatusLabel("GPS reconnect failed - exiting thread")
         
     def run(self):
-        self.updateGPSThreadState("run")
+        self.updateGPSThreadState(gpsRunState)
 
         while not self.exiting and True:
             if self.connected==True and self.session!=None:
                 try:
                     self.session.__next__()
                     self.updateGPSDisplay(self.session)
-                    self.updateGPSThreadState("run")
+                    self.updateGPSThreadState(gpsRunState)
                 except StopIteration:
                     self.updateStatusLabel("GPS connection lost")
+                    self.updateGPSThreadState(gpsIdleState)
                     self.connected=False
                     self.session=None
                     self.reconnectGPS()
                 except socket.timeout:
                     self.updateStatusLabel("GPS thread socket.timeout")
-                    self.updateGPSThreadState("idle")
+                    self.updateGPSThreadState(gpsIdleState)
                     continue
                 except socket.error:
                     if self.exiting==True:
@@ -133,7 +139,7 @@ class GPSMonitorUpateWorker(QThread):
                 self.msleep(1000)
             
         self.updateStatusLabel("GPS thread stopped")
-        self.updateGPSThreadState("stopped")
+        self.updateGPSThreadState(gpsStoppedState)
         self.updateGPSDisplay(None)
         
 class GPSMonitor(QWidget):
@@ -200,7 +206,7 @@ class GPSMonitor(QWidget):
         vbox=QVBoxLayout()
         vbox.setAlignment(Qt.AlignTop|Qt.AlignRight)
 
-        self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass.png")
+        self.compassGauge=QtPngCompassGauge(self.canMonitor, "compass", "compass1.png")
         self.compassGauge.setValue(0)
         self.compassGauge.setMaximumSize(300, 300)
         vbox.addWidget(self.compassGauge)
@@ -326,6 +332,9 @@ class GPSMonitor(QWidget):
         self.localDistance=0
         self.distanceLocalDisplay.display("%d"%(self.localDistance))
         
+    def _cleanup(self):
+        None
+        
 class GPSWindow(QMainWindow):
     def __init__(self, parent):
         QMainWindow.__init__(self, parent)
@@ -354,10 +363,10 @@ class GPSWindow(QMainWindow):
 
         tabs.addTab(gpsTab, "GSM")
 
-        self.gpsWidget=GPSMonitor(self)
-        self.gpsWidget.loadConfig(self.config)
+        self.osmWidget=GPSMonitor(self)
+        self.osmWidget.loadConfig(self.config)
 
-        self.gpsWidget.addToWidget(gpsTabLayout)
+        self.osmWidget.addToWidget(gpsTabLayout)
         
         self.zoom=9
         self.startLat=47.8
@@ -394,7 +403,7 @@ class GPSWindow(QMainWindow):
             
         self.incLat=self.incLat+0.001
         self.incLon=self.incLon+0.001
-        self.gpsWidget.updateGPSPositionTest(self.incLat, self.incLon) 
+        self.osmWidget.updateGPSPositionTest(self.incLat, self.incLon) 
         
     def updateStatusLabel(self, text):
         print(text)
@@ -411,7 +420,7 @@ class GPSWindow(QMainWindow):
                 self.updateGPSThread.stop()
                 
     def updateGPSDisplay(self, session):
-        self.gpsWidget.update(session)
+        self.osmWidget.update(session)
         
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)
@@ -434,7 +443,10 @@ class GPSWindow(QMainWindow):
         
     @pyqtSlot()
     def _cleanup(self):
-        self.gpsWidget.saveConfig(self.config)
+        if self.updateGPSThread.isRunning():
+            self.updateGPSThread.stop()
+            
+        self.osmWidget.saveConfig(self.config)
         self.config.writeConfig()
 
 def main(argv): 

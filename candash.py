@@ -6,10 +6,10 @@ import time
 import os
 from datetime import datetime
 import fnmatch
-from canutils import CANSocketWorker, CANDecoder
-from gpsutils import GPSMonitor, GPSMonitorUpateWorker
+from canutils import CANSocketWorker, CANDecoder, canIdleState, canRunState, canStoppedState
+from gpsutils import GPSMonitor, GPSMonitorUpateWorker, gpsIdleState, gpsRunState, gpsStoppedState
 from config import Config
-from log import Log
+from log import Log, DebugLogWidget
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
 from PyQt4.QtGui import QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
@@ -26,9 +26,7 @@ TIME_COL=1
 ID_COL=2
 SIZE_COL=3
 DATA_COL=4
-
-
-                
+       
 class CANLogViewTableModel(QAbstractTableModel):
     def __init__(self, logBuffer, canIdList, parent):
         QAbstractTableModel.__init__(self, parent)
@@ -457,13 +455,17 @@ class CANMonitor(QMainWindow):
         self.canIdList=[0x621, 0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
         self.updateGPSThread=None
         self.config=Config()
-        self.log=Log(True)
+        self.log=Log(False)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
         self.ampelGruen=QIcon("images/ampel-gruen.png")
         self.ampelRot=QIcon("images/ampel-rot.png")
         self.ampelGelb=QIcon("images/ampel-gelb.png")
+        self.lastCANState=canStoppedState
+        self.lastGPSState=gpsStoppedState
+        self.canDecoder=CANDecoder(self)
+
         self.initUI(parent)
     
     def clearAllLCD(self):
@@ -638,29 +640,38 @@ class CANMonitor(QMainWindow):
         mainTab = QWidget(self)
         miscTab = QWidget(self) 
         misc2Tab=QWidget(self)
-        logTab=QWidget(self)
+        canLogTab=QWidget(self)
         dashTab=QWidget(self)
         gpsTab=QWidget(self)
         osmTab=QWidget(self)
+        debugLogTab=QWidget(self)
         
         mainTabLayout = QFormLayout(mainTab)
         miscTabLayout = QFormLayout(miscTab)
         misc2TabLayout = QFormLayout(misc2Tab)
-        logTabLayout = QVBoxLayout(logTab)
+        canLogTabLayout = QVBoxLayout(canLogTab)
         dashTabLayout = QHBoxLayout(dashTab)
         gpsTabLayout=QHBoxLayout(gpsTab)
         osmTabLayout=QVBoxLayout(osmTab)
-
+        debugLogTabLayout=QVBoxLayout(debugLogTab)
+        
         self.tabs.addTab(dashTab, "Dash") 
         self.tabs.addTab(mainTab, "Main")
         self.tabs.addTab(miscTab, "Misc 1") 
         self.tabs.addTab(misc2Tab, "Misc 2") 
-        self.tabs.addTab(logTab, "Log") 
+        self.tabs.addTab(canLogTab, "CAN") 
         self.tabs.addTab(gpsTab, "GPS")
         self.tabs.addTab(osmTab, "OSM")
+        self.tabs.addTab(debugLogTab, "Log")
 
         self.tabs.setCurrentIndex(0)
         
+        self.debugLogWidget=DebugLogWidget(self)
+        debugLogTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+        self.debugLogWidget.addToWidget(debugLogTabLayout)
+
+#        self.debugLogWidget.addLine("test")
+
         self.createCANIdEntry(mainTabLayout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
         self.createCANIdEntry(mainTabLayout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
         self.createCANIdEntry(mainTabLayout, 0x351, "0", "Geschwindigkeit", QLCDNumber.Dec)
@@ -687,7 +698,7 @@ class CANMonitor(QMainWindow):
         self.createCANIdEntrySingleLine(misc2TabLayout, 0x621, ["1", "2"], "0x621", QLCDNumber.Dec)
         
         logTabs = MyTabWidget(self)
-        logTabLayout.addWidget(logTabs)
+        canLogTabLayout.addWidget(logTabs)
         
         logTabWidget1=QWidget()
         logTabWidget2=QWidget()
@@ -714,7 +725,7 @@ class CANMonitor(QMainWindow):
         self.logViewTableBox2.addTableBox(logTab2Layout)
         
         logButtonBox = QHBoxLayout()
-        logTabLayout.addLayout(logButtonBox)
+        canLogTabLayout.addLayout(logButtonBox)
         
         self.logFileButton=QCheckBox("Log to File", self)
         self.logFileButton.setToolTip('Enable file logging')
@@ -746,7 +757,7 @@ class CANMonitor(QMainWindow):
         dashTabLayout.addLayout(velBox)
         dashTabLayout.setAlignment(Qt.AlignCenter|Qt.AlignBottom)
              
-        self.velGauge=QtPngDialGauge(self, "tacho3", "tacho3.png")
+        self.velGauge=QtPngDialGauge(self, "tacho3", "tacho31.png")
         self.velGauge.setMinimum(20)
         self.velGauge.setMaximum(220)
         self.velGauge.setStartAngle(135)
@@ -767,7 +778,7 @@ class CANMonitor(QMainWindow):
         rpmBox = QVBoxLayout()
         dashTabLayout.addLayout(rpmBox)
 #        rpmBox.setAlignment(Qt.AlignCenter|Qt.AlignHCenter)
-        self.rpmGauge=QtPngDialGauge(self, "rpm", "rpm.png")
+        self.rpmGauge=QtPngDialGauge(self, "rpm", "rpm1.png")
         self.rpmGauge.setMinimum(0)
         self.rpmGauge.setMaximum(8000)
         self.rpmGauge.setStartAngle(125)
@@ -822,6 +833,7 @@ class CANMonitor(QMainWindow):
         self.connect(self.updateCANThread, SIGNAL("clearAllLCD()"), self.clearAllLCD)
         self.connect(self.updateCANThread, SIGNAL("connectCANFailed()"), self.connectCANFailed)
         self.connect(self.updateCANThread, SIGNAL("replayModeDone()"), self.replayModeDone)
+        self.connect(self.updateCANThread, SIGNAL("processCANData(PyQt_PyObject)"), self.canDecoder.scan_can_frame)
         self._connectCAN()
         
         self.updateGPSThread=GPSMonitorUpateWorker(self)
@@ -982,6 +994,15 @@ class CANMonitor(QMainWindow):
 
     @pyqtSlot()
     def _cleanup(self):
+        self.osmWidget._cleanup()
+        self.gpsBox._cleanup()
+
+        if self.updateCANThread.isRunning():
+            self.updateCANThread.stop()
+        
+        if self.updateGPSThread.isRunning():
+            self.updateGPSThread.stop()
+            
         self.closeLogFile()
         self.config.getDefaultSection()["canConnect"]=str(self.connectCANEnable)
         self.config.getDefaultSection()["gpsConnect"]=str(self.connectGPSEnable)
@@ -1048,8 +1069,7 @@ class CANMonitor(QMainWindow):
 #            self.connectCANButton.setDisabled(True)
             self.logViewTableBox1._clearTable()
             self.logViewTableBox2._clearTable()
-            canDecoder=CANDecoder(self)
-            self.updateCANThread.setup(self.app, canDecoder, self.connectCANEnable, self.test, False, None)
+            self.updateCANThread.setup(self.app, self.connectCANEnable, self.test, False, None)
 
         else:
             if self.updateCANThread.isRunning():
@@ -1087,8 +1107,8 @@ class CANMonitor(QMainWindow):
 
     def updateStatusBarLabel(self, text):
         self.statusbar.showMessage(text)
-        if self.log!=None:
-            self.log.addLineToLog(text)
+        logLine=self.log.addLineToLog(text)
+        self.debugLogWidget.addLineToLog(logLine)
         
 #    def connectCANSuccessful(self):
 #        self.connectCANEnable=True
@@ -1126,22 +1146,26 @@ class CANMonitor(QMainWindow):
 #        self.connectGPSButton.setIcon(self.ampelRot)
 
     def updateCANThreadState(self, state):
-        if state=="idle":
-            self.connectCANButton.setIcon(self.ampelGelb)
-        elif state=="run":
-            self.connectCANButton.setIcon(self.ampelGruen)
-        elif state=="stopped":
-            self.connectCANButton.setIcon(self.ampelRot)
-            self.connectCANEnable=False
+        if state!=self.lastCANState:
+            if state==canIdleState:
+                self.connectCANButton.setIcon(self.ampelGelb)
+            elif state==canRunState:
+                self.connectCANButton.setIcon(self.ampelGruen)
+            elif state==canStoppedState:
+                self.connectCANButton.setIcon(self.ampelRot)
+                self.connectCANEnable=False
+            self.lastCANState=state
             
     def updateGPSThreadState(self, state):
-        if state=="idle":
-            self.connectGPSButton.setIcon(self.ampelGelb)
-        elif state=="run":
-            self.connectGPSButton.setIcon(self.ampelGruen)
-        elif state=="stopped":
-            self.connectGPSButton.setIcon(self.ampelRot)
-            self.connectGPSnable=False
+        if state!=self.lastGPSState:
+            if state==gpsIdleState:
+                self.connectGPSButton.setIcon(self.ampelGelb)
+            elif state==gpsRunState:
+                self.connectGPSButton.setIcon(self.ampelGruen)
+            elif state==gpsStoppedState:
+                self.connectGPSButton.setIcon(self.ampelRot)
+                self.connectGPSnable=False
+            self.lastGPSState=state
 
     def hasOSMWidget(self):
         return self.osmWidget!=None
