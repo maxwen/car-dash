@@ -48,12 +48,16 @@ class CANDecoder:
         return rpmValueAverage
     
     def calcOilTemp(self, data):
+        if data[3]==0:
+            return 0
         return data[3] - 80
     
     def calcVelocity(self, data):
         return ((data[2] << 8) + data[1] - 1) / 190
     
     def calcOuterTemp(self, data):
+        if data[5]==0:
+            return 0
         return data[5] / 2 - 50
 
     # pretty print can_frame struct

@@ -442,7 +442,7 @@ class QtOSMWidget(QWidget):
                 self.center_coord_update();
             self.update()
         
-    def osm_centerGPS_map(self):
+    def osm_center_map_to_GPS(self):
         if self.gpsLatitude!=0.0 and self.gpsLongitude!=0.0:
             pixel_x = self.osmutils.lon2pixel(self.map_zoom, self.gpsLongitude)
             pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.gpsLatitude)
@@ -573,7 +573,7 @@ class QtOSMWidget(QWidget):
     def setAutocenterGPS(self, value):
         self.autocenterGPS=value
         if value==True:
-            self.osm_centerGPS_map()
+            self.osm_center_map_to_GPS()
         
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
@@ -802,7 +802,7 @@ class OSMWidget(QWidget):
     
     @pyqtSlot()
     def _centerGPS(self):
-        self.mapWidgetQt.osm_centerGPS_map()   
+        self.mapWidgetQt.osm_center_map_to_GPS()   
     
     @pyqtSlot()
     def _followGPS(self):
