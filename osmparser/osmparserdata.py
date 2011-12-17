@@ -22,6 +22,10 @@ class OSMParserData(object):
         self.streetIndex=dict()
         self.wayIndex=dict()
         self.file=file
+        self.doneRefs=list()
+        self.doneWays=list()
+        self.startCount=0
+        self.endCount=0
         
     def parse_nodes(self, node):
         for osmid, tags, coords in node:
@@ -36,26 +40,17 @@ class OSMParserData(object):
 #            self.ways[osmid]=(tags, refs)
             try:
                 if "highway" in tags and "name" in tags:
-                    name=tags["name"]
-                    indexName=name
-
                     streetType=tags["highway"]
                     if streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway":
                         continue
                     
                     self.ways[osmid]=(tags, refs)
 
-                    if "ref" in tags:
-                        ref=tags["ref"]
-                        if streetType=="motorway":
-                            indexName=ref
-                   
-                    if "postal_code" in tags:
-                        indexName=indexName+"("+tags["postal_code"]+")"
-                    if "is_in" in tags:
-                        indexName=indexName+"("+tags["is_in"]+")"
+                    indexName=self.getIndexNameOfStreet(tags)
                         
                     tags["index"]=indexName
+                    if indexName!="Alpenstraße":
+                        continue
                         
                     if not indexName in self.street_by_name.keys():
                         streetWayList=list()
@@ -70,14 +65,31 @@ class OSMParserData(object):
         for osmid, tags, ways in relation:
             self.relations[osmid]=(tags, ways)
             
-    def findWayWithStartRefInAllWays(self, ref, streetName, doneWays):
+    def getIndexNameOfStreet(self, tags):
+        name=tags["name"]
+        indexName=name
+        streetType=tags["highway"]
+        if "ref" in tags:
+            ref=tags["ref"]
+            if streetType=="motorway":
+                indexName=ref.replace(' ', '')
+            else:
+                if "postal_code" in tags:
+                    indexName=indexName+"("+tags["postal_code"]+")"
+                if "is_in" in tags:
+                    indexName=indexName+"("+tags["is_in"]+")"
+        return indexName
+    
+    def findWayWithRefAndCoordsInAllWays(self, ref, streetName):
         possibleWays=list()
         for wayid in self.ways.keys():
             tags=self.ways[wayid][0]
             refs=self.ways[wayid][1]
-            if "name" in tags:
-                if tags["name"]==streetName:
-                    continue
+            
+            indexName=self.getIndexNameOfStreet(tags)
+
+            if indexName==streetName:
+                continue
 
 #            if refs[0]==ref:
 #                possibleWays.append((wayid, tags, refs))
@@ -94,11 +106,12 @@ class OSMParserData(object):
                         None
         return possibleWays
     
-    def findWayWithRefAndCoords(self, ways, ref, doneWays):
+    def findWayWithRefAndCoords(self, ways, ref):
         possibleWays=list()
         for way in ways:
-            if way[0] in doneWays:
+            if way[0] in self.doneWays:
                 continue
+
             for wayRef in way[2]:
                 if wayRef==ref:
                     possibleWays.append(way)
@@ -113,19 +126,19 @@ class OSMParserData(object):
 
         return possibleWays
     
-    def findWayWithStartRef(self, ways, startRef, doneWays):
+    def findWayWithStartRef(self, ways, startRef):
         possibleWays=list()
         for way in ways:
-            if way[0] in doneWays:
+            if way[0] in self.doneWays:
                 continue
             if way[2][0]==startRef:
                 possibleWays.append(way)
         return possibleWays
     
-    def findWayWithEndRef(self, ways, endRef, doneWays):
+    def findWayWithEndRef(self, ways, endRef):
         possibleWays=list()
         for way in ways:
-            if way[0] in doneWays:
+            if way[0] in self.doneWays:
                 continue
             if way[2][-1]==endRef:
                 possibleWays.append(way)
@@ -134,7 +147,7 @@ class OSMParserData(object):
     def findStartWay(self, ways):
         for way in ways:
             startRef=way[2][0]
-            possibleWays=self.findWayWithEndRef(ways, startRef, list())
+            possibleWays=self.findWayWithEndRef(ways, startRef)
             if len(possibleWays)==0:
                 return way
         return ways[0]
@@ -142,11 +155,20 @@ class OSMParserData(object):
     def findEndWay(self, ways):
         for way in ways:
             endRef=way[2][-1]
-            possibleWays=self.findWayWithStartRef(ways, endRef, list())
+            possibleWays=self.findWayWithStartRef(ways, endRef)
             if len(possibleWays)==0:
                 return way        
         return ways[0]
             
+    def findMotorwayJunctions(self, ref):
+        if ref in self.nodes:
+            tags, coords=self.nodes[ref]
+            if "highway" in tags:
+                nodeType=tags["highway"]
+                if nodeType=="motorway_junction":
+                    return ref
+        return None
+
     def printRelationCoords(self, name):
         for osmid, relation in self.relations.items():
             try:
@@ -165,19 +187,29 @@ class OSMParserData(object):
             self.waysCopy=ways
             print("process %d of %d"%(i, len(self.street_by_name)))
 
+            self.doneWays=list()
+            self.doneRefs=list()
+            
             while len(self.waysCopy)!=0:
                 way=self.findStartWay(self.waysCopy)
-                doneWays=list()
+
                 self.track=dict()
                 self.track["name"]=name
                 self.track["track"]=list()
                 
 #                trackItem=dict()
 #                trackItem["start"]="start"
+#                self.startCount=self.startCount+1
 #                self.track["track"].append(trackItem)
-
+                
                 if way!=None:
-                    self.resolveWay(self.waysCopy, way, doneWays, name)
+                    self.resolveWay(way, name, False)
+                    
+#                    trackItem=dict()
+#                    trackItem["end"]="end"
+#                    self.endCount=self.endCount+1
+#                    self.track["track"].append(trackItem)
+                    
                     dictName=name
                     if dictName in self.streetIndex:
                         dictName=name+"_"+str(way[0])
@@ -185,29 +217,48 @@ class OSMParserData(object):
                     self.wayIndex[way[0]]=self.track
 #                    print(self.wayIndex[way[0]])
 #                    print(self.streetIndex[name])
+
+                    print(self.startCount)
+                    print(self.endCount)
                 if len(self.waysCopy)!=0:
                     None
                 
             i=i+1
                                               
-    def resolveWay(self, ways, way, doneWays, streetName):
+    def resolveWay(self, way, streetName, reverse):
         if way==None:
             return
         
-        if way in self.waysCopy:
-            self.waysCopy.remove(way)
+
+        streetType=""
+#        i=0
+
+#        print(way[2])
+        if reverse:
+            refList=way[2][::-1]
+#            print("reverse "+str(refList))
         else:
-            return
-        
-        for ref in way[2][0:-1]:
+            refList=way[2]
+#            print("normal "+str(refList))
+#        for ref in way[2][0:-1]:
+        for ref in refList:
             try:
+#                if i>0:
+#                    if ref in self.doneRefs:
+#                        print(ref)
+#                        break
+#                i=i+1
                 trackItem=dict()
                 trackItem["wayId"]=way[0]
                 trackItem["ref"]=ref
                 trackItem["lat"]=self.coords[ref][1]
                 trackItem["lon"]=self.coords[ref][0]
                 
-                way_crossings=self.findWayWithStartRefInAllWays(ref, streetName, doneWays)
+                wayTags=way[1]
+                if "highway" in wayTags:
+                    streetType=wayTags["highway"]
+                
+                way_crossings=self.findWayWithRefAndCoordsInAllWays(ref, streetName)
                 if len(way_crossings)!=0:
                     for way_crossing in way_crossings:
                         wayid, tags, refs=way_crossing
@@ -218,65 +269,52 @@ class OSMParserData(object):
 #                            name="unknown"
                         trackItem["crossing"]=wayid
 #                        print(name + " crossing mit "+str(wayid))
+                
+                if streetType=="motorway":
+                    nodeid=self.findMotorwayJunctions(ref)
+                    if nodeid!=None:
+                        trackItem["crossing"]=nodeid
 
                 self.track["track"].append(trackItem)
 
             except KeyError:
                 print("no node with id=%d"%(ref))
-                
-            possibleWays=self.findWayWithRefAndCoords(self.waysCopy, ref, doneWays)  
+
+            self.doneRefs.append(ref)
+
+            possibleWays=self.findWayWithRefAndCoords(self.waysCopy, ref)  
             if len(possibleWays)!=0:
-                if len(possibleWays)!=1:
-                    trackItem=dict()
-                    trackItem["start"]="start"
-                    self.track["track"].append(trackItem)
+                addStart=True
+#                if len(possibleWays)!=1:
+#                    addStart=True
     
                 for possibleWay in possibleWays:  
-                    self.resolveWay(self.waysCopy, possibleWay, doneWays, streetName)
-                
-        refEnd=way[2][-1]
-        doneWays.append(way[0])
+                    if possibleWay in self.waysCopy:
+                        self.waysCopy.remove(possibleWay)
+                    else:
+                        continue
         
-        possibleWays=self.findWayWithRefAndCoords(self.waysCopy, refEnd, doneWays)  
-        if len(possibleWays)==0:
-            try:
-                trackItem=dict()
-                trackItem["wayId"]=way[0]
-                trackItem["ref"]=refEnd
-                trackItem["lat"]=self.coords[refEnd][1]
-                trackItem["lon"]=self.coords[refEnd][0]
+                    if addStart:
+                        trackItem=dict()
+                        trackItem["start"]="start"
+                        self.startCount=self.startCount+1
+                        self.track["track"].append(trackItem)
 
-                way_crossings=self.findWayWithStartRefInAllWays(refEnd, streetName, doneWays)
-                if len(way_crossings)!=0:
-                    for way_crossing in way_crossings:
-                        wayid, tags, refs=way_crossing
+                    reverse=False
+                    if possibleWay[2][0]==ref:
+                        reverse=False
+                    elif possibleWay[2][-1]==ref:
+                        reverse=True
+                    self.resolveWay(possibleWay, streetName, reverse)
 
-#                        if "name" in tags:
-#                            name=tags["name"]
-#                        else:
-#                            name="unknown"
-#                        print(name + " crossing mit "+str(wayid))
-                        trackItem["crossing"]=wayid
-
-                self.track["track"].append(trackItem)
-                
-                trackItem=dict()
-                trackItem["end"]="end"
-                self.track["track"].append(trackItem)
-
-            except KeyError:
-                print("no node with id=%d"%(refEnd))
-        else:
-            if len(possibleWays)!=1:
-                trackItem=dict()
-                trackItem["start"]="start"
-                self.track["track"].append(trackItem)
-
-            for possibleWay in possibleWays:  
-                self.resolveWay(self.waysCopy, possibleWay, doneWays, streetName)
+                    if addStart:
+                        trackItem=dict()
+                        trackItem["end"]="end"
+                        self.endCount=self.endCount+1
+                        self.track["track"].append(trackItem)
     
     def parse(self):
-        p = OSMParser(2, nodes_callback=None, 
+        p = OSMParser(2, nodes_callback=self.parse_nodes, 
                   ways_callback=self.parse_ways, 
                   relations_callback=None,
                   coords_callback=self.parse_coords)
@@ -398,7 +436,7 @@ def main(argv):
 #    t.printRelationCoords("teststrasse")
     
 #    t.printWayCoords("Münchner Bundesstraße")
-    print(p.wayIndex[p.streetIndex["Münchner Bundesstraße"]])
+    print(p.wayIndex[p.streetIndex["Alpenstraße"]])
 
 #    t.printWayCoords("A10")
 

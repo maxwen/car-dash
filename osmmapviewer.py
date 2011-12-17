@@ -585,12 +585,24 @@ class QtOSMWidget(QWidget):
             map_x0 = self.map_x - EXTRA_BORDER
             map_y0 = self.map_y - EXTRA_BORDER
 
+#            donePosList=list()
             track=self.track["track"]
             for item in track:
                 if "lat" in item:
                     lat=item["lat"]
                 if "lon" in item:
                     lon=item["lon"]
+                    
+#                donePos=dict()
+#                donePos["lat"]=lat
+#                donePos["lon"]=lon
+#                if donePos in donePosList:
+#                    print(donePos)
+#                    lastX=0
+#                    lastY=0
+#                    continue
+#                
+#                donePosList.append(donePos)
                 
                 start=False
                 end=False
@@ -607,7 +619,6 @@ class QtOSMWidget(QWidget):
     
                     if lastX!=0 and lastY!=0:
                         self.painter.setPen(pen)
-                        print()
                         self.painter.drawLine(x, y, lastX, lastY)
                     else:
                         self.trackStartLon=lon
