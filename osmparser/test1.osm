@@ -11,6 +11,14 @@
 	<node id="42" lat="53" lon="11" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
 	<node id="4" lat="52.8" lon="10" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
 	<node id="43" lat="53.5" lon="11" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="351" lat="80" lon="80" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="352" lat="81" lon="81" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="361" lat="82" lon="82" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="371" lat="83" lon="83" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="372" lat="84" lon="84" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="373" lat="84" lon="84" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+	<node id="374" lat="84" lon="84" version="1" changeset="1" user="testbot" uid="1" timestamp="2011-12-16T13:24:15Z"/>
+
 	<way id="32" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
 		<nd ref="2"/>
 		<nd ref="3"/>
@@ -20,6 +28,7 @@
 	<way id="3" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
 		<nd ref="1"/>
 		<nd ref="10"/>
+		<nd ref="373"/>
 		<nd ref="2"/>
 		<tag k="highway" v="primary" />
 		<tag k="name" v="teststrasse" />
@@ -43,6 +52,31 @@
 		<nd ref="43"/>
 		<tag k="highway" v="primary" />
 		<tag k="name" v="teststrasse" />
+	</way>
+	<way id="35" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
+		<nd ref="351"/>
+		<nd ref="352"/>
+		<tag k="highway" v="primary" />
+		<tag k="name" v="teststrasse" />
+	</way>
+	<way id="36" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
+		<nd ref="10"/>
+		<nd ref="361"/>
+		<tag k="highway" v="primary" />
+		<tag k="name" v="teststrasse" />
+	</way>
+	<way id="37" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
+		<nd ref="42"/>
+		<nd ref="372"/>
+		<tag k="highway" v="primary" />
+		<tag k="name" v="teststrasse-kreuzung" />
+	</way>
+	<way id="38" version="3" changeset="5" uid="2" user="testbot" timestamp="2010-07-16T17:36:18Z">
+		<nd ref="371"/>
+		<nd ref="373"/>
+		<nd ref="374"/>
+		<tag k="highway" v="primary" />
+		<tag k="name" v="teststrasse-kreuzung2" />
 	</way>
 	<relation id="4" version="2" changeset="4" uid="1" user="testbot" timestamp="2010-05-20T19:38:47Z">
 		<member type="way" ref="3" role="inner"/>

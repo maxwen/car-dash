@@ -13,11 +13,11 @@ import io
 import socket
 from collections import deque
 import fnmatch
+import pickle
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmparsertest import ParserTestBase
-from osmparser.parser.simple import OSMParser
+from PyQt4.QtGui import QColor, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from osmparser.osmparserdata import OSMParserData
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -148,15 +148,11 @@ class OSMDataLoadWorker(QThread):
 #        self.exiting = True
 #        self.wait()
         
-    def setup(self, t, osmFile):
+    def setup(self, p):
         self.updateStatusLabel("OSM starting data load thread")
         self.exiting = False
-        self.osmFile=osmFile
-        self.t=t
-        self.p = OSMParser(2, nodes_callback=self.t.parse_nodes, 
-              ways_callback=self.t.parse_ways, 
-              relations_callback=self.t.parse_relations,
-              coords_callback=self.t.parse_coords)
+        self.p = p
+
         self.start()
  
     def updateDataThreadState(self, state):
@@ -172,7 +168,12 @@ class OSMDataLoadWorker(QThread):
     def run(self):
         self.updateDataThreadState("run")
         while not self.exiting and True:
-            self.p.parse(self.osmFile)
+            if not self.p.dumpExists():
+                self.p.parse()
+                self.p.postprocessWays()
+                self.p.dump()
+            else:
+                self.p.loadDump()
             self.exiting=True
 
         self.updateDataThreadState("stopped")
@@ -300,7 +301,7 @@ class QtOSMWidget(QWidget):
 
     def setTrack(self, track):
         self.track=track
-        print(self.track)
+#        print(self.track)
         self.update()
 
     def init(self):
@@ -568,9 +569,12 @@ class QtOSMWidget(QWidget):
     def showTrack(self):
         if self.track!=None:
             pen=QPen()
-            pen.setColor(Qt.red)
-            pen.setWidth(5)
-            self.painter.setPen(pen)
+            pen.setColor(QColor(255, 0, 0, 100))
+            pen.setWidth(self.map_zoom)
+            
+            bluePen=QPen()
+            bluePen.setColor(QColor(0, 0, 255))
+            bluePen.setWidth(self.map_zoom)
 
             self.trackStartLon=0.0
             self.trackStartLat=0.0
@@ -581,12 +585,29 @@ class QtOSMWidget(QWidget):
             map_x0 = self.map_x - EXTRA_BORDER
             map_y0 = self.map_y - EXTRA_BORDER
 
-            for lat, lon in self.track:
-                if type(lat)==type(0.0):
+            track=self.track["track"]
+            for item in track:
+                if "lat" in item:
+                    lat=item["lat"]
+                if "lon" in item:
+                    lon=item["lon"]
+                
+                start=False
+                end=False
+                crossing=False
+                if "start" in item:
+                    start=True
+                if "end" in item:
+                    end=True
+                if"crossing" in item:
+                    crossing=True
+                if not start and not end:
                     x=self.osmutils.lon2pixel(self.map_zoom, self.osmutils.deg2rad(lon)) - map_x0
                     y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
     
                     if lastX!=0 and lastY!=0:
+                        self.painter.setPen(pen)
+                        print()
                         self.painter.drawLine(x, y, lastX, lastY)
                     else:
                         self.trackStartLon=lon
@@ -594,11 +615,17 @@ class QtOSMWidget(QWidget):
 
                     lastX=x
                     lastY=y
-                elif type(lat)==type(""):
-                    if lat=="start":
-                        startNode.append((lastX, lastY))
-                    if lat=="end":
-                        lastX, lastY=startNode.pop()
+                    
+                    if crossing:
+                        self.painter.setPen(bluePen)
+                        self.painter.drawPoint(x, y)
+
+                elif start:
+                    startNode.append((lastX, lastY))
+                elif end:
+                    lastX, lastY=startNode.pop()
+            if len(startNode)!=0:
+                print(startNode)
             
     def minimumSizeHint(self):
         return QSize(minWidth, minHeight)
@@ -689,7 +716,7 @@ class QtOSMWidget(QWidget):
         self.emit(SIGNAL("updateStatus(QString)"), text)
 
     def updateMap(self):
-        print("updateMap")
+#        print("updateMap")
         self.update()
         
     def mouseReleaseEvent(self, event ):
@@ -1037,7 +1064,7 @@ class OSMWayListTableModel(QAbstractTableModel):
         return len(self.streetList)
     
     def columnCount(self, parent): 
-        return 1
+        return 2
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -1047,22 +1074,24 @@ class OSMWayListTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
+        name=self.streetList[index.row()]
+
         if index.column()==0:
-#            print(self.streetList[index.row()][0])
-            osmid, tags, refs=self.streetList[index.row()][0]
-            name=tags["name"]
             return name
-    
+        elif index.column()==1:
+            return ""
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
                 if col==0:
                     return "Street"
+                elif col==1:
+                    return "Ref"
             elif role == Qt.TextAlignmentRole:
-                if col==0:
-                    return Qt.AlignLeft
+                return Qt.AlignLeft
         return None
     
+   
     def update(self, streetList):
         self.streetList=streetList
         self.reset()
@@ -1071,14 +1100,19 @@ class OSMWaySearchDialog(QDialog):
     def __init__(self, t, parent):
         QDialog.__init__(self, parent) 
         self.t=t
-#        self.t.street_by_name["foo"]=("0", "1", "2", "foo")
-#        self.t.street_by_name["bar"]=("0", "1", "2", "bar")
-        self.streetList=list(self.t.street_by_name.values())
+
+        self.streetList=list(t.streetIndex.keys())
+        self.streetList=sorted(self.streetList)
         self.filteredStreetList=self.streetList
+#        print(len(self.streetList))
 
         self.initUI()
         self.selectedStreet=None
          
+    def indexSort(self, item):
+       osmid, tags, refs=item[0]
+       return tags["index"]
+   
     def getStreetName(self):
         return self.selectedStreet
 #        return "Münchner Bundesstraße"
@@ -1102,7 +1136,8 @@ class OSMWaySearchDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.streetView)
         header.setStretchLastSection(True)
         self.streetView.setHorizontalHeader(header)
-        
+        self.streetView.setColumnWidth(0, 300)
+
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1139,8 +1174,10 @@ class OSMWaySearchDialog(QDialog):
         selmodel = self.streetView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
-            osmid, tags, refs=self.filteredStreetList[current.row()][0]
-            self.selectedStreet=tags["name"]
+#            print(self.filteredStreetList[current.row()])
+            name=self.filteredStreetList[current.row()]
+            self.selectedStreet=name
+#            print(self.selectedStreet)
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -1156,12 +1193,10 @@ class OSMWaySearchDialog(QDialog):
             if self.filterValue[-1]!="*":
                 self.filterValue=self.filterValue+"*"
             self.filteredStreetList=list()
-            for item in self.streetList:
-                osmid, tags, refs=item[0]
-                name=tags["name"]
+            for name in self.streetList:
                 if not fnmatch.fnmatch(name, self.filterValue):
                     continue
-                self.filteredStreetList.append(item)
+                self.filteredStreetList.append(name)
         else:
             self.filteredStreetList=self.streetList
         
@@ -1176,7 +1211,6 @@ class OSMWindow(QMainWindow):
         self.incLat=0.0
         self.incLon=0.0
         self.initParserDone=False
-        self.t=ParserTestBase()
         self.app=app
         self.initUI()
 
@@ -1243,22 +1277,20 @@ class OSMWindow(QMainWindow):
 
     @pyqtSlot()
     def _testTrack(self):
-        if self.initParserDone==False:
-            self.initParser()
-            
+        self.initParser()
+
     @pyqtSlot()
     def _showWay(self):
-        searchDialog=OSMWaySearchDialog(self.t, self)
+        searchDialog=OSMWaySearchDialog(self.p, self)
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             streetName=searchDialog.getStreetName()
-            print(streetName)
-            self.t.printWayCoords(streetName)
-            self.osmWidget.mapWidgetQt.setTrack(self.t.track)
+            track=self.p.wayIndex[self.p.streetIndex[streetName]]
+            print(track)
+            self.osmWidget.mapWidgetQt.setTrack(track)
             self.app.processEvents()
             
             # TODO hack
-            print("show track")
             self.osmWidget.mapWidgetQt.osm_center_map_to(self.osmWidget.mapWidgetQt.osmutils.deg2rad(self.osmWidget.mapWidgetQt.trackStartLat),
                                    self.osmWidget.mapWidgetQt.osmutils.deg2rad(self.osmWidget.mapWidgetQt.trackStartLon))
 
@@ -1275,11 +1307,12 @@ class OSMWindow(QMainWindow):
             self.testTrackButton.setDisabled(True)
 
     def initParser(self):
+        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+        self.p = OSMParserData(osmFile)
         self.dataThread=OSMDataLoadWorker(self)
         self.connect(self.dataThread, SIGNAL("updateDataThreadState(QString)"), self.updateDataThreadState)
         self.connect(self.dataThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.dataThread.setup(self.t, '/home/maxl/Downloads/salzburg-streets.osm')
-        self.initParserDone=True
+        self.dataThread.setup(self.p)
 
     @pyqtSlot()
     def _cleanup(self):
