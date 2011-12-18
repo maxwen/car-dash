@@ -13,7 +13,6 @@ import io
 import socket
 from collections import deque
 import fnmatch
-import pickle
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QColor, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
@@ -34,6 +33,9 @@ defaultTileServer="tile.openstreetmap.org"
 downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
+
+osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+osmParserData = OSMParserData(osmFile)
 
 class OSMDownloadTilesWorker(QThread):
     def __init__(self, parent): 
@@ -148,10 +150,9 @@ class OSMDataLoadWorker(QThread):
 #        self.exiting = True
 #        self.wait()
         
-    def setup(self, p):
+    def setup(self):
         self.updateStatusLabel("OSM starting data load thread")
         self.exiting = False
-        self.p = p
 
         self.start()
  
@@ -168,12 +169,12 @@ class OSMDataLoadWorker(QThread):
     def run(self):
         self.updateDataThreadState("run")
         while not self.exiting and True:
-            if not self.p.dumpExists():
-                self.p.parse()
-                self.p.postprocessWays()
-                self.p.dump()
+            if not osmParserData.dumpExists():
+                osmParserData.parse()
+                osmParserData.postprocessWays()
+                osmParserData.dump()
             else:
-                self.p.loadDump()
+                osmParserData.loadDump()
             self.exiting=True
 
         self.updateDataThreadState("stopped")
@@ -568,75 +569,86 @@ class QtOSMWidget(QWidget):
     
     def showTrack(self):
         if self.track!=None:
-            pen=QPen()
-            pen.setColor(QColor(255, 0, 0, 100))
-            pen.setWidth(self.map_zoom)
+            redPen=QPen()
+            redPen.setColor(QColor(255, 0, 0))
+            redPen.setWidth(4)
+            redPen.setCapStyle(Qt.RoundCap);
+            redPen.setJoinStyle(Qt.RoundJoin)
             
             bluePen=QPen()
             bluePen.setColor(QColor(0, 0, 255))
             bluePen.setWidth(self.map_zoom)
+            bluePen.setCapStyle(Qt.RoundCap);
 
-            self.trackStartLon=0.0
-            self.trackStartLat=0.0
-            lastX=0
-            lastY=0
-            startNode=deque()
+            greenPen=QPen()
+            greenPen.setColor(QColor(0, 255, 0))
+            greenPen.setWidth(self.map_zoom)
+            greenPen.setCapStyle(Qt.RoundCap);
             
-            map_x0 = self.map_x - EXTRA_BORDER
-            map_y0 = self.map_y - EXTRA_BORDER
-
-#            donePosList=list()
-            track=self.track["track"]
-            for item in track:
-                if "lat" in item:
-                    lat=item["lat"]
-                if "lon" in item:
-                    lon=item["lon"]
-                    
-#                donePos=dict()
-#                donePos["lat"]=lat
-#                donePos["lon"]=lon
-#                if donePos in donePosList:
-#                    print(donePos)
-#                    lastX=0
-#                    lastY=0
-#                    continue
-#                
-#                donePosList.append(donePos)
+            for wayid in self.track:
+                self.trackStartLon=0.0
+                self.trackStartLat=0.0
+                lastX=0
+                lastY=0
+                startNode=deque()
+                node=None
                 
-                start=False
-                end=False
-                crossing=False
-                if "start" in item:
-                    start=True
-                if "end" in item:
-                    end=True
-                if"crossing" in item:
-                    crossing=True
-                if not start and not end:
-                    x=self.osmutils.lon2pixel(self.map_zoom, self.osmutils.deg2rad(lon)) - map_x0
-                    y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
+                map_x0 = self.map_x - EXTRA_BORDER
+                map_y0 = self.map_y - EXTRA_BORDER
     
-                    if lastX!=0 and lastY!=0:
-                        self.painter.setPen(pen)
-                        self.painter.drawLine(x, y, lastX, lastY)
-                    else:
-                        self.trackStartLon=lon
-                        self.trackStartLat=lat
-
-                    lastX=x
-                    lastY=y
-                    
-                    if crossing:
-                        self.painter.setPen(bluePen)
-                        self.painter.drawPoint(x, y)
-
-                elif start:
-                    startNode.append((lastX, lastY))
-                elif end:
-                    lastX, lastY=startNode.pop()
-            if len(startNode)!=0:
-                print(startNode)
+                track= osmParserData.wayIndex[wayid]["track"]
+                for item in track:
+                    if "lat" in item:
+                        lat=item["lat"]
+                    if "lon" in item:
+                        lon=item["lon"]
+                    if "ref" in item:
+                        ref=item["ref"]
+                        if ref in osmParserData.nodes:
+                            node=osmParserData.nodes[ref]
+                            
+                    start=False
+                    end=False
+                    crossing=False
+                    if "start" in item:
+                        start=True
+                    if "end" in item:
+                        end=True
+                    if"crossing" in item:
+                        crossing=True
+                    if not start and not end:
+                        x=self.osmutils.lon2pixel(self.map_zoom, self.osmutils.deg2rad(lon)) - map_x0
+                        y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
+        
+                        if lastX!=0 and lastY!=0:
+                            self.painter.setPen(redPen)
+                            self.painter.drawLine(x, y, lastX, lastY)
+                        else:
+#                            self.painter.setPen(greenPen)
+#                            self.painter.drawPoint(x, y)
+                            self.trackStartLon=lon
+                            self.trackStartLat=lat
+    
+                        lastX=x
+                        lastY=y
+                        
+                        if crossing:
+                            self.painter.setPen(bluePen)
+                            self.painter.drawPoint(x, y)
+    
+    #                    if node!=None:
+    #                        tags,coords=node
+    #                        if "highway" in tags:
+    #                            nodeType=tags["highway"]
+    #                            if nodeType=="motorway_junction":
+    #                                self.painter.setPen(greenPen)
+    #                                self.painter.drawPoint(x, y)
+                    elif start:
+                        startNode.append((lastX, lastY))
+                    elif end:
+                        lastX, lastY=startNode.pop()
+                if len(startNode)!=0:
+                    print(startNode)
             
     def minimumSizeHint(self):
         return QSize(minWidth, minHeight)
@@ -1108,11 +1120,10 @@ class OSMWayListTableModel(QAbstractTableModel):
         self.reset()
         
 class OSMWaySearchDialog(QDialog):
-    def __init__(self, t, parent):
+    def __init__(self, parent):
         QDialog.__init__(self, parent) 
-        self.t=t
 
-        self.streetList=list(t.streetIndex.keys())
+        self.streetList=list(osmParserData.streetIndex.keys())
         self.streetList=sorted(self.streetList)
         self.filteredStreetList=self.streetList
 #        print(len(self.streetList))
@@ -1204,8 +1215,10 @@ class OSMWaySearchDialog(QDialog):
             if self.filterValue[-1]!="*":
                 self.filterValue=self.filterValue+"*"
             self.filteredStreetList=list()
+            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
             for name in self.streetList:
-                if not fnmatch.fnmatch(name, self.filterValue):
+                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
                     continue
                 self.filteredStreetList.append(name)
         else:
@@ -1223,6 +1236,8 @@ class OSMWindow(QMainWindow):
         self.incLon=0.0
         self.initParserDone=False
         self.app=app
+        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+        self.p = OSMParserData(osmFile)
         self.initUI()
 
     def initUI(self):
@@ -1292,13 +1307,31 @@ class OSMWindow(QMainWindow):
 
     @pyqtSlot()
     def _showWay(self):
-        searchDialog=OSMWaySearchDialog(self.p, self)
+        searchDialog=OSMWaySearchDialog(self)
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             streetName=searchDialog.getStreetName()
-            track=self.p.wayIndex[self.p.streetIndex[streetName]]
-            print(track)
-            self.osmWidget.mapWidgetQt.setTrack(track)
+            waylist=osmParserData.streetIndex[streetName]
+#            track=osmParserData.wayIndex[osmParserData.streetIndex[streetName]]
+#            print(track)
+            for wayid in waylist:
+                trackList=osmParserData.wayIndex[wayid]["track"]
+                for trackItem in trackList:
+                    if "start" in trackItem:
+                        continue
+                    if "end" in trackItem:
+                        continue
+                    print("start="+str(trackItem))
+                    break
+                for trackItem in trackList[::-1]:
+                    if "start" in trackItem:
+                        continue
+                    if "end" in trackItem:
+                        continue
+                    print("end="+str(trackItem))
+                    break
+            
+            self.osmWidget.mapWidgetQt.setTrack(waylist)
             self.app.processEvents()
             
             # TODO hack
@@ -1318,12 +1351,10 @@ class OSMWindow(QMainWindow):
             self.testTrackButton.setDisabled(True)
 
     def initParser(self):
-        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
-        self.p = OSMParserData(osmFile)
         self.dataThread=OSMDataLoadWorker(self)
         self.connect(self.dataThread, SIGNAL("updateDataThreadState(QString)"), self.updateDataThreadState)
         self.connect(self.dataThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.dataThread.setup(self.p)
+        self.dataThread.setup()
 
     @pyqtSlot()
     def _cleanup(self):
