@@ -35,6 +35,7 @@ downloadRunState="run"
 downloadStoppedState="stopped"
 
 osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+#osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
 
 class OSMDownloadTilesWorker(QThread):
@@ -302,7 +303,6 @@ class QtOSMWidget(QWidget):
 
     def setTrack(self, track):
         self.track=track
-#        print(self.track)
         self.update()
 
     def init(self):
@@ -557,8 +557,8 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
-        self.showControlOverlay()
         self.showTrack()
+        self.showControlOverlay()
         self.painter.end()
               
 #    def setRotation(self, r):
@@ -645,6 +645,8 @@ class QtOSMWidget(QWidget):
     #                                self.painter.drawPoint(x, y)
                     elif start:
                         startNode.append((lastX, lastY))
+                        lastX=0
+                        lastY=0
                     elif end:
                         lastX, lastY=startNode.pop()
                 if len(startNode)!=0:
@@ -1316,6 +1318,7 @@ class OSMWindow(QMainWindow):
 #            print(track)
             for wayid in waylist:
                 trackList=osmParserData.wayIndex[wayid]["track"]
+                print(trackList)
                 for trackItem in trackList:
                     if "start" in trackItem:
                         continue

@@ -34,5 +34,5 @@ def log_file_on_exception(xml):
         fd_, filename = tempfile.mkstemp('.osm')
         xml.seek(0)
         with open(filename, 'w') as f:
-            f.write(xml.read())
+            f.write(xml.read().decode())
         print('SyntaxError in xml: %s, (stored dump %s)' % (ex, filename))

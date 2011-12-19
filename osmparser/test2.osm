@@ -1,0 +1,73 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version="0.6" generator="pbf2osm">
+	  <way id="8755088" version="20" timestamp="2011-10-25T22:39:44Z" uid="534991" user="ray_ray_ray" changeset="9656684">
+    <nd ref="62882247"/>
+    <nd ref="357911279"/>
+    <nd ref="357911448"/>
+    <nd ref="1480603290"/>
+    <nd ref="62882249"/>
+    <nd ref="62882250"/>
+    <nd ref="1480603289"/>
+    <nd ref="62882251"/>
+    <nd ref="1480603281"/>
+    <nd ref="357911285"/>
+    <nd ref="62882252"/>
+    <nd ref="62882253"/>
+    <nd ref="357911288"/>
+    <nd ref="62882254"/>
+    <nd ref="62882247"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="is_in:country" v="Austria"/>
+    <tag k="junction" v="roundabout"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="oneway" v="yes"/>
+    <tag k="postal_code" v="5071"/>
+  </way>
+  <way id="31956033" version="6" timestamp="2011-10-25T22:39:44Z" uid="534991" user="ray_ray_ray" changeset="9656684">
+    <nd ref="357912289"/>
+    <nd ref="357912796"/>
+    <nd ref="1480603287"/>
+    <nd ref="357911279"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="oneway" v="yes"/>
+  <way id="31956718" version="11" timestamp="2011-02-25T16:21:55Z" uid="47064" user="7503146" changeset="7391883">
+    <nd ref="357911448"/>
+    <nd ref="357912992"/>
+    <nd ref="357912989"/>
+    <nd ref="357923363"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="98333501" version="3" timestamp="2011-02-25T16:21:45Z" uid="47064" user="7503146" changeset="7391883">
+    <nd ref="357923363"/>
+    <nd ref="1137697989"/>
+    <nd ref="1137698045"/>
+    <nd ref="62882250"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="8755152" version="10" timestamp="2011-02-05T17:08:53Z" uid="199058" user="pegeka" changeset="7194793">
+    <nd ref="357911288"/>
+    <nd ref="357912697"/>
+    <nd ref="357912294"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="31957687" version="11" timestamp="2011-10-25T22:39:45Z" uid="534991" user="ray_ray_ray" changeset="9656684">
+    <nd ref="62882254"/>
+    <nd ref="1137698030"/>
+    <nd ref="357953036"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="is_in:country" v="Austria"/>
+    <tag k="name" v="Europastraße"/>
+    <tag k="postal_code" v="5071"/>
+  </way>
+
+
+  </way>
+
+</osm>
