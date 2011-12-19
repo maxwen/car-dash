@@ -50,34 +50,34 @@ def CalcRad(lat):
     r = r * 1000.0      # Convert to meters
     return r
 
-def EarthDistance(xxx_todo_changeme, xxx_todo_changeme1):
-    "Distance in meters between two points specified in degrees."
-    (lat1, lon1) = xxx_todo_changeme
-    (lat2, lon2) = xxx_todo_changeme1
-    x1 = CalcRad(lat1) * math.cos(Deg2Rad(lon1)) * math.sin(Deg2Rad(90-lat1))
-    x2 = CalcRad(lat2) * math.cos(Deg2Rad(lon2)) * math.sin(Deg2Rad(90-lat2))
-    y1 = CalcRad(lat1) * math.sin(Deg2Rad(lon1)) * math.sin(Deg2Rad(90-lat1))
-    y2 = CalcRad(lat2) * math.sin(Deg2Rad(lon2)) * math.sin(Deg2Rad(90-lat2))
-    z1 = CalcRad(lat1) * math.cos(Deg2Rad(90-lat1))
-    z2 = CalcRad(lat2) * math.cos(Deg2Rad(90-lat2))
-    a = (x1*x2 + y1*y2 + z1*z2)/pow(CalcRad((lat1+lat2)/2), 2)
-    # a should be in [1, -1] but can sometimes fall outside it by
-    # a very small amount due to rounding errors in the preceding
-    # calculations (this is prone to happen when the argument points
-    # are very close together).  Thus we constrain it here.
-    if abs(a) > 1: a = 1
-    elif a < -1: a = -1
-    return CalcRad((lat1+lat2) / 2) * math.acos(a)
-
-def MeterOffset(xxx_todo_changeme2, xxx_todo_changeme3):
-    "Return offset in meters of second arg from first."
-    (lat1, lon1) = xxx_todo_changeme2
-    (lat2, lon2) = xxx_todo_changeme3
-    dx = EarthDistance((lat1, lon1), (lat1, lon2))
-    dy = EarthDistance((lat1, lon1), (lat2, lon1))
-    if lat1 < lat2: dy *= -1
-    if lon1 < lon2: dx *= -1
-    return (dx, dy)
+#def EarthDistance(xxx_todo_changeme, xxx_todo_changeme1):
+#    "Distance in meters between two points specified in degrees."
+#    (lat1, lon1) = xxx_todo_changeme
+#    (lat2, lon2) = xxx_todo_changeme1
+#    x1 = CalcRad(lat1) * math.cos(Deg2Rad(lon1)) * math.sin(Deg2Rad(90-lat1))
+#    x2 = CalcRad(lat2) * math.cos(Deg2Rad(lon2)) * math.sin(Deg2Rad(90-lat2))
+#    y1 = CalcRad(lat1) * math.sin(Deg2Rad(lon1)) * math.sin(Deg2Rad(90-lat1))
+#    y2 = CalcRad(lat2) * math.sin(Deg2Rad(lon2)) * math.sin(Deg2Rad(90-lat2))
+#    z1 = CalcRad(lat1) * math.cos(Deg2Rad(90-lat1))
+#    z2 = CalcRad(lat2) * math.cos(Deg2Rad(90-lat2))
+#    a = (x1*x2 + y1*y2 + z1*z2)/pow(CalcRad((lat1+lat2)/2), 2)
+#    # a should be in [1, -1] but can sometimes fall outside it by
+#    # a very small amount due to rounding errors in the preceding
+#    # calculations (this is prone to happen when the argument points
+#    # are very close together).  Thus we constrain it here.
+#    if abs(a) > 1: a = 1
+#    elif a < -1: a = -1
+#    return CalcRad((lat1+lat2) / 2) * math.acos(a)
+#
+#def MeterOffset(xxx_todo_changeme2, xxx_todo_changeme3):
+#    "Return offset in meters of second arg from first."
+#    (lat1, lon1) = xxx_todo_changeme2
+#    (lat2, lon2) = xxx_todo_changeme3
+#    dx = EarthDistance((lat1, lon1), (lat1, lon2))
+#    dy = EarthDistance((lat1, lon1), (lat2, lon1))
+#    if lat1 < lat2: dy *= -1
+#    if lon1 < lon2: dx *= -1
+#    return (dx, dy)
 
 def isotime(s):
     "Convert timestamps in ISO8661 format to and from Unix time."

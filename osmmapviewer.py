@@ -585,6 +585,21 @@ class QtOSMWidget(QWidget):
             greenPen.setWidth(self.map_zoom)
             greenPen.setCapStyle(Qt.RoundCap);
             
+            motorwayPen=QPen()
+            motorwayPen.setColor(QColor(0, 0, 200))
+            motorwayPen.setWidth(4)
+            motorwayPen.setCapStyle(Qt.RoundCap);
+            
+            primaryPen=QPen()
+            primaryPen.setColor(QColor(100, 0, 0))
+            primaryPen.setWidth(4)
+            primaryPen.setCapStyle(Qt.RoundCap);
+            
+            residentialPen=QPen()
+            residentialPen.setColor(QColor(0, 100, 0))
+            residentialPen.setWidth(4)
+            residentialPen.setCapStyle(Qt.RoundCap);
+            
             for wayid in self.track:
                 self.trackStartLon=0.0
                 self.trackStartLat=0.0
@@ -610,19 +625,36 @@ class QtOSMWidget(QWidget):
                     start=False
                     end=False
                     crossing=False
+                    oneway=False
+                    streetType=""
                     if "start" in item:
                         start=True
                     if "end" in item:
                         end=True
                     if"crossing" in item:
                         crossing=True
+                    if"oneway" in item:
+                        oneway=item["oneway"]
+                    if "type" in item:
+                        streetType=item["type"]
                     if not start and not end:
                         x=self.osmutils.lon2pixel(self.map_zoom, self.osmutils.deg2rad(lon)) - map_x0
                         y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
         
                         if lastX!=0 and lastY!=0:
-                            self.painter.setPen(redPen)
+                            pen=redPen
+                            if streetType=="motorway" or streetType=="motorway_link":
+                                pen=motorwayPen
+                            elif streetType=="primary" or streetType=="primary_link":
+                                pen=primaryPen
+                            elif streetType=="residential":
+                                pen=residentialPen
+                            self.painter.setPen(pen)
                             self.painter.drawLine(x, y, lastX, lastY)
+                            
+                            if oneway:
+                                self.painter.drawLine(x, y, lastX, lastY)
+
                         else:
 #                            self.painter.setPen(greenPen)
 #                            self.painter.drawPoint(x, y)
@@ -745,12 +777,16 @@ class QtOSMWidget(QWidget):
         self.update()
         
     def mouseReleaseEvent(self, event ):
+        self.moving=False
+
 #        print("mouseReleaseEvent")
         if self.controlWidgetRect.contains(event.x(), event.y()):
             self.pointInsideMoveOverlay(event.x(), event.y())
             self.pointInsideZoomOverlay(event.x(), event.y())
-        self.moving=False
-        
+        else:
+#            print("%d %d"%(event.x(), event.y()))
+            self.showTrackOnMousePos(event.x(), event.y())
+
     def pointInsideMoveOverlay(self, x, y):
         if self.moveRect.contains(x, y):
             if self.leftRect.contains(x, y):
@@ -813,8 +849,8 @@ class QtOSMWidget(QWidget):
             self.lastMouseMoveY=event.y()
         else:
             self.updateMousePositionDisplay(event.x(), event.y())
-#            self.posStr=self.showPosition(event.x(), event.y())
-#            print(self.posStr)
+#            self.showTrackOnMousePos(event.x(), event.y())
+
             
     def updateMousePositionDisplay(self, x, y):
         (lat, lon)=self.getMousePosition(x, y)
@@ -835,7 +871,9 @@ class QtOSMWidget(QWidget):
         menu = QMenu(self)
         forceDownloadAction = QAction("Force Download", self)
         forceDownloadAction.setEnabled(self.withDownload==True)
+#        showTrackOnPosAction = QAction("Show Track", self)
         menu.addAction(forceDownloadAction)
+#        menu.addAction(showTrackOnPosAction)
         action = menu.exec_(self.mapToGlobal(event.pos()))
         if action==forceDownloadAction:
             if self.withDownload==True:
@@ -843,6 +881,10 @@ class QtOSMWidget(QWidget):
         
         self.moving=False
         
+    def showTrackOnMousePos(self, x, y):
+        (lat, lon)=self.getMousePosition(x, y)
+        print("%f %f"%(lat, lon))
+
 #    def point_new_degrees(self, lat, lon):
 #        rlat = self.osmutils.deg2rad(lat);
 #        rlon = self.osmutils.deg2rad(lon);
@@ -868,9 +910,154 @@ class QtOSMWidget(QWidget):
 #     
 #        return super(QtOSMWidget, self).event(event)
          
-         
-class OSMWidget(QWidget):
+class OSMWayListTableModel(QAbstractTableModel):
     def __init__(self, parent):
+        QAbstractTableModel.__init__(self, parent)
+        
+    def rowCount(self, parent): 
+        return len(self.streetList)
+    
+    def columnCount(self, parent): 
+        return 2
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.streetList):
+            return ""
+        (name, ref)=self.streetList[index.row()]
+
+        if index.column()==0:
+            return name
+        elif index.column()==1:
+            return ref
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Street"
+                elif col==1:
+                    return "Ref"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+   
+    def update(self, streetList):
+        self.streetList=streetList
+        self.reset()
+        
+class OSMWaySearchDialog(QDialog):
+    def __init__(self, parent):
+        QDialog.__init__(self, parent) 
+
+        self.streetList=sorted(osmParserData.streetIndex.keys(), key=self.nameSort)
+#        self.streetList=sorted(self.streetList)
+        self.filteredStreetList=self.streetList
+#        print(len(self.streetList))
+
+        self.initUI()
+        self.selectedStreet=None
+         
+    def nameSort(self, item):
+       (name, ref)=item
+       return name
+   
+    def getStreetName(self):
+        return self.selectedStreet
+#        return "Münchner Bundesstraße"
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        
+        self.filterEdit=QLineEdit(self)
+        self.filterEdit.setToolTip('Id Filter')
+        self.filterEdit.returnPressed.connect(self._applyFilter)
+        self.filterEdit.textChanged.connect(self._applyFilter)
+        top.addWidget(self.filterEdit)
+        
+        self.streetView=QTableView(self)
+        top.addWidget(self.streetView)
+        
+        self.streetViewModel=OSMWayListTableModel(self)
+        self.streetViewModel.update(self.filteredStreetList)
+        self.streetView.setModel(self.streetViewModel)
+        header=QHeaderView(Qt.Horizontal, self.streetView)
+        header.setStretchLastSection(True)
+        self.streetView.setHorizontalHeader(header)
+        self.streetView.setColumnWidth(0, 300)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setEnabled(False)
+        self.okButton.setDefault(True)
+        buttons.addWidget(self.okButton)
+        top.addLayout(buttons)
+        
+        self.connect(self.streetView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+
+        self.setLayout(top)
+        self.setWindowTitle('Way Search')
+        self.setGeometry(0, 0, 400, 400)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        self.okButton.setEnabled(current.isValid())
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+#            print(self.filteredStreetList[current.row()])
+            self.selectedStreet=self.filteredStreetList[current.row()]
+            print(self.selectedStreet)
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _clearTableSelection(self):
+        self.streetView.clearSelection()
+        self.okButton.setEnabled(False)
+        
+    @pyqtSlot()
+    def _applyFilter(self):
+        self._clearTableSelection()
+        self.filterValue=self.filterEdit.text()
+        if len(self.filterValue)!=0:
+            if self.filterValue[-1]!="*":
+                self.filterValue=self.filterValue+"*"
+            self.filteredStreetList=list()
+            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for (name, ref) in self.streetList:
+                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+                    continue
+                self.filteredStreetList.append((name, ref))
+        else:
+            self.filteredStreetList=self.streetList
+        
+        self.streetViewModel.update(self.filteredStreetList)
+
+class OSMWidget(QWidget):
+    def __init__(self, parent, app):
         QWidget.__init__(self, parent)
         self.startLat=47.8
         self.startLon=13.0
@@ -878,6 +1065,8 @@ class OSMWidget(QWidget):
         self.ampelRot=QIcon("images/ampel-rot.png")
         self.ampelGelb=QIcon("images/ampel-gelb.png")
         self.lastDownloadState=downloadStoppedState
+        self.app=app
+
         
     def addToWidget(self, vbox):       
         self.mapWidgetQt=QtOSMWidget(self)
@@ -923,6 +1112,19 @@ class OSMWidget(QWidget):
         self.mousePosLabelLon=QLabel("", self)
         self.mousePosLabelLon.setText("+%2.4f"%(0.0))
         hbox.addWidget(self.mousePosLabelLon)
+        
+        buttons=QHBoxLayout()        
+
+        self.testTrackButton=QPushButton("Test Track", self)
+        self.testTrackButton.clicked.connect(self._testTrack)
+        buttons.addWidget(self.testTrackButton)
+
+        self.searchWayButton=QPushButton("Show Way", self)
+        self.searchWayButton.clicked.connect(self._showWay)
+        self.searchWayButton.setDisabled(True)
+        buttons.addWidget(self.searchWayButton)
+                
+        vbox.addLayout(buttons)
         
         self.downloadThread=OSMDownloadTilesWorker(self)
         self.downloadThread.setWidget(self.mapWidgetQt)
@@ -1081,228 +1283,19 @@ class OSMWidget(QWidget):
                 self.downloadTilesButton.setIcon(self.ampelRot)
             self.lastDownloadState=state
           
-class OSMWayListTableModel(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.streetList)
-    
-    def columnCount(self, parent): 
-        return 2
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.streetList):
-            return ""
-        name=self.streetList[index.row()]
-
-        if index.column()==0:
-            return name
-        elif index.column()==1:
-            return ""
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "Street"
-                elif col==1:
-                    return "Ref"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, streetList):
-        self.streetList=streetList
-        self.reset()
-        
-class OSMWaySearchDialog(QDialog):
-    def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-
-        self.streetList=list(osmParserData.streetIndex.keys())
-        self.streetList=sorted(self.streetList)
-        self.filteredStreetList=self.streetList
-#        print(len(self.streetList))
-
-        self.initUI()
-        self.selectedStreet=None
-         
-    def indexSort(self, item):
-       osmid, tags, refs=item[0]
-       return tags["index"]
-   
-    def getStreetName(self):
-        return self.selectedStreet
-#        return "Münchner Bundesstraße"
-    
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-        
-        self.filterEdit=QLineEdit(self)
-        self.filterEdit.setToolTip('Id Filter')
-        self.filterEdit.returnPressed.connect(self._applyFilter)
-        self.filterEdit.textChanged.connect(self._applyFilter)
-        top.addWidget(self.filterEdit)
-        
-        self.streetView=QTableView(self)
-        top.addWidget(self.streetView)
-        
-        self.streetViewModel=OSMWayListTableModel(self)
-        self.streetViewModel.update(self.filteredStreetList)
-        self.streetView.setModel(self.streetViewModel)
-        header=QHeaderView(Qt.Horizontal, self.streetView)
-        header.setStretchLastSection(True)
-        self.streetView.setHorizontalHeader(header)
-        self.streetView.setColumnWidth(0, 300)
-
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        buttons.addWidget(self.cancelButton)
-
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setEnabled(False)
-        self.okButton.setDefault(True)
-        buttons.addWidget(self.okButton)
-        top.addLayout(buttons)
-        
-        self.connect(self.streetView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.setLayout(top)
-        self.setWindowTitle('Way Search')
-        self.setGeometry(0, 0, 400, 400)
-        
-    @pyqtSlot()
-    def _selectionChanged(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        self.okButton.setEnabled(current.isValid())
-        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _ok(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-#            print(self.filteredStreetList[current.row()])
-            name=self.filteredStreetList[current.row()]
-            self.selectedStreet=name
-#            print(self.selectedStreet)
-        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _clearTableSelection(self):
-        self.streetView.clearSelection()
-        self.okButton.setEnabled(False)
-        
-    @pyqtSlot()
-    def _applyFilter(self):
-        self._clearTableSelection()
-        self.filterValue=self.filterEdit.text()
-        if len(self.filterValue)!=0:
-            if self.filterValue[-1]!="*":
-                self.filterValue=self.filterValue+"*"
-            self.filteredStreetList=list()
-            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+    def updateDataThreadState(self, state):
+        if state=="stopped":
+            self.searchWayButton.setDisabled(False)
+            self.testTrackButton.setDisabled(False)
             
-            for name in self.streetList:
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredStreetList.append(name)
-        else:
-            self.filteredStreetList=self.streetList
-        
-        self.streetViewModel.update(self.filteredStreetList)
+        if state=="run":
+            self.testTrackButton.setDisabled(True)
 
-class OSMWindow(QMainWindow):
-    def __init__(self, parent, app):
-        QMainWindow.__init__(self, parent)
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-        self.incLat=0.0
-        self.incLon=0.0
-        self.initParserDone=False
-        self.app=app
-        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
-        self.p = OSMParserData(osmFile)
-        self.initUI()
-
-    def initUI(self):
-        mainWidget=QWidget()
-        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-
-        self.setCentralWidget(mainWidget)
-        top=QVBoxLayout(mainWidget)        
-        tabs = QTabWidget(self)
-        top.addWidget(tabs)
-        
-        osmTab = QWidget()
-        osmTabLayout=QVBoxLayout(osmTab)
-        osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-
-        tabs.addTab(osmTab, "OSM")
-
-        self.osmWidget=OSMWidget(self)
-        self.osmWidget.addToWidget(osmTabLayout)
-
-        self.osmWidget.setZoomValue(13)
-        self.startLat=47.8
-        self.startLon=13.0
-        self.osmWidget.initHome()
-
-        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-
-        buttons=QHBoxLayout()        
-
-        self.testGPSButton=QPushButton("Test GPS", self)
-        self.testGPSButton.clicked.connect(self._testGPS)
-        buttons.addWidget(self.testGPSButton)
-
-        self.testTrackButton=QPushButton("Test Track", self)
-        self.testTrackButton.clicked.connect(self._testTrack)
-        buttons.addWidget(self.testTrackButton)
-
-        self.searchWayButton=QPushButton("Show Way", self)
-        self.searchWayButton.clicked.connect(self._showWay)
-        self.searchWayButton.setDisabled(True)
-        buttons.addWidget(self.searchWayButton)
-                
-        top.addLayout(buttons)
-        
-#        self.setGeometry(0, 0, 800, 400)
-        self.setWindowTitle('OSM Test')
-        self.show()
-        
-    @pyqtSlot()
-    def _testGPS(self):
-        if self.incLat==0.0:
-            self.incLat=self.startLat
-        if self.incLon==0.0:
-            self.incLon=self.startLon
-            
-        self.incLat=self.incLat+0.001
-        self.incLon=self.incLon+0.001
-        self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
-        
-        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-
+    def initParser(self):
+        self.dataThread=OSMDataLoadWorker(self)
+        self.connect(self.dataThread, SIGNAL("updateDataThreadState(QString)"), self.updateDataThreadState)
+        self.connect(self.dataThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.dataThread.setup()
     @pyqtSlot()
     def _testTrack(self):
         self.initParser()
@@ -1334,30 +1327,81 @@ class OSMWindow(QMainWindow):
                     print("end="+str(trackItem))
                     break
             
-            self.osmWidget.mapWidgetQt.setTrack(waylist)
+            self.mapWidgetQt.setTrack(waylist)
             self.app.processEvents()
             
             # TODO hack
-            self.osmWidget.mapWidgetQt.osm_center_map_to(self.osmWidget.mapWidgetQt.osmutils.deg2rad(self.osmWidget.mapWidgetQt.trackStartLat),
-                                   self.osmWidget.mapWidgetQt.osmutils.deg2rad(self.osmWidget.mapWidgetQt.trackStartLon))
+            self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
+                                   self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
 
         
+class OSMWindow(QMainWindow):
+    def __init__(self, parent, app):
+        QMainWindow.__init__(self, parent)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        self.incLat=0.0
+        self.incLon=0.0
+        self.initParserDone=False
+        self.app=app
+        self.initUI()
+
+    def initUI(self):
+        mainWidget=QWidget()
+        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+
+        self.setCentralWidget(mainWidget)
+        top=QVBoxLayout(mainWidget)        
+        tabs = QTabWidget(self)
+        top.addWidget(tabs)
+        
+        osmTab = QWidget()
+        osmTabLayout=QVBoxLayout(osmTab)
+        osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+
+        tabs.addTab(osmTab, "OSM")
+
+        self.osmWidget=OSMWidget(self, self.app)
+        self.osmWidget.addToWidget(osmTabLayout)
+
+        self.osmWidget.setZoomValue(13)
+        self.startLat=47.8
+        self.startLon=13.0
+        self.osmWidget.initHome()
+
+        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+
+        buttons=QHBoxLayout()        
+
+        self.testGPSButton=QPushButton("Test GPS", self)
+        self.testGPSButton.clicked.connect(self._testGPS)
+        buttons.addWidget(self.testGPSButton)
+                
+        top.addLayout(buttons)
+        
+#        self.setGeometry(0, 0, 800, 400)
+        self.setWindowTitle('OSM Test')
+        self.show()
+        
+    @pyqtSlot()
+    def _testGPS(self):
+        if self.incLat==0.0:
+            self.incLat=self.startLat
+        if self.incLon==0.0:
+            self.incLon=self.startLon
+            
+        self.incLat=self.incLat+0.001
+        self.incLon=self.incLon+0.001
+        self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
+        
+        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
+        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distanceFast(self.startLat, self.startLon, self.incLat, self.incLon)))
+
     def updateStatusLabel(self, text):
         print(text)
-
-    def updateDataThreadState(self, state):
-        if state=="stopped":
-            self.searchWayButton.setDisabled(False)
-            self.testTrackButton.setDisabled(False)
-            
-        if state=="run":
-            self.testTrackButton.setDisabled(True)
-
-    def initParser(self):
-        self.dataThread=OSMDataLoadWorker(self)
-        self.connect(self.dataThread, SIGNAL("updateDataThreadState(QString)"), self.updateDataThreadState)
-        self.connect(self.dataThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.dataThread.setup()
 
     @pyqtSlot()
     def _cleanup(self):
