@@ -600,6 +600,11 @@ class QtOSMWidget(QWidget):
             residentialPen.setWidth(4)
             residentialPen.setCapStyle(Qt.RoundCap);
             
+            linkPen=QPen()
+            linkPen.setColor(QColor(0, 255, 255))
+            linkPen.setWidth(4)
+            linkPen.setCapStyle(Qt.RoundCap);
+            
             for wayid in self.track:
                 self.trackStartLon=0.0
                 self.trackStartLat=0.0
@@ -611,7 +616,7 @@ class QtOSMWidget(QWidget):
                 map_x0 = self.map_x - EXTRA_BORDER
                 map_y0 = self.map_y - EXTRA_BORDER
     
-                track= osmParserData.wayIndex[wayid]["track"]
+                track= osmParserData.streetIndex[wayid]["track"]
                 for item in track:
                     if "lat" in item:
                         lat=item["lat"]
@@ -643,10 +648,14 @@ class QtOSMWidget(QWidget):
         
                         if lastX!=0 and lastY!=0:
                             pen=redPen
-                            if streetType=="motorway" or streetType=="motorway_link":
+                            if streetType=="motorway":
                                 pen=motorwayPen
-                            elif streetType=="primary" or streetType=="primary_link":
+                            elif streetType=="motorway_link":
+                                pen=linkPen
+                            elif streetType=="primary":
                                 pen=primaryPen
+                            elif streetType=="primary_link":
+                                pen=linkPen
                             elif streetType=="residential":
                                 pen=residentialPen
                             self.painter.setPen(pen)
@@ -954,7 +963,7 @@ class OSMWaySearchDialog(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent) 
 
-        self.streetList=sorted(osmParserData.streetIndex.keys(), key=self.nameSort)
+        self.streetList=sorted(osmParserData.streetNameIndex.keys(), key=self.nameSort)
 #        self.streetList=sorted(self.streetList)
         self.filteredStreetList=self.streetList
 #        print(len(self.streetList))
@@ -1306,11 +1315,11 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             streetName=searchDialog.getStreetName()
-            waylist=osmParserData.streetIndex[streetName]
-#            track=osmParserData.wayIndex[osmParserData.streetIndex[streetName]]
+            waylist=osmParserData.streetNameIndex[streetName]
+#            track=osmParserData.streetIndex[osmParserData.streetNameIndex[streetName]]
 #            print(track)
             for wayid in waylist:
-                trackList=osmParserData.wayIndex[wayid]["track"]
+                trackList=osmParserData.streetIndex[wayid]["track"]
                 print(trackList)
                 for trackItem in trackList:
                     if "start" in trackItem:
