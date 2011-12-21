@@ -129,12 +129,17 @@ class OSMParserData(object):
 
         name=""
         ref=""
+        intref=""
+        
         if "name" in tags:
             name=tags["name"]
         
         if "ref" in tags:
             ref=tags["ref"]
-      
+            
+        if "int_ref" in tags:
+            intref=tags["int_ref"]
+            
         if streetType=="motorway" or streetType=="motorway_link":
             if ref!="":
                 ref=ref.replace(' ', '')
@@ -182,8 +187,8 @@ class OSMParserData(object):
             
             if wayid==fromWayId:
                 continue
-            if wayid in self.doneWays:
-                continue
+#            if wayid in self.doneWays:
+#                continue
             
             if "highway" in tags:
 #                streetType=tags["highway"]
@@ -670,9 +675,12 @@ class OSMParserData(object):
     def dumpExists(self):
         return os.path.exists(self.getDumpFile())
         
-def main(argv):     
-    p = OSMParserData('/home/maxl/Downloads/salzburg-city-streets.osm')
-#    p = OSMParserData('test1.osm')
+def main(argv):    
+    try:
+        osmFile=argv[1]
+    except IndexError:
+        osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
+    p = OSMParserData(osmFile)
     if not p.dumpExists():
         p.parse()
         p.postprocessWays()

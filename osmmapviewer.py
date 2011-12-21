@@ -34,7 +34,8 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
+#osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
 
@@ -1133,6 +1134,11 @@ class OSMWidget(QWidget):
         self.searchWayButton.setDisabled(True)
         buttons.addWidget(self.searchWayButton)
                 
+        self.showAllWayButton=QPushButton("Show All Ways", self)
+        self.showAllWayButton.clicked.connect(self._showAllWay)
+        self.showAllWayButton.setDisabled(True)
+        buttons.addWidget(self.showAllWayButton)
+        
         vbox.addLayout(buttons)
         
         self.downloadThread=OSMDownloadTilesWorker(self)
@@ -1296,6 +1302,7 @@ class OSMWidget(QWidget):
         if state=="stopped":
             self.searchWayButton.setDisabled(False)
             self.testTrackButton.setDisabled(False)
+            self.showAllWayButton.setDisabled(False)
             
         if state=="run":
             self.testTrackButton.setDisabled(True)
@@ -1343,7 +1350,19 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
                                    self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
 
-        
+    @pyqtSlot()
+    def _showAllWay(self):
+            allWays=list()
+            for waylist in osmParserData.streetNameIndex.values():
+                allWays.extend(waylist)
+                
+            self.mapWidgetQt.setTrack(allWays)
+            self.app.processEvents()
+                
+            # TODO hack
+            self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
+                                       self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
+
 class OSMWindow(QMainWindow):
     def __init__(self, parent, app):
         QMainWindow.__init__(self, parent)
