@@ -34,8 +34,8 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-#osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
+#osmFile='/home/maxl/Downloads/salzburg-streets.osm'
+osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
 
@@ -171,12 +171,7 @@ class OSMDataLoadWorker(QThread):
     def run(self):
         self.updateDataThreadState("run")
         while not self.exiting and True:
-            if not osmParserData.dumpExists():
-                osmParserData.parse()
-                osmParserData.postprocessWays()
-                osmParserData.dump()
-            else:
-                osmParserData.loadDump()
+            osmParserData.initDB()
             self.exiting=True
 
         self.updateDataThreadState("stopped")
@@ -964,7 +959,8 @@ class OSMWaySearchDialog(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent) 
 
-        self.streetList=sorted(osmParserData.streetNameIndex.keys(), key=self.nameSort)
+        self.streetList=sorted(osmParserData.getStreetList().keys())
+#        self.streetList=sorted(osmParserData.streetNameIndex.keys(), key=self.nameSort)
 #        self.streetList=sorted(self.streetList)
         self.filteredStreetList=self.streetList
 #        print(len(self.streetList))
@@ -1152,7 +1148,8 @@ class OSMWidget(QWidget):
     def _cleanup(self):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()
-                    
+        osmParserData.closeDB()
+        
     def updateMousePositionDisplay(self, lat, lon):
         self.mousePosLabelLat.setText("+%.4f"%(lat))
         self.mousePosLabelLon.setText("+%.4f"%(lon)) 
@@ -1303,7 +1300,7 @@ class OSMWidget(QWidget):
             self.searchWayButton.setDisabled(False)
             self.testTrackButton.setDisabled(False)
             self.showAllWayButton.setDisabled(False)
-            
+            osmParserData.openDB()
         if state=="run":
             self.testTrackButton.setDisabled(True)
 
@@ -1312,6 +1309,7 @@ class OSMWidget(QWidget):
         self.connect(self.dataThread, SIGNAL("updateDataThreadState(QString)"), self.updateDataThreadState)
         self.connect(self.dataThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.dataThread.setup()
+        
     @pyqtSlot()
     def _testTrack(self):
         self.initParser()
@@ -1321,13 +1319,18 @@ class OSMWidget(QWidget):
         searchDialog=OSMWaySearchDialog(self)
         result=searchDialog.exec()
         if result==QDialog.Accepted:
-            streetName=searchDialog.getStreetName()
-            waylist=osmParserData.streetNameIndex[streetName]
+            (name, ref)=searchDialog.getStreetName()
+            if not (name, ref) in osmParserData.streetNameIndex.keys():
+                osmParserData.postprocessWay(name, ref)
+                
+            waylist=osmParserData.streetNameIndex[(name, ref)]
+#            waylist=waylist[2:3]
+            print(waylist)
 #            track=osmParserData.streetIndex[osmParserData.streetNameIndex[streetName]]
 #            print(track)
             for wayid in waylist:
                 trackList=osmParserData.streetIndex[wayid]["track"]
-                print(trackList)
+#                print(trackList)
                 for trackItem in trackList:
                     if "start" in trackItem:
                         continue
