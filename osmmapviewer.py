@@ -36,7 +36,7 @@ downloadRunState="run"
 downloadStoppedState="stopped"
 
 #osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
+osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
 #osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
@@ -559,7 +559,7 @@ class QtOSMWidget(QWidget):
             linkPen.setWidth(4)
             linkPen.setCapStyle(Qt.RoundCap);
             
-            for wayid in self.track:
+            for track in self.track:
                 self.trackStartLon=0.0
                 self.trackStartLat=0.0
                 lastX=0
@@ -570,12 +570,12 @@ class QtOSMWidget(QWidget):
                 map_x0 = self.map_x - EXTRA_BORDER
                 map_y0 = self.map_y - EXTRA_BORDER
     
-                track= osmParserData.getStreetTrackList(wayid)
-                if track==None:
-                    print("no track found for %d"%(wayid))
-                    continue
+#                track= osmParserData.getStreetTrackList(wayid)
+#                if track==None:
+#                    print("no track found for %d"%(wayid))
+#                    continue
                 
-                for item in track:
+                for item in track["track"]:
                     if "lat" in item:
                         lat=item["lat"]
                     if "lon" in item:
@@ -855,15 +855,13 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            waylist=osmParserData.getWayIdListForPos(actlat, actlon)
-            if waylist!=None and len(waylist)!=0:
-                # TODO multiple ways?
-                wayid=waylist[0]
-                (name, ref)=osmParserData.getStreetInfoWithWayId(wayid)
+            wayId=osmParserData.getWayIdForPos(actlat, actlon)
+            if wayId!=None:
+                trackList=osmParserData.getTrackListByWay(wayId)
+                (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-
-                self.osmWidget.showWay(waylist)
+                self.setTrack(trackList, True)
                     
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
@@ -872,14 +870,13 @@ class QtOSMWidget(QWidget):
 
     def showTrackOnGPSPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            waylist=osmParserData.getWayIdListForPos(actlat, actlon)
-            if waylist!=None and len(waylist)!=0:
-                # TODO multiple ways?
-                wayid=waylist[0]
-                (name, ref)=osmParserData.getStreetInfoWithWayId(wayid)
+            wayId=osmParserData.getWayIdForPos(actlat, actlon)
+            if wayId!=None:
+                trackList=osmParserData.getTrackListByWay(wayId)
+                (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-                self.setTrack(waylist, False)
+                self.setTrack(trackList, False)
             
 #    def point_new_degrees(self, lat, lon):
 #        rlat = self.osmutils.deg2rad(lat);
@@ -1318,9 +1315,9 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             (name, ref)=searchDialog.getStreetName()           
-            waylist=osmParserData.getStreetWayList(name, ref)
-            if waylist!=None:
-                self.showWay(waylist)
+            trackList=osmParserData.getTrackListByName(name, ref)
+            if trackList!=None:
+                self.showWay(trackList)
                 self.app.processEvents()
         
                 # TODO hack
@@ -1329,7 +1326,7 @@ class OSMWidget(QWidget):
             else:
                 print("no waylist for %s-%s"%(name, ref))
                 
-    def showWay(self, waylist):
+    def showWay(self, trackList):
 #        for wayid in waylist:
 #            trackList=osmParserData.streetIndex[wayid]["track"]
 ##                print(trackList)
@@ -1348,7 +1345,7 @@ class OSMWidget(QWidget):
 #                print("end="+str(trackItem))
 #                break
         
-        self.mapWidgetQt.setTrack(waylist, True)
+        self.mapWidgetQt.setTrack(trackList, True)
 
 #    @pyqtSlot()
 #    def _showAllWay(self):
@@ -1423,6 +1420,10 @@ class OSMWindow(QMainWindow):
             
         self.incLat=self.incLat+0.001
         self.incLon=self.incLon+0.001
+        
+        osmutils=OSMUtils()
+        print(osmutils.headingDegrees(self.startLat, self.startLon, self.incLat, self.incLon))
+
         self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
         
         print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))

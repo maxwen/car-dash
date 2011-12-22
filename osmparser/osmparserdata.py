@@ -31,6 +31,7 @@ class OSMParserData(object):
 #        self.gpsGrid=[]
         self.connection=None
         self.cursor=None
+        self.crossingTest=list()
 
 #        for i in range(10000):
 #            self.gpsGrid.append([])
@@ -58,16 +59,16 @@ class OSMParserData(object):
         self.cursor.execute('CREATE TABLE streetTable (street TEXT PRIMARY KEY, wayIdList TEXT)')
     
     def createCrossingsTable(self):
-        self.cursor.execute('CREATE TABLE crossingTable (crossingId TEXT PRIMARY KEY, crossingWayIdList TEXT, nexWayIdList TEXT)')
+        self.cursor.execute('CREATE TABLE crossingTable (crossingId TEXT PRIMARY KEY, crossingWayIdList TEXT, nextWayIdList TEXT)')
 
-    def addToRefTable(self, ref, lat, lon, wayIdList):
+    def addToRefTable(self, refid, lat, lon, wayIdList):
         wayIdListString=""
         for wayId in wayIdList:
             wayIdListString=wayIdListString+str(wayId)+"|"
         wayIdListString=wayIdListString[:-1]
-        self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?)', (ref, lat, lon, wayIdListString))
+        self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?)', (refid, lat, lon, wayIdListString))
 
-    def addToWayTable(self, way, tags, refs):
+    def addToWayTable(self, wayid, tags, refs):
         refsString=""
         for ref in refs:
             refsString=refsString+str(ref)+"|"
@@ -76,7 +77,7 @@ class OSMParserData(object):
         for key, value in tags.items():
             tagsString=tagsString+key+"|"+value+"||"
         tagsString=tagsString[:-2]
-        self.cursor.execute('INSERT INTO wayTable VALUES( ?, ?, ?)', (way, tagsString, refsString))
+        self.cursor.execute('INSERT INTO wayTable VALUES( ?, ?, ?)', (wayid, tagsString, refsString))
 
     def addToStreetTable(self, streetInfo, wayidList):
         (name, ref)=streetInfo
@@ -90,28 +91,28 @@ class OSMParserData(object):
     def addToCrossingsTable(self, refid, wayid, crossingList, nextWaysList):
         existingEntryId, existingCrossingList, existingNextWayIdList=self.getCrossingEntryFor(refid, wayid)
         
-        if existingEntryId==None:
-            existingCrossingList=list()
-            existingNextWayIdList=list()
-            
+        if existingEntryId!=None:
+            # e.g. roundabouts have the same ref twice
+            return
+
         crossingIdString="%d|%d"%(refid, wayid)
-        nextWaysListString=""
-        if nextWaysList!=None:
-            existingNextWayIdList.extend(nextWaysList)
-        
-        for wayId in existingNextWayIdList:
+       
+        nextWaysListString=""   
+        for wayId in nextWaysList:
             nextWaysListString=nextWaysListString+str(wayId)+"|"
         nextWaysListString=nextWaysListString[:-1]
 
         nextCrossingListString=""
-        if crossingList!=None:
-            existingCrossingList.extend(crossingList)
-        
-        for wayId in existingCrossingList:
+        for wayId in crossingList:
             nextCrossingListString=nextCrossingListString+str(wayId)+"|"
         nextCrossingListString=nextCrossingListString[:-1]
-                
-        self.cursor.execute('REPLACE INTO crossingTable VALUES( ?, ?, ?)', (crossingIdString, nextCrossingListString, nextWaysListString))
+  
+        self.crossingTest.append(crossingIdString)
+#        self.cursor.execute('REPLACE INTO crossingTable VALUES( ?, ?, ?)', (crossingIdString, nextCrossingListString, nextWaysListString))
+        try:
+            self.cursor.execute('INSERT INTO crossingTable VALUES( ?, ?, ?)', (crossingIdString, nextCrossingListString, nextWaysListString))
+        except sqlite3.IntegrityError as msg:
+            print("sqlite3 error %s"%(msg))
 
     def getRefEntryForId(self, refId):
         self.cursor.execute('SELECT * FROM refTable where refId==%s'%(str(refId)))
@@ -144,13 +145,14 @@ class OSMParserData(object):
     
     def getCrossingEntryFor(self, refid, wayid):
         crossingIdString="%d|%d"%(refid, wayid)
-
+#        print(crossingIdString)
         self.cursor.execute('SELECT * FROM crossingTable where crossingId=="%s"'%(crossingIdString))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
             crossingIdString, crossingList, wayIdList=self.crossingFromDB(allentries[0])
             return (crossingIdString, crossingList, wayIdList)
-        
+        else:
+            None
         return (None, None, None)  
     
     def testRefTable(self):
@@ -187,7 +189,7 @@ class OSMParserData(object):
             
         return (None, None)
     
-    def getWayIdListForPos(self, actlat, actlon):
+    def getWayIdForPos(self, actlat, actlon):
         if self.cursor!=None:
             osmutils=OSMUtils()
 
@@ -198,7 +200,7 @@ class OSMParserData(object):
             minDistance=1000
             minWayId=0
             
-            minWayList=list()
+#            minWayList=list()
             for (refId, lat, lon, wayIdList) in nodes:   
 #                distance=osmutils.distance(actlat, actlon, lat, lon)   
 #                if distance < minDistance:
@@ -242,14 +244,14 @@ class OSMParserData(object):
 #                    else:
 #                        print("next and ref not found on same way %d"%(wayId))
                         
-            (id, tags, refs)=self.getWayEntryForId(minWayId)
-            if id!=None:
+#            (id, tags, refs)=self.getWayEntryForId(minWayId)
+#            if id!=None:
 #                (name, ref)=self.getStreetNameInfo(tags)
 #                print("way %d %s-%s %s has min distance of %d"%(minWayId, name, ref, tags["highway"], minDistance))
-                minWayList.append(minWayId)
+#                minWayList.append(minWayId)
                 
-            waylist=self.postprocessWayForWayId(minWayList)
-            return waylist    
+#            waylist=self.postprocessWayForWayId(minWayList)
+            return minWayId    
         
     def createTemporaryPoint(self, lat, lon, lat1, lon1):
         osmutils=OSMUtils()
@@ -361,6 +363,7 @@ class OSMParserData(object):
         if len(nextWaysListString)!=0:
             for wayId in nextWaysListString.split("|"):
                 nextWayIdList.append(int(wayId))
+                
         return (crossingIdString, crossingList, nextWayIdList)
     
     def commitDB(self):
@@ -413,7 +416,9 @@ class OSMParserData(object):
 #                self.gpsGrid[x][y]=reflist
                 
     def parse_ways(self, way):
-        for osmid, tags, refs in way:
+        osmutils=OSMUtils()
+
+        for wayid, tags, refs in way:
             if "highway" in tags:
                 streetType=tags["highway"]
                 if streetType=="services" or streetType=="bridleway" or streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway" or streetType=="service" or streetType=="living_street" or streetType=="steps" or streetType=="platform":
@@ -428,13 +433,22 @@ class OSMParserData(object):
                 if "amenity" in tags:
                     continue
                 
-                self.addToWayTable(osmid, tags, refs)
+            startRef=refs[0]
+            (lat, lon)=self.getCoordsWithRef(startRef)
+            
+            self.addToWayTable(wayid, tags, refs)
+                
+            for ref in refs:  
+                if ref!=startRef:
+                    (lat1, lon1)=self.getCoordsWithRef(ref)
+                    distance=osmutils.distance(lat, lon, lat1, lon1)
+                    
                 for ref in refs:
                     wayRefList=list()
                     if ref in self.wayRefIndex:
                         wayRefList=self.wayRefIndex[ref]
                 
-                    wayRefList.append(osmid)
+                    wayRefList.append(wayid)
                     self.wayRefIndex[ref]=wayRefList                   
 
     def collectWaysByName(self):
@@ -793,16 +807,19 @@ class OSMParserData(object):
 
         return streetList
     
-    def getStreetWayList(self, name, ref):
+    def getTrackListByName(self, name, ref):
         if not (name, ref) in self.streetNameIndex.keys():
             self.postprocessWay(name, ref)
         
+        trackList=list()
         if (name, ref) in self.streetNameIndex.keys():
-            return self.streetNameIndex[(name, ref)]
+            tracks=self.streetNameIndex[(name, ref)]
+            for track in tracks:
+                trackList.append(self.streetIndex[track])
             
-        return None
+        return trackList
     
-    def getSingleWayAsTrack(self, wayId):
+    def getTrackListByWay(self, wayId):
         (id, tags, refs)=self.getWayEntryForId(wayId)
         if id!=None:
             track=dict()
@@ -821,7 +838,49 @@ class OSMParserData(object):
                 trackItem["lon"]=lon
                 trackItemList.append(trackItem)
                 
-            track["track"]=trackItemList  
+                streetInfo=None 
+                if "name" in tags or "ref" in tags:
+                    streetInfo=self.getStreetNameInfo(tags)
+                
+                streetType=""
+                if "highway" in tags:
+                    streetType=tags["highway"]
+                oneway=False
+                if "oneway" in tags:
+                    if tags["oneway"]=="yes":
+                        oneway=True
+                if "junction" in tags:
+                    if tags["junction"]=="roundabout":
+                        oneway=True
+                        
+                trackItem["oneway"]=oneway
+                trackItem["type"]=streetType
+
+                croosingList=list()
+                crossingId, crossingIdList, nextWayIdList=self.getCrossingEntryFor(ref, wayId)
+                if crossingId!=None:
+                    way_crossings=list()
+                    for crossingId in crossingIdList:
+                        (crossingWayid, crossingTags, crossingRefs)=self.getWayEntryForId(crossingId)
+                        if crossingWayid!=None:
+                            newStreetInfo=self.getStreetNameInfo(crossingTags)
+                            if streetInfo==newStreetInfo:
+                                continue
+    
+                            way_crossings.append((crossingWayid, crossingTags, crossingRefs))
+                        
+                    if len(way_crossings)!=0:
+                        for (wayid1, tags1, refs1) in way_crossings:
+                            if "highway" in tags1:
+                                if not wayid1 in croosingList:
+                                    croosingList.append(wayid1)
+                        if len(croosingList)!=0:  
+                            trackItem["crossing"]=croosingList
+
+            track["track"]=trackItemList
+            wayIdList=list()
+            wayIdList.append(track)
+            return wayIdList
 
     def getStreetTrackList(self, wayid):
         if wayid in self.streetIndex:
@@ -1079,20 +1138,23 @@ class OSMParserData(object):
             if "name" in tags or "ref" in tags:
                 streetInfo=self.getStreetNameInfo(tags)
                 
-            for ref in refs:        
+            for ref in refs:  
+                crossingWayIdList=list()
+                nextWaysIdList=list()
+
                 crossingWays=self.findWayWithRefInAllWays(ref, wayid, streetInfo, False)
                 if len(crossingWays)!=0:
-                    crossingWayIdList=list()
                     for (wayid1, tags1, refs1) in crossingWays:
-                        crossingWayIdList.append(wayid1)
-                    self.addToCrossingsTable(ref, wayid, crossingWayIdList, None)
+                        if not wayid1 in crossingWayIdList:
+                            crossingWayIdList.append(wayid1)
 
                 nextWays=self.findWayWithRefInAllWays(ref, wayid, streetInfo, True)  
                 if len(nextWays)!=0:
-                    nextWaysIdList=list()
                     for (wayid2, tags2, refs2) in nextWays:
-                        nextWaysIdList.append(wayid2)
-                        self.addToCrossingsTable(ref, wayid, None, nextWaysIdList)
+                        if not wayid2 in nextWaysIdList:
+                            nextWaysIdList.append(wayid2)
+
+                self.addToCrossingsTable(ref, wayid, crossingWayIdList, nextWaysIdList)
 
     def parse(self):
         p = OSMParser(1, nodes_callback=None, 
@@ -1142,7 +1204,7 @@ def main(argv):
         osmFile=argv[1]
     except IndexError:
 #        osmFile='/home/maxl/Downloads/austria.osm.bz2'
-#        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
+#        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
         osmFile='test1.osm'
 
     p = OSMParserData(osmFile)
@@ -1156,13 +1218,14 @@ def main(argv):
     p.testCrossingTable()
     
 #    streetList=p.getStreetList()
-#    lat=47.8
-#    lon=13.0
+    lat1=47.8
+    lon1=13.0
 #    print(p.getNearNodes(lat, lon))
-#    lat1=47.9
-#    lon1=13.1
+    lat2=47.8
+    lon2=13.1
     
-#    osmutils=OSMUtils()
+    osmutils=OSMUtils()
+    print(osmutils.headingDegrees(lat1, lon1, lat2, lon2))
 #    distance=int(osmutils.distance(lat, lon, lat1, lon1))
 #    frac=10
 #    print(distance)
@@ -1176,7 +1239,7 @@ def main(argv):
 #            doneDistance=doneDistance+frac
     
 #    for name, ref in streetList.keys():
-#        waylist=p.getStreetWayList(name, ref)
+#        waylist=p.getTrackListByName(name, ref)
 ##        p.postprocessWay(name, ref)
 ##        print(p.streetNameIndex[(name, ref)])
 #        for wayid in waylist:
