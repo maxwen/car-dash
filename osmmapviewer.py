@@ -34,8 +34,9 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-#osmFile='/home/maxl/Downloads/salzburg-streets.osm'
+#osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
 osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
+#osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
 
@@ -263,6 +264,7 @@ class QtOSMWidget(QWidget):
         
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
         self.moving=False
+        self.mousePressed=False
         self.setMouseTracking(True)
         self.posStr="+%.4f , +%.4f" % (0.0, 0.0)
         
@@ -272,6 +274,8 @@ class QtOSMWidget(QWidget):
         self.track=None
         self.trackStartLat=0.0
         self.trackStartLon=0.0
+        self.lastMouseMoveX=0
+        self.lastMouseMoveY=0
         
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
@@ -297,9 +301,10 @@ class QtOSMWidget(QWidget):
     def setTileServer(self, value):
         self.tileServer=value
 
-    def setTrack(self, track):
+    def setTrack(self, track, update):
         self.track=track
-        self.update()
+        if update:
+            self.update()
 
     def init(self):
         self.setMinimumWidth(minWidth)
@@ -728,6 +733,7 @@ class QtOSMWidget(QWidget):
             gpsLatitudeNew=self.osmutils.deg2rad(lat)
             gpsLongitudeNew=self.osmutils.deg2rad(lon)
             
+            self.showTrackOnGPSPos(lat, lon)
             if self.gpsLatitude!=gpsLatitudeNew or self.gpsLongitude!=gpsLongitudeNew:
                 self.stop=False
                 self.gpsLatitude=gpsLatitudeNew
@@ -782,15 +788,19 @@ class QtOSMWidget(QWidget):
         self.update()
         
     def mouseReleaseEvent(self, event ):
+        self.mousePressed=False
+
+        if not self.moving:
+            if not self.controlWidgetRect.contains(event.x(), event.y()):
+                self.lastMouseMoveX=event.x()
+                self.lastMouseMoveY=event.y()
+                self.showTrackOnMousePos(event.x(), event.y())
+            else:
+                self.pointInsideMoveOverlay(event.x(), event.y())
+                self.pointInsideZoomOverlay(event.x(), event.y())
+        
         self.moving=False
 
-#        print("mouseReleaseEvent")
-        if self.controlWidgetRect.contains(event.x(), event.y()):
-            self.pointInsideMoveOverlay(event.x(), event.y())
-            self.pointInsideZoomOverlay(event.x(), event.y())
-        else:
-#            print("%d %d"%(event.x(), event.y()))
-            self.showTrackOnMousePos(event.x(), event.y())
 
     def pointInsideMoveOverlay(self, x, y):
         if self.moveRect.contains(x, y):
@@ -835,16 +845,15 @@ class QtOSMWidget(QWidget):
 #        self.painter.drawRect(self.downRect)
 
     def mousePressEvent(self, event):
+        self.mousePressed=True
 #        print("mousePressEvent")
-        if not self.controlWidgetRect.contains(event.x(), event.y()):
-            self.moving=True
-#            print("press %d-%d"%(event.x(), event.y()))
-            self.lastMouseMoveX=event.x()
-            self.lastMouseMoveY=event.y()
-        else:
-            self.moving=False
+        self.lastMouseMoveX=event.x()
+        self.lastMouseMoveY=event.y()
             
     def mouseMoveEvent(self, event):
+        if self.mousePressed==True:
+            self.moving=True
+            
         if self.moving==True:
 #            print("move %d-%d"%(event.x(), event.y()))
             dx=self.lastMouseMoveX-event.x()
@@ -884,12 +893,52 @@ class QtOSMWidget(QWidget):
             if self.withDownload==True:
                 self.setForceDownload(True, True)
         
+        self.mousePressed=False
         self.moving=False
         
-    def showTrackOnMousePos(self, x, y):
-        (lat, lon)=self.getMousePosition(x, y)
-        print("%f %f"%(lat, lon))
+    def showTrackOnPos(self, actlat, actlon):
+        if self.osmWidget.dbLoaded==True:
+            waylist=self.getWayIdListForPos(actlat, actlon)
+            if waylist!=None and len(waylist)!=0:
+                wayid=waylist[0]
+                (name, ref)=osmParserData.getStreetInfoWithWayId(wayid)
+                self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
 
+                self.osmWidget.showWay(waylist)
+                    
+    def getWayIdListForPos(self, actlat, actlon):
+        if self.osmWidget.dbLoaded==True:
+            nodes=osmParserData.getNearNodes(actlat, actlon)
+            minDistance=1000
+            index=0
+            i=0
+            for (refId, lat, lon, wayIdList) in nodes:   
+                distance=self.osmutils.distance(actlat, actlon, lat, lon)   
+                if distance < minDistance:
+                    minDistance=distance
+                    index=i
+#                print("distance of %d = %dm"%(refId, distance))
+                i=i+1
+            
+#            print("closest is %d =%dm"%(nodes[index][0], minDistance))
+            wayIdList=nodes[index][3]
+            waylist=osmParserData.postprocessWayForWayId(wayIdList)
+            return waylist
+        
+    def showTrackOnMousePos(self, x, y):
+        if self.osmWidget.dbLoaded==True:
+            (actlat, actlon)=self.getMousePosition(x, y)
+            self.showTrackOnPos(actlat, actlon)
+
+    def showTrackOnGPSPos(self, actlat, actlon):
+        if self.osmWidget.dbLoaded==True:
+            waylist=self.getWayIdListForPos(actlat, actlon)
+            if waylist!=None and len(waylist)!=0:
+                wayid=waylist[0]
+                (name, ref)=osmParserData.getStreetInfoWithWayId(wayid)
+                self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
+                self.setTrack(waylist, False)
+            
 #    def point_new_degrees(self, lat, lon):
 #        rlat = self.osmutils.deg2rad(lat);
 #        rlon = self.osmutils.deg2rad(lon);
@@ -1072,6 +1121,7 @@ class OSMWidget(QWidget):
         self.ampelGelb=QIcon("images/ampel-gelb.png")
         self.lastDownloadState=downloadStoppedState
         self.app=app
+        self.dbLoaded=False
 
         
     def addToWidget(self, vbox):       
@@ -1130,10 +1180,14 @@ class OSMWidget(QWidget):
         self.searchWayButton.setDisabled(True)
         buttons.addWidget(self.searchWayButton)
                 
-        self.showAllWayButton=QPushButton("Show All Ways", self)
-        self.showAllWayButton.clicked.connect(self._showAllWay)
-        self.showAllWayButton.setDisabled(True)
-        buttons.addWidget(self.showAllWayButton)
+#        self.showAllWayButton=QPushButton("Show All Ways", self)
+#        self.showAllWayButton.clicked.connect(self._showAllWay)
+#        self.showAllWayButton.setDisabled(True)
+#        buttons.addWidget(self.showAllWayButton)
+        
+        self.trackLabel=QLabel("", self)
+        self.trackLabel.setText("")
+        buttons.addWidget(self.trackLabel)
         
         vbox.addLayout(buttons)
         
@@ -1143,12 +1197,16 @@ class OSMWidget(QWidget):
         self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
         self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
         self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
+        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
 
     @pyqtSlot()
     def _cleanup(self):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()
-        osmParserData.closeDB()
+#        osmParserData.closeDB()
+        
+    def updateTrackDisplay(self, track):
+        self.trackLabel.setText(track)
         
     def updateMousePositionDisplay(self, lat, lon):
         self.mousePosLabelLat.setText("+%.4f"%(lat))
@@ -1299,8 +1357,9 @@ class OSMWidget(QWidget):
         if state=="stopped":
             self.searchWayButton.setDisabled(False)
             self.testTrackButton.setDisabled(False)
-            self.showAllWayButton.setDisabled(False)
+#            self.showAllWayButton.setDisabled(False)
             osmParserData.openDB()
+            self.dbLoaded=True
         if state=="run":
             self.testTrackButton.setDisabled(True)
 
@@ -1322,49 +1381,48 @@ class OSMWidget(QWidget):
             (name, ref)=searchDialog.getStreetName()
             if not (name, ref) in osmParserData.streetNameIndex.keys():
                 osmParserData.postprocessWay(name, ref)
-                
+            
             waylist=osmParserData.streetNameIndex[(name, ref)]
-#            waylist=waylist[2:3]
-            print(waylist)
-#            track=osmParserData.streetIndex[osmParserData.streetNameIndex[streetName]]
-#            print(track)
-            for wayid in waylist:
-                trackList=osmParserData.streetIndex[wayid]["track"]
-#                print(trackList)
-                for trackItem in trackList:
-                    if "start" in trackItem:
-                        continue
-                    if "end" in trackItem:
-                        continue
-                    print("start="+str(trackItem))
-                    break
-                for trackItem in trackList[::-1]:
-                    if "start" in trackItem:
-                        continue
-                    if "end" in trackItem:
-                        continue
-                    print("end="+str(trackItem))
-                    break
-            
-            self.mapWidgetQt.setTrack(waylist)
+            self.showWay(waylist)
             self.app.processEvents()
-            
+        
             # TODO hack
             self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
-                                   self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
+                               self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
 
-    @pyqtSlot()
-    def _showAllWay(self):
-            allWays=list()
-            for waylist in osmParserData.streetNameIndex.values():
-                allWays.extend(waylist)
-                
-            self.mapWidgetQt.setTrack(allWays)
-            self.app.processEvents()
-                
-            # TODO hack
-            self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
-                                       self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
+    def showWay(self, waylist):
+#        for wayid in waylist:
+#            trackList=osmParserData.streetIndex[wayid]["track"]
+##                print(trackList)
+#            for trackItem in trackList:
+#                if "start" in trackItem:
+#                    continue
+#                if "end" in trackItem:
+#                    continue
+#                print("start="+str(trackItem))
+#                break
+#            for trackItem in trackList[::-1]:
+#                if "start" in trackItem:
+#                    continue
+#                if "end" in trackItem:
+#                    continue
+#                print("end="+str(trackItem))
+#                break
+        
+        self.mapWidgetQt.setTrack(waylist, True)
+
+#    @pyqtSlot()
+#    def _showAllWay(self):
+#            allWays=list()
+#            for waylist in osmParserData.streetNameIndex.values():
+#                allWays.extend(waylist)
+#                
+#            self.mapWidgetQt.setTrack(allWays)
+#            self.app.processEvents()
+#                
+#            # TODO hack
+#            self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
+#                                       self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
 
 class OSMWindow(QMainWindow):
     def __init__(self, parent, app):
@@ -1429,7 +1487,6 @@ class OSMWindow(QMainWindow):
         self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
         
         print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distanceFast(self.startLat, self.startLon, self.incLat, self.incLon)))
 
     def updateStatusLabel(self, text):
         print(text)

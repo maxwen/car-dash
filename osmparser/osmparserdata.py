@@ -117,6 +117,20 @@ class OSMParserData(object):
             refId, lat, lon, wayIdList=self.refFromDB(x)
             print( "ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " ways:"+str(wayIdList))
              
+    def getNearNodes(self, lat, lon):
+        latRangeMax=lat+0.003
+        lonRangeMax=lon+0.003
+        latRangeMin=lat-0.003
+        lonRangeMin=lon-0.003
+        
+        nodes=list()
+        self.cursor.execute('SELECT * FROM refTable where lat>%s AND lat<%s AND lon>%s AND lon<%s'%(latRangeMin, latRangeMax, lonRangeMin, lonRangeMax))
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            refId, lat, lon, wayIdList=self.refFromDB(x)
+            nodes.append((refId, lat, lon, wayIdList))
+
+        return nodes
 #        self.cursor.execute('SELECT * FROM refTable where refId==1')
 #        allentries=self.cursor.fetchall()
 #        for x in allentries:
@@ -357,6 +371,11 @@ class OSMParserData(object):
         
         return None
 
+    def getStreetInfoWithWayId(self, wayId):
+        (id, tags, refs)=self.getWayEntryForId(wayId)
+        (name, ref)=self.getStreetNameInfo(tags)
+        return (name, ref)
+            
     def getCoordsWithRef(self, ref):
         (refId, lat, lon, wayIdList)=self.getRefEntryForId(ref)
         if refId!=None:
@@ -597,6 +616,18 @@ class OSMParserData(object):
 
         return streetList
     
+    def postprocessWayForWayId(self, wayIdList):
+        allWayList=list()
+        for wayId in wayIdList:
+            (id, tags, refs)=self.getWayEntryForId(wayId)
+            (name, ref)=self.getStreetNameInfo(tags)
+            if name=="" and ref=="":
+                continue
+            self.postprocessWay(name, ref)
+            waylist=self.streetNameIndex[(name, ref)]
+            allWayList.extend(waylist)
+        return allWayList
+
     def postprocessWay(self, name, ref):
         name, ref, wayIdList=self.getStreetEntryForName((name, ref))
         
@@ -993,6 +1024,7 @@ def main(argv):
     try:
         osmFile=argv[1]
     except IndexError:
+#        osmFile='/home/maxl/Downloads/austria.osm.bz2'
         osmFile='/home/maxl/Downloads/salzburg-city-streets.osm.bz2'
 #        osmFile='test1.osm'
 
@@ -1001,16 +1033,19 @@ def main(argv):
     p.initDB()
     
     p.openDB()
-    p.testRefTable()
-    p.testWayTable()
-    p.testStreetTable()
+#    p.testRefTable()
+#    p.testWayTable()
+#    p.testStreetTable()
     
     streetList=p.getStreetList()
-    for name, ref in streetList.keys():
-        p.postprocessWay(name, ref)
-        print(p.streetNameIndex[(name, ref)])
-        for way in p.streetNameIndex[(name, ref)]:
-            print(p.streetIndex[way])
+    lat=47.8
+    lon=13.0
+    print(p.getNearNodes(lat, lon))
+#    for name, ref in streetList.keys():
+#        p.postprocessWay(name, ref)
+#        print(p.streetNameIndex[(name, ref)])
+#        for way in p.streetNameIndex[(name, ref)]:
+#            print(p.streetIndex[way])
         
     p.closeDB()
 
