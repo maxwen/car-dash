@@ -619,8 +619,8 @@ class QtOSMWidget(QWidget):
                             self.painter.setPen(pen)
                             self.painter.drawLine(x, y, lastX, lastY)
                             
-                            if oneway:
-                                self.painter.drawLine(x, y, lastX, lastY)
+#                            if oneway:
+#                                self.painter.drawLine(x, y, lastX, lastY)
 
                         else:
 #                            self.painter.setPen(greenPen)

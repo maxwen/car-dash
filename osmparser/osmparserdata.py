@@ -53,7 +53,7 @@ class OSMParserData(object):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, ways TEXT)')
     
     def createWayTable(self):
-        self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags TEXT, refs TEXT)')
+        self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags TEXT, refs TEXT, refsDistance TEXT)')
 
     def createStreetTable(self):
         self.cursor.execute('CREATE TABLE streetTable (street TEXT PRIMARY KEY, wayIdList TEXT)')
@@ -68,16 +68,22 @@ class OSMParserData(object):
         wayIdListString=wayIdListString[:-1]
         self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?)', (refid, lat, lon, wayIdListString))
 
-    def addToWayTable(self, wayid, tags, refs):
+    def addToWayTable(self, wayid, tags, refs, distances):
         refsString=""
         for ref in refs:
             refsString=refsString+str(ref)+"|"
         refsString=refsString[:-1]
+        
         tagsString=""
         for key, value in tags.items():
             tagsString=tagsString+key+"|"+value+"||"
         tagsString=tagsString[:-2]
-        self.cursor.execute('INSERT INTO wayTable VALUES( ?, ?, ?)', (wayid, tagsString, refsString))
+        
+        distanceString=""
+        for distance in distances:
+            distanceString=distanceString+str(distance)+"|"
+        distanceString=distanceString[:-1]
+        self.cursor.execute('INSERT INTO wayTable VALUES( ?, ?, ?, ?)', (wayid, tagsString, refsString, distanceString))
 
     def addToStreetTable(self, streetInfo, wayidList):
         (name, ref)=streetInfo
@@ -118,8 +124,7 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM refTable where refId==%s'%(str(refId)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
-            refId, lat, lon, wayIdList=self.refFromDB(allentries[0])
-            return (refId, lat, lon, wayIdList)
+            return self.refFromDB(allentries[0])
         
         return (None, None, None, None)
 
@@ -127,10 +132,9 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM wayTable where wayId==%s'%(str(wayId)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
-            wayId, tags, refs=self.wayFromDB(allentries[0])
-            return (wayId, tags, refs)
+            return self.wayFromDB(allentries[0])
         
-        return (None, None, None)
+        return (None, None, None, None)
     
     def getStreetEntryForName(self, streetInfo):
         (name, ref)=streetInfo
@@ -138,8 +142,7 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM streetTable where street=="%s"'%(str(streetInfoString)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
-            name, ref, wayIdList=self.streetFromDB(allentries[0])
-            return (name, ref, wayIdList)
+            return self.streetFromDB(allentries[0])
         
         return (None, None, None)
     
@@ -149,8 +152,7 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM crossingTable where crossingId=="%s"'%(crossingIdString))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
-            crossingIdString, crossingList, wayIdList=self.crossingFromDB(allentries[0])
-            return (crossingIdString, crossingList, wayIdList)
+            return self.crossingFromDB(allentries[0])
         else:
             None
         return (None, None, None)  
@@ -220,7 +222,7 @@ class OSMParserData(object):
                     # TODO find matching way by creating interpolation points betwwen refs
                     
 #                    print("trying %s-%s"%(name, ref))
-                    (id, tags, refs)=self.getWayEntryForId(wayId)
+                    (id, tags, refs, distances)=self.getWayEntryForId(wayId)
                     if id==None:
                         continue
                     
@@ -234,7 +236,7 @@ class OSMParserData(object):
                         tempPoints.extend(self.createTemporaryPoint(lat, lon, nextLat, nextLon))
                         
                         for (tmpLat, tmpLon) in tempPoints:
-                            distance=osmutils.distance(actlat, actlon, tmpLat, tmpLon)
+                            distance=int(osmutils.distance(actlat, actlon, tmpLat, tmpLon))
 #                            print("way %d %s-%s has distance of %d"%(wayId, name, ref, distance))
 
                             if distance < minDistance:
@@ -296,8 +298,8 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM wayTable')
         allentries=self.cursor.fetchall()
         for x in allentries:
-            wayId, tags, refs=self.wayFromDB(x)
-            print( "way: " + str(wayId) + "  tags: " + str(tags) + "  refs: " + str(refs))
+            wayId, tags, refs, distances=self.wayFromDB(x)
+            print( "way: " + str(wayId) + "  tags: " + str(tags) + "  refs: " + str(refs) + " distances: "+str(distances))
 
     def testStreetTable(self):
         self.cursor.execute('SELECT * FROM streetTable')
@@ -328,7 +330,12 @@ class OSMParserData(object):
                 tags[key]=value
             except ValueError:
                 print("%s %s %s"%(wayId, tagsString, refListString))
-        return (wayId, tags, refs)
+        
+        distanceString=x[3]
+        distances=list()
+        for distance in distanceString.split("|"):
+            distances.append(int(distance))
+        return (wayId, tags, refs, distances)
     
     def refFromDB(self, x):
         wayIdListString=x[3]
@@ -392,8 +399,11 @@ class OSMParserData(object):
         return (xIndex, yIndex)
     
     def parse_nodes(self, node):
-        for osmid, tags, coords in node:
-            self.nodes[osmid]=(tags, coords)
+        None
+#        for osmid, tags, coords in node:
+##            self.nodes[osmid]=(tags, coords)
+#            self.coords[osmid]=(coords[1], coords[0])
+
                     
 #    def printGPSGrid(self):
 #        for i in range(10000):
@@ -433,30 +443,45 @@ class OSMParserData(object):
                 if "amenity" in tags:
                     continue
                 
-            startRef=refs[0]
-            (lat, lon)=self.getCoordsWithRef(startRef)
-            
-            self.addToWayTable(wayid, tags, refs)
-                
-            for ref in refs:  
-                if ref!=startRef:
-                    (lat1, lon1)=self.getCoordsWithRef(ref)
-                    distance=osmutils.distance(lat, lon, lat1, lon1)
-                    
-                for ref in refs:
+                distances=list()
+    
+                startRef=refs[0]
+                if startRef in self.coords:
+                    (lat, lon)=self.coords[startRef]
+                else:
+                    lat=0.0
+                    lon=0.0
+                distances.append(0)
+                           
+                for ref in refs:  
+                    if ref!=startRef:
+                        if ref in self.coords:
+                            (lat1, lon1)=self.coords[ref]
+                            if lat==0.0 and lon==0.0:
+                                lat=lat1
+                                lon=lon1
+                            distance=int(osmutils.distance(lat, lon, lat1, lon1))
+                            distances.append(distance)
+                            lat=lat1
+                            lon=lon1
+                        else:
+                            distances.append(0)
+                        
                     wayRefList=list()
                     if ref in self.wayRefIndex:
                         wayRefList=self.wayRefIndex[ref]
-                
+            
                     wayRefList.append(wayid)
-                    self.wayRefIndex[ref]=wayRefList                   
+                    self.wayRefIndex[ref]=wayRefList     
+                        
+                self.addToWayTable(wayid, tags, refs, distances)
 
     def collectWaysByName(self):
         street_by_name=dict()
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
         for way in allWays:
-            wayId, tags, refs=self.wayFromDB(way)
+            wayId, tags, refs, distances=self.wayFromDB(way)
                 
             if "highway" in tags:
                 streetType=tags["highway"]
@@ -490,6 +515,8 @@ class OSMParserData(object):
             self.relations[osmid]=(tags, ways)
             
     def getStreetNameInfo(self, tags):
+        if not "highway" in tags:
+            None
         streetType=tags["highway"]
 
         name=""
@@ -556,7 +583,7 @@ class OSMParserData(object):
         return None
 
     def getStreetInfoWithWayId(self, wayId):
-        (id, tags, refs)=self.getWayEntryForId(wayId)
+        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
         if id!=None:
             (name, ref)=self.getStreetNameInfo(tags)
             return (name, ref)
@@ -584,7 +611,7 @@ class OSMParserData(object):
 #            if wayid in self.doneWays:
 #                continue
             
-            (id, tags, refs)=self.getWayEntryForId(wayid)
+            (id, tags, refs, distances)=self.getWayEntryForId(wayid)
             if id==None:
                 print("no entry in way DB for "+str(wayid))
                 continue
@@ -635,7 +662,7 @@ class OSMParserData(object):
             if wayid in self.doneWays:
                 continue
             
-            (id, tags, refs)=self.getWayEntryForId(wayid)
+            (id, tags, refs, distances)=self.getWayEntryForId(wayid)
             if id==None:
                 print("no entry in way DB for "+str(wayid))
                 continue
@@ -678,7 +705,7 @@ class OSMParserData(object):
 #            if wayid in self.doneWays:
 #                continue
             
-            (id, tags, refs)=self.getWayEntryForId(wayid)
+            (id, tags, refs, distances)=self.getWayEntryForId(wayid)
             if id==None:
                 print("no entry in way DB for "+str(wayid))
                 continue
@@ -716,32 +743,32 @@ class OSMParserData(object):
     
     def findWayWithStartRef(self, ways, startRef):
         possibleWays=list()
-        for (wayid, tags, refs) in ways:
+        for (wayid, tags, refs, distances) in ways:
             if refs[0]==startRef:
-                possibleWays.append((wayid, tags, refs))
+                possibleWays.append((wayid, tags, refs, distances))
         return possibleWays
     
     def findWayWithEndRef(self, ways, endRef):
         possibleWays=list()
-        for (wayid, tags, refs) in ways:
+        for (wayid, tags, refs, distances) in ways:
             if refs[-1]==endRef:
-                possibleWays.append((wayid, tags, refs))
+                possibleWays.append((wayid, tags, refs, distances))
         return possibleWays
     
     def findStartWay(self, ways):
-        for (wayid, tags, refs) in ways:
+        for (wayid, tags, refs, distances) in ways:
             startRef=refs[0]
             possibleWays=self.findWayWithEndRef(ways, startRef)
             if len(possibleWays)==0:
-                return (wayid, tags, refs)
+                return (wayid, tags, refs, distances)
         return ways[0]
     
     def findEndWay(self, ways):
-        for (wayid, tags, refs) in ways:
+        for (wayid, tags, refs, distances) in ways:
             endRef=refs[-1]
             possibleWays=self.findWayWithStartRef(ways, endRef)
             if len(possibleWays)==0:
-                return (wayid, tags, refs)        
+                return (wayid, tags, refs, distances)        
         return ways[0]
 
 #    def printRelationCoords(self, name):
@@ -820,13 +847,16 @@ class OSMParserData(object):
         return trackList
     
     def getTrackListByWay(self, wayId):
-        (id, tags, refs)=self.getWayEntryForId(wayId)
+        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
         if id!=None:
             track=dict()
             track["name"]=""
             trackItemList=list()
-            
+            distance=0
+            i=0
             for ref in refs:
+                refDistance=distances[i]
+                distance=distance+refDistance
                 trackItem=dict()
                 trackItem["wayId"]=wayId
                 trackItem["ref"]=ref
@@ -861,25 +891,27 @@ class OSMParserData(object):
                 if crossingId!=None:
                     way_crossings=list()
                     for crossingId in crossingIdList:
-                        (crossingWayid, crossingTags, crossingRefs)=self.getWayEntryForId(crossingId)
+                        (crossingWayid, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(crossingId)
                         if crossingWayid!=None:
                             newStreetInfo=self.getStreetNameInfo(crossingTags)
                             if streetInfo==newStreetInfo:
                                 continue
     
-                            way_crossings.append((crossingWayid, crossingTags, crossingRefs))
+                            way_crossings.append((crossingWayid, crossingTags, crossingRefs, crossingDistances))
                         
                     if len(way_crossings)!=0:
-                        for (wayid1, tags1, refs1) in way_crossings:
+                        for (wayid1, tags1, refs1, distances1) in way_crossings:
                             if "highway" in tags1:
                                 if not wayid1 in croosingList:
                                     croosingList.append(wayid1)
                         if len(croosingList)!=0:  
                             trackItem["crossing"]=croosingList
 
+                i=i+1
             track["track"]=trackItemList
             wayIdList=list()
             wayIdList.append(track)
+            print(distance)
             return wayIdList
 
     def getStreetTrackList(self, wayid):
@@ -887,18 +919,18 @@ class OSMParserData(object):
             return self.streetIndex[wayid]["track"]
         return None
 
-    def postprocessWayForWayId(self, wayIdList):
-        allWayList=list()
-        for wayId in wayIdList:
-            (id, tags, refs)=self.getWayEntryForId(wayId)
-            (name, ref)=self.getStreetNameInfo(tags)
-            if name=="" and ref=="":
-                continue
-            if not (name, ref) in self.streetNameIndex.keys():
-                self.postprocessWay(name, ref)
-            waylist=self.streetNameIndex[(name, ref)]
-            allWayList.extend(waylist)
-        return allWayList
+#    def postprocessWayForWayId(self, wayIdList):
+#        allWayList=list()
+#        for wayId in wayIdList:
+#            (id, tags, refs, distances)=self.getWayEntryForId(wayId)
+#            (name, ref)=self.getStreetNameInfo(tags)
+#            if name=="" and ref=="":
+#                continue
+#            if not (name, ref) in self.streetNameIndex.keys():
+#                self.postprocessWay(name, ref)
+#            waylist=self.streetNameIndex[(name, ref)]
+#            allWayList.extend(waylist)
+#        return allWayList
 
     def postprocessWay(self, name, ref):
         print("postprocess %s-%s"%(name, ref))
@@ -907,9 +939,7 @@ class OSMParserData(object):
         ways=list()
 
         for wayId in wayIdList:
-            (id, tags, refs)=self.getWayEntryForId(wayId)
-            ways.append((id, tags, refs))
-            
+            ways.append(self.getWayEntryForId(wayId))            
 
         self.waysCopy=ways
 
@@ -924,7 +954,7 @@ class OSMParserData(object):
                 self.track["name"]=(name, ref)
                 self.track["track"]=list()                         
                 
-                (startWayid, tags, refs)=way
+                (startWayid, tags, refs, distances)=way
                               
                 self.resolveWay(way, (name, ref))
 
@@ -949,7 +979,7 @@ class OSMParserData(object):
         if way==None:
             return
         
-        (wayid, tags, refs)=way
+        (wayid, tags, refs, distances)=way
         
         if not wayid in self.doneWays:
             self.doneWays.append(wayid)
@@ -989,17 +1019,17 @@ class OSMParserData(object):
                 way_crossings=list()
                 for wayId in crossingIdList:
                     if not wayId in self.doneWays:
-                        (crossingWayid, crossingTags, crossingRefs)=self.getWayEntryForId(wayId)
+                        (crossingWayid, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(wayId)
                         if crossingWayid!=None:
                             newStreetInfo=self.getStreetNameInfo(crossingTags)
                             if streetInfo==newStreetInfo:
                                 continue
 
-                            way_crossings.append((crossingWayid, crossingTags, crossingRefs))
+                            way_crossings.append((crossingWayid, crossingTags, crossingRefs, crossingDistances))
                     
 #                way_crossings=self.findWayWithRefInAllWays(ref, wayid, streetInfo, False)
                 if len(way_crossings)!=0:
-                    for (wayid1, tags1, refs1) in way_crossings:
+                    for (wayid1, tags1, refs1, distances1) in way_crossings:
                         if "highway" in tags1:
                             if not wayid1 in croosingList:
                                 croosingList.append(wayid1)
@@ -1026,12 +1056,12 @@ class OSMParserData(object):
                 possibleWays=list()
                 for wayId in nextWayIdList:
                     if not wayId in self.doneWays:
-                        (crossingWayid, crossingTags, crossingRefs)=self.getWayEntryForId(wayId)
+                        (crossingWayid, crossingTags, crossingRefs, crossingDistancees)=self.getWayEntryForId(wayId)
                         if crossingWayid!=None:
                             newStreetInfo=self.getStreetNameInfo(crossingTags)
                             if streetInfo!=newStreetInfo:
                                 continue
-                            possibleWays.append((crossingWayid, crossingTags, crossingRefs))
+                            possibleWays.append((crossingWayid, crossingTags, crossingRefs, crossingDistancees))
 
 #            possibleWays=self.findWayWithRefAndCoords(self.waysCopy, wayid, ref)  
                 if len(possibleWays)!=0:
@@ -1122,7 +1152,7 @@ class OSMParserData(object):
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
         for way in allWays:
-            wayid, tags, refs=self.wayFromDB(way)
+            wayid, tags, refs, distances=self.wayFromDB(way)
             streetType=""
             if "highway" in tags:
                 streetType=tags["highway"]
@@ -1157,7 +1187,7 @@ class OSMParserData(object):
                 self.addToCrossingsTable(ref, wayid, crossingWayIdList, nextWaysIdList)
 
     def parse(self):
-        p = OSMParser(1, nodes_callback=None, 
+        p = OSMParser(1, nodes_callback=self.parse_nodes, 
                   ways_callback=self.parse_ways, 
                   relations_callback=None,
                   coords_callback=self.parse_coords)
@@ -1204,28 +1234,28 @@ def main(argv):
         osmFile=argv[1]
     except IndexError:
 #        osmFile='/home/maxl/Downloads/austria.osm.bz2'
-#        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
-        osmFile='test1.osm'
+        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+#        osmFile='test1.osm'
 
     p = OSMParserData(osmFile)
     
     p.initDB()
     
     p.openDB()
-    p.testRefTable()
+#    p.testRefTable()
     p.testWayTable()
-    p.testStreetTable()
-    p.testCrossingTable()
+#    p.testStreetTable()
+#    p.testCrossingTable()
     
 #    streetList=p.getStreetList()
-    lat1=47.8
-    lon1=13.0
-#    print(p.getNearNodes(lat, lon))
-    lat2=47.8
-    lon2=13.1
-    
-    osmutils=OSMUtils()
-    print(osmutils.headingDegrees(lat1, lon1, lat2, lon2))
+#    lat1=47.8
+#    lon1=13.0
+##    print(p.getNearNodes(lat, lon))
+#    lat2=47.8
+#    lon2=13.1
+#    
+#    osmutils=OSMUtils()
+#    print(osmutils.headingDegrees(lat1, lon1, lat2, lon2))
 #    distance=int(osmutils.distance(lat, lon, lat1, lon1))
 #    frac=10
 #    print(distance)
