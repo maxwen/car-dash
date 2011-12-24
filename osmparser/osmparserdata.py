@@ -783,6 +783,7 @@ class OSMParserData(object):
             
             wayId, nextWayList=self.getCrossingEntryFor(wayId)
             print(str(nextWayList))
+            print(str(tags))
         
             nextWayDict=dict()
             for(nextWayRefId, nextWayWaysList) in nextWayList:
@@ -819,7 +820,7 @@ class OSMParserData(object):
                 crossingWayList=list()
                 if ref in nextWayDict:                            
                     nextWayIdList=nextWayDict[ref]
-                    for nextWayId in nextWayIdList:
+                    for nextWayId, onewayCrossing in nextWayIdList:
                         (crossingId, crossingTags, crossingRefs, crossingDistancees)=self.getWayEntryForId(nextWayId)
                         if crossingId!=None:
                             newStreetType=crossingTags["highway"]
@@ -828,14 +829,14 @@ class OSMParserData(object):
                             if newStreetInfo==None:
                                 if newStreetType[-5:]=="_link":
                                     if not crossingId in crossingList:
-                                        crossingList.append(crossingId)    
+                                        crossingList.append((crossingId, onewayCrossing))    
                             else:
                                 if streetInfo!=newStreetInfo: 
                                     if not crossingId in crossingList:
-                                        crossingList.append(crossingId)
+                                        crossingList.append((crossingId, onewayCrossing))
                                 else:
                                     if not crossingId in crossingWayList:
-                                        crossingWayList.append(crossingId)
+                                        crossingWayList.append((crossingId, onewayCrossing))
                 
                 if len(crossingList)!=0:
                     trackItem["crossing"]=crossingList  
@@ -963,7 +964,7 @@ class OSMParserData(object):
                 
             if ref in nextWayDict:
                 nextWayIdList=nextWayDict[ref]
-                for nextWayId in nextWayIdList:
+                for nextWayId,onewayCrossing in nextWayIdList:
                     (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
                     if crossingId!=None:
                         newStreetInfo=self.getStreetNameInfo(crossingTags)
@@ -972,17 +973,15 @@ class OSMParserData(object):
                         if newStreetType==None:
                             if newStreetType[-5:]=="_link":
                                 if not crossingId in crossingList:
-                                    crossingList.append(crossingId)
+                                    crossingList.append((crossingId, onewayCrossing))
                         else:
                             if streetInfo!=newStreetInfo:
                                 if not crossingId in crossingList:
-                                    crossingList.append(crossingId)
+                                    crossingList.append((crossingId, onewayCrossing))
                             else:
                                 if not crossingId in self.doneWays:
                                     if not crossingId in crossingWayList:
-                                        crossingWayList.append(crossingId)
-
-                                    trackItem["crossingWay"]=crossingId
+                                        crossingWayList.append((crossingId, onewayCrossing))
         
                                     streetTrackItem=dict()
                                     streetTrackItem["start"]="start"
@@ -1108,7 +1107,11 @@ class OSMParserData(object):
             
             for ref in refs:  
                 if oneway and ref==refs[0]:
+                    # oneway has never a crossing at start
                     continue
+                
+                twowayCrossing=False
+                
                 nextWays=self.findWayWithRefInAllWays(ref, wayid, oneway)  
                 if len(nextWays)!=0:
                     wayList=list()
@@ -1125,17 +1128,22 @@ class OSMParserData(object):
                                     if not newOneway:
                                         print("found roundabout with different start and end and not oneway %d %s"%(wayid2, str(tags2)))
     
-                        if not oneway and newOneway:
-                            if not refs2[0]==ref:
-                                continue
+                        if not oneway: 
+                            if newOneway:
+                                if not refs2[0]==ref:
+                                    # crossing only if new oneway starts here
+                                    continue
                         if newOneway:
                             if refs2[-1]==ref:
+                                # no crossing with end of a oneway
                                 continue
-#    
-#                        if oneway and newOneway and ref==refs[-1]:
-#                            continue
+
+                        if ref!=refs2[0] and ref!=refs2[-1]:
+                            # crossing in middle of way
+                            twowayCrossing=True
+                            
                         if not wayid2 in wayList:
-                            wayList.append(wayid2)
+                            wayList.append((wayid2, twowayCrossing))
                     if len(wayList)!=0:
                         nextWaysIdList.append((ref, wayList))
                 
@@ -1188,9 +1196,9 @@ def main(argv):
     try:
         osmFile=argv[1]
     except IndexError:
-        osmFile='/home/maxl/Downloads/austria.osm.bz2'
+#        osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
-#        osmFile='test1.osm'
+        osmFile='test1.osm'
 
     p = OSMParserData(osmFile)
     
@@ -1200,7 +1208,7 @@ def main(argv):
 #    p.testRefTable()
 #    p.testWayTable()
 #    p.testStreetTable()
-#    p.testCrossingTable()
+    p.testCrossingTable()
     
 #    streetList=p.getStreetList()
 #    lat1=47.8

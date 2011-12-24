@@ -522,50 +522,59 @@ class QtOSMWidget(QWidget):
 #        self.painter.translate(-TILESIZE/2,-TILESIZE/2);
     
     def showTrack(self):
+#        There are 20 predefined QColors: Qt::white, Qt::black, Qt::red, 
+#        Qt::darkRed, Qt::green, Qt::darkGreen, Qt::blue, Qt::darkBlue, 
+#        Qt::cyan, Qt::darkCyan, Qt::magenta, Qt::darkMagenta, Qt::yellow, 
+#        Qt::darkYellow, Qt::gray, Qt::darkGray, Qt::lightGray, Qt::color0, 
+#        Qt::color1, and Qt::transparent.
+
+#        Qt::SolidLine    Qt::DashLine    Qt::DotLine        
+#        Qt::DashDotLine    Qt::DashDotDotLine    Qt::CustomDashLine
+
         if self.track!=None:
             redPen=QPen()
-            redPen.setColor(QColor(255, 0, 0))
+            redPen.setColor(Qt.red)
             redPen.setWidth(4)
             redPen.setCapStyle(Qt.RoundCap);
             redPen.setJoinStyle(Qt.RoundJoin)
             
             bluePen=QPen()
-            bluePen.setColor(QColor(0, 0, 255))
+            bluePen.setColor(Qt.darkBlue)
             bluePen.setWidth(self.map_zoom)
             bluePen.setCapStyle(Qt.RoundCap);
 
-            blueLightPen=QPen()
+            blueLightPen=QPen(Qt.blue)
             blueLightPen.setColor(QColor(0, 255, 255))
             blueLightPen.setWidth(self.map_zoom)
             blueLightPen.setCapStyle(Qt.RoundCap);
             
             greenPen=QPen()
-            greenPen.setColor(QColor(0, 255, 0))
+            greenPen.setColor(Qt.darkGreen)
             greenPen.setWidth(self.map_zoom)
             greenPen.setCapStyle(Qt.RoundCap);
             
             greenLightPen=QPen()
-            greenLightPen.setColor(QColor(0, 50, 0))
+            greenLightPen.setColor(Qt.green)
             greenLightPen.setWidth(self.map_zoom)
             greenLightPen.setCapStyle(Qt.RoundCap);
             
             motorwayPen=QPen()
-            motorwayPen.setColor(QColor(0, 0, 200))
+            motorwayPen.setColor(Qt.blue)
             motorwayPen.setWidth(4)
             motorwayPen.setCapStyle(Qt.RoundCap);
             
             primaryPen=QPen()
-            primaryPen.setColor(QColor(100, 0, 0))
+            primaryPen.setColor(Qt.red)
             primaryPen.setWidth(4)
             primaryPen.setCapStyle(Qt.RoundCap);
             
             residentialPen=QPen()
-            residentialPen.setColor(QColor(0, 100, 0))
+            residentialPen.setColor(Qt.darkYellow)
             residentialPen.setWidth(4)
             residentialPen.setCapStyle(Qt.RoundCap);
             
             linkPen=QPen()
-            linkPen.setColor(QColor(0, 255, 255))
+            linkPen.setColor(Qt.gray)
             linkPen.setWidth(4)
             linkPen.setCapStyle(Qt.RoundCap);
             
@@ -606,16 +615,28 @@ class QtOSMWidget(QWidget):
                         start=True
                     if "end" in item:
                         end=True
-                    if"crossing" in item:
+                    if "crossing" in item:
                         crossing=True
-                        if len(item["crossing"])>1:
+                        crosslingList=item["crossing"]
+                        if len(crosslingList)>1:
                             onewayCrossing=False
-                    if"crossingWay" in item:
+                        else:
+                            nextWay, twowayCrossing=crosslingList[0]
+                            if twowayCrossing:
+                                onewayCrossing=False
+                                
+                    if "crossingWay" in item:
                         crossingWay=True
-                        if len(item["crossingWay"])>1:
+                        crosslingList=item["crossingWay"]
+                        if len(crosslingList)>1:
                             onewayCrossing=False
+                        else:
+                            nextWay, twowayCrossing=crosslingList[0]
+                            if twowayCrossing:
+                                onewayCrossing=False
+                                
                     if"oneway" in item:
-                        oneway=item["oneway"]
+                        oneway=item["oneway"]=="yes"
                     if "type" in item:
                         streetType=item["type"]
                     if not start and not end:
@@ -623,26 +644,25 @@ class QtOSMWidget(QWidget):
                         y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
         
                         if lastX!=0 and lastY!=0:
-                            pen=redPen
-                            if streetType=="motorway":
-                                pen=motorwayPen
-                            elif streetType=="motorway_link":
+                            if streetType[-5]=="_link":
                                 pen=linkPen
+                            elif streetType=="motorway":
+                                pen=motorwayPen
                             elif streetType=="primary":
                                 pen=primaryPen
-                            elif streetType=="primary_link":
-                                pen=linkPen
                             elif streetType=="residential":
                                 pen=residentialPen
+                            else:
+                                pen=redPen
+                                
+                            if oneway:
+                                pen.setStyle(Qt.DashLine)
+                            else:
+                                pen.setStyle(Qt.SolidLine)
+                                
                             self.painter.setPen(pen)
                             self.painter.drawLine(x, y, lastX, lastY)
-                            
-#                            if oneway:
-#                                self.painter.drawLine(x, y, lastX, lastY)
-
                         else:
-#                            self.painter.setPen(greenPen)
-#                            self.painter.drawPoint(x, y)
                             self.trackStartLon=lon
                             self.trackStartLat=lat
     
@@ -662,16 +682,7 @@ class QtOSMWidget(QWidget):
                             else:
                                 self.painter.setPen(bluePen)
                             self.painter.drawPoint(x, y)
-    
-                       
-    
-    #                    if node!=None:
-    #                        tags,coords=node
-    #                        if "highway" in tags:
-    #                            nodeType=tags["highway"]
-    #                            if nodeType=="motorway_junction":
-    #                                self.painter.setPen(greenPen)
-    #                                self.painter.drawPoint(x, y)
+
                     elif start:
                         startNode.append((lastX, lastY))
                         lastX=0
