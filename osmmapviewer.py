@@ -534,10 +534,20 @@ class QtOSMWidget(QWidget):
             bluePen.setWidth(self.map_zoom)
             bluePen.setCapStyle(Qt.RoundCap);
 
+            blueLightPen=QPen()
+            blueLightPen.setColor(QColor(0, 255, 255))
+            blueLightPen.setWidth(self.map_zoom)
+            blueLightPen.setCapStyle(Qt.RoundCap);
+            
             greenPen=QPen()
             greenPen.setColor(QColor(0, 255, 0))
             greenPen.setWidth(self.map_zoom)
             greenPen.setCapStyle(Qt.RoundCap);
+            
+            greenLightPen=QPen()
+            greenLightPen.setColor(QColor(0, 50, 0))
+            greenLightPen.setWidth(self.map_zoom)
+            greenLightPen.setCapStyle(Qt.RoundCap);
             
             motorwayPen=QPen()
             motorwayPen.setColor(QColor(0, 0, 200))
@@ -588,14 +598,22 @@ class QtOSMWidget(QWidget):
                     start=False
                     end=False
                     crossing=False
+                    crossingWay=False
                     oneway=False
                     streetType=""
+                    onewayCrossing=True
                     if "start" in item:
                         start=True
                     if "end" in item:
                         end=True
                     if"crossing" in item:
                         crossing=True
+                        if len(item["crossing"])>1:
+                            onewayCrossing=False
+                    if"crossingWay" in item:
+                        crossingWay=True
+                        if len(item["crossingWay"])>1:
+                            onewayCrossing=False
                     if"oneway" in item:
                         oneway=item["oneway"]
                     if "type" in item:
@@ -631,9 +649,21 @@ class QtOSMWidget(QWidget):
                         lastX=x
                         lastY=y
                         
-                        if crossing:
-                            self.painter.setPen(bluePen)
+                        if crossingWay:
+                            if onewayCrossing:
+                                self.painter.setPen(greenLightPen)
+                            else:
+                                self.painter.setPen(greenPen)
                             self.painter.drawPoint(x, y)
+                            
+                        if crossing:
+                            if onewayCrossing:
+                                self.painter.setPen(blueLightPen)
+                            else:
+                                self.painter.setPen(bluePen)
+                            self.painter.drawPoint(x, y)
+    
+                       
     
     #                    if node!=None:
     #                        tags,coords=node
@@ -1390,9 +1420,9 @@ class OSMWindow(QMainWindow):
         self.osmWidget=OSMWidget(self, self.app)
         self.osmWidget.addToWidget(osmTabLayout)
 
-        self.osmWidget.setZoomValue(13)
-        self.startLat=47.8
-        self.startLon=13.0
+        self.osmWidget.setZoomValue(16)
+        self.osmWidget.setStartLatitude(47.824)
+        self.osmWidget.setStartLongitude(13.013)
         self.osmWidget.initHome()
 
         self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
@@ -1407,7 +1437,7 @@ class OSMWindow(QMainWindow):
                 
         top.addLayout(buttons)
         
-#        self.setGeometry(0, 0, 800, 400)
+        self.setGeometry(0, 0, 900, 690)
         self.setWindowTitle('OSM Test')
         self.show()
         
