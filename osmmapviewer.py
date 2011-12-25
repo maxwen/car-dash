@@ -544,7 +544,6 @@ class QtOSMWidget(QWidget):
             bluePen.setCapStyle(Qt.RoundCap);
 
             blueLightPen=QPen(Qt.blue)
-            blueLightPen.setColor(QColor(0, 255, 255))
             blueLightPen.setWidth(self.map_zoom)
             blueLightPen.setCapStyle(Qt.RoundCap);
             
@@ -569,9 +568,14 @@ class QtOSMWidget(QWidget):
             primaryPen.setCapStyle(Qt.RoundCap);
             
             residentialPen=QPen()
-            residentialPen.setColor(Qt.darkYellow)
+            residentialPen.setColor(Qt.yellow)
             residentialPen.setWidth(4)
             residentialPen.setCapStyle(Qt.RoundCap);
+            
+            tertiaryPen=QPen()
+            tertiaryPen.setColor(Qt.darkYellow)
+            tertiaryPen.setWidth(4)
+            tertiaryPen.setCapStyle(Qt.RoundCap);
             
             linkPen=QPen()
             linkPen.setColor(Qt.gray)
@@ -644,7 +648,7 @@ class QtOSMWidget(QWidget):
                         y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
         
                         if lastX!=0 and lastY!=0:
-                            if streetType[-5]=="_link":
+                            if streetType[-5:]=="_link":
                                 pen=linkPen
                             elif streetType=="motorway":
                                 pen=motorwayPen
@@ -652,6 +656,8 @@ class QtOSMWidget(QWidget):
                                 pen=primaryPen
                             elif streetType=="residential":
                                 pen=residentialPen
+                            elif streetType=="tertiary":
+                                pen=tertiaryPen
                             else:
                                 pen=redPen
                                 
@@ -898,7 +904,7 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None:
-                trackList=osmParserData.getTrackListByWay(wayId)
+                trackList=osmParserData.getTrackListForWaySucc2(wayId)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -913,7 +919,7 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None:
-                trackList=osmParserData.getTrackListByWay(wayId)
+                trackList=osmParserData.getTrackListForWaySucc2(wayId)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
