@@ -578,7 +578,7 @@ class QtOSMWidget(QWidget):
             tertiaryPen.setCapStyle(Qt.RoundCap);
             
             linkPen=QPen()
-            linkPen.setColor(Qt.gray)
+            linkPen.setColor(Qt.black)
             linkPen.setWidth(4)
             linkPen.setCapStyle(Qt.RoundCap);
             
@@ -611,33 +611,33 @@ class QtOSMWidget(QWidget):
                     start=False
                     end=False
                     crossing=False
-                    crossingWay=False
+#                    crossingWay=False
                     oneway=False
                     streetType=""
-                    onewayCrossing=True
                     if "start" in item:
                         start=True
                     if "end" in item:
                         end=True
-                    if "crossing" in item:
-                        crossing=True
-                        crosslingList=item["crossing"]
-                        if len(crosslingList)>1:
-                            onewayCrossing=False
-                        else:
-                            nextWay, twowayCrossing=crosslingList[0]
-                            if twowayCrossing:
-                                onewayCrossing=False
+#                    if "crossing" in item:
+##                        crossing=True
+#                        crossingList=item["crossing"]
+#                        print(crossingList)
+#                        if len(crossingList)>1:
+#                            crossing=True
+#                        for nextWay, twowayCrossing in crosslingList:
+#                            print("%d %d %s"%(ref, nextWay, twowayCrossing))
+#                            if twowayCrossing:
+#                                onewayCrossing=False
                                 
-                    if "crossingWay" in item:
-                        crossingWay=True
-                        crosslingList=item["crossingWay"]
-                        if len(crosslingList)>1:
-                            onewayCrossing=False
-                        else:
-                            nextWay, twowayCrossing=crosslingList[0]
-                            if twowayCrossing:
-                                onewayCrossing=False
+#                    if "crossingWay" in item:
+#                        crossingWay=True
+#                        crosslingList=item["crossingWay"]
+#                        if len(crosslingList)>1:
+#                            onewayCrossing=False
+#                        else:
+#                            nextWay, twowayCrossing=crosslingList[0]
+#                            if twowayCrossing:
+#                                onewayCrossing=False
                                 
                     if"oneway" in item:
                         oneway=item["oneway"]=="yes"
@@ -675,18 +675,18 @@ class QtOSMWidget(QWidget):
                         lastX=x
                         lastY=y
                         
-                        if crossingWay:
-                            if onewayCrossing:
-                                self.painter.setPen(greenLightPen)
-                            else:
-                                self.painter.setPen(greenPen)
-                            self.painter.drawPoint(x, y)
+#                        if crossingWay:
+#                            if onewayCrossing:
+#                                self.painter.setPen(greenLightPen)
+#                            else:
+#                                self.painter.setPen(greenPen)
+#                            self.painter.drawPoint(x, y)
                             
                         if crossing:
-                            if onewayCrossing:
-                                self.painter.setPen(blueLightPen)
-                            else:
-                                self.painter.setPen(bluePen)
+#                            if realCrossing:
+#                                self.painter.setPen(blueLightPen)
+#                            else:
+                            self.painter.setPen(bluePen)
                             self.painter.drawPoint(x, y)
 
                     elif start:
@@ -904,7 +904,7 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None:
-                trackList=osmParserData.getTrackListForWaySucc2(wayId)
+                trackList=osmParserData.getTrackListForWayLevels(wayId, 2)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -919,7 +919,7 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None:
-                trackList=osmParserData.getTrackListForWaySucc2(wayId)
+                trackList=osmParserData.getTrackListForWayLevels(wayId, 2)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -1461,19 +1461,19 @@ class OSMWindow(QMainWindow):
     @pyqtSlot()
     def _testGPS(self):
         if self.incLat==0.0:
-            self.incLat=self.startLat
+            self.incLat=self.osmWidget.startLat
         if self.incLon==0.0:
-            self.incLon=self.startLon
+            self.incLon=self.osmWidget.startLon
             
         self.incLat=self.incLat+0.001
         self.incLon=self.incLon+0.001
         
         osmutils=OSMUtils()
-        print(osmutils.headingDegrees(self.startLat, self.startLon, self.incLat, self.incLon))
+        print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
 
         self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
         
-        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
+        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
 
     def updateStatusLabel(self, text):
         print(text)

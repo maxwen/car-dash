@@ -33,6 +33,10 @@ class OSMParserData(object):
         self.connection=None
         self.cursor=None
         self.edgeId=0
+        self.actLevel=0
+        self.wantLevel=0
+        self.trackItemList=list()
+
 #        self.edgeCrossingItem=dict()
 #        self.crossingTest=list()
 
@@ -230,17 +234,7 @@ class OSMParserData(object):
                             if distance < minDistance:
                                 minDistance=distance
                                 minWayId=wayId
-#                        (name, ref)=self.getStreetNameInfo(tags)
-#                    else:
-#                        print("next and ref not found on same way %d"%(wayId))
-                        
-#            (id, tags, refs)=self.getWayEntryForId(minWayId)
-#            if id!=None:
-#                (name, ref)=self.getStreetNameInfo(tags)
-#                print("way %d %s-%s %s has min distance of %d"%(minWayId, name, ref, tags["highway"], minDistance))
-#                minWayList.append(minWayId)
-                
-#            waylist=self.postprocessWayForWayId(minWayList)
+
             return minWayId    
         
     def createTemporaryPoint(self, lat, lon, lat1, lon1):
@@ -270,18 +264,7 @@ class OSMParserData(object):
             nodes.append((refId, lat, lon, wayIdList))
 
         return nodes
-#        self.cursor.execute('SELECT * FROM refTable where refId==1')
-#        allentries=self.cursor.fetchall()
-#        for x in allentries:
-#            wayIdListString=x[3]
-#            wayIdList=list()
-#            for wayId in wayIdListString.split("|"):
-#                wayIdList.append(int(wayId))
-#            lat=float(x[1])
-#            lon=float(x[2])
-#            refId=int(x[0])
-#            print( "ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " ways:"+str(wayIdList))
-
+    
     def testWayTable(self):
         self.cursor.execute('SELECT * FROM wayTable')
         allentries=self.cursor.fetchall()
@@ -374,26 +357,10 @@ class OSMParserData(object):
 ##            self.nodes[osmid]=(tags, coords)
 #            self.coords[osmid]=(coords[1], coords[0])
 
-                    
-#    def printGPSGrid(self):
-#        for i in range(10000):
-#            for j in range(10000):
-#                if self.gpsGrid[i][j]!=None:
-#                    reflist=self.gpsGrid[i][j]
-#                    print("%d %d %d"%(i,j,len(reflist)))
                 
     def parse_coords(self, coord):
         for osmid, lat, lon in coord:
             self.coords[osmid]=(lat, lon)
-                   
-#            (x, y)=self.locationToGridIndex(lat, lon)
-#            if self.gpsGrid[x][y]!=None:
-#                reflist=self.gpsGrid[x][y]
-#                reflist.append((osmid, lat, lon))
-#            else:
-#                reflist=list()
-#                reflist.append((osmid, lat, lon))
-#                self.gpsGrid[x][y]=reflist
                 
     def parse_ways(self, way):
         osmutils=OSMUtils()
@@ -576,126 +543,19 @@ class OSMParserData(object):
             return possibleWays
         
         for wayid in wayIdList:
-#            tags=self.ways[wayid][0]
-#            refs=self.ways[wayid][1]
-            
             if wayid==fromWayId:
                 continue
-#            if wayid in self.doneWays:
-#                continue
             
             (id, tags, refs, distances)=self.getWayEntryForId(wayid)
             if id==None:
                 print("no entry in way DB for "+str(wayid))
                 continue
-            
-#            newOneway=False
-#            if "oneway" in tags:
-#                if tags["oneway"]=="yes":
-#                    newOneway=True
-#            if "junction" in tags:
-#                if tags["junction"]=="roundabout":
-#                    newOneway=True
             
             for wayRef in refs:
                 if wayRef==ref:
                     possibleWays.append((wayid, tags, refs))
  
         return possibleWays
-    
-    def findLinkWaysWithRefInAllWays(self, ref, fromWayId, streetInfo, streetType):
-        possibleWays=list()
-        wayIdList=self.getWaysWithRef(ref)
-        if wayIdList==None:
-            return possibleWays
-        
-        for wayid in wayIdList:
-#            tags=self.ways[wayid][0]
-#            refs=self.ways[wayid][1]
-            
-            if wayid==fromWayId:
-                continue
-            if wayid in self.doneWays:
-                continue
-            
-            (id, tags, refs, distances)=self.getWayEntryForId(wayid)
-            if id==None:
-                print("no entry in way DB for "+str(wayid))
-                continue
-
-            if "highway" in tags:
-                newStreetType=tags["highway"]
-                if newStreetType!=streetType+"_link":
-                    continue
-                
-                oneway=False
-                if "oneway" in tags:
-                    if tags["oneway"]=="yes":
-                        oneway=True
-
-#                if oneway:
-#                    if refs[0]==ref:
-#                        possibleWays.append((wayid, tags, refs))
-#                else:
-                for wayRef in refs:
-                    if wayRef==ref:
-                        possibleWays.append((wayid, tags, refs))
-#                    else:
-#                        coords1=self.getCoordsWithRef(ref)
-#                        coords2=self.getCoordsWithRef(wayRef)
-#                        if coords1==coords2:
-#                            possibleWays.append((wayid, tags, refs))
-        return possibleWays
-    
-    def findLinkEndWaysWithRefInAllWays(self, ref, fromWayId, streetInfo, streetType):
-        wayIdList=self.getWaysWithRef(ref)
-        if wayIdList==None:
-            return (None, None, None)
-        
-        for wayid in wayIdList:
-#            tags=self.ways[wayid][0]
-#            refs=self.ways[wayid][1]
-            
-            if wayid==fromWayId:
-                continue
-#            if wayid in self.doneWays:
-#                continue
-            
-            (id, tags, refs, distances)=self.getWayEntryForId(wayid)
-            if id==None:
-                print("no entry in way DB for "+str(wayid))
-                continue
-
-            if "highway" in tags:
-                newStreetType=tags["highway"]
-                if newStreetType!=streetType+"_link":
-                    for wayRef in refs:
-                        if wayRef==ref:
-                            return (wayid, tags, refs)
-#                        else:
-#                            coords1=self.getCoordsWithRef(ref)
-#                            coords2=self.getCoordsWithRef(wayRef)
-#                            if coords1==coords2:
-#                                return ((wayid, tags, refs))
-        return (None, None, None)
-    
-#    def findWayWithRefAndCoords(self, ways, fromWayId, ref):
-#        possibleWays=list()
-#        for (wayid, tags, refs) in ways:
-#            if wayid==fromWayId:
-#                continue
-#            if wayid in self.doneWays:
-#                continue
-#            for wayRef in refs:
-#                if wayRef==ref:
-#                    possibleWays.append((wayid, tags, refs))
-##                else:
-##                    coords1=self.getCoordsWithRef(ref)
-##                    coords2=self.getCoordsWithRef(wayRef)
-##                    if coords1==coords2:
-##                        possibleWays.append((wayid, tags, refs))
-#                        
-#        return possibleWays
     
     def findWayWithStartRef(self, ways, startRef):
         possibleWays=list()
@@ -726,59 +586,6 @@ class OSMParserData(object):
             if len(possibleWays)==0:
                 return (wayid, tags, refs, distances)        
         return ways[0]
-
-#    def printRelationCoords(self, name):
-#        for osmid, relation in self.relations.items():
-#            try:
-#                if relation[0]["name"]==name:
-#                    for way in relation[1]:
-#                        if way[1]=="way":
-#                            wayRef=self.ways[way[0]]
-#                            for ref in wayRef[1]:   
-#                                print("%f %f"%(self.coords[ref][1], self.coords[ref][0]))
-#            except KeyError:
-#                None
-        
-#    def postprocessWays(self):
-#        i=1
-#        for (name, ref),ways in self.street_by_name.items():
-##            print((name, ref))
-#            self.waysCopy=ways
-#            print("process %d of %d"%(i, len(self.street_by_name)))
-#
-#            self.doneWays=list()
-#            
-#            while len(self.waysCopy)!=0:
-#                way=self.findStartWay(self.waysCopy)
-#                
-#                if way!=None:   
-#                    self.track=dict()
-#                    self.trackWayList=list()
-#                    self.track["name"]=(name, ref)
-#                    self.track["track"]=list()                         
-#                    
-#                    (startWayid, tags, refs)=way
-#                                  
-#                    self.resolveWay(way, (name, ref))
-#
-#                    wayList=list()
-#                    if (name, ref) in self.streetNameIndex:
-#                        wayList=self.streetNameIndex[(name, ref)]
-#                    
-#                    wayList.append(startWayid)
-#                            
-#                    self.streetNameIndex[(name, ref)]=wayList
-#                    self.streetIndex[startWayid]=self.track
-#                    
-#                    for wayid in self.trackWayList:
-#                        self.wayToStreetIndex[wayid]=startWayid
-#                else:
-#                    print("no start way found "+str(ways))
-#                    break
-##                if len(self.waysCopy)!=0:
-##                    print("self.waysCopy!=0 "+str(self.waysCopy))
-#                
-#            i=i+1
                  
     def getStreetList(self):
         self.cursor.execute('SELECT * FROM streetTable')
@@ -801,231 +608,25 @@ class OSMParserData(object):
                 trackList.append(self.streetIndex[track])
             
         return trackList
-    
-    def getTrackListForSingleWay(self, wayId):
-        print(wayId)
-        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-        if id!=None:
-            track=dict()
-            track["name"]=""
-            trackItemList=list()
-            
-            streetInfo=None 
-            if "name" in tags or "ref" in tags:
-                streetInfo=self.getStreetNameInfo(tags)
-            
-            print(streetInfo)
-            streetType=""
-            if "highway" in tags:
-                streetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-            if "junction" in tags:
-                if tags["junction"]=="roundabout":
-                    oneway=True
-                    
-            wayId, nextWayList=self.getCrossingEntryFor(wayId)
-            print(str(nextWayList))
-            print(str(tags))
-        
-            nextWayDict=dict()
-            for(nextWayRefId, nextWayWaysList) in nextWayList:
-                nextWayDict[nextWayRefId]=nextWayWaysList
-                
-            for ref in refs:
-                trackItem=dict()
-                trackItem["wayId"]=wayId
-                trackItem["ref"]=ref
-                (lat, lon)=self.getCoordsWithRef(ref)
-                if lat==None:
-                    print("resolveWay no node in DB with %d"%(ref))
-                    continue
-                trackItem["lat"]=lat
-                trackItem["lon"]=lon
-                trackItem["oneway"]=oneway
-                trackItem["type"]=streetType
-
-                crossingList=list()
-                crossingWayList=list()
-                if ref in nextWayDict:                            
-                    nextWayIdList=nextWayDict[ref]
-                    for nextWayId, twowayCrossing in nextWayIdList:
-                        (crossingId, crossingTags, crossingRefs, crossingDistancees)=self.getWayEntryForId(nextWayId)
-                        if crossingId!=None:
-                            newStreetType=crossingTags["highway"]
-                            newStreetInfo=self.getStreetNameInfo(crossingTags)
-    
-                            if newStreetInfo==None:
-                                if newStreetType[-5:]=="_link":
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))    
-                            else:
-                                if streetInfo!=newStreetInfo: 
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                                else:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, twowayCrossing))
-                
-                if len(crossingList)!=0:
-                    trackItem["crossing"]=crossingList  
-                if len(crossingWayList)!=0:
-                    trackItem["crossingWay"]=crossingWayList
-
-
-                trackItemList.append(trackItem)
-            track["track"]=trackItemList
-            wayIdList=list()
-            wayIdList.append(track)
-            return wayIdList
-
-    def getWayPart(self, wayId, refList):
-        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-        if id!=None:
-            streetInfo=None 
-            if "name" in tags or "ref" in tags:
-                streetInfo=self.getStreetNameInfo(tags)
-            
-            streetType=""
-            if "highway" in tags:
-                streetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-            if "junction" in tags:
-                if tags["junction"]=="roundabout":
-                    oneway=True
-                    
-            wayId, nextWayList=self.getCrossingEntryFor(wayId)
-        
-            nextWayDict=dict()
-            for(nextWayRefId, nextWayWaysList) in nextWayList:
-                nextWayDict[nextWayRefId]=nextWayWaysList
-            
-            crossingFound=False
-            self.refNodeList=list()
-            
-            for ref in refList:
-                trackItem=dict()
-                trackItem["wayId"]=wayId
-                trackItem["ref"]=ref
-                (lat, lon)=self.getCoordsWithRef(ref)
-                if lat==None:
-                    print("resolveWay no node in DB with %d"%(ref))
-                    continue
-                trackItem["lat"]=lat
-                trackItem["lon"]=lon        
-                trackItem["oneway"]=oneway
-                trackItem["type"]=streetType
-
-                crossingList=list()
-                crossingWayList=list()
-                
-                if ref!=refList[0]:
-                    self.refNodeList.append(ref)
-                
-                if ref in nextWayDict:                            
-                    nextWayIdList=nextWayDict[ref]
-                    for nextWayId, twowayCrossing in nextWayIdList:
-                        (crossingId, crossingTags, crossingRefs, crossingDistancees)=self.getWayEntryForId(nextWayId)
-                        if crossingId!=None:
-                            newStreetType=crossingTags["highway"]
-                            newStreetInfo=self.getStreetNameInfo(crossingTags)
-    
-                            if newStreetInfo==None:
-                                if newStreetType[-5:]=="_link":
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))    
-                            else:
-                                if streetInfo!=newStreetInfo: 
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                                else:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, twowayCrossing))                           
-                            
-                if len(crossingList)!=0:
-                    trackItem["crossing"]=crossingList  
-                    if ref!=refList[0]:
-                        crossingFound=True
-                if len(crossingWayList)!=0:
-                    trackItem["crossingWay"]=crossingWayList
-                    if ref!=refList[0]:
-                        crossingFound=True
-                    
-                self.trackItemList.append(trackItem)
-                
-                if crossingFound:
-                    # only go until next crossing
-                    break
 
     def createEdgePart(self, wayId, refList):
         (id, tags, refs, distances)=self.getWayEntryForId(wayId)
         if id!=None:
-            streetInfo=None 
-            if "name" in tags or "ref" in tags:
-                streetInfo=self.getStreetNameInfo(tags)
-                                
-            wayId, nextWayList=self.getCrossingEntryFor(wayId)
-        
-            nextWayDict=dict()
-            for(nextWayRefId, nextWayWaysList) in nextWayList:
-                nextWayDict[nextWayRefId]=nextWayWaysList
-            
-            crossingFound=False
             refNodeList=list()
+            distanceList=list()
+            distanceList.append(0) 
+
             distance=0
             i=0
             for ref in refList:
-                edgeCrossingItem=dict()
-
                 if i!=0:
-                    distance=distance+distances[i]    
+                    distance=distance+distances[i]  
+                    distanceList.append(distance)
                 i=i+1   
-                crossingList=list()
-                crossingWayList=list()
                 
                 refNodeList.append(ref)
-#                if ref!=refList[0]:
-#                    self.refNodeList.append(ref)
-                
-                if ref in nextWayDict:                            
-                    nextWayIdList=nextWayDict[ref]
-                    for nextWayId, twowayCrossing in nextWayIdList:
-                        (crossingId, crossingTags, crossingRefs, crossingDistancees)=self.getWayEntryForId(nextWayId)
-                        if crossingId!=None:
-                            newStreetType=crossingTags["highway"]
-                            newStreetInfo=self.getStreetNameInfo(crossingTags)
-    
-                            if newStreetInfo==None:
-                                if newStreetType[-5:]=="_link":
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))    
-                            else:
-                                if streetInfo!=newStreetInfo: 
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                                else:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, twowayCrossing))                           
-                            
-                if len(crossingList)!=0:
-                    edgeCrossingItem["crossing"]=crossingList  
-                    if ref!=refList[0]:
-                        crossingFound=True
-                if len(crossingWayList)!=0:
-                    edgeCrossingItem["crossingWay"]=crossingWayList
-                    if ref!=refList[0]:
-                        crossingFound=True
-                                    
-                if crossingFound:
-                    # only go until next crossing
-                    break
-                
-            return refNodeList, edgeCrossingItem, distance
+                                                            
+            return refNodeList, distanceList
                 
     def createStartTrackItem(self):
         streetTrackItem=dict()
@@ -1036,272 +637,122 @@ class OSMParserData(object):
         streetTrackItem=dict()
         streetTrackItem["end"]="end"
         return streetTrackItem
+
+    def getTrackListForWayName(self, wayId, streetInfo):
+        self.wantLevel=0
+        self.level=0
+        self.trackItemList=list()
+        track=dict()
+        waylist=list()
+        self.doneWays=list()
+#        print(wayId)
+        self.getTrackListForWayLevel(wayId, None, streetInfo)
+        track["track"]=self.trackItemList
+        waylist.append(track)
+        self.doneWays=list()
+        self.trackItemList=list()
+
+        return track
     
-    def getTrackListForWaySucc(self, wayId):
-        print(wayId)
-        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-        if id!=None:
-            track=dict()
-            track["name"]=""
-            self.trackItemList=list()
-            wayIdList=list()
-            
-            streetInfo=None 
-            if "name" in tags or "ref" in tags:
-                streetInfo=self.getStreetNameInfo(tags)
-            
-            print(streetInfo)
-            streetType=""
-            if "highway" in tags:
-                streetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-            if "junction" in tags:
-                if tags["junction"]=="roundabout":
-                    oneway=True
-                    
-            wayId, nextWayList=self.getCrossingEntryFor(wayId)
-            print(str(nextWayList))
-            print(str(tags))
-            
-            nextWayDict=dict()
-            for(nextWayRefId, nextWayIdList) in nextWayList:
-                nextWayDict[nextWayRefId]=nextWayIdList
-            
-            nodeList=list()
-            
-            for ref in refs:
-                trackItem=dict()
-                trackItem["wayId"]=wayId
-                trackItem["ref"]=ref
-                (lat, lon)=self.getCoordsWithRef(ref)
-                if lat==None:
-                    print("resolveWay no node in DB with %d"%(ref))
-                    continue
-                trackItem["lat"]=lat
-                trackItem["lon"]=lon        
-                trackItem["oneway"]=oneway
-                trackItem["type"]=streetType
-       
-                crossingList=list()                
-                crossingWayList=list()
-                    
-                if ref in nextWayDict:
-                    nextWayIdList=nextWayDict[ref]
-                    for nextWayId,twowayCrossing in nextWayIdList:
-                        
-                        (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
-                        if crossingId!=None:
-                            newOneway=False
-                            if "oneway" in crossingTags:
-                                if crossingTags["oneway"]=="yes":
-                                    newOneway=True
-                                    
-                            if not twowayCrossing:
-                                if newOneway:
-                                    index=crossingRefs.index(ref)
-                                
-                                    self.trackItemList.append(self.createStartTrackItem())                                  
-                                    self.getWayPart(crossingId, crossingRefs[index:])    
-                                    self.trackItemList.append(self.createEndTrackItem())
-                                    
-                                    nodeList.append((ref, self.refNodeList))
-                                else:
-                                    if ref==crossingRefs[0]:
-                                        self.trackItemList.append(self.createStartTrackItem())  
-                                        self.getWayPart(crossingId, crossingRefs)                                       
-                                        self.trackItemList.append(self.createEndTrackItem())
-                                        
-                                        nodeList.append((ref, self.refNodeList))
-
-                                    elif ref==crossingRefs[-1]:
-                                        self.trackItemList.append(self.createStartTrackItem())                                        
-                                        self.getWayPart(crossingId, crossingRefs[::-1])   
-                                        self.trackItemList.append(self.createEndTrackItem())
-                                        
-                                        nodeList.append((ref, self.refNodeList))
-
-                            else:
-                                if ref==crossingRefs[0]:
-                                    self.trackItemList.append(self.createStartTrackItem())  
-                                    self.getWayPart(crossingId, crossingRefs)                                       
-                                    self.trackItemList.append(self.createEndTrackItem())
-                                    
-                                    nodeList.append((ref, self.refNodeList))
-
-                                elif ref==crossingRefs[-1]:
-                                    self.trackItemList.append(self.createStartTrackItem())                                        
-                                    self.getWayPart(crossingId, crossingRefs[::-1])   
-                                    self.trackItemList.append(self.createEndTrackItem())
-                                
-                                    nodeList.append((ref, self.refNodeList))
-                                else:
-                                    index=crossingRefs.index(ref)
-                                    self.trackItemList.append(self.createStartTrackItem())
-                                    self.getWayPart(crossingId, crossingRefs[index:])                              
-                                    self.trackItemList.append(self.createEndTrackItem())
-                                    
-                                    nodeList.append((ref, self.refNodeList))
-
-                                    self.trackItemList.append(self.createStartTrackItem())                   
-                                    self.getWayPart(crossingId, crossingRefs[index::-1])
-                                    self.trackItemList.append(self.createEndTrackItem())
-                                    
-                                    nodeList.append((ref, self.refNodeList))
-
-                            newStreetInfo=self.getStreetNameInfo(crossingTags)
-                            newStreetType=crossingTags["highway"]
-                            
-                            if newStreetType==None:
-                                if newStreetType[-5:]=="_link":
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                            else:
-                                if streetInfo!=newStreetInfo:
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                                else:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, twowayCrossing))
-               
-                if len(crossingList)!=0:
-                    trackItem["crossing"]=crossingList  
-
-                if len(crossingWayList)!=0:
-                    trackItem["crossingWay"]=crossingWayList
-
-                    
-                self.trackItemList.append(trackItem)
-                
-            print(nodeList)
-            track["track"]=self.trackItemList
-            wayIdList.append(track)
-            return wayIdList
+    def getTrackListForWayLevels(self, wayId, level):
+        self.wantLevel=level
+        self.level=0
+        self.trackItemList=list()
+        track=dict()
+        waylist=list()
+#        print(wayId)
+        self.getTrackListForWayLevel(wayId, None, None)
+        track["track"]=self.trackItemList
+        waylist.append(track)
         
-    def getTrackListForWaySucc2(self, wayId):
-        print(wayId)
-        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-        if id!=None:
-            track=dict()
-            track["name"]=""
-            trackItemList=list()
-            wayIdList=list()
-            
-            streetInfo=None 
-            if "name" in tags or "ref" in tags:
-                streetInfo=self.getStreetNameInfo(tags)
-            
-            streetType=""
-            if "highway" in tags:
-                streetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-#            if "junction" in tags:
-#                if tags["junction"]=="roundabout":
-#                    oneway=True
+        self.doneWays=list()
+        self.trackItemList=list()
+        return waylist
+        
+    def getTrackListForWayLevel(self, wayId, edge, streetInfo):
+        
+        self.doneWays.append(wayId)
+
+        if edge==None:
+            (id, tags, refs, distances)=self.getWayEntryForId(wayId)
+        else:
+            (id, tags, refs, distances)=self.getWayEntryForId(wayId)
+            refs=edge["refList"]
+        track=dict()
+        track["name"]=""
+                
+        streetType=""
+        if "highway" in tags:
+            streetType=tags["highway"]
+        oneway=False
+        if "oneway" in tags:
+            if tags["oneway"]=="yes":
+                oneway=True
+                
+        wayId, nextWayList=self.getCrossingEntryFor(wayId)
+        
+        nextWayDict=dict()
+        for(nextWayRefId, nextWayIdList) in nextWayList:
+            nextWayDict[nextWayRefId]=nextWayIdList
+                
+        for ref in refs:
+            trackItem=dict()
+            trackItem["wayId"]=wayId
+            trackItem["ref"]=ref
+            (lat, lon)=self.getCoordsWithRef(ref)
+            if lat==None:
+                print("resolveWay no node in DB with %d"%(ref))
+                continue
+            trackItem["lat"]=lat
+            trackItem["lon"]=lon        
+            trackItem["oneway"]=oneway
+            trackItem["type"]=streetType
+                   
+#            crossingList=list()
+            if ref in nextWayDict:
+                nextWayIdList=nextWayDict[ref]
+#                print(nextWayIdList)
+
+                for nextWayId,twowayCrossing in nextWayIdList:
                     
-            wayId, nextWayList=self.getCrossingEntryFor(wayId)
-            
-            nextWayDict=dict()
-            for(nextWayRefId, nextWayIdList) in nextWayList:
-                nextWayDict[nextWayRefId]=nextWayIdList
-            
-            nodeList=list()
-            
-            for ref in refs:
-                trackItem=dict()
-                trackItem["wayId"]=wayId
-                trackItem["ref"]=ref
-                (lat, lon)=self.getCoordsWithRef(ref)
-                if lat==None:
-                    print("resolveWay no node in DB with %d"%(ref))
-                    continue
-                trackItem["lat"]=lat
-                trackItem["lon"]=lon        
-                trackItem["oneway"]=oneway
-                trackItem["type"]=streetType
-       
-                crossingList=list()                
-                crossingWayList=list()
-                    
-                if ref in nextWayDict:
-                    nextWayIdList=nextWayDict[ref]
-                    for nextWayId,twowayCrossing in nextWayIdList:
+                    (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
+                    if crossingId!=None:
                         
-                        (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
-                        if crossingId!=None:
-                            newStreetType=""
-                            if "highway" in crossingTags:
-                                newStreetType=crossingTags["highway"]
-                                
-                            newOneway=False
-                            if "oneway" in crossingTags:
-                                if crossingTags["oneway"]=="yes":
-                                    newOneway=True
-                                  
-                            (edgeId, refId, nextWayId, refList)=self.getEdgeEntryForId(ref, nextWayId)
-                            if edgeId==None:
+                        if streetInfo!=None:
+                            newStreetInfo=None 
+                            if "name" in tags or "ref" in crossingTags:
+                                newStreetInfo=self.getStreetNameInfo(crossingTags)
+                            
+                            if streetInfo!=newStreetInfo:
                                 continue
                             
-                            for edge in refList:
-                                print(edge)
-                                trackItemList.append(self.createStartTrackItem())                                  
-                                
-                                edgeRefdList=edge["refList"]
-                                for edgeRefId in edgeRefdList:
-                                    newTrackItem=dict()
-                                    newTrackItem["wayId"]=nextWayId
-                                    newTrackItem["ref"]=edgeRefId
-                                    (lat, lon)=self.getCoordsWithRef(edgeRefId)
-                                    if lat==None:
-                                        print("resolveWay no node in DB with %d"%(edgeRefId))
-                                        continue
-                                    newTrackItem["lat"]=lat
-                                    newTrackItem["lon"]=lon        
-                                    newTrackItem["oneway"]=newOneway
-                                    newTrackItem["type"]=newStreetType
-                                    
-                                    if edgeRefId==edgeRefdList[-1]:
-                                        if "crossing" in edge["crossing"]:
-                                            newTrackItem["crossing"]=edge["crossing"]["crossing"] 
-                                        if "crossingWay" in edge["crossing"]:
-                                            newTrackItem["crossingWay"]=edge["crossing"]["crossingWay"] 
-                                    
-                                    trackItemList.append(newTrackItem)
+#                        crossingList.append((nextWayId,twowayCrossing))
+                        
+                        (edgeId, refId, nextWayId, refList)=self.getEdgeEntryForId(ref, nextWayId)
+                        if edgeId==None:
+                            continue
+#                        print(crossingTags)
+                        if streetInfo==None:
+                            if self.level!=self.wantLevel:
+                                for edge in refList:
+#                                    print(edge)
+                                    self.level=self.level+1
+                                    self.trackItemList.append(self.createStartTrackItem())
+                                    self.getTrackListForWayLevel(nextWayId, edge, streetInfo)
+                                    self.trackItemList.append(self.createEndTrackItem())
+                                    self.level=self.level-1
+                        else:
+                            if not nextWayId in self.doneWays:
+                                for edge in refList:
+#                                    print(edge)
+                                    self.trackItemList.append(self.createStartTrackItem())
+                                    self.getTrackListForWayLevel(nextWayId, edge, streetInfo)
+                                    self.trackItemList.append(self.createEndTrackItem())
 
-                                trackItemList.append(self.createEndTrackItem())
-
-                            newStreetInfo=self.getStreetNameInfo(crossingTags)
-                            
-                            if newStreetType==None:
-                                if newStreetType[-5:]=="_link":
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                            else:
-                                if streetInfo!=newStreetInfo:
-                                    if not crossingId in crossingList:
-                                        crossingList.append((crossingId, twowayCrossing))
-                                else:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, twowayCrossing))
-               
-                if len(crossingList)!=0:
-                    trackItem["crossing"]=crossingList  
-
-                if len(crossingWayList)!=0:
-                    trackItem["crossingWay"]=crossingWayList
+#            if len(crossingList)!=0:
+#                trackItem["crossing"]=crossingList                     
+            self.trackItemList.append(trackItem)
                     
-                trackItemList.append(trackItem)
-                print(trackItemList)
-                    
-            track["track"]=trackItemList
-            wayIdList.append(track)
-            return wayIdList
- 
     def createEdgeTableEntries(self):
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
@@ -1326,89 +777,90 @@ class OSMParserData(object):
                         
                         (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
                         if crossingId!=None:
-                            reflist=list()
+                            edgeList=list()
                             newOneway=False
                             if "oneway" in crossingTags:
                                 if crossingTags["oneway"]=="yes":
                                     newOneway=True
-                                    
-                            if not twowayCrossing:
-                                if newOneway:
-                                    index=crossingRefs.index(ref)
-                                    refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs[index:])    
-                                    edgeInfo=dict()
-                                    edgeInfo["refList"]=refNodeList
-                                    edgeInfo["crossing"]=edgeCrossingItem
-                                    edgeInfo["distance"]=distance
-                                    reflist.append(edgeInfo)
+                            newRoundabout=False
+                            if "junction" in crossingTags:
+                                if crossingTags["junction"]=="roundabout":
+                                    newRoundabout=True
+                            # TODO hack
+                            elif crossingRefs[0]==crossingRefs[-1]:
+                                print("found way with same start and end and not roundabout %d %s"%(nextWayId, str(crossingTags)))
+                                newRoundabout=True
+                                       
+                            if newRoundabout:
+#                                print(ref)
+#                                print(crossingRefs)
+                                index=crossingRefs.index(ref)
+                                refList=crossingRefs[index:]
+                                refList.extend(crossingRefs[1:index+1])
+#                                print(refList)
+                                refNodeList, distanceList=self.createEdgePart(crossingId, refList)                              
+                                edgeInfo=dict()
+                                edgeInfo["refList"]=refNodeList
+                                edgeInfo["distance"]=distanceList
+                                edgeList.append(edgeInfo)
+                            else:
+                                if not twowayCrossing:
+                                    if newOneway:
+                                        index=crossingRefs.index(ref)
+                                        refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs[index:])    
+                                        edgeInfo=dict()
+                                        edgeInfo["refList"]=refNodeList
+                                        edgeInfo["distance"]=distanceList
+                                        edgeList.append(edgeInfo)
+                                    else:
+                                        if ref==crossingRefs[0]:
+                                            refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs)                                       
+                                            edgeInfo=dict()
+                                            edgeInfo["refList"]=refNodeList
+                                            edgeInfo["distance"]=distanceList
+                                            edgeList.append(edgeInfo)
+                                        elif ref==crossingRefs[-1]:
+                                            refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs[::-1])   
+                                            edgeInfo=dict()
+                                            edgeInfo["refList"]=refNodeList
+                                            edgeInfo["distance"]=distanceList
+                                            edgeList.append(edgeInfo)
                                 else:
                                     if ref==crossingRefs[0]:
-                                        refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs)                                       
+                                        refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs)                                       
                                         edgeInfo=dict()
                                         edgeInfo["refList"]=refNodeList
-                                        edgeInfo["crossing"]=edgeCrossingItem
-                                        edgeInfo["distance"]=distance
-                                        reflist.append(edgeInfo)
+                                        edgeInfo["distance"]=distanceList
+                                        edgeList.append(edgeInfo)
                                     elif ref==crossingRefs[-1]:
-                                        refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs[::-1])   
+                                        refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs[::-1])   
                                         edgeInfo=dict()
                                         edgeInfo["refList"]=refNodeList
-                                        edgeInfo["crossing"]=edgeCrossingItem
-                                        edgeInfo["distance"]=distance
-                                        reflist.append(edgeInfo)
-                            else:
-                                if ref==crossingRefs[0]:
-                                    refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs)                                       
-                                    edgeInfo=dict()
-                                    edgeInfo["refList"]=refNodeList
-                                    edgeInfo["crossing"]=edgeCrossingItem
-                                    edgeInfo["distance"]=distance
-                                    reflist.append(edgeInfo)
-                                elif ref==crossingRefs[-1]:
-                                    refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs[::-1])   
-                                    edgeInfo=dict()
-                                    edgeInfo["refList"]=refNodeList
-                                    edgeInfo["crossing"]=edgeCrossingItem
-                                    edgeInfo["distance"]=distance
-                                    reflist.append(edgeInfo)
-                                else:
-                                    index=crossingRefs.index(ref)
-
-                                    refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs[index:])                              
-                                    edgeInfo=dict()
-                                    edgeInfo["refList"]=refNodeList
-                                    edgeInfo["crossing"]=edgeCrossingItem
-                                    edgeInfo["distance"]=distance
-                                    reflist.append(edgeInfo)
-                                    
-                                    refNodeList, edgeCrossingItem, distance=self.createEdgePart(crossingId, crossingRefs[index::-1])
-                                    
-                                    edgeInfo=dict()
-                                    edgeInfo["refList"]=refNodeList
-                                    edgeInfo["crossing"]=edgeCrossingItem
-                                    edgeInfo["distance"]=distance
-                                    reflist.append(edgeInfo)
+                                        edgeInfo["distance"]=distanceList
+                                        edgeList.append(edgeInfo)
+                                    else:
+                                        index=crossingRefs.index(ref)
+    
+                                        refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs[index:])                              
+                                        edgeInfo=dict()
+                                        edgeInfo["refList"]=refNodeList
+                                        edgeInfo["distance"]=distanceList
+                                        edgeList.append(edgeInfo)
+                                        
+                                        refNodeList, distanceList=self.createEdgePart(crossingId, crossingRefs[index::-1])
+                                        
+                                        edgeInfo=dict()
+                                        edgeInfo["refList"]=refNodeList
+                                        edgeInfo["distance"]=distanceList
+                                        edgeList.append(edgeInfo)
                             
-                            self.addToEdgeTable(ref, nextWayId, reflist)
+                            self.addToEdgeTable(ref, nextWayId, edgeList)
 
 
     def getStreetTrackList(self, wayid):
         if wayid in self.streetIndex:
             return self.streetIndex[wayid]["track"]
         return None
-
-#    def postprocessWayForWayId(self, wayIdList):
-#        allWayList=list()
-#        for wayId in wayIdList:
-#            (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-#            (name, ref)=self.getStreetNameInfo(tags)
-#            if name=="" and ref=="":
-#                continue
-#            if not (name, ref) in self.streetNameIndex.keys():
-#                self.postprocessWay(name, ref)
-#            waylist=self.streetNameIndex[(name, ref)]
-#            allWayList.extend(waylist)
-#        return allWayList
 
     def postprocessWay(self, name, ref):
         print("postprocess %s-%s"%(name, ref))
@@ -1461,153 +913,12 @@ class OSMParserData(object):
         
         (wayid, tags, refs, distances)=way
         
-        if not wayid in self.doneWays:
-            self.doneWays.append(wayid)
+        self.track=self.getTrackListForWayName(wayid, streetInfo)
         
-        wayid, nextWayList=self.getCrossingEntryFor(wayid)
-        if wayid==None:
-            print("resolveway way not found %d"%(wayid))
-            return
-        
-        nextWayDict=dict()
-        for(nextWayRefId, nextWayIdList) in nextWayList:
-            nextWayDict[nextWayRefId]=nextWayIdList
-            
-        for ref in refs:
-            trackItem=dict()
-            trackItem["wayId"]=wayid
-            trackItem["ref"]=ref
-            (lat, lon)=self.getCoordsWithRef(ref)
-            if lat==None:
-                print("resolveWay no node in DB with %d"%(ref))
-                continue
-            trackItem["lat"]=lat
-            trackItem["lon"]=lon
-            
-            if not wayid in self.trackWayList:
-                self.trackWayList.append(wayid)
-                
-            streetType=""
-            if "highway" in tags:
-                streetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-            if "junction" in tags:
-                if tags["junction"]=="roundabout":
-                    oneway=True
-                    
-            trackItem["oneway"]=oneway
-            trackItem["type"]=streetType
-   
-            crossingList=list()                
-            crossingWayList=list()
-                
-            if ref in nextWayDict:
-                nextWayIdList=nextWayDict[ref]
-                for nextWayId,onewayCrossing in nextWayIdList:
-                    (crossingId, crossingTags, crossingRefs, crossingDistances)=self.getWayEntryForId(nextWayId)
-                    if crossingId!=None:
-                        newStreetInfo=self.getStreetNameInfo(crossingTags)
-                        newStreetType=crossingTags["highway"]
-                        
-                        if newStreetType==None:
-                            if newStreetType[-5:]=="_link":
-                                if not crossingId in crossingList:
-                                    crossingList.append((crossingId, onewayCrossing))
-                        else:
-                            if streetInfo!=newStreetInfo:
-                                if not crossingId in crossingList:
-                                    crossingList.append((crossingId, onewayCrossing))
-                            else:
-                                if not crossingId in self.doneWays:
-                                    if not crossingId in crossingWayList:
-                                        crossingWayList.append((crossingId, onewayCrossing))
-        
-                                    self.track["track"].append(self.createStartTrackItem())               
-                                    self.resolveWay((crossingId, crossingTags, crossingRefs, crossingDistances), streetInfo)                
-                                    self.track["track"].append(self.createEndTrackItem())
-           
-            if len(crossingList)!=0:
-                trackItem["crossing"]=crossingList  
-            if len(crossingWayList)!=0:
-                trackItem["crossingWay"]=crossingWayList
-
-            link_crossings=self.findLinkWaysWithRefInAllWays(ref, wayid, streetInfo, streetType)
-            if len(link_crossings)!=0:
-                for link_crossing in link_crossings:
-                    self.track["track"].append(self.createStartTrackItem())                  
-                    self.resolveLink(link_crossing, streetInfo, streetType)
-                    self.track["track"].append(self.createEndTrackItem())
-                    
-            self.track["track"].append(trackItem)
-
         if not way in self.waysCopy:
             None
         else:
             self.waysCopy.remove(way)
-
-    def resolveLink(self, way, streetInfo, streetType):
-        if way==None:
-            return
-        
-        (wayid, tags, refs)=way
-        
-        if not wayid in self.doneWays:
-            self.doneWays.append(wayid)
-        
-        for ref in refs:
-            trackItem=dict()
-            trackItem["wayId"]=wayid
-            trackItem["ref"]=ref
-            (lat, lon)=self.getCoordsWithRef(ref)
-            if lat==None:
-                print("resolveLink no node in DB with %d"%(ref))
-                continue
-            trackItem["lat"]=lat
-            trackItem["lon"]=lon
-            
-            if not wayid in self.trackWayList:
-                self.trackWayList.append(wayid)
-                
-            newStreetType=""
-            if "highway" in tags:
-                newStreetType=tags["highway"]
-            oneway=False
-            if "oneway" in tags:
-                if tags["oneway"]=="yes":
-                    oneway=True
-            if "junction" in tags:
-                if tags["junction"]=="roundabout":
-                    oneway=True
-                    
-            trackItem["oneway"]=oneway
-            trackItem["type"]=newStreetType
-            
-            croosingList=list()
-
-            (wayid1, tags1, refs1)=self.findLinkEndWaysWithRefInAllWays(ref, wayid, streetInfo, streetType)
-            if wayid1!=None:
-                if "highway" in tags1:
-                    endLinkStreetType=tags1["highway"]
-                    # no crossings on motorway entries
-                    if endLinkStreetType!="motorway":
-                        if not wayid1 in croosingList:
-                            croosingList.append(wayid1)
-                    if len(croosingList)!=0:  
-                        trackItem["crossing"]=croosingList
-            else:
-                link_crossings=self.findLinkWaysWithRefInAllWays(ref, wayid, streetInfo, streetType)
-                if len(link_crossings)!=0:
-                    for link_crossing in link_crossings:
-                        self.track["track"].append(self.createStartTrackItem())                        
-                        self.resolveLink(link_crossing, streetInfo, streetType)
-                        self.track["track"].append(self.createEndTrackItem())
-#                    else:
-#                        if ref==refs[-1]:
-#                            print("end of links without crossing reached "+str(ref))
-            self.track["track"].append(trackItem)
 
     def createCrossingEntries(self):
         self.cursor.execute('SELECT * FROM wayTable')
@@ -1626,7 +937,11 @@ class OSMParserData(object):
                     if refs[0]!=refs[-1]:
                         if not oneway:
                             print("found roundabout with different start and end and not oneway %d %s"%(wayid, str(tags)))
-                    
+                                    # TODO hack
+            elif refs[0]==refs[-1]:
+                print("found way with same start and end and not roundabout %d %s"%(wayid, str(tags)))
+                roundabout=True
+
             nextWaysIdList=list() 
             
             for ref in refs:  
@@ -1635,7 +950,7 @@ class OSMParserData(object):
                     continue
                 
                 twowayCrossing=False
-                
+                noEntryCrossing=False
                 nextWays=self.findWayWithRefInAllWays(ref, wayid, oneway)  
                 if len(nextWays)!=0:
                     wayList=list()
@@ -1651,20 +966,30 @@ class OSMParserData(object):
                                 if refs2[0]!=refs2[-1]:
                                     if not newOneway:
                                         print("found roundabout with different start and end and not oneway %d %s"%(wayid2, str(tags2)))
-    
+                        # TODO hack
+                        elif refs2[0]==refs2[-1]:
+                            print("found way with same start and end and not roundabout %d %s"%(wayid2, str(tags2)))
+                            newRoundabout=True
+                            
+#                        if newRoundabout:
+#                            twowayCrossing=False
+                            
                         if not oneway: 
                             if newOneway:
                                 if not refs2[0]==ref:
                                     # crossing only if new oneway starts here
+                                    noEntryCrossing=True
                                     continue
                         if newOneway:
                             if refs2[-1]==ref:
                                 # no crossing with end of a oneway
+                                noEntryCrossing=True
                                 continue
                         if not oneway and not newOneway:
-                            if ref!=refs2[0] and ref!=refs2[-1]:
-                                # crossing in middle of way
-                                twowayCrossing=True
+                            if not newRoundabout:
+                                if ref!=refs2[0] and ref!=refs2[-1]:
+                                    # crossing in middle of way
+                                    twowayCrossing=True
                             
                         if not wayid2 in wayList:
                             wayList.append((wayid2, twowayCrossing))
