@@ -230,6 +230,8 @@ class QtOSMWidget(QWidget):
         self.lastMouseMoveX=0
         self.lastMouseMoveY=0
         
+        self.lastWayId=None
+        
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
             return self.getTileHome()
@@ -605,8 +607,8 @@ class QtOSMWidget(QWidget):
                         lon=item["lon"]
                     if "ref" in item:
                         ref=item["ref"]
-                        if ref in osmParserData.nodes:
-                            node=osmParserData.nodes[ref]
+#                        if ref in osmParserData.nodes:
+#                            node=osmParserData.nodes[ref]
                             
                     start=False
                     end=False
@@ -902,9 +904,10 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            wayId=osmParserData.getWayIdForPos(actlat, actlon)
-            if wayId!=None:
-                trackList=osmParserData.getTrackListForWayLevels(wayId, 2)
+            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+            if wayId!=None and wayId!=self.lastWayId:
+                self.lastWayId=wayId
+                trackList=osmParserData.showWay(wayId, usedRefId, 4)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -917,9 +920,10 @@ class QtOSMWidget(QWidget):
 
     def showTrackOnGPSPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            wayId=osmParserData.getWayIdForPos(actlat, actlon)
-            if wayId!=None:
-                trackList=osmParserData.getTrackListForWayLevels(wayId, 2)
+            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+            if wayId!=None and wayId!=self.lastWayId:
+                self.lastWayId=wayId
+                trackList=osmParserData.showWay(wayId, usedRefId, 4)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
