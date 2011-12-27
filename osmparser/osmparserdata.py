@@ -672,11 +672,11 @@ class OSMParserData(object):
             print("more then one start edge")
             return
         
-        startEdge, startRefId, endRefId, wayId, edgeInfo=resultList[0]
-        print(startEdge)
+#        startEdge, startRefId, endRefId, wayId, edgeInfo=resultList[0]
+#        print(startEdge)
 
         self.edgeList=list()
-        self.getEdgeListForWayName(startEdge, (name, ref))
+        self.getEdgeListForWayName(resultList[0], (name, ref))
         return self.printEdgeList(self.edgeList)
     
     def printEdgeList(self, edgeList):
@@ -753,16 +753,15 @@ class OSMParserData(object):
                 
         print(startEdge)
         self.doneEdges=list()
-        self.getEdgePartLevels(startEdge)
+        result=self.getEdgeEntryForEdgeId(startEdge)
+        self.getEdgePartLevels(result)
         print(self.edgeList)
 
-    def getEdgePartLevels(self, edgeId):
-        self.doneEdges.append(edgeId)
-
-        result=self.getEdgeEntryForEdgeId(edgeId)
-        edgeId, startRefId, endRefId, wayId, edgeInfo=result
+    def getEdgePartLevels(self, edge):
+        edgeId, startRefId, endRefId, wayId, edgeInfo=edge
         oneway=edgeInfo["o"]
-#        print(result)
+        
+        self.doneEdges.append(edgeId)
         self.edgeList.append(edgeId)
 
         if self.level==self.wantLevel:
@@ -778,7 +777,7 @@ class OSMParserData(object):
                 continue
             
             self.level=self.level+1
-            self.getEdgePartLevels(edgeId1)
+            self.getEdgePartLevels(result)
             self.level=self.level-1
             
         resultList=self.getEdgeEntryForEndRefId(startRefId)
@@ -790,7 +789,7 @@ class OSMParserData(object):
             if oneway1==1:
                 continue
             self.level=self.level+1
-            self.getEdgePartLevels(edgeId1)
+            self.getEdgePartLevels(result)
             self.level=self.level-1
             
         resultList=self.getEdgeEntryForStartRefId(endRefId)
@@ -800,7 +799,7 @@ class OSMParserData(object):
                 continue           
 
             self.level=self.level+1
-            self.getEdgePartLevels(edgeId1)
+            self.getEdgePartLevels(result)
             self.level=self.level-1
             
         resultList=self.getEdgeEntryForEndRefId(endRefId)
@@ -812,21 +811,19 @@ class OSMParserData(object):
             if oneway1==1:
                 continue
             self.level=self.level+1
-            self.getEdgePartLevels(edgeId1)
+            self.getEdgePartLevels(result)
             self.level=self.level-1
                 
-    def getEdgeListForWayName(self, startEdge, streetInfo):        
+    def getEdgeListForWayName(self, edge, streetInfo):        
         self.doneEdges=list()
                 
-        self.getEdgePartName(startEdge, streetInfo)
+        self.getEdgePartName(edge, streetInfo)
         
-    def getEdgePartName(self, edgeId, streetInfo):
-        self.doneEdges.append(edgeId)
-
-        result=self.getEdgeEntryForEdgeId(edgeId)
-        edgeId, startRefId, endRefId, wayId, edgeInfo=result
+    def getEdgePartName(self, edge, streetInfo):
+        edgeId, startRefId, endRefId, wayId, edgeInfo=edge
         oneway=edgeInfo["o"]
 
+        self.doneEdges.append(edgeId)
         self.edgeList.append(edgeId)
                 
         resultList=self.getEdgeEntryForStartRefId(startRefId)
@@ -840,7 +837,7 @@ class OSMParserData(object):
 
             newStreetInfo=self.getStreetInfoWithWayId(wayId1)
             if newStreetInfo==streetInfo:
-                self.getEdgePartName(edgeId1, streetInfo)
+                self.getEdgePartName(result, streetInfo)
             
         resultList=self.getEdgeEntryForEndRefId(startRefId)
         for result in resultList:
@@ -852,7 +849,7 @@ class OSMParserData(object):
                 continue
             newStreetInfo=self.getStreetInfoWithWayId(wayId1)
             if newStreetInfo==streetInfo:
-                self.getEdgePartName(edgeId1, streetInfo)
+                self.getEdgePartName(result, streetInfo)
                             
         resultList=self.getEdgeEntryForStartRefId(endRefId)
         for result in resultList:
@@ -861,7 +858,7 @@ class OSMParserData(object):
                 continue           
             newStreetInfo=self.getStreetInfoWithWayId(wayId1)
             if newStreetInfo==streetInfo:
-                self.getEdgePartName(edgeId1, streetInfo)
+                self.getEdgePartName(result, streetInfo)
                             
         resultList=self.getEdgeEntryForEndRefId(endRefId)
         for result in resultList:
@@ -873,7 +870,7 @@ class OSMParserData(object):
                 continue
             newStreetInfo=self.getStreetInfoWithWayId(wayId1)
             if newStreetInfo==streetInfo:
-                self.getEdgePartName(edgeId1, streetInfo)
+                self.getEdgePartName(result, streetInfo)
 
     def createEdgeTableEntries(self):
         self.cursor.execute('SELECT * FROM wayTable')
