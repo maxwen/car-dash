@@ -35,8 +35,8 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-#osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
+#osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
 #osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
@@ -540,24 +540,15 @@ class QtOSMWidget(QWidget):
             redPen.setCapStyle(Qt.RoundCap);
             redPen.setJoinStyle(Qt.RoundJoin)
             
-            bluePen=QPen()
-            bluePen.setColor(Qt.darkBlue)
-            bluePen.setWidth(self.map_zoom)
-            bluePen.setCapStyle(Qt.RoundCap);
-
-            blueLightPen=QPen(Qt.blue)
-            blueLightPen.setWidth(self.map_zoom)
-            blueLightPen.setCapStyle(Qt.RoundCap);
+            blueCrossingPen=QPen()
+            blueCrossingPen.setColor(Qt.darkBlue)
+            blueCrossingPen.setWidth(min(self.map_zoom, 10))
+            blueCrossingPen.setCapStyle(Qt.RoundCap);
             
-            greenPen=QPen()
-            greenPen.setColor(Qt.darkGreen)
-            greenPen.setWidth(self.map_zoom)
-            greenPen.setCapStyle(Qt.RoundCap);
-            
-            greenLightPen=QPen()
-            greenLightPen.setColor(Qt.green)
-            greenLightPen.setWidth(self.map_zoom)
-            greenLightPen.setCapStyle(Qt.RoundCap);
+            redCrossingPen=QPen()
+            redCrossingPen.setColor(Qt.red)
+            redCrossingPen.setWidth(min(self.map_zoom, 10))
+            redCrossingPen.setCapStyle(Qt.RoundCap);
             
             motorwayPen=QPen()
             motorwayPen.setColor(Qt.blue)
@@ -613,34 +604,17 @@ class QtOSMWidget(QWidget):
                     start=False
                     end=False
                     crossing=False
-#                    crossingWay=False
+                    crossingType=0
                     oneway=False
                     streetType=""
                     if "start" in item:
                         start=True
                     if "end" in item:
                         end=True
-#                    if "crossing" in item:
-##                        crossing=True
-#                        crossingList=item["crossing"]
-#                        print(crossingList)
-#                        if len(crossingList)>1:
-#                            crossing=True
-#                        for nextWay, twowayCrossing in crosslingList:
-#                            print("%d %d %s"%(ref, nextWay, twowayCrossing))
-#                            if twowayCrossing:
-#                                onewayCrossing=False
-                                
-#                    if "crossingWay" in item:
-#                        crossingWay=True
-#                        crosslingList=item["crossingWay"]
-#                        if len(crosslingList)>1:
-#                            onewayCrossing=False
-#                        else:
-#                            nextWay, twowayCrossing=crosslingList[0]
-#                            if twowayCrossing:
-#                                onewayCrossing=False
-                                
+                    if "crossing" in item:
+                        crossing=True
+                        crossingType=item["crossing"]
+  
                     if"oneway" in item:
                         oneway=item["oneway"]=="yes"
                     if "type" in item:
@@ -676,19 +650,12 @@ class QtOSMWidget(QWidget):
     
                         lastX=x
                         lastY=y
-                        
-#                        if crossingWay:
-#                            if onewayCrossing:
-#                                self.painter.setPen(greenLightPen)
-#                            else:
-#                                self.painter.setPen(greenPen)
-#                            self.painter.drawPoint(x, y)
                             
                         if crossing:
-#                            if realCrossing:
-#                                self.painter.setPen(blueLightPen)
-#                            else:
-                            self.painter.setPen(bluePen)
+                            if crossingType==1:
+                                self.painter.setPen(blueCrossingPen)
+                            else:
+                                self.painter.setPen(redCrossingPen)
                             self.painter.drawPoint(x, y)
 
                     elif start:
