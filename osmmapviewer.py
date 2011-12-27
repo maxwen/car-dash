@@ -906,8 +906,8 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
-                self.lastWayId=wayId
-                trackList=osmParserData.showWay(wayId, usedRefId, 4)
+#                self.lastWayId=wayId
+                trackList=osmParserData.showWay(wayId, usedRefId, 5)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -923,7 +923,7 @@ class QtOSMWidget(QWidget):
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                trackList=osmParserData.showWay(wayId, usedRefId, 4)
+                trackList=osmParserData.showWay(wayId, usedRefId, 2)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
@@ -1366,7 +1366,7 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             (name, ref)=searchDialog.getStreetName()           
-            trackList=osmParserData.getTrackListByName(name, ref)
+            trackList=osmParserData.showWayWithName(name, ref)
             if trackList!=None:
                 self.showWay(trackList)
                 self.app.processEvents()
