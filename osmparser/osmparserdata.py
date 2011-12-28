@@ -38,6 +38,7 @@ class OSMParserData(object):
         self.edgeList=list()
         self.crossingId=0
         self.nodeId=1
+        self.dWrapper=None
         
     def createTables(self):
         if self.cursor!=None:
@@ -50,6 +51,7 @@ class OSMParserData(object):
     def openDB(self):
         self.connection=sqlite3.connect(self.getDBFile())
         self.cursor=self.connection.cursor()   
+        self.dWrapper=DijkstraWrapper(self.cursor)
 
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, ways BLOB)')
@@ -663,6 +665,34 @@ class OSMParserData(object):
         streetTrackItem["end"]="end"
         return streetTrackItem
 
+    def showRouteToMousePos(self, wayId, usedRefId):
+        source=1507
+        
+        targetFound=False
+        target=3810
+        
+        resultList=self.getEdgeEntryForWayId(wayId)
+        for result in resultList:
+            if targetFound:
+                break
+            
+            (edgeId, startRef, endRef, length, oneway, wayId, source1, target1, refList)=result
+
+            for edgeRef in refList:
+                if edgeRef==usedRefId:
+                    target=target1
+                    targetFound=True
+                    break
+                
+        print(target)
+
+        if self.dWrapper!=None:
+            edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+            if edgeList!=None:
+                return self.printEdgeList(edgeList)
+
+        return None
+        
     def showWay(self, wayId, usedRefId, level):
         self.edgeList=list()
         self.getEdgeListForWayLevels(wayId, usedRefId, level)
@@ -1154,6 +1184,10 @@ class OSMParserData(object):
     def dbExists(self):
         return os.path.exists(self.getDBFile())
         
+    def initGraph(self):
+        if self.dWrapper!=None:
+            self.dWrapper.initGraph()
+
     def initDB(self):
         createDB=not self.dbExists()
         
@@ -1205,7 +1239,7 @@ def main(argv):
     p.initDB()
     
     p.openDB()
-    
+    p.initGraph()
 
 #    p.testRefTable()
 #    p.testWayTable()
@@ -1213,23 +1247,24 @@ def main(argv):
 #    p.testCrossingTable()
 #    p.testEdgeTable()
         
-    l=p.getEdgeEntryForWayId(51732744)
-    for edge in l:
-        print(edge)
-
-    l=p.getEdgeEntryForWayId(30510253)
-    for edge in l:
-        print(edge)
+#    l=p.getEdgeEntryForWayId(30525406)
+#    for edge in l:
+#        print(edge)
+#
+#    l=p.getEdgeEntryForWayId(30510253)
+#    for edge in l:
+#        print(edge)
 #        
 #    l=p.getEdgeEntryForWayId(82173348)
 #    for edge in l:
 #        print(edge)
         
-#    print(p.getEdgeEntryForSourceAndTarget(626, 2862))
-#    print(p.getEdgeEntryForSourceAndTarget(2862, 626))
+#    print(p.getEdgeEntryForSourceAndTarget(3773, 1703))
+#    print(p.getEdgeEntryForSourceAndTarget(1703, 3773))
+#    print(p.getEdgeEntryForSourceAndTarget(3024, 821))
+#    print(p.getEdgeEntryForSourceAndTarget(877, 887))
     
-    dWrapper=DijkstraWrapper(p.cursor)
-    pathEdgeList, pathLen=dWrapper.computeShortestPath(2046, 1506, True, True)
+    print(p.dWrapper.computeShortestPath(2046, 1506))
 
 #    l=p.getEdgeEntryForWayId(4064363)
 #    for edge in l:

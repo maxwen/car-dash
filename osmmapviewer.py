@@ -767,7 +767,9 @@ class QtOSMWidget(QWidget):
             if not self.controlWidgetRect.contains(event.x(), event.y()):
                 self.lastMouseMoveX=event.x()
                 self.lastMouseMoveY=event.y()
-                self.showTrackOnMousePos(event.x(), event.y())
+#                self.showTrackOnMousePos(event.x(), event.y())
+                self.showRouteToMousePos(event.x(), event.y())
+
             else:
                 self.pointInsideMoveOverlay(event.x(), event.y())
                 self.pointInsideZoomOverlay(event.x(), event.y())
@@ -873,13 +875,21 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
-#                self.lastWayId=wayId
+                self.lastWayId=wayId
                 trackList=osmParserData.showWay(wayId, usedRefId, 3)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
                 self.setTrack(trackList, True)
-                    
+            
+    def showRouteToMousePos(self, x, y):
+        if self.osmWidget.dbLoaded==True:
+            (actlat, actlon)=self.getMousePosition(x, y)
+            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+            trackList=osmParserData.showRouteToMousePos(wayId, usedRefId)
+            if trackList!=None:
+                self.setTrack(trackList, True)
+        
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
             (actlat, actlon)=self.getMousePosition(x, y)
@@ -1313,6 +1323,7 @@ class OSMWidget(QWidget):
             self.testTrackButton.setDisabled(False)
 #            self.showAllWayButton.setDisabled(False)
             osmParserData.openDB()
+            osmParserData.initGraph()
             self.dbLoaded=True
         if state=="run":
             self.testTrackButton.setDisabled(True)

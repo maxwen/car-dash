@@ -31,6 +31,10 @@ class Edge():
 class DijkstraWrapper():
     def __init__(self, cursor):
         self.cursor=cursor
+        self.gr=None
+        self.directed=True
+        self.hasReverseCost=True
+
         
     def edgeFromDB(self, x):
         edgeId=x[0]
@@ -56,10 +60,10 @@ class DijkstraWrapper():
             edgeList.append(edge)
         return edgeList    
 
-    def route(self, gr, st):
-        lastnode = self.targetNode
+    def route(self, gr, st, startNode, targetNode):
+        lastnode = targetNode
         path = []
-        while lastnode != self.startNode:
+        while lastnode != startNode:
             nextnode = st[lastnode]
             assert nextnode in gr.neighbors(lastnode)
             path.append((lastnode, st[lastnode]))
@@ -68,11 +72,33 @@ class DijkstraWrapper():
         print(path)
         return path
     
-    def dijkstra(self):
+    def dijkstra(self, startNode, targetNode):       
+        if not self.gr.has_node(startNode):
+            print("start node not found %d"%(startNode))
+            return None, None
+        
+        if not self.gr.has_node(targetNode):
+            print("target node not found %d"%(targetNode))
+            return None, None
+
         pathEdgeList=list()
         pathLen=0
         
-        gr=digraph()
+        st, dist = shortest_path(self.gr, startNode)                    
+        path=self.route(self.gr, st, startNode, targetNode)        
+                
+        for source, target in path:
+            pathEdgeList.append(int(self.gr.edge_label((source, target))))
+                
+        if targetNode in dist:
+            pathLen=dist[targetNode]
+            
+        return pathEdgeList, pathLen
+        
+    def initGraph(self):
+        self.allEdgesList=self.fillEdges()
+        
+        self.gr=digraph()
         for edge in self.allEdgesList:
             edgeId=edge.id
             source=edge.source
@@ -86,57 +112,49 @@ class DijkstraWrapper():
             if source==2862 and target==626:
                 None
                 
-            if not gr.has_node(source):
-                gr.add_node(source, ["source", source])
+            if not self.gr.has_node(source):
+                self.gr.add_node(source, ["source", source])
             
-            if not gr.has_node(target):
-                gr.add_node(target, ["target", target])
+            if not self.gr.has_node(target):
+                self.gr.add_node(target, ["target", target])
             
-            if not gr.has_edge((source, target)):
-                gr.add_edge((source, target), cost, str(edgeId))            
+            if not self.gr.has_edge((source, target)):
+                self.gr.add_edge((source, target), cost, str(edgeId))            
             else:
-                print("edge target=%d source=%d already added"%(source, target))
+                cost1=self.gr.edge_weight((source, target))
+                if cost<cost1:
+                    self.gr.del_edge((source, target))
+                    self.gr.add_edge((source, target), cost, str(edgeId))            
+                else:
+                    print("edge source=%d target=%d already added but with larger cost"%(source, target))
                 
             if not self.directed or (self.directed and self.hasReverseCost):
                 if self.hasReverseCost:
-                    if not gr.has_edge((target, source)):
-                        gr.add_edge((target, source), reverseCost, str(edgeId))
+                    if not self.gr.has_edge((target, source)):
+                        self.gr.add_edge((target, source), reverseCost, str(edgeId))
                     else:
-                        print("edge target=%d source=%d already added"%(target, source))
+                        reverseCost1=self.gr.edge_weight((target, source))
+                        if reverseCost<reverseCost1:
+                            self.gr.del_edge((target, source))
+                            self.gr.add_edge((target, source), reverseCost, str(edgeId))
+                        else:
+                            print("edge target=%d source=%d already added but with larget reverseCost"%(target, source))
                 else:
-                    if not gr.has_edge((target, source)):
-                        gr.add_edge((target, source), cost, str(edgeId))
+                    if not self.gr.has_edge((target, source)):
+                        self.gr.add_edge((target, source), cost, str(edgeId))
                     else:
+                        cost1=self.gr.edge_weight((target, source))
+                        if cost<cost1:
+                            self.gr.del_edge((target, source))
+                            self.gr.add_edge((target, source), cost, str(edgeId))            
+                        else:
+                            print("edge target=%d source=%d already added but with larger cost"%(target, source))
+
                         print("edge target=%d source=%d already added"%(target, source))
         
-        if not gr.has_node(self.startNode):
-            print("startNode not found")
-            return None, None
         
-        if not gr.has_node(self.targetNode):
-            print("endNode not found")
-            return None, None
-        
-        st, dist = shortest_path(gr, self.startNode)                    
-        path=self.route(gr, st)        
-                
-        for source, target in path:
-            pathEdgeList.append(int(gr.edge_label((source, target))))
-                
-        if self.targetNode in dist:
-            pathLen=dist[self.targetNode]
-            
-        return pathEdgeList, pathLen
-        
-    def computeShortestPath(self, startNode, targetNode, directed, hasReverseCost):
-        self.startNode=startNode
-        self.targetNode=targetNode
-        self.directed=directed
-        self.hasReverseCost=hasReverseCost
-        
-        self.allEdgesList=self.fillEdges()
-                        
-        pathEdgeList, pathLen=self.dijkstra()
+    def computeShortestPath(self, startNode, targetNode):                       
+        pathEdgeList, pathLen=self.dijkstra(startNode, targetNode)
         if pathLen!=None and pathEdgeList!=None:
             print("%s %d"%(str(pathEdgeList), pathLen))
             
