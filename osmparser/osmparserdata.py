@@ -12,6 +12,7 @@ import time
 import array
 from osmparser.osmutils import OSMUtils
 import pickle
+from osmparser.dijkstrawrapper import DijkstraWrapper
 
 # simple class that handles the parsed OSM data.
 
@@ -116,6 +117,14 @@ class OSMParserData(object):
             resultList.append(edge)
         return resultList      
     
+    def getEdgeEntryForSourceAndTarget(self, sourceId, targetId):
+        self.cursor.execute('SELECT * FROM edgeTable where source=="%s" AND target=="%s"'%(str(sourceId), str(targetId)))
+        resultList=list()
+        allentries=self.cursor.fetchall()
+        for result in allentries:
+            edge=self.edgeFromDB(result)
+            resultList.append(edge)
+        return resultList   
     def getEdgeEntryForEdgeId(self, edgeId):
         self.cursor.execute('SELECT * FROM edgeTable where id=="%s"'%(str(edgeId)))
         allentries=self.cursor.fetchall()
@@ -836,55 +845,51 @@ class OSMParserData(object):
                 
         print(edge)
         
-        if target!=0:
-            resultList=self.getEdgeEntryForSource(target)  
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
-                if edgeId in self.doneEdges:
-                    continue
-                
-                newStreetInfo=self.getStreetInfoWithWayId(wayId1)
-                if newStreetInfo==streetInfo:
-                    self.getEdgePartName(result, streetInfo)
-       
-        if target!=0:
-            resultList=self.getEdgeEntryForTarget(target)  
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway1==1:
-                    continue
-                
-                newStreetInfo=self.getStreetInfoWithWayId(wayId1)
-                if newStreetInfo==streetInfo:
-                    self.getEdgePartName(result, streetInfo)
-      
-        if source!=0:
-            resultList=self.getEdgeEntryForTarget(source)
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway1==1:
-                    continue
-
-                newStreetInfo=self.getStreetInfoWithWayId(wayId1)
-                if newStreetInfo==streetInfo:
-                    self.getEdgePartName(result, streetInfo)
+        resultList=self.getEdgeEntryForSource(target)  
+        for result in resultList:
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            if edgeId in self.doneEdges:
+                continue
             
-        if source!=0:
-            resultList=self.getEdgeEntryForSource(source)
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway==1 and oneway1==1:
-                    continue
+            newStreetInfo=self.getStreetInfoWithWayId(wayId1)
+            if newStreetInfo==streetInfo:
+                self.getEdgePartName(result, streetInfo)
+       
+        resultList=self.getEdgeEntryForTarget(target)  
+        for result in resultList:
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            if edgeId in self.doneEdges:
+                continue
+            if oneway1==1:
+                continue
+            
+            newStreetInfo=self.getStreetInfoWithWayId(wayId1)
+            if newStreetInfo==streetInfo:
+                self.getEdgePartName(result, streetInfo)
+      
+        resultList=self.getEdgeEntryForTarget(source)
+        for result in resultList:
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            if edgeId in self.doneEdges:
+                continue
+            if oneway1==1:
+                continue
 
-                newStreetInfo=self.getStreetInfoWithWayId(wayId1)
-                if newStreetInfo==streetInfo:
-                    self.getEdgePartName(result, streetInfo)
+            newStreetInfo=self.getStreetInfoWithWayId(wayId1)
+            if newStreetInfo==streetInfo:
+                self.getEdgePartName(result, streetInfo)
+            
+        resultList=self.getEdgeEntryForSource(source)
+        for result in resultList:
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            if edgeId in self.doneEdges:
+                continue
+            if oneway==1 and oneway1==1:
+                continue
+
+            newStreetInfo=self.getStreetInfoWithWayId(wayId1)
+            if newStreetInfo==streetInfo:
+                self.getEdgePartName(result, streetInfo)
 
     def createEdgeTableEntries(self):
         self.cursor.execute('SELECT * FROM wayTable')
@@ -911,10 +916,21 @@ class OSMParserData(object):
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSourceEnriesFor(edge)
 
-#        for id in allEdges:
-#            edgeId=id[0]
-#            edge=self.getEdgeEntryForEdgeId(edgeId)
-#            self.createEdgeTableNodeTargetEnriesFor(edge)
+        self.cursor.execute('SELECT id FROM edgeTable WHERE source==0 OR target==0')
+        allEdges=self.cursor.fetchall()
+
+        for id in allEdges:
+            edgeId=id[0]
+            edge=self.getEdgeEntryForEdgeId(edgeId)
+            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList=edge
+            if source==0:
+                sourceId=self.nodeId
+                self.nodeId=self.nodeId+1
+                self.updateSourceOfEdge(edgeId, sourceId)
+            if target==0:
+                targetId=self.nodeId
+                self.nodeId=self.nodeId+1
+                self.updateTargetOfEdge(edgeId, targetId)
 
         self.cursor.execute("CREATE INDEX source_idx ON edgeTable (source)")
         self.cursor.execute("CREATE INDEX target_idx ON edgeTable (target)")
@@ -1181,40 +1197,50 @@ def main(argv):
     except IndexError:
 #        osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #        osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-#        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
-        osmFile='test1.osm'
+        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+#        osmFile='test1.osm'
 
     p = OSMParserData(osmFile)
     
     p.initDB()
     
     p.openDB()
+    
+
 #    p.testRefTable()
 #    p.testWayTable()
 #    p.testStreetTable()
 #    p.testCrossingTable()
 #    p.testEdgeTable()
+        
+    l=p.getEdgeEntryForWayId(51732744)
+    for edge in l:
+        print(edge)
+
+    l=p.getEdgeEntryForWayId(30510253)
+    for edge in l:
+        print(edge)
+#        
+#    l=p.getEdgeEntryForWayId(82173348)
+#    for edge in l:
+#        print(edge)
+        
+#    print(p.getEdgeEntryForSourceAndTarget(626, 2862))
+#    print(p.getEdgeEntryForSourceAndTarget(2862, 626))
     
-    l=p.getEdgeEntryForWayId(82173657)
-    for edge in l:
-        print(edge)
+    dWrapper=DijkstraWrapper(p.cursor)
+    pathEdgeList, pathLen=dWrapper.computeShortestPath(2046, 1506, True, True)
 
-    l=p.getEdgeEntryForWayId(82173666)
-    for edge in l:
-        print(edge)
-    l=p.getEdgeEntryForWayId(4064350)
-    for edge in l:
-        print(edge)
-    l=p.getEdgeEntryForWayId(4064363)
-    for edge in l:
-        print(edge)
-    l=p.getEdgeEntryForWayId(10711379)
-    for edge in l:
-        print(edge)
-
-    l=p.getEdgeEntryForWayId(12138807)
-    for edge in l:
-        print(edge)        
+#    l=p.getEdgeEntryForWayId(4064363)
+#    for edge in l:
+#        print(edge)
+#    l=p.getEdgeEntryForWayId(10711379)
+#    for edge in l:
+#        print(edge)
+#
+#    l=p.getEdgeEntryForWayId(12138807)
+#    for edge in l:
+#        print(edge)        
 #        82173657
 #        10711379
 #        4064363
