@@ -35,8 +35,8 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-#osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+#osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
+osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
 #osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
@@ -874,7 +874,7 @@ class QtOSMWidget(QWidget):
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
 #                self.lastWayId=wayId
-                trackList=osmParserData.showWay(wayId, usedRefId, 5)
+                trackList=osmParserData.showWay(wayId, usedRefId, 3)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
