@@ -15,9 +15,10 @@ from collections import deque
 import fnmatch
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QColor, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint
 from osmparser.osmutils import OSMUtils
+from config import Config
 
 TILESIZE=256
 minWidth=500
@@ -235,7 +236,7 @@ class QtOSMWidget(QWidget):
         self.startPoint=None
         self.endPoint=None
         self.gpsPoint=None
-        self.wayPoints=dict()
+        self.wayPoints=list()
         self.startPointImage=QPixmap("images/source.png")
         self.endPointImage=QPixmap("images/target.png")
         self.wayPointImage=QPixmap("images/waypoint.png")
@@ -570,7 +571,7 @@ class QtOSMWidget(QWidget):
 #            self.painter.setPen(endPointPen)
 #            self.painter.drawPoint(x, y)
             
-        for point in self.wayPoints.values():
+        for point in self.wayPoints:
             (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
             self.painter.drawPixmap(int(x-self.wayPointImage.width()/2), int(y-self.wayPointImage.height()/2), self.wayPointImage)
             
@@ -842,8 +843,8 @@ class QtOSMWidget(QWidget):
             if not self.controlWidgetRect.contains(event.x(), event.y()):
                 self.lastMouseMoveX=event.x()
                 self.lastMouseMoveY=event.y()
-#                self.showTrackOnMousePos(event.x(), event.y())
-                self.showRouteToMousePos(event.x(), event.y())
+                self.showTrackOnMousePos(event.x(), event.y())
+#                self.showRouteToMousePos(event.x(), event.y())
 
             else:
                 self.pointInsideMoveOverlay(event.x(), event.y())
@@ -939,12 +940,19 @@ class QtOSMWidget(QWidget):
         setStartPointAction = QAction("Set Start Point", self)
         setEndPointAction = QAction("Set End Point", self)
         setWayPointAction = QAction("Set Way Point", self)
+        addFavoriteAction=QAction("Add to Favorites", self)
+        clearPointsAction = QAction("Clear Routing Points", self)
         showRouteAction=QAction("Show Route", self)
 
         menu.addAction(forceDownloadAction)
+        menu.addSeparator()
         menu.addAction(setStartPointAction)
         menu.addAction(setEndPointAction)
         menu.addAction(setWayPointAction)
+        menu.addAction(addFavoriteAction)
+        menu.addSeparator()
+        menu.addAction(clearPointsAction)
+        menu.addSeparator()
         menu.addAction(showRouteAction)
 
         addPointDisabled=not self.osmWidget.dbLoaded
@@ -974,40 +982,58 @@ class QtOSMWidget(QWidget):
             self.addRoutingPoint("way", 2)
         elif action==showRouteAction:
             self.showRouteForRoutingPoints()
+        elif action==clearPointsAction:
+            self.startPoint=None
+            self.endPoint=None
+            self.wayPoints.clear()
+        elif action==addFavoriteAction:
+            self.addToFavorite(self.mousePos)
+            
         self.mousePressed=False
         self.moving=False
         
-    def addRoutingPoint(self, name, type):
+    def addToFavorite(self, mousePos):
+        (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
+        defaultName=""
+        wayId, usedRefId=osmParserData.getWayIdForPos(lat, lon)
+        if wayId!=None:
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+
+        favNameDialog=QInputDialog(self)
+        favNameDialog.setLabelText("Favorite Name")
+        favNameDialog.setTextValue(defaultName)
+        result=favNameDialog.exec()
+        if result==QDialog.Accepted:
+            favoriteName=favNameDialog.textValue()
+            favoritePoint=OSMRoutingPoint(favoriteName, 4, lat, lon)
+            self.osmWidget.favoriteList.append(favoritePoint)
+            
+    def addRoutingPoint(self, name, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
         # change to actual positions for a real way
-        if type==0:
-            self.startPoint=OSMRoutingPoint(name, type, lat, lon)
+        if pointType==0:
+            self.startPoint=OSMRoutingPoint(name, pointType, lat, lon)
             self.startPoint.resolveFromPos(osmParserData)
             
-        elif type==1:
-            self.endPoint=OSMRoutingPoint(name, type, lat, lon)
+        elif pointType==1:
+            self.endPoint=OSMRoutingPoint(name, pointType, lat, lon)
             self.endPoint.resolveFromPos(osmParserData)
 
-        elif type==2:
-            # TODO mae name uniquw
-#            if name in self.wayPoints:
-#                wayPointNames=self.wayPoints.keys()
-#
-            wayPoint=OSMRoutingPoint(name, type, lat, lon)
+        elif pointType==2:
+            wayPoint=OSMRoutingPoint(name, pointType, lat, lon)
             wayPoint.resolveFromPos(osmParserData)
-
-            self.wayPoints[name]=wayPoint
+            self.wayPoints.append(wayPoint)
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                trackList=osmParserData.showWay(wayId, usedRefId, 3)
+#                trackList=osmParserData.showWay(wayId, usedRefId, 3)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-                self.setTrack(trackList, True)
+#                self.setTrack(trackList, True)
             
     def showRouteForRoutingPoints(self):
         if self.osmWidget.dbLoaded==True:
@@ -1021,13 +1047,13 @@ class QtOSMWidget(QWidget):
             if trackList!=None:
                 self.setTrack(trackList, True)
 
-    def showRouteToMousePos(self, x, y):
-        if self.osmWidget.dbLoaded==True:
-            (actlat, actlon)=self.getMousePosition(x, y)
-            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
-            trackList=osmParserData.showRouteToMousePos(wayId, usedRefId)
-            if trackList!=None:
-                self.setTrack(trackList, True)
+#    def showRouteToMousePos(self, x, y):
+#        if self.osmWidget.dbLoaded==True:
+#            (actlat, actlon)=self.getMousePosition(x, y)
+#            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+#            trackList=osmParserData.showRouteToMousePos(wayId, usedRefId)
+#            if trackList!=None:
+#                self.setTrack(trackList, True)
         
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
@@ -1039,11 +1065,11 @@ class QtOSMWidget(QWidget):
             wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                trackList=osmParserData.showWay(wayId, usedRefId, 2)
+#                trackList=osmParserData.showWay(wayId, usedRefId, 2)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-                self.setTrack(trackList, False)
+#                self.setTrack(trackList, False)
             
 #    def point_new_degrees(self, lat, lon):
 #        rlat = self.osmutils.deg2rad(lat);
@@ -1070,6 +1096,50 @@ class QtOSMWidget(QWidget):
 #     
 #        return super(QtOSMWidget, self).event(event)
          
+    def loadConfig(self, config):
+        section="routing"
+
+        if config.hasSection(section):
+            for name, value in config.items(section):
+                if name=="start":
+                    self.startPoint=OSMRoutingPoint()
+                    self.startPoint.readFromConfig(value)
+                if name=="end":
+                    self.endPoint=OSMRoutingPoint()
+                    self.endPoint.readFromConfig(value)
+                if name[:3]=="way":
+                    wayPoint=OSMRoutingPoint()
+                    wayPoint.readFromConfig(value)
+                    self.wayPoints.append(wayPoint)
+                    
+    def saveConfig(self, config):
+        section="routing"
+        config.removeSection(section)
+        config.addSection(section)
+        
+        if self.startPoint!=None:
+            self.startPoint.saveToConfig(config, section, "start")
+            
+        if self.endPoint!=None:
+            self.endPoint.saveToConfig(config, section, "end")
+        
+        i=0
+        for point in self.wayPoints:
+            point.saveToConfig(config, section, "way%d"%(i))
+            i=i+1
+        
+    def setStartPoint(self, point):
+        self.startPoint=point
+        self.update()
+        
+    def setEndPoint(self, point):
+        self.endPoint=point
+        self.update()
+        
+    def setWayPoint(self, point):
+        self.wayPoints.append(point)
+        self.update()
+        
 class OSMWayListTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
@@ -1120,9 +1190,9 @@ class OSMWaySearchDialog(QDialog):
         self.initUI()
         self.selectedStreet=None
          
-    def nameSort(self, item):
-       (name, ref)=item
-       return name
+#    def nameSort(self, item):
+#       (name, ref)=item
+#       return name
    
     def getStreetName(self):
         return self.selectedStreet
@@ -1214,6 +1284,183 @@ class OSMWaySearchDialog(QDialog):
         
         self.streetViewModel.update(self.filteredStreetList)
 
+#----------------------------
+class OSMFavoriteTableModel(QAbstractTableModel):
+    def __init__(self, parent):
+        QAbstractTableModel.__init__(self, parent)
+        
+    def rowCount(self, parent): 
+        return len(self.favoriteList)
+    
+    def columnCount(self, parent): 
+        return 1
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.favoriteList):
+            return ""
+        point=self.favoriteList[index.row()]
+        name=point.getName()
+        
+        if index.column()==0:
+            return name
+       
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Name"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+   
+    def update(self, favoriteList):
+        self.favoriteList=favoriteList
+        self.reset()
+        
+class OSMFavoritesDialog(QDialog):
+    def __init__(self, parent, favoriteList):
+        QDialog.__init__(self, parent) 
+
+        self.favoriteList=sorted(favoriteList)
+        self.filteredFavoriteList=self.favoriteList
+
+        self.initUI()
+        self.selectedFavorite=None
+        self.pointType=0
+         
+#    def nameSort(self, item):
+#       (name, ref)=item
+#       return name
+   
+    def getResult(self):
+        return (self.selectedFavorite, self.pointType)
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        
+        self.filterEdit=QLineEdit(self)
+        self.filterEdit.setToolTip('Name Filter')
+        self.filterEdit.returnPressed.connect(self._applyFilter)
+        self.filterEdit.textChanged.connect(self._applyFilter)
+        top.addWidget(self.filterEdit)
+        
+        self.favoriteView=QTableView(self)
+        top.addWidget(self.favoriteView)
+        
+        self.favoriteViewModel=OSMFavoriteTableModel(self)
+        self.favoriteViewModel.update(self.filteredFavoriteList)
+        self.favoriteView.setModel(self.favoriteViewModel)
+        header=QHeaderView(Qt.Horizontal, self.favoriteView)
+        header.setStretchLastSection(True)
+        self.favoriteView.setHorizontalHeader(header)
+        self.favoriteView.setColumnWidth(0, 300)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setDefault(True)
+        buttons.addWidget(self.cancelButton)
+
+        self.setStartPointButton=QPushButton("Start Point", self)
+        self.setStartPointButton.clicked.connect(self._setStartPoint)
+        self.setStartPointButton.setEnabled(False)
+        buttons.addWidget(self.setStartPointButton)
+        
+        self.setEndPointButton=QPushButton("End Point", self)
+        self.setEndPointButton.clicked.connect(self._setEndPoint)
+        self.setEndPointButton.setEnabled(False)
+        buttons.addWidget(self.setEndPointButton)
+        
+        self.setWayPointButton=QPushButton("Way Point", self)
+        self.setWayPointButton.clicked.connect(self._setWayPoint)
+        self.setWayPointButton.setEnabled(False)
+        buttons.addWidget(self.setWayPointButton)
+
+        top.addLayout(buttons)
+        
+        self.connect(self.favoriteView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+
+        self.setLayout(top)
+        self.setWindowTitle('Favorites')
+        self.setGeometry(0, 0, 400, 400)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        self.setEndPointButton.setEnabled(current.isValid())
+        self.setStartPointButton.setEnabled(current.isValid())
+        self.setWayPointButton.setEnabled(current.isValid())
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _setWayPoint(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedFavorite=self.filteredFavoriteList[current.row()]
+            self.pointType=2
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setStartPoint(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedFavorite=self.filteredFavoriteList[current.row()]
+            self.pointType=0
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setEndPoint(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedFavorite=self.filteredFavoriteList[current.row()]
+            self.pointType=1
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _clearTableSelection(self):
+        self.favoriteView.clearSelection()
+        self.setWayPointButton.setEnabled(False)
+        self.setStartPointButton.setEnabled(False)
+        self.setEndPointButton.setEnabled(False)
+        
+    @pyqtSlot()
+    def _applyFilter(self):
+        self._clearTableSelection()
+        self.filterValue=self.filterEdit.text()
+        if len(self.filterValue)!=0:
+            if self.filterValue[-1]!="*":
+                self.filterValue=self.filterValue+"*"
+            self.filteredFavoriteList=list()
+            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for point in self.favoriteList:
+                name=point.getName()
+                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+                    continue
+                self.filteredFavoriteList.append(point)
+        else:
+            self.filteredFavoriteList=self.favoriteList
+        
+        self.favoriteViewModel.update(self.filteredFavoriteList)
+#---------------------
+
 class OSMWidget(QWidget):
     def __init__(self, parent, app):
         QWidget.__init__(self, parent)
@@ -1225,6 +1472,13 @@ class OSMWidget(QWidget):
         self.lastDownloadState=downloadStoppedState
         self.app=app
         self.dbLoaded=False
+        self.favoriteList=list()
+        self.initParser()
+        
+#        testPoint=OSMRoutingPoint("fav1", 0, 47.8205, 13.0170)
+#        self.favoriteList.append(testPoint)
+#        testPoint=OSMRoutingPoint("fav2", 0, 47.8215, 13.0190)
+#        self.favoriteList.append(testPoint)
 
         
     def addToWidget(self, vbox):       
@@ -1274,19 +1528,19 @@ class OSMWidget(QWidget):
         
         buttons=QHBoxLayout()        
 
-        self.testTrackButton=QPushButton("Test Track", self)
-        self.testTrackButton.clicked.connect(self._testTrack)
-        buttons.addWidget(self.testTrackButton)
+#        self.testTrackButton=QPushButton("Test Track", self)
+#        self.testTrackButton.clicked.connect(self._testTrack)
+#        buttons.addWidget(self.testTrackButton)
 
         self.searchWayButton=QPushButton("Show Way", self)
         self.searchWayButton.clicked.connect(self._showWay)
         self.searchWayButton.setDisabled(True)
         buttons.addWidget(self.searchWayButton)
                 
-#        self.showAllWayButton=QPushButton("Show All Ways", self)
-#        self.showAllWayButton.clicked.connect(self._showAllWay)
-#        self.showAllWayButton.setDisabled(True)
-#        buttons.addWidget(self.showAllWayButton)
+        self.favoritesButton=QPushButton("Favorites", self)
+        self.favoritesButton.clicked.connect(self._showFavorites)
+        self.favoritesButton.setDisabled(True)
+        buttons.addWidget(self.favoritesButton)
         
         self.trackLabel=QLabel("", self)
         self.trackLabel.setText("")
@@ -1305,7 +1559,7 @@ class OSMWidget(QWidget):
     @pyqtSlot()
     def _cleanup(self):
         if self.downloadThread.isRunning():
-            self.downloadThread.stop()
+            self.downloadThread.stop()        
 #        osmParserData.closeDB()
         
     def updateTrackDisplay(self, track):
@@ -1434,6 +1688,17 @@ class OSMWidget(QWidget):
         self.setTileHome(config.getDefaultSection().get("tileHome", defaultTileHome))
         self.setTileServer(config.getDefaultSection().get("tileServer", defaultTileServer))
 
+        section="favorites"
+        self.favoriteList=list()
+        if config.hasSection(section):
+            for name, value in config.items(section):
+                if name[:8]=="favorite":
+                    favoritePoint=OSMRoutingPoint()
+                    favoritePoint.readFromConfig(value)
+                    self.favoriteList.append(favoritePoint)
+
+        self.mapWidgetQt.loadConfig(config)
+        
     def saveConfig(self, config):
         config.getDefaultSection()["zoom"]=str(self.getZoomValue())
         config.getDefaultSection()["autocenterGPS"]=str(self.getAutocenterGPSValue())
@@ -1445,6 +1710,16 @@ class OSMWidget(QWidget):
 
         config.getDefaultSection()["tileHome"]=self.getTileHome()
         config.getDefaultSection()["tileServer"]=self.getTileServer()
+        
+        section="favorites"
+        config.removeSection(section)
+        config.addSection(section)
+        i=0
+        for point in self.favoriteList:
+            point.saveToConfig(config, section, "favorite%d"%(i))
+            i=i+1
+        
+        self.mapWidgetQt.saveConfig(config)
         
     def updateDownloadThreadState(self, state):
         if state!=self.lastDownloadState:
@@ -1459,13 +1734,13 @@ class OSMWidget(QWidget):
     def updateDataThreadState(self, state):
         if state=="stopped":
             self.searchWayButton.setDisabled(False)
-            self.testTrackButton.setDisabled(False)
-#            self.showAllWayButton.setDisabled(False)
+#            self.testTrackButton.setDisabled(False)
+            self.favoritesButton.setDisabled(False)
             osmParserData.openDB()
             osmParserData.initGraph()
             self.dbLoaded=True
-        if state=="run":
-            self.testTrackButton.setDisabled(True)
+#        if state=="run":
+#            self.testTrackButton.setDisabled(True)
 
     def initParser(self):
         self.dataThread=OSMDataLoadWorker(self)
@@ -1494,39 +1769,25 @@ class OSMWidget(QWidget):
             else:
                 print("no waylist for %s-%s"%(name, ref))
                 
-    def showWay(self, trackList):
-#        for wayid in waylist:
-#            trackList=osmParserData.streetIndex[wayid]["track"]
-##                print(trackList)
-#            for trackItem in trackList:
-#                if "start" in trackItem:
-#                    continue
-#                if "end" in trackItem:
-#                    continue
-#                print("start="+str(trackItem))
-#                break
-#            for trackItem in trackList[::-1]:
-#                if "start" in trackItem:
-#                    continue
-#                if "end" in trackItem:
-#                    continue
-#                print("end="+str(trackItem))
-#                break
-        
-        self.mapWidgetQt.setTrack(trackList, True)
+#    def showWay(self, trackList):        
+#        self.mapWidgetQt.setTrack(trackList, True)
 
-#    @pyqtSlot()
-#    def _showAllWay(self):
-#            allWays=list()
-#            for waylist in osmParserData.streetNameIndex.values():
-#                allWays.extend(waylist)
-#                
-#            self.mapWidgetQt.setTrack(allWays)
-#            self.app.processEvents()
-#                
-#            # TODO hack
-#            self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
-#                                       self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
+    @pyqtSlot()
+    def _showFavorites(self):
+        favoritesDialog=OSMFavoritesDialog(self, self.favoriteList)
+        result=favoritesDialog.exec()
+        if result==QDialog.Accepted:
+            point, pointType=favoritesDialog.getResult()
+            if pointType==0:
+                routingPoint=OSMRoutingPoint("start", pointType, point.getLat(), point.getLon())  
+                self.mapWidgetQt.setStartPoint(routingPoint) 
+            elif pointType==1:
+                routingPoint=OSMRoutingPoint("end", pointType, point.getLat(), point.getLon())  
+                self.mapWidgetQt.setEndPoint(routingPoint) 
+            elif pointType==2:
+                routingPoint=OSMRoutingPoint("way", pointType, point.getLat(), point.getLon())  
+                self.mapWidgetQt.setWayPoint(routingPoint) 
+
 
 class OSMWindow(QMainWindow):
     def __init__(self, parent, app):
@@ -1536,8 +1797,8 @@ class OSMWindow(QMainWindow):
         self.setFont(font)
         self.incLat=0.0
         self.incLon=0.0
-        self.initParserDone=False
         self.app=app
+        self.config=Config("osmmapviewer.cfg")
         self.initUI()
 
     def initUI(self):
@@ -1557,10 +1818,11 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget=OSMWidget(self, self.app)
         self.osmWidget.addToWidget(osmTabLayout)
+        self.osmWidget.loadConfig(self.config)
 
         self.osmWidget.setZoomValue(16)
-        self.osmWidget.setStartLatitude(47.824)
-        self.osmWidget.setStartLongitude(13.013)
+        self.osmWidget.setStartLatitude(47.8205)
+        self.osmWidget.setStartLongitude(13.0170)
         self.osmWidget.initHome()
 
         self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
@@ -1583,11 +1845,10 @@ class OSMWindow(QMainWindow):
     def _testGPS(self):
         if self.incLat==0.0:
             self.incLat=self.osmWidget.startLat
-        if self.incLon==0.0:
             self.incLon=self.osmWidget.startLon
-            
-        self.incLat=self.incLat+0.001
-        self.incLon=self.incLon+0.001
+        else:
+            self.incLat=self.incLat+0.001
+            self.incLon=self.incLon+0.001
         
         osmutils=OSMUtils()
         print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
@@ -1601,6 +1862,9 @@ class OSMWindow(QMainWindow):
 
     @pyqtSlot()
     def _cleanup(self):
+        self.osmWidget.saveConfig(self.config)
+        self.config.writeConfig()
+
         self.osmWidget._cleanup()
 
 def main(argv): 

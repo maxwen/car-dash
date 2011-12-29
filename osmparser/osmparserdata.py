@@ -16,7 +16,7 @@ from osmparser.dijkstrawrapper import DijkstraWrapper
 from config import Config
 
 class OSMRoutingPoint():
-    def __init__(self, name, type, lat, lon):
+    def __init__(self, name="", type=0, lat=0.0, lon=0.0):
         self.lat=lat
         self.lon=lon
         self.target=0
@@ -25,6 +25,7 @@ class OSMRoutingPoint():
         # 1 end
         # 2 way
         # 3 gps
+        # 4 favorite
         self.type=type
         self.wayId=None
         self.edgeId=None
@@ -51,13 +52,22 @@ class OSMRoutingPoint():
                     break
     
     def __repr__(self):
-        return "%s %f-%f %d"%(self.name, self.lat, self.lon,self.type)
+        return "%s %d %f %f"%(self.name, self.type, self.lat, self.lon)
+    
+    def __lt__(self, other):
+        return self.name < other.name
+    
+    def getName(self):
+        return self.name
     
     def getType(self):
         return self.type
     
-    def getPos(self):
-        return (self.lat, self.lon)
+    def getLat(self):
+        return self.lat
+    
+    def getLon(self):
+        return self.lon
     
     def getEdgeId(self):
         return self.getEdgeId()
@@ -71,17 +81,15 @@ class OSMRoutingPoint():
     def getTarget(self):
         return self.target
     
-    def saveToConfig(self, config):
-        section="routingpoint."+self.name
-        if not config.hasSection(section):
-            config.addSection(section)
+    def saveToConfig(self, config, section, name):        
+        config.set(section, name, "%s:%d:%f:%f"%(self.name,self.type, self.lat,self.lon))
         
-        config.set(section, "type", str(self.type))
-        config.set(section, "pos", str(self.getPos()))
-        
-    def readFromConfig(self, config):
-        self.type=config.getDefaultSection()["routing"]["points"]["type"]
-        self.lat, self.lon=config.getDefaultSection()["routing"]["points"]["pos"]
+    def readFromConfig(self, value):
+        name, type, lat, lon=value.split(":")
+        self.type=int(type)
+        self.name=name
+        self.lat=float(lat)
+        self.lon=float(lon)
         
 class OSMParserData():
     def __init__(self, file):
@@ -1360,16 +1368,40 @@ def main(argv):
 #    print(str(dur)+"s")
     
     config=Config("routingTest.cfg")
-    
-    point1=OSMRoutingPoint("point1", "10.0", "20.0", 0)
-    point2=OSMRoutingPoint("point2", "20.0", "30.0", 1)
-    point3=OSMRoutingPoint("point3", "30.0", "40.0", 2)
-    
-    point1.saveToConfig(config)
-    point2.saveToConfig(config)
-    point3.saveToConfig(config)
+    section="routing"
+    if not config.hasSection(section):
+        config.addSection(section)
+
+    point1=OSMRoutingPoint("start", 0, 10.0, 20.0)
+    point2=OSMRoutingPoint("end", 1, 20.0, 30.0)
+    point3=OSMRoutingPoint("way", 2, 30.0, 40.0)
+
+    print(point1)    
+    print(point2)    
+    print(point3)    
+
+    point1.saveToConfig(config, section, "start")
+    point2.saveToConfig(config, section, "end")
+    point3.saveToConfig(config, section, "way")
     
     config.writeConfig()
+    
+    config.readConfig()
+    for name, value in config.items(section):
+        if name=="start":
+            point11=OSMRoutingPoint()
+            point11.readFromConfig(value)
+        if name=="end":
+            point22=OSMRoutingPoint()
+            point22.readFromConfig(value)
+        if name=="way":
+            point33=OSMRoutingPoint()
+            point33.readFromConfig(value)
+
+    print(point11)    
+    print(point22)    
+    print(point33)    
+
 
 #    l=p.getEdgeEntryForWayId(4064363)
 #    for edge in l:

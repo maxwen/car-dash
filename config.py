@@ -30,12 +30,18 @@ class Config():
     def hasSection(self, section):
         return self.config.has_section(section)
     
+    def removeSection(self, section):
+        self.config.remove_section(section)
+        
     def set(self, section, key, value):
         self.config.set(section, key, value)
 
     def get(self, section, key):
         return self.config.get(section, key, default=None)
         
+    def items(self, section):
+        return self.config.items(section)
+    
     def testConfig(self):
         for item in self.config.items("DEFAULT"): 
             print(item)
