@@ -13,10 +13,77 @@ import array
 from osmparser.osmutils import OSMUtils
 import pickle
 from osmparser.dijkstrawrapper import DijkstraWrapper
+from config import Config
 
-# simple class that handles the parsed OSM data.
+class OSMRoutingPoint():
+    def __init__(self, name, type, lat, lon):
+        self.lat=lat
+        self.lon=lon
+        self.target=0
+        self.source=0
+        # 0 start
+        # 1 end
+        # 2 way
+        # 3 gps
+        self.type=type
+        self.wayId=None
+        self.edgeId=None
+        self.name=name
+    
+    def resolveFromPos(self, osmParserData):
+        wayId, usedRefId=osmParserData.getWayIdForPos(self.lat, self.lon)
+        resultList=osmParserData.getEdgeEntryForWayId(wayId)
+        
+        targetFound=False
+        for result in resultList:
+            if targetFound:
+                break
+            
+            (edgeId, startRef, endRef, length, oneway, wayId, source1, target1, refList)=result
 
-class OSMParserData(object):
+            for edgeRef in refList:
+                if edgeRef==usedRefId:
+                    (self.lat, self.lon)=osmParserData.getCoordsWithRef(edgeRef)
+                    self.edgeId=edgeId
+                    self.target=target1
+                    self.source=source1
+                    targetFound=True
+                    break
+    
+    def __repr__(self):
+        return "%s %f-%f %d"%(self.name, self.lat, self.lon,self.type)
+    
+    def getType(self):
+        return self.type
+    
+    def getPos(self):
+        return (self.lat, self.lon)
+    
+    def getEdgeId(self):
+        return self.getEdgeId()
+    
+    def getSource(self):
+        return self.source
+    
+    def getWayId(self):
+        return self.wayId
+    
+    def getTarget(self):
+        return self.target
+    
+    def saveToConfig(self, config):
+        section="routingpoint."+self.name
+        if not config.hasSection(section):
+            config.addSection(section)
+        
+        config.set(section, "type", str(self.type))
+        config.set(section, "pos", str(self.getPos()))
+        
+    def readFromConfig(self, config):
+        self.type=config.getDefaultSection()["routing"]["points"]["type"]
+        self.lat, self.lon=config.getDefaultSection()["routing"]["points"]["pos"]
+        
+class OSMParserData():
     def __init__(self, file):
         self.nodes = dict()
         self.coords = dict()
@@ -665,6 +732,27 @@ class OSMParserData(object):
         streetTrackItem["end"]="end"
         return streetTrackItem
 
+    def showRouteForPoints(self, startPoint, endPoint, wayPoints):
+        if startPoint.getSource()==0:
+            startPoint.resolveFromPos(self)
+        
+        if endPoint.getTarget()==0:
+            endPoint.resolveFromPos(self)
+        
+        source=startPoint.getSource()
+        target=endPoint.getTarget()
+        
+        print(target)
+        print(source)
+        
+        if source!=0 and target!=0:
+            if self.dWrapper!=None:
+                edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+                if edgeList!=None:
+                    return self.printEdgeList(edgeList)
+
+        return None
+
     def showRouteToMousePos(self, wayId, usedRefId):
         source=1507
         
@@ -1264,7 +1352,24 @@ def main(argv):
 #    print(p.getEdgeEntryForSourceAndTarget(3024, 821))
 #    print(p.getEdgeEntryForSourceAndTarget(877, 887))
     
-    print(p.dWrapper.computeShortestPath(2046, 1506))
+    # home to work
+#    start=time.time()
+#    print(p.dWrapper.computeShortestPath(1507, 7229))
+#    stop=time.time()
+#    dur=int(stop-start)
+#    print(str(dur)+"s")
+    
+    config=Config("routingTest.cfg")
+    
+    point1=OSMRoutingPoint("point1", "10.0", "20.0", 0)
+    point2=OSMRoutingPoint("point2", "20.0", "30.0", 1)
+    point3=OSMRoutingPoint("point3", "30.0", "40.0", 2)
+    
+    point1.saveToConfig(config)
+    point2.saveToConfig(config)
+    point3.saveToConfig(config)
+    
+    config.writeConfig()
 
 #    l=p.getEdgeEntryForWayId(4064363)
 #    for edge in l:

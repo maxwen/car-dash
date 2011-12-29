@@ -6,9 +6,12 @@ Created on Dec 6, 2011
 import configparser
 
 class Config():
-    def __init__(self):
+    def __init__(self, fileName=None):
         self.config=configparser.ConfigParser()
-        self.fileName="candash.cfg"
+        if fileName==None:
+            self.fileName="candash.cfg"
+        else:
+            self.fileName=fileName
         self.readConfig()
         
     def writeConfig(self):
@@ -21,6 +24,18 @@ class Config():
     def getDefaultSection(self):
         return self.config["DEFAULT"]
     
+    def addSection(self, section):
+        self.config.add_section(section)
+    
+    def hasSection(self, section):
+        return self.config.has_section(section)
+    
+    def set(self, section, key, value):
+        self.config.set(section, key, value)
+
+    def get(self, section, key):
+        return self.config.get(section, key, default=None)
+        
     def testConfig(self):
         for item in self.config.items("DEFAULT"): 
             print(item)

@@ -9,6 +9,7 @@ from pygraph.classes.digraph import digraph
 from pygraph.algorithms.minmax import shortest_path, shortest_path_bellman_ford
 from pygraph.algorithms.generators import generate
 from pygraph.mixins import labeling
+import time
 
 class Edge():
     def __init__(self):
@@ -69,10 +70,11 @@ class DijkstraWrapper():
             path.append((lastnode, st[lastnode]))
             lastnode = nextnode
         path.reverse()
-        print(path)
+#        print(path)
         return path
     
     def dijkstra(self, startNode, targetNode):       
+        start=time.time()
         if not self.gr.has_node(startNode):
             print("start node not found %d"%(startNode))
             return None, None
@@ -80,15 +82,31 @@ class DijkstraWrapper():
         if not self.gr.has_node(targetNode):
             print("target node not found %d"%(targetNode))
             return None, None
+        curr=time.time()
+        dur=int(curr-start)
+        print(str(dur)+"s")
 
         pathEdgeList=list()
         pathLen=0
-        
-        st, dist = shortest_path(self.gr, startNode)                    
+        start=time.time()
+        st, dist = shortest_path(self.gr, startNode)     
+        curr=time.time()
+        dur=int(curr-start)
+        print(str(dur)+"s")
+               
+        start=time.time()
         path=self.route(self.gr, st, startNode, targetNode)        
-                
+        curr=time.time()
+        dur=int(curr-start)
+        print(str(dur)+"s")
+      
+        start=time.time()
         for source, target in path:
             pathEdgeList.append(int(self.gr.edge_label((source, target))))
+
+        curr=time.time()
+        dur=int(curr-start)
+        print(str(dur)+"s")
                 
         if targetNode in dist:
             pathLen=dist[targetNode]
@@ -106,11 +124,11 @@ class DijkstraWrapper():
             cost=edge.cost
             reverseCost=edge.reverseCost
             
-            if source==626 and target==2862:
-                None
-            
-            if source==2862 and target==626:
-                None
+#            if source==626 and target==2862:
+#                None
+#            
+#            if source==2862 and target==626:
+#                None
                 
             if not self.gr.has_node(source):
                 self.gr.add_node(source, ["source", source])
@@ -155,7 +173,7 @@ class DijkstraWrapper():
         
     def computeShortestPath(self, startNode, targetNode):                       
         pathEdgeList, pathLen=self.dijkstra(startNode, targetNode)
-        if pathLen!=None and pathEdgeList!=None:
-            print("%s %d"%(str(pathEdgeList), pathLen))
+#        if pathLen!=None and pathEdgeList!=None:
+#            print("%s %d"%(str(pathEdgeList), pathLen))
             
         return pathEdgeList, pathLen
