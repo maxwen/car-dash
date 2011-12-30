@@ -7,16 +7,13 @@ from osmparser.parser.simple import OSMParser
 import sys
 import os
 import sqlite3
-import bz2
-import time
-import array
 from osmparser.osmutils import OSMUtils
 import pickle
 from osmparser.dijkstrawrapper import DijkstraWrapper
 from config import Config
 
 class OSMRoutingPoint():
-    def __init__(self, name="", type=0, lat=0.0, lon=0.0):
+    def __init__(self, name="", pointType=0, lat=0.0, lon=0.0):
         self.lat=lat
         self.lon=lon
         self.target=0
@@ -26,7 +23,7 @@ class OSMRoutingPoint():
         # 2 way
         # 3 gps
         # 4 favorite
-        self.type=type
+        self.type=pointType
         self.wayId=None
         self.edgeId=None
         self.name=name
@@ -96,8 +93,8 @@ class OSMRoutingPoint():
         config.set(section, name, "%s:%d:%f:%f"%(self.name,self.type, self.lat,self.lon))
         
     def readFromConfig(self, value):
-        name, type, lat, lon=value.split(":")
-        self.type=int(type)
+        name, pointType, lat, lon=value.split(":")
+        self.type=int(pointType)
         self.name=name
         self.lat=float(lat)
         self.lon=float(lon)
@@ -137,7 +134,6 @@ class OSMParserData():
     def openDB(self):
         self.connection=sqlite3.connect(self.getDBFile())
         self.cursor=self.connection.cursor()   
-        self.dWrapper=DijkstraWrapper(self.cursor)
 
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, ways BLOB)')
@@ -329,7 +325,6 @@ class OSMParserData():
         minDistance=1000
         minWayId=0
         usedRefId=0
-#            minWayList=list()
         for (refId, lat, lon, wayIdList) in nodes:   
             for wayId in wayIdList:
                 # find matching way by creating interpolation points betwwen refs
@@ -337,7 +332,6 @@ class OSMParserData():
                 if wayId==None:
                     continue
                 
-#                    (name, ref)=self.getStreetNameInfo(tags)
                 (prevRefId, nextRefId)=self.getPrevAndNextRefForWay(refId, wayId, tags, refs)
                 if prevRefId!=None and nextRefId!=None:
 #                    print("%d %d %d"%(wayId, prevRefId, nextRefId))
@@ -742,13 +736,18 @@ class OSMParserData():
         streetTrackItem["end"]="end"
         return streetTrackItem
 
-    def showRouteForPoints(self, routingPointList):
+    def calcRouteForPoints(self, routingPointList):
         allPathLen=0
         allEdgeList=list()
         
         if len(routingPointList)!=0:  
             i=0          
             for point in routingPointList[:-1]:
+            # find out if last edge goes through the end point
+            # if yes we need to shorten it
+            # if no we need to add the last points
+            # same is true for the actual starting point
+
                 if point.getSource()==0:
                     point.resolveFromPos(self)
                 source=point.getSource()
@@ -774,8 +773,6 @@ class OSMParserData():
                         allPathLen=allPathLen+pathLen
                 i=i+1
             
-#            if not targetPoint.getEdgeId() in allEdgeList:
-#                allEdgeList.append(targetPoint.getEdgeId())
 
             return allEdgeList, allPathLen
 
@@ -784,34 +781,6 @@ class OSMParserData():
     def createTrackForEdgeList(self, edgeList):
         if edgeList!=None:
             return self.printEdgeList(edgeList)
-
-    def showRouteToMousePos(self, wayId, usedRefId):
-        source=1507
-        
-        targetFound=False
-        target=3810
-        
-        resultList=self.getEdgeEntryForWayId(wayId)
-        for result in resultList:
-            if targetFound:
-                break
-            
-            (edgeId, startRef, endRef, length, oneway, wayId, source1, target1, refList)=result
-
-            for edgeRef in refList:
-                if edgeRef==usedRefId:
-                    target=target1
-                    targetFound=True
-                    break
-                
-        print(target)
-
-        if self.dWrapper!=None:
-            edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-            if edgeList!=None:
-                return self.printEdgeList(edgeList)
-
-        return None
         
     def showWay(self, wayId, usedRefId, level):
         self.edgeList=list()
@@ -1305,8 +1274,13 @@ class OSMParserData():
         return os.path.exists(self.getDBFile())
         
     def initGraph(self):
-        if self.dWrapper!=None:
+        if self.dWrapper==None:
+            self.openDB()
+            self.dWrapper=DijkstraWrapper(self.cursor)
+            print("init graph")
             self.dWrapper.initGraph()
+            print("init graph done")
+            self.closeDB()
 
     def initDB(self):
         createDB=not self.dbExists()
@@ -1357,11 +1331,11 @@ def main(argv):
     p = OSMParserData(osmFile)
     
     p.initDB()
+    p.initGraph()
     
     p.openDB()
-    p.initGraph()
 
-#    p.testRefTable()
+    p.testRefTable()
 #    p.testWayTable()
 #    p.testStreetTable()
 #    p.testCrossingTable()
