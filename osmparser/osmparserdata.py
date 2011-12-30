@@ -114,6 +114,7 @@ class OSMParserData():
         self.crossingId=0
         self.nodeId=1
         self.dWrapper=None
+        self.osmutils=OSMUtils()
         
     def createTables(self):
         if self.cursor!=None:
@@ -322,7 +323,6 @@ class OSMParserData():
     
     def getWayIdForPos(self, actlat, actlon):
         if self.cursor!=None:
-            osmutils=OSMUtils()
 
             nodes=self.getNearNodes(actlat, actlon)
 #            minDistance=1000
@@ -351,7 +351,7 @@ class OSMParserData():
                         tempPoints.extend(self.createTemporaryPoint(lat, lon, nextLat, nextLon))
                         
                         for (tmpLat, tmpLon) in tempPoints:
-                            distance=int(osmutils.distance(actlat, actlon, tmpLat, tmpLon))
+                            distance=int(self.osmutils.distance(actlat, actlon, tmpLat, tmpLon))
 #                            print("way %d %s-%s has distance of %d"%(wayId, name, ref, distance))
 
                             if distance < minDistance:
@@ -362,14 +362,13 @@ class OSMParserData():
             return minWayId, usedRefId    
         
     def createTemporaryPoint(self, lat, lon, lat1, lon1):
-        osmutils=OSMUtils()
-        distance=int(osmutils.distance(lat, lon, lat1, lon1))
+        distance=int(self.osmutils.distance(lat, lon, lat1, lon1))
         frac=10
         points=list()
         if distance>frac:
             doneDistance=0
             while doneDistance<distance:
-                newLat, newLon=osmutils.linepart(lat, lon, lat1, lon1, doneDistance/distance)
+                newLat, newLon=self.osmutils.linepart(lat, lon, lat1, lon1, doneDistance/distance)
                 points.append((newLat, newLon))
                 doneDistance=doneDistance+frac
         return points
@@ -494,7 +493,6 @@ class OSMParserData():
             self.coords[osmid]=(lat, lon)
                 
     def parse_ways(self, way):
-        osmutils=OSMUtils()
 
         for wayid, tags, refs in way:
             if "highway" in tags:
@@ -531,7 +529,7 @@ class OSMParserData():
                             if lat==0.0 and lon==0.0:
                                 lat=lat1
                                 lon=lon1
-                            distance=int(osmutils.distance(lat, lon, lat1, lon1))
+                            distance=int(self.osmutils.distance(lat, lon, lat1, lon1))
                             distances.append(distance)
                             lat=lat1
                             lon=lon1
@@ -747,19 +745,79 @@ class OSMParserData():
         if endPoint.getTarget()==0:
             endPoint.resolveFromPos(self)
         
-        source=startPoint.getSource()
-        target=endPoint.getTarget()
+        nearestWayPoint=None
+        minDistance=0
+        allPathLen=0
+        allEdgeList=list()
         
-        print(target)
-        print(source)
-        
-        if source!=0 and target!=0:
-            if self.dWrapper!=None:
-                edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-                if edgeList!=None:
-                    return self.printEdgeList(edgeList)
+        if len(wayPoints)!=0:
+#            wayPointsCopy=list()
+#            wayPointsCopy.extend(wayPoints)
+#            
+#            source=startPoint.getSource()
+#            currentStartPoint=startPoint
+#            
+#            while len(wayPointsCopy)!=0:
+#                for point in wayPointsCopy:
+#                    if point.getSource()==0:
+#                        point.resolveFromPos(self)
+#                    distance=int(self.osmutils.distance(currentStartPoint.getLat(), currentStartPoint.getLon(), point.getLat(), point.getLon()))
+#                    if minDistance==0 or distance<minDistance:
+#                        nearestWayPoint=point
+#                        
+#                target=nearestWayPoint.getTarget()
+#                wayPointsCopy.remove(nearestWayPoint)
+#                    
+#                if source!=0 and target!=0:
+#                    if self.dWrapper!=None:
+#                        edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+#                        allEdgeList.extend(edgeList)
+#                        allPathLen=allPathLen+pathLen
+#                
+#                source=nearestWayPoint.getSource()
+#                currentStartPoint=nearestWayPoint
+            
+            source=startPoint.getSource()
+            
+            for point in wayPoints:
+                if point.getSource()==0:
+                    point.resolveFromPos(self)
+                        
+                target=point.getTarget()
+                    
+                if source!=0 and target!=0:
+                    if self.dWrapper!=None:
+                        edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+                        allEdgeList.extend(edgeList)
+                        allPathLen=allPathLen+pathLen
+                
+                source=point.getSource()
 
-        return None
+            target=endPoint.getTarget()
+            if source!=0 and target!=0:
+                if self.dWrapper!=None:
+                    edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+                    allEdgeList.extend(edgeList)
+                    allPathLen=allPathLen+pathLen
+
+            return allEdgeList, allPathLen
+        else:
+            source=startPoint.getSource()
+            target=endPoint.getTarget()
+
+            print(target)
+            print(source)
+            
+            if source!=0 and target!=0:
+                if self.dWrapper!=None:
+                    edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+                    return edgeList, pathLen
+
+        return None, None
+
+    def createTrackForEdgeList(self, edgeList):
+        if edgeList!=None:
+            return self.printEdgeList(edgeList)
 
     def showRouteToMousePos(self, wayId, usedRefId):
         source=1507
