@@ -44,7 +44,8 @@ class OSMRoutingPoint():
 
             for edgeRef in refList:
                 if edgeRef==usedRefId:
-                    (self.lat, self.lon)=osmParserData.getCoordsWithRef(edgeRef)
+                    # TODO change locations to found ref?
+#                    (self.lat, self.lon)=osmParserData.getCoordsWithRef(edgeRef)
                     self.edgeId=edgeId
                     self.target=target1
                     self.source=source1
@@ -738,80 +739,30 @@ class OSMParserData():
         streetTrackItem["end"]="end"
         return streetTrackItem
 
-    def showRouteForPoints(self, startPoint, endPoint, wayPoints):
-        if startPoint.getSource()==0:
-            startPoint.resolveFromPos(self)
-        
-        if endPoint.getTarget()==0:
-            endPoint.resolveFromPos(self)
-        
-        nearestWayPoint=None
-        minDistance=0
+    def showRouteForPoints(self, routingPointList):
         allPathLen=0
         allEdgeList=list()
         
-        if len(wayPoints)!=0:
-#            wayPointsCopy=list()
-#            wayPointsCopy.extend(wayPoints)
-#            
-#            source=startPoint.getSource()
-#            currentStartPoint=startPoint
-#            
-#            while len(wayPointsCopy)!=0:
-#                for point in wayPointsCopy:
-#                    if point.getSource()==0:
-#                        point.resolveFromPos(self)
-#                    distance=int(self.osmutils.distance(currentStartPoint.getLat(), currentStartPoint.getLon(), point.getLat(), point.getLon()))
-#                    if minDistance==0 or distance<minDistance:
-#                        nearestWayPoint=point
-#                        
-#                target=nearestWayPoint.getTarget()
-#                wayPointsCopy.remove(nearestWayPoint)
-#                    
-#                if source!=0 and target!=0:
-#                    if self.dWrapper!=None:
-#                        edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-#                        allEdgeList.extend(edgeList)
-#                        allPathLen=allPathLen+pathLen
-#                
-#                source=nearestWayPoint.getSource()
-#                currentStartPoint=nearestWayPoint
-            
-            source=startPoint.getSource()
-            
-            for point in wayPoints:
+        if len(routingPointList)!=0:  
+            i=0          
+            for point in routingPointList[:-1]:
                 if point.getSource()==0:
                     point.resolveFromPos(self)
+                source=point.getSource()
+                
+                targetPoint=routingPointList[i+1]
+                if targetPoint.getSource()==0:
+                    targetPoint.resolveFromPos(self)
                         
-                target=point.getTarget()
+                target=targetPoint.getTarget()
                     
                 if source!=0 and target!=0:
                     if self.dWrapper!=None:
                         edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
                         allEdgeList.extend(edgeList)
                         allPathLen=allPathLen+pathLen
-                
-                source=point.getSource()
-
-            target=endPoint.getTarget()
-            if source!=0 and target!=0:
-                if self.dWrapper!=None:
-                    edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-                    allEdgeList.extend(edgeList)
-                    allPathLen=allPathLen+pathLen
-
+                i=i+1
             return allEdgeList, allPathLen
-        else:
-            source=startPoint.getSource()
-            target=endPoint.getTarget()
-
-            print(target)
-            print(source)
-            
-            if source!=0 and target!=0:
-                if self.dWrapper!=None:
-                    edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-                    return edgeList, pathLen
 
         return None, None
 

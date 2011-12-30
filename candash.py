@@ -12,7 +12,7 @@ from config import Config
 from log import Log, DebugLogWidget
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
-from PyQt4.QtGui import QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
+from PyQt4.QtGui import QProgressBar, QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
 
 from collections import deque
 from gaugepng import QtPngDialGauge
@@ -607,6 +607,8 @@ class CANMonitor(QMainWindow):
 #        exitAction.triggered.connectToCAN(self.close)
 
         self.statusbar=self.statusBar()
+        self.progress=QProgressBar()
+        self.statusbar.addPermanentWidget(self.progress)
 
 #        menubar = self.menuBar()
 #        fileMenu = menubar.addMenu('&File')
@@ -803,6 +805,8 @@ class CANMonitor(QMainWindow):
         self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+        self.connect(self.osmWidget, SIGNAL("startProgress()"), self.startProgress)
+        self.connect(self.osmWidget, SIGNAL("stopProgress()"), self.stopProgress)
 
         self.osmWidget.initHome()
         
@@ -843,6 +847,7 @@ class CANMonitor(QMainWindow):
         self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         self._connectGPS()
         
+        self.osmWidget.loadData()
     
     #def mousePressEvent(self, event):
     #    print("CANMonitor mousePressEvent")
@@ -1110,6 +1115,15 @@ class CANMonitor(QMainWindow):
         logLine=self.log.addLineToLog(text)
         self.debugLogWidget.addLineToLog(logLine)
         
+    def stopProgress(self):
+        self.progress.setMinimum(0)
+        self.progress.setMaximum(1)
+        self.progress.reset()
+    
+    def startProgress(self):
+        self.progress.setMinimum(0)
+        self.progress.setMaximum(0)
+
 #    def connectCANSuccessful(self):
 #        self.connectCANEnable=True
 ##        self.connectCANButton.setChecked(True)
