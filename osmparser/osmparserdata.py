@@ -30,11 +30,18 @@ class OSMRoutingPoint():
         self.wayId=None
         self.edgeId=None
         self.name=name
+        self.usedRefId=0
     
     def resolveFromPos(self, osmParserData):
-        wayId, usedRefId=osmParserData.getWayIdForPos(self.lat, self.lon)
+        wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(self.lat, self.lon)
+        if wayId==None:
+            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
+
         resultList=osmParserData.getEdgeEntryForWayId(wayId)
         
+        self.lat=usedPos[0]
+        self.lon=usedPos[1]
+            
         targetFound=False
         for result in resultList:
             if targetFound:
@@ -44,11 +51,11 @@ class OSMRoutingPoint():
 
             for edgeRef in refList:
                 if edgeRef==usedRefId:
-                    # TODO change locations to found ref?
-#                    (self.lat, self.lon)=osmParserData.getCoordsWithRef(edgeRef)
                     self.edgeId=edgeId
                     self.target=target1
                     self.source=source1
+                    self.usedRefId=edgeRef
+                    self.wayId=wayId
                     targetFound=True
                     break
     
@@ -71,14 +78,17 @@ class OSMRoutingPoint():
         return self.lon
     
     def getEdgeId(self):
-        return self.getEdgeId()
-    
-    def getSource(self):
-        return self.source
+        return self.edgeId
     
     def getWayId(self):
         return self.wayId
     
+    def getEdgeRefId(self):
+        return self.usedRefId
+    
+    def getSource(self):
+        return self.source
+        
     def getTarget(self):
         return self.target
     
@@ -118,12 +128,11 @@ class OSMParserData():
         self.osmutils=OSMUtils()
         
     def createTables(self):
-        if self.cursor!=None:
-            self.createRefTable()
-            self.createWayTable()
-            self.createStreetTable()
-            self.createCrossingsTable()
-            self.createEdgeTable()
+        self.createRefTable()
+        self.createWayTable()
+        self.createStreetTable()
+        self.createCrossingsTable()
+        self.createEdgeTable()
 
     def openDB(self):
         self.connection=sqlite3.connect(self.getDBFile())
@@ -307,14 +316,6 @@ class OSMParserData():
                     prevRefId=refs[index-1]
                     nextRevId=refs[-1]
                 return (prevRefId, nextRevId)
-#                (crossingIdString, crossingList, wayIdList)=self.getCrossingEntryFor(wayId, refId)
-#                if crossingIdString!=None:
-#                    if index==len(refs)-1:
-#                        prevRefId=refs[index-1]
-#                        (id, tags, refs)=self.getWayEntryForId(wayIdList[0])
-#                        if id!=None:
-#                            nextRevId=refs[0]
-#                            return (prevRefId, nextRevId)
             else:
                 prevRefId=refs[index-1]
                 nextRevId=refs[index+1]
@@ -323,44 +324,43 @@ class OSMParserData():
         return (None, None)
     
     def getWayIdForPos(self, actlat, actlon):
-        if self.cursor!=None:
-
-            nodes=self.getNearNodes(actlat, actlon)
-#            minDistance=1000
-#            index=0
-#            i=0
-            minDistance=1000
-            minWayId=0
-            usedRefId=0
+        nodes=self.getNearNodes(actlat, actlon)
+#        print(nodes)
+        minDistance=1000
+        minWayId=0
+        usedRefId=0
 #            minWayList=list()
-            for (refId, lat, lon, wayIdList) in nodes:   
-                for wayId in wayIdList:
-                    # TODO find matching way by creating interpolation points betwwen refs
-                    
-#                    print("trying %s-%s"%(name, ref))
-                    (id, tags, refs, distances)=self.getWayEntryForId(wayId)
-                    if id==None:
-                        continue
-                    
+        for (refId, lat, lon, wayIdList) in nodes:   
+            for wayId in wayIdList:
+                # find matching way by creating interpolation points betwwen refs
+                (wayId, tags, refs, distances)=self.getWayEntryForId(wayId)
+                if wayId==None:
+                    continue
+                
 #                    (name, ref)=self.getStreetNameInfo(tags)
-                    (prevRefId, nextRefId)=self.getPrevAndNextRefForWay(refId, id, tags, refs)
-                    if prevRefId!=None and nextRefId!=None:
-                        (prevLat, prevLon)=self.getCoordsWithRef(prevRefId)
-                        (nextLat, nextLon)=self.getCoordsWithRef(nextRefId)
-                        
-                        tempPoints=self.createTemporaryPoint(lat, lon, prevLat, prevLon)
-                        tempPoints.extend(self.createTemporaryPoint(lat, lon, nextLat, nextLon))
-                        
-                        for (tmpLat, tmpLon) in tempPoints:
-                            distance=int(self.osmutils.distance(actlat, actlon, tmpLat, tmpLon))
+                (prevRefId, nextRefId)=self.getPrevAndNextRefForWay(refId, wayId, tags, refs)
+                if prevRefId!=None and nextRefId!=None:
+#                    print("%d %d %d"%(wayId, prevRefId, nextRefId))
+                    (prevLat, prevLon)=self.getCoordsWithRef(prevRefId)
+                    (nextLat, nextLon)=self.getCoordsWithRef(nextRefId)
+                    
+                    tempPoints=self.createTemporaryPoint(lat, lon, prevLat, prevLon)
+                    tempPoints.extend(self.createTemporaryPoint(lat, lon, nextLat, nextLon))
+                    
+#                    print(tempPoints)
+                    for (tmpLat, tmpLon) in tempPoints:
+                        distance=int(self.osmutils.distance(actlat, actlon, tmpLat, tmpLon))
 #                            print("way %d %s-%s has distance of %d"%(wayId, name, ref, distance))
 
-                            if distance < minDistance:
-                                minDistance=distance
-                                minWayId=wayId
-                                usedRefId=refId
+                        if distance < minDistance:
+                            minDistance=distance
+                            minWayId=wayId
+                            usedRefId=refId
+                            usedLat=tmpLat
+                            usedLon=tmpLon
 
-            return minWayId, usedRefId    
+#        print(minWayId)
+        return minWayId, usedRefId, (usedLat, usedLon) 
         
     def createTemporaryPoint(self, lat, lon, lat1, lon1):
         distance=int(self.osmutils.distance(lat, lon, lat1, lon1))
@@ -384,8 +384,11 @@ class OSMParserData():
         self.cursor.execute('SELECT * FROM refTable where lat>%s AND lat<%s AND lon>%s AND lon<%s'%(latRangeMin, latRangeMax, lonRangeMin, lonRangeMax))
         allentries=self.cursor.fetchall()
         for x in allentries:
-            refId, lat, lon, wayIdList=self.refFromDB(x)
-            nodes.append((refId, lat, lon, wayIdList))
+            refId, lat1, lon1, wayIdList=self.refFromDB(x)
+            distance=self.osmutils.distance(lat, lon, lat1, lon1)
+            if distance>100:
+                continue
+            nodes.append((refId, lat1, lon1, wayIdList))
 
         return nodes
     
@@ -755,13 +758,25 @@ class OSMParserData():
                     targetPoint.resolveFromPos(self)
                         
                 target=targetPoint.getTarget()
-                    
+                
+                print(point.getWayId())
+                print(point.getEdgeRefId())
+
+                print(targetPoint.getWayId())
+                print(targetPoint.getEdgeRefId())
+                
+                print(source)
+                print(target) 
                 if source!=0 and target!=0:
                     if self.dWrapper!=None:
                         edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
                         allEdgeList.extend(edgeList)
                         allPathLen=allPathLen+pathLen
                 i=i+1
+            
+#            if not targetPoint.getEdgeId() in allEdgeList:
+#                allEdgeList.append(targetPoint.getEdgeId())
+
             return allEdgeList, allPathLen
 
         return None, None

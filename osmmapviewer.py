@@ -14,7 +14,7 @@ import socket
 from collections import deque
 import fnmatch
 
-from PyQt4.QtCore import QAbstractTableModel, Qt, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint
 from osmparser.osmutils import OSMUtils
@@ -979,33 +979,28 @@ class QtOSMWidget(QWidget):
     def updateMousePositionDisplay(self, x, y):
         (lat, lon)=self.getMousePosition(x, y)
         self.emit(SIGNAL("updateMousePositionDisplay(float, float)"), lat, lon)
-
-#    def addContectMenu(self, menu):
-#        testAction = QAction("Force Download", self)
-#        testAction.triggered.connect(self._fAction)
-#        menu.addAction(testAction)        
-            
-#    @pyqtSlot()
-#    def _forceDownAction(self, x, y):
-#        print("foo")
-##        self.showPosition(x, y)
         
-    def getRoutingPointForPos(self, lat, lon):
+    def getRoutingPointForPos(self, mousePos):
+        p=QPoint(mousePos[0], mousePos[1])
+
         if self.startPoint!=None:
-            distance=int(self.osmutils.distance(lat, lon, self.startPoint.getLat(), self.startPoint.getLon()))
-            if distance<100:
+            (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
+            rect=QRect(x-int(self.startPointImage.width()/2), y-int(self.startPointImage.height()/2), self.startPointImage.width(), self.startPointImage.height())
+            if rect.contains(p, proper=False):
                 return self.startPoint
 
         if self.endPoint!=None:
-            distance=int(self.osmutils.distance(lat, lon, self.endPoint.getLat(), self.endPoint.getLon()))
-            if distance<100:
+            (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
+            rect=QRect(x-int(self.endPointImage.width()/2), y-int(self.endPointImage.height()/2), self.endPointImage.width(), self.endPointImage.height())
+            if rect.contains(p, proper=False):
                 return self.endPoint
 
         for point in self.wayPoints:
-            distance=int(self.osmutils.distance(lat, lon, point.getLat(), point.getLon()))
-            if distance<100:
+            (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
+            rect=QRect(x-int(self.wayPointImage.width()/2), y-int(self.wayPointImage.height()/2), self.wayPointImage.width(), self.wayPointImage.height())
+            if rect.contains(p, proper=False):
                 return point
-        
+
         return None
     
     def contextMenuEvent(self, event):
@@ -1040,7 +1035,7 @@ class QtOSMWidget(QWidget):
         setEndPointAction.setDisabled(addPointDisabled)
         setWayPointAction.setDisabled(addPointDisabled)
         addFavoriteAction.setDisabled(addPointDisabled)
-        clearRoutingPointAction.setDisabled(addPointDisabled)
+        clearRoutingPointAction.setDisabled(self.getSelectedRoutingPoint(self.mousePos)==None)
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
         editRoutingPointAction.setDisabled(self.getCompleteRoutingPoints()==None)
         
@@ -1111,9 +1106,12 @@ class QtOSMWidget(QWidget):
                 self.wayPoints.append(point)
                 
 
+    def getSelectedRoutingPoint(self, mousePos):
+#        (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
+        return self.getRoutingPointForPos(mousePos)
+
     def removeRoutingPoint(self, mousePos):
-        (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
-        selectedPoint=self.getRoutingPointForPos(lat, lon)
+        selectedPoint=self.getSelectedRoutingPoint(mousePos)
         if selectedPoint!=None:
             if selectedPoint==self.startPoint:
                 self.startPoint=None
@@ -1127,7 +1125,7 @@ class QtOSMWidget(QWidget):
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
         defaultName="favorite"
-        wayId, usedRefId=osmParserData.getWayIdForPos(lat, lon)
+        wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
         if wayId!=None:
             (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
@@ -1147,10 +1145,9 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        # change to actual positions for a real way
+        wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
         if pointType==0:
             defaultName="start"
-            wayId, usedRefId=osmParserData.getWayIdForPos(lat, lon)
             if wayId!=None:
                 (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
@@ -1159,7 +1156,6 @@ class QtOSMWidget(QWidget):
             
         elif pointType==1:
             defaultName="end"
-            wayId, usedRefId=osmParserData.getWayIdForPos(lat, lon)
             if wayId!=None:
                 (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 
@@ -1168,7 +1164,6 @@ class QtOSMWidget(QWidget):
 
         elif pointType==2:
             defaultName="way"
-            wayId, usedRefId=osmParserData.getWayIdForPos(lat, lon)
             if wayId!=None:
                 (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
@@ -1178,7 +1173,7 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+            wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
 #                trackList=osmParserData.showWay(wayId, usedRefId, 3)
@@ -1224,7 +1219,7 @@ class QtOSMWidget(QWidget):
 #    def showRouteToMousePos(self, x, y):
 #        if self.osmWidget.dbLoaded==True:
 #            (actlat, actlon)=self.getMousePosition(x, y)
-#            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+#            wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
 #            trackList=osmParserData.showRouteToMousePos(wayId, usedRefId)
 #            if trackList!=None:
 #                self.setTrack(trackList, True)
@@ -1236,7 +1231,7 @@ class QtOSMWidget(QWidget):
 
     def showTrackOnGPSPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            wayId, usedRefId=osmParserData.getWayIdForPos(actlat, actlon)
+            wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
 #                trackList=osmParserData.showWay(wayId, usedRefId, 2)
