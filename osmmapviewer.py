@@ -840,8 +840,8 @@ class QtOSMWidget(QWidget):
             gpsLatitudeNew=self.osmutils.deg2rad(lat)
             gpsLongitudeNew=self.osmutils.deg2rad(lon)
             
-            self.showTrackOnGPSPos(lat, lon)
             self.gpsPoint=OSMRoutingPoint("gps", 3, lat, lon)
+            self.showTrackOnGPSPos(lat, lon)
 
             if self.gpsLatitude!=gpsLatitudeNew or self.gpsLongitude!=gpsLongitudeNew:
                 self.stop=False
@@ -1101,11 +1101,12 @@ class QtOSMWidget(QWidget):
         result=routeDialog.exec()
         if result==QDialog.Accepted:
             routingPointList=routeDialog.getResult()
-            self.startPoint=routingPointList[0]
-            self.endPoint=routingPointList[-1]
+            self.setStartPoint(routingPointList[0])            
+            self.setEndPoint(routingPointList[-1])            
             self.wayPoints.clear()
-            for point in routingPointList[1:-1]:
-                self.wayPoints.append(point)
+            if len(routingPointList)>2:
+                for point in routingPointList[1:-1]:
+                    self.setWayPoint(point)
                 
 
     def getSelectedRoutingPoint(self, mousePos):
@@ -1128,8 +1129,10 @@ class QtOSMWidget(QWidget):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
         defaultName="favorite"
         wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
-        if wayId!=None:
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+        if wayId==None:
+            return
+        
+        (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
         favNameDialog=QInputDialog(self)
         favNameDialog.setLabelText("Favorite Name")
@@ -1148,26 +1151,26 @@ class QtOSMWidget(QWidget):
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
         wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
+        if wayId==None:
+            return
+        
         if pointType==0:
             defaultName="start"
-            if wayId!=None:
-                (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
             self.startPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             self.startPoint.resolveFromPos(osmParserData)
             
         elif pointType==1:
             defaultName="end"
-            if wayId!=None:
-                (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 
             self.endPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             self.endPoint.resolveFromPos(osmParserData)
 
         elif pointType==2:
             defaultName="way"
-            if wayId!=None:
-                (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
             wayPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             wayPoint.resolveFromPos(osmParserData)
@@ -1181,16 +1184,15 @@ class QtOSMWidget(QWidget):
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 if name!=None:
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-            
+                    if self.gpsPoint!=None:
+                        self.gpsPoint.name=name
+                        
     def showRouteForRoutingPoints(self):
-        if self.osmWidget.dbLoaded==True:
-            endPoint=self.endPoint
-            startPoint=self.startPoint
-            
-            routingPointList=self.getCompleteRoutingPoints()
+        if self.osmWidget.dbLoaded==True:         
+            self.routingPointList=self.getCompleteRoutingPoints()
             # make sure all are resolved because we cannot access
             # the db from the thread
-            for point in routingPointList:
+            for point in self.routingPointList:
                 if point.getSource()==0:
                     point.resolveFromPos(osmParserData)
 
@@ -1201,7 +1203,7 @@ class QtOSMWidget(QWidget):
             self.connect(routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
 
             if not routeCalculationThread.isRunning():
-                routeCalculationThread.setup(routingPointList)
+                routeCalculationThread.setup(self.routingPointList)
 
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -1212,7 +1214,7 @@ class QtOSMWidget(QWidget):
     def routeCalculationDone(self, edgeList, pathLen):
         if edgeList!=None:
             print(pathLen)
-            trackList=osmParserData.createTrackForEdgeList(edgeList)
+            trackList=osmParserData.createTrackForEdgeList(edgeList, self.routingPointList)
             self.setTrack(trackList, True)
         
     def showTrackOnMousePos(self, x, y):
@@ -1221,18 +1223,7 @@ class QtOSMWidget(QWidget):
             self.showTrackOnPos(actlat, actlon)
 
     def showTrackOnGPSPos(self, actLat, actLon):
-        self.showTrackOnPos(actLat, actLon)
-        
-#        if self.osmWidget.dbLoaded==True:
-#            wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
-#            if wayId!=None and wayId!=self.lastWayId:
-#                self.lastWayId=wayId
-##                trackList=osmParserData.showWay(wayId, usedRefId, 2)
-#                (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
-#                if name!=None:
-#                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-##                self.setTrack(trackList, False)
-            
+        self.showTrackOnPos(actLat, actLon)            
     
     def convert_screen_to_geographic(self, pixel_x, pixel_y):
         rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y + pixel_y);
@@ -1291,13 +1282,16 @@ class QtOSMWidget(QWidget):
         
     def setStartPoint(self, point):
         self.startPoint=point
+        self.startPoint.type=0
         self.update()
         
     def setEndPoint(self, point):
         self.endPoint=point
+        self.endPoint.type=1
         self.update()
         
     def setWayPoint(self, point):
+        point.type=2
         self.wayPoints.append(point)
         self.update()
         

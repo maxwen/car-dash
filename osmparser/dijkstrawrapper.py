@@ -43,21 +43,26 @@ class DijkstraWrapper():
         oneway=x[2]
         source=x[3]
         target=x[4]
-        return (edgeId, length, oneway, source, target)
+        maxspeed=x[5]
+        return (edgeId, length, oneway, source, target, maxspeed)
 
     def fillEdges(self):
         edgeList=list()
-        self.cursor.execute("SELECT id, length, oneway, source, target from edgeTable")
+        self.cursor.execute("SELECT id, length, oneway, source, target, maxspeed from edgeTable")
         allentries=self.cursor.fetchall()
         for x in allentries:
-            edgeId, length, oneway, source, target=self.edgeFromDB(x)
+            edgeId, length, oneway, source, target, maxspeed=self.edgeFromDB(x)
                   
+            # TODO length calculation
             edge=Edge()
+            cost=(length / (maxspeed/120))
+            
             if oneway:
-                reverseCost=length*100000
+                reverseCost=cost*100000
             else:
-                reverseCost=length
-            edge.fillEdge(edgeId, source, target, length, reverseCost)
+                reverseCost=cost
+                
+            edge.fillEdge(edgeId, source, target, cost, reverseCost)
             edgeList.append(edge)
         return edgeList    
 

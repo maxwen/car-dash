@@ -44,7 +44,7 @@ class OSMRoutingPoint():
             if targetFound:
                 break
             
-            (edgeId, startRef, endRef, length, oneway, wayId, source1, target1, refList)=result
+            (edgeId, startRef, endRef, length, oneway, wayId, source1, target1, refList, maxspeed)=result
 
             for edgeRef in refList:
                 if edgeRef==usedRefId:
@@ -80,7 +80,7 @@ class OSMRoutingPoint():
     def getWayId(self):
         return self.wayId
     
-    def getEdgeRefId(self):
+    def getRefId(self):
         return self.usedRefId
     
     def getSource(self):
@@ -148,7 +148,7 @@ class OSMParserData():
         self.cursor.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
 
     def createEdgeTable(self):
-        self.cursor.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, oneway BOOL, wayID INTEGER, source INTEGER, target INTEGER, refList BLOB)')
+        self.cursor.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, oneway BOOL, wayID INTEGER, source INTEGER, target INTEGER, refList BLOB, maxspeed INTEGER)')
  
     def addToRefTable(self, refid, lat, lon, wayIdList):
         self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList)))
@@ -165,23 +165,23 @@ class OSMParserData():
         self.cursor.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
         self.crossingId=self.crossingId+1
 
-    def addToEdgeTable(self, startRef, endRef, length, oneway, wayId, refList):
-        self.cursor.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, oneway, wayId, 0, 0, pickle.dumps(refList)))
+    def addToEdgeTable(self, startRef, endRef, length, oneway, wayId, refList, maxspeed):
+        self.cursor.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, oneway, wayId, 0, 0, pickle.dumps(refList), maxspeed))
         self.edgeId=self.edgeId+1
     
     def updateSourceOfEdge(self, edgeId, sourceId):
-        existingEdgeId, startRef, endRef, length, oneway, wayId, source, target, refList=self.getEdgeEntryForEdgeId(edgeId)
+        existingEdgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, sourceId, target, pickle.dumps(refList)))
+        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, sourceId, target, pickle.dumps(refList), maxspeed))
 
     def updateTargetOfEdge(self, edgeId, targetId):
-        existingEdgeId, startRef, endRef, length, oneway, wayId, source, target, refList=self.getEdgeEntryForEdgeId(edgeId)
+        existingEdgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, source, targetId, pickle.dumps(refList)))     
+        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, source, targetId, pickle.dumps(refList), maxspeed))     
       
     def getEdgeEntryForSource(self, sourceId):
         self.cursor.execute('SELECT * FROM edgeTable where source=="%s"'%(str(sourceId)))
@@ -209,6 +209,7 @@ class OSMParserData():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList   
+    
     def getEdgeEntryForEdgeId(self, edgeId):
         self.cursor.execute('SELECT * FROM edgeTable where id=="%s"'%(str(edgeId)))
         allentries=self.cursor.fetchall()
@@ -216,7 +217,7 @@ class OSMParserData():
             edge=self.edgeFromDB(allentries[0])
             return edge
         print("no edge with %d"%(edgeId))
-        return (None, None, None, None, None, None, None, None, None)
+        return (None, None, None, None, None, None, None, None, None, None)
         
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
         self.cursor.execute('SELECT * FROM edgeTable where startRef="%s" AND id!="%s"'%(str(startRef), str(edgeId)))
@@ -325,6 +326,9 @@ class OSMParserData():
         minDistance=1000
         minWayId=0
         usedRefId=0
+        if len(nodes)==0:
+            return None, None, (None, None)
+        
         for (refId, lat, lon, wayIdList) in nodes:   
             for wayId in wayIdList:
                 # find matching way by creating interpolation points betwwen refs
@@ -380,7 +384,7 @@ class OSMParserData():
         for x in allentries:
             refId, lat1, lon1, wayIdList=self.refFromDB(x)
             distance=self.osmutils.distance(lat, lon, lat1, lon1)
-            if distance>100:
+            if distance>1000:
                 continue
             nodes.append((refId, lat1, lon1, wayIdList))
 
@@ -411,8 +415,8 @@ class OSMParserData():
         self.cursor.execute('SELECT * FROM edgeTable')
         allentries=self.cursor.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList=self.edgeFromDB(x)
-            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " oneway: "+str(oneway)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) +" refList:"+str(refList))
+            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=self.edgeFromDB(x)
+            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " oneway: "+str(oneway)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) +" refList:"+str(refList) + " maxspeed: "+str(maxspeed))
 
     def wayFromDB(self, x):
         wayId=x[0]
@@ -451,7 +455,8 @@ class OSMParserData():
         source=x[6]
         target=x[7]
         refList=pickle.loads(x[8])
-        return (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList)
+        maxspeed=x[9]
+        return (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)
                 
     def commitDB(self):
         self.connection.commit()
@@ -741,7 +746,7 @@ class OSMParserData():
         allEdgeList=list()
         
         if len(routingPointList)!=0:  
-            i=0          
+            i=0   
             for point in routingPointList[:-1]:
             # find out if last edge goes through the end point
             # if yes we need to shorten it
@@ -759,28 +764,34 @@ class OSMParserData():
                 target=targetPoint.getTarget()
                 
                 print(point.getWayId())
-                print(point.getEdgeRefId())
+                print(point.getRefId())
 
                 print(targetPoint.getWayId())
-                print(targetPoint.getEdgeRefId())
+                print(targetPoint.getRefId())
                 
                 print(source)
                 print(target) 
-                if source!=0 and target!=0:
-                    if self.dWrapper!=None:
-                        edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
-                        allEdgeList.extend(edgeList)
-                        allPathLen=allPathLen+pathLen
-                i=i+1
-            
+                if source==0 and target==0:
+                    print("source and target==0!")
+                    break
+                
+                if self.dWrapper!=None:
+                    edgeList, pathLen=self.dWrapper.computeShortestPath(source, target)
+                    allEdgeList.extend(edgeList)
+                    allPathLen=allPathLen+pathLen            
 
+                if not targetPoint.getEdgeId() in allEdgeList:
+                    allEdgeList.append(targetPoint.getEdgeId())
+                
+                i=i+1
+                
             return allEdgeList, allPathLen
 
         return None, None
 
-    def createTrackForEdgeList(self, edgeList):
+    def createTrackForEdgeList(self, edgeList, routingPointList):
         if edgeList!=None:
-            return self.printEdgeList(edgeList)
+            return self.printEdgeList(edgeList, routingPointList)
         
     def showWay(self, wayId, usedRefId, level):
         self.edgeList=list()
@@ -808,53 +819,56 @@ class OSMParserData():
             self.getEdgeListForWayName(resultList[0], (name, ref))
         return self.printEdgeList(self.edgeList)
     
-    def printEdgeList(self, edgeList):
+    def printEdge(self, edgeId, trackWayList):
+        result=self.getEdgeEntryForEdgeId(edgeId)
+        print(result)
+        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=result
+        (id, tags, refs, distances)=self.getWayEntryForId(wayId)
+
+        if "highway" in tags:
+            streetType=tags["highway"]
+            
+        (name, ref)=self.getStreetNameInfo(tags)
+            
+        trackWayList.append(self.createStartTrackItem())
+
+        for ref in refList:
+            trackItem=dict()
+            trackItem["wayId"]=wayId
+            trackItem["ref"]=ref
+            (lat, lon)=self.getCoordsWithRef(ref)
+            if lat==None:
+                print("resolveWay no node in DB with %d"%(ref))
+                continue
+            trackItem["lat"]=lat
+            trackItem["lon"]=lon        
+            trackItem["oneway"]=bool(oneway)
+            trackItem["type"]=streetType
+            trackItem["info"]=(name, ref)
+            resultList=self.getCrossingEntryForRefId(wayId, ref)
+            if len(resultList)!=0:
+                crossingType=1
+                for result in resultList:
+                    if crossingType==0:
+                        break
+                    (id, wayId, refId, nextWayIdList)=result
+                    for nextWayId, crossingType in nextWayIdList:
+                        if crossingType==0:
+                            break
+                trackItem["crossing"]=crossingType
+
+            trackWayList.append(trackItem)
+        
+        trackWayList.append(self.createEndTrackItem())
+
+    def printEdgeList(self, edgeList, routingPointList):
         trackWayList=list()
         track=dict()
         track["name"]=""
-
+                    
         for edgeId in edgeList:
-            result=self.getEdgeEntryForEdgeId(edgeId)
-            (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList)=result
-            (id, tags, refs, distances)=self.getWayEntryForId(wayId)
+            self.printEdge(edgeId, trackWayList)
 
-            if "highway" in tags:
-                streetType=tags["highway"]
-                
-            (name, ref)=self.getStreetNameInfo(tags)
-                
-            trackWayList.append(self.createStartTrackItem())
-
-            for ref in refList:
-#                print("%d %d %d %d"%(edgeId, refId, wayId, ref))
-                trackItem=dict()
-                trackItem["wayId"]=wayId
-                trackItem["ref"]=ref
-                (lat, lon)=self.getCoordsWithRef(ref)
-                if lat==None:
-                    print("resolveWay no node in DB with %d"%(ref))
-                    continue
-                trackItem["lat"]=lat
-                trackItem["lon"]=lon        
-                trackItem["oneway"]=bool(oneway)
-                trackItem["type"]=streetType
-                trackItem["info"]=(name, ref)
-                resultList=self.getCrossingEntryForRefId(wayId, ref)
-                if len(resultList)!=0:
-                    crossingType=1
-                    for result in resultList:
-                        if crossingType==0:
-                            break
-                        (id, wayId, refId, nextWayIdList)=result
-                        for nextWayId, crossingType in nextWayIdList:
-                            if crossingType==0:
-                                break
-                    trackItem["crossing"]=crossingType
-
-                trackWayList.append(trackItem)
-            
-            trackWayList.append(self.createEndTrackItem())
-        
         track["track"]=trackWayList
         trackList=list()
         trackList.append(track)
@@ -873,7 +887,7 @@ class OSMParserData():
             if startRefFound:
                 break
             
-            (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList)=result
+            (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=result
 
             for edgeRef in refList:
                 if edgeRef==usedRefId:
@@ -889,7 +903,7 @@ class OSMParserData():
         print(self.edgeList)
 
     def getEdgePartLevels(self, edge):
-        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList)=edge
+        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=edge
 
         self.doneEdges.append(edgeId)
         self.edgeList.append(edgeId)
@@ -902,7 +916,7 @@ class OSMParserData():
         if target!=0:
             resultList=self.getEdgeEntryForSource(target)  
             for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList=result
+                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
                 if edgeId in self.doneEdges:
                     continue
                 
@@ -913,7 +927,7 @@ class OSMParserData():
         if target!=0:
             resultList=self.getEdgeEntryForTarget(target)  
             for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList=result
+                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
                 if edgeId in self.doneEdges:
                     continue
                 if oneway1==1:
@@ -926,7 +940,7 @@ class OSMParserData():
         if source!=0:
             resultList=self.getEdgeEntryForTarget(source)
             for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList=result
+                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
                 if edgeId in self.doneEdges:
                     continue
                 if oneway1==1:
@@ -939,7 +953,7 @@ class OSMParserData():
         if source!=0:
             resultList=self.getEdgeEntryForSource(source)
             for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList=result
+                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
                 if edgeId in self.doneEdges:
                     continue
                 if oneway==1 and oneway1==1:
@@ -955,7 +969,7 @@ class OSMParserData():
         self.getEdgePartName(edge, streetInfo)
         
     def getEdgePartName(self, edge, streetInfo):
-        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList)=edge
+        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=edge
 
         self.doneEdges.append(edgeId)
         if wayId in self.possibleWays:
@@ -966,7 +980,7 @@ class OSMParserData():
         
         resultList=self.getEdgeEntryForSource(target)  
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed=result
             if edgeId in self.doneEdges:
                 continue
             
@@ -976,7 +990,7 @@ class OSMParserData():
        
         resultList=self.getEdgeEntryForTarget(target)  
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed=result
             if edgeId in self.doneEdges:
                 continue
             if oneway1==1:
@@ -988,7 +1002,7 @@ class OSMParserData():
       
         resultList=self.getEdgeEntryForTarget(source)
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed=result
             if edgeId in self.doneEdges:
                 continue
             if oneway1==1:
@@ -1000,7 +1014,7 @@ class OSMParserData():
             
         resultList=self.getEdgeEntryForSource(source)
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList=result
+            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed=result
             if edgeId in self.doneEdges:
                 continue
             if oneway==1 and oneway1==1:
@@ -1041,7 +1055,7 @@ class OSMParserData():
         for id in allEdges:
             edgeId=id[0]
             edge=self.getEdgeEntryForEdgeId(edgeId)
-            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList=edge
+            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=edge
             if source==0:
                 sourceId=self.nodeId
                 self.nodeId=self.nodeId+1
@@ -1055,7 +1069,7 @@ class OSMParserData():
         self.cursor.execute("CREATE INDEX target_idx ON edgeTable (target)")
    
     def createEdgeTableNodeSameStartEnriesFor(self, edge):
-        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList=edge
+        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList, maxspeed =edge
                            
         resultList=self.getEdgeEntryForStartPoint(startRef, edgeId)
         if len(resultList)!=0:
@@ -1064,7 +1078,7 @@ class OSMParserData():
                 self.nodeId=self.nodeId+1
     
         for result in resultList:
-            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6=result
+            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6, maxspeed=result
             if source1!=0:
                 continue
             
@@ -1075,7 +1089,7 @@ class OSMParserData():
             self.updateSourceOfEdge(edgeId1, sourceId)
 
     def createEdgeTableNodeSameEndEnriesFor(self, edge):
-        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList=edge
+        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList, maxspeed=edge
                            
         resultList=self.getEdgeEntryForEndPoint(endRef, edgeId)
         if len(resultList)!=0:
@@ -1084,7 +1098,7 @@ class OSMParserData():
                 self.nodeId=self.nodeId+1
             
         for result in resultList:
-            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6=result
+            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6, maxspeed=result
             if target1!=0:
                 continue
             
@@ -1095,7 +1109,7 @@ class OSMParserData():
             self.updateTargetOfEdge(edgeId1, targetId)
             
     def createEdgeTableNodeSourceEnriesFor(self, edge):
-        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList=edge
+        edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList, maxspeed=edge
         
         resultList=self.getEdgeEntryForStartPoint(endRef, edgeId)        
         if len(resultList)!=0:
@@ -1104,7 +1118,7 @@ class OSMParserData():
                 self.nodeId=self.nodeId+1
 
         for result in resultList:
-            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6=result
+            edgeId1, l1, l2, l3, oneway1, wayId1, source1, target1, l6, maxspeed=result
             
             if source1==0:
                 self.updateSourceOfEdge(edgeId1, targetId)
@@ -1146,6 +1160,11 @@ class OSMParserData():
             
             oneway=0
             roundabout=0
+            maxspeed=1
+            streetType=""
+            if "highway" in tags:
+                streetType=tags["highway"]
+                
             if "oneway" in tags:
                 if tags["oneway"]=="yes":
                     oneway=1
@@ -1158,6 +1177,28 @@ class OSMParserData():
                 roundabout=1
                 print("street with same start and end and not roundabout %d %s"%(wayId, str(tags)))
                 
+            # TODO iplicit
+            #     <tag k="source:maxspeed" v="AT:urban"/>
+            if "maxspeed" in tags:
+                maxspeed=tags["maxspeed"]
+                if ";" in maxspeed:
+                    print(maxspeed)
+                    print(maxspeed.split(";")[0])
+                    try:
+                        maxspeed=int(maxspeed.split(";")[0])
+                    except ValueError:
+                        maxspeed=int(maxspeed.split(";")[1])
+                else:
+                    try:
+                        maxspeed=int(maxspeed)
+                    except ValueError:
+                        maxspeed=50
+            else:
+                if streetType=="motorway":
+                    maxspeed=100
+                else:
+                    maxspeed=50
+                    
             doneRefs=list()
             for ref in refs:                  
                 if ref in nextWayDict:
@@ -1176,7 +1217,7 @@ class OSMParserData():
                         startRef=refNodeList[0]
                         endRef=refNodeList[-1]
 
-                        self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList)
+                        self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList, maxspeed)
                             
                         refNodeList=list()
                         distance=0
@@ -1192,7 +1233,7 @@ class OSMParserData():
                     startRef=refNodeList[0]
                     endRef=refNodeList[-1]
 
-                    self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList)
+                    self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList, maxspeed)
 
     def getStreetTrackList(self, wayid):
         if wayid in self.streetIndex:
@@ -1335,11 +1376,11 @@ def main(argv):
     
     p.openDB()
 
-    p.testRefTable()
+#    p.testRefTable()
 #    p.testWayTable()
 #    p.testStreetTable()
 #    p.testCrossingTable()
-#    p.testEdgeTable()
+    p.testEdgeTable()
         
 #    l=p.getEdgeEntryForWayId(30525406)
 #    for edge in l:
@@ -1365,40 +1406,40 @@ def main(argv):
 #    dur=int(stop-start)
 #    print(str(dur)+"s")
     
-    config=Config("routingTest.cfg")
-    section="routing"
-    if not config.hasSection(section):
-        config.addSection(section)
-
-    point1=OSMRoutingPoint("start", 0, 10.0, 20.0)
-    point2=OSMRoutingPoint("end", 1, 20.0, 30.0)
-    point3=OSMRoutingPoint("way", 2, 30.0, 40.0)
-
-    print(point1)    
-    print(point2)    
-    print(point3)    
-
-    point1.saveToConfig(config, section, "start")
-    point2.saveToConfig(config, section, "end")
-    point3.saveToConfig(config, section, "way")
-    
-    config.writeConfig()
-    
-    config.readConfig()
-    for name, value in config.items(section):
-        if name=="start":
-            point11=OSMRoutingPoint()
-            point11.readFromConfig(value)
-        if name=="end":
-            point22=OSMRoutingPoint()
-            point22.readFromConfig(value)
-        if name=="way":
-            point33=OSMRoutingPoint()
-            point33.readFromConfig(value)
-
-    print(point11)    
-    print(point22)    
-    print(point33)    
+#    config=Config("routingTest.cfg")
+#    section="routing"
+#    if not config.hasSection(section):
+#        config.addSection(section)
+#
+#    point1=OSMRoutingPoint("start", 0, 10.0, 20.0)
+#    point2=OSMRoutingPoint("end", 1, 20.0, 30.0)
+#    point3=OSMRoutingPoint("way", 2, 30.0, 40.0)
+#
+#    print(point1)    
+#    print(point2)    
+#    print(point3)    
+#
+#    point1.saveToConfig(config, section, "start")
+#    point2.saveToConfig(config, section, "end")
+#    point3.saveToConfig(config, section, "way")
+#    
+#    config.writeConfig()
+#    
+#    config.readConfig()
+#    for name, value in config.items(section):
+#        if name=="start":
+#            point11=OSMRoutingPoint()
+#            point11.readFromConfig(value)
+#        if name=="end":
+#            point22=OSMRoutingPoint()
+#            point22.readFromConfig(value)
+#        if name=="way":
+#            point33=OSMRoutingPoint()
+#            point33.readFromConfig(value)
+#
+#    print(point11)    
+#    print(point22)    
+#    print(point33)    
 
 
 #    l=p.getEdgeEntryForWayId(4064363)
