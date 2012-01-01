@@ -183,8 +183,6 @@ class OSMDataLoadWorker(QThread):
         while not self.exiting and True:
             self.updateStatusLabel("OSM init DB")
             osmParserData.initDB()
-            self.updateStatusLabel("OSM init routing graph")
-            osmParserData.initGraph()
             self.exiting=True
 
         self.updateDataThreadState("stopped")
@@ -204,6 +202,8 @@ class OSMRouteCalcWorker(QThread):
         self.updateStatusLabel("OSM starting route calculation thread")
         self.exiting = False
         self.routingPointList=routingPointList
+        self.startProgress()
+        osmParserData.initGraph()
         self.start()
  
     def updateRouteCalcThreadState(self, state):
@@ -212,8 +212,8 @@ class OSMRouteCalcWorker(QThread):
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
     
-    def updateEdgeList(self, edgeList, pathLen):
-        self.emit(SIGNAL("updateEdgeList(PyQt_PyObject, int)"), edgeList, pathLen)
+    def updateEdgeList(self, edgeList, pathCost):
+        self.emit(SIGNAL("updateEdgeList(PyQt_PyObject, int)"), edgeList, pathCost)
         
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -229,8 +229,8 @@ class OSMRouteCalcWorker(QThread):
         self.updateRouteCalcThreadState("run")
         self.startProgress()
         while not self.exiting and True:
-            edgeList, pathLen=osmParserData.calcRouteForPoints(self.routingPointList)
-            self.updateEdgeList(edgeList, pathLen)
+            edgeList, pathCost=osmParserData.calcRouteForPoints(self.routingPointList)
+            self.updateEdgeList(edgeList, pathCost)
             self.exiting=True
 
         self.updateRouteCalcThreadState("stopped")
@@ -301,6 +301,7 @@ class QtOSMWidget(QWidget):
         self.startPointImage=QPixmap("images/source.png")
         self.endPointImage=QPixmap("images/target.png")
         self.wayPointImage=QPixmap("images/waypoint.png")
+        self.routeCalculationThread=None
         
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
@@ -1041,7 +1042,7 @@ class QtOSMWidget(QWidget):
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
         editRoutingPointAction.setDisabled(self.getCompleteRoutingPoints()==None)
         
-        showRouteDisabled=not self.osmWidget.dbLoaded
+        showRouteDisabled=not self.osmWidget.dbLoaded or (self.routeCalculationThread!=None and self.routeCalculationThread.isRunning())
         if self.gpsPoint!=None:
             if self.endPoint==None:
                 showRouteDisabled=True
@@ -1178,14 +1179,15 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
+            print(osmParserData.countryNameOfPoint(actlat, actlon))
             wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
+                print(wayId)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
-                if name!=None:
-                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-                    if self.gpsPoint!=None:
-                        self.gpsPoint.name=name
+                self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
+                if self.gpsPoint!=None:
+                    self.gpsPoint.name=name
                         
     def showRouteForRoutingPoints(self):
         if self.osmWidget.dbLoaded==True:         
@@ -1196,14 +1198,14 @@ class QtOSMWidget(QWidget):
                 if point.getSource()==0:
                     point.resolveFromPos(osmParserData)
 
-            routeCalculationThread=OSMRouteCalcWorker(self)
-            self.connect(routeCalculationThread, SIGNAL("updateEdgeList(PyQt_PyObject, int)"), self.routeCalculationDone)
-            self.connect(routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-            self.connect(routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
-            self.connect(routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
+            self.routeCalculationThread=OSMRouteCalcWorker(self)
+            self.connect(self.routeCalculationThread, SIGNAL("updateEdgeList(PyQt_PyObject, int)"), self.routeCalculationDone)
+            self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+            self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
+            self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
 
-            if not routeCalculationThread.isRunning():
-                routeCalculationThread.setup(self.routingPointList)
+            if not self.routeCalculationThread.isRunning():
+                self.routeCalculationThread.setup(self.routingPointList)
 
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -1211,9 +1213,9 @@ class QtOSMWidget(QWidget):
     def stopProgress(self):
         self.emit(SIGNAL("stopProgress()"))
 
-    def routeCalculationDone(self, edgeList, pathLen):
+    def routeCalculationDone(self, edgeList, pathCost):
         if edgeList!=None:
-            print(pathLen)
+            print("cost=%f"%(pathCost))
             trackList=osmParserData.createTrackForEdgeList(edgeList, self.routingPointList)
             self.setTrack(trackList, True)
         

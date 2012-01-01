@@ -35,8 +35,11 @@ class DijkstraWrapper():
         self.gr=None
         self.directed=True
         self.hasReverseCost=True
+        self.graphLoaded=False
 
-        
+    def isGraphLoaded(self):
+        return self.graphLoaded
+    
     def edgeFromDB(self, x):
         edgeId=x[0]
         length=x[1]
@@ -55,7 +58,7 @@ class DijkstraWrapper():
                   
             # TODO length calculation
             edge=Edge()
-            cost=(length / (maxspeed/120))
+            cost=(length / (maxspeed/3.6))
             
             if oneway:
                 reverseCost=cost*100000
@@ -64,6 +67,7 @@ class DijkstraWrapper():
                 
             edge.fillEdge(edgeId, source, target, cost, reverseCost)
             edgeList.append(edge)
+        self.graphLoaded=True
         return edgeList    
 
     def route(self, gr, st, startNode, targetNode):
@@ -74,6 +78,7 @@ class DijkstraWrapper():
             assert nextnode in gr.neighbors(lastnode)
             path.append((lastnode, st[lastnode]))
             lastnode = nextnode
+#        path.append((startNode, st[startNode]))
         path.reverse()
 #        print(path)
         return path
@@ -92,7 +97,7 @@ class DijkstraWrapper():
         print(str(dur)+"s")
 
         pathEdgeList=list()
-        pathLen=0
+        pathCost=0.0
         start=time.time()
         st, dist = shortest_path(self.gr, startNode)     
         curr=time.time()
@@ -114,9 +119,9 @@ class DijkstraWrapper():
         print(str(dur)+"s")
                 
         if targetNode in dist:
-            pathLen=dist[targetNode]
+            pathCost=float(dist[targetNode])
             
-        return pathEdgeList, pathLen
+        return pathEdgeList, pathCost
         
     def initGraph(self):
         self.allEdgesList=self.fillEdges()
@@ -177,8 +182,8 @@ class DijkstraWrapper():
         
         
     def computeShortestPath(self, startNode, targetNode):                       
-        pathEdgeList, pathLen=self.dijkstra(startNode, targetNode)
-#        if pathLen!=None and pathEdgeList!=None:
-#            print("%s %d"%(str(pathEdgeList), pathLen))
+        pathEdgeList, pathCost=self.dijkstra(startNode, targetNode)
+#        if pathCost!=None and pathEdgeList!=None:
+#            print("%s %d"%(str(pathEdgeList), pathCost))
             
-        return pathEdgeList, pathLen
+        return pathEdgeList, pathCost
