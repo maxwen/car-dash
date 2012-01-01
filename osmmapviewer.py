@@ -1184,6 +1184,10 @@ class QtOSMWidget(QWidget):
             if wayId!=None and wayId!=self.lastWayId:
                 self.lastWayId=wayId
                 print(wayId)
+                wayId, tags, refs, distances=osmParserData.getWayEntryForId(wayId)
+                print(refs)
+                print(tags)
+                print(distances)
                 (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
                 self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
                 if self.gpsPoint!=None:

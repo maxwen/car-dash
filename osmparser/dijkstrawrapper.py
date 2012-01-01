@@ -58,7 +58,8 @@ class DijkstraWrapper():
                   
             # TODO length calculation
             edge=Edge()
-            cost=(length / (maxspeed/3.6))
+#            cost=length
+            cost=(length / (maxspeed/3.6))*100
             
             if oneway:
                 reverseCost=cost*100000
@@ -80,7 +81,7 @@ class DijkstraWrapper():
             lastnode = nextnode
 #        path.append((startNode, st[startNode]))
         path.reverse()
-#        print(path)
+        print(path)
         return path
     
     def dijkstra(self, startNode, targetNode):       

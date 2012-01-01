@@ -17,7 +17,7 @@ class OSMBoarderUtils():
         self.bbox=list()
     
     def getDataDir(self):
-        return os.path.join(os.environ['PWD'], "data")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
 
     def getAllPolyFiles(self):
         polyFiles=list()
