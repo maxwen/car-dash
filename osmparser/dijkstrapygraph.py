@@ -29,7 +29,7 @@ class Edge():
         self.cost=cost
         self.reverseCost=reverseCost
         
-class DijkstraWrapper():
+class DijkstraWrapperPygraph():
     def __init__(self, cursor):
         self.cursor=cursor
         self.gr=None

@@ -9,7 +9,7 @@ import os
 import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
-from osmparser.dijkstrawrapper import DijkstraWrapper
+from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
 from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 
@@ -971,7 +971,8 @@ class OSMParserData():
         trackWayList=list()
         track=dict()
         track["name"]=""
-               
+        allLength=0
+        
         endPoint=routingPointList[-1]
         routeEndRefId=endPoint.getRefId()
         endEdgeId=endPoint.getEdgeId()
@@ -998,7 +999,7 @@ class OSMParserData():
 #                self.printEdgeToRoutingPoint(startPoint, startPoint.getWayId(), trackWayList)
 
             if not routeStartRefId in refList:
-                (startEdgeId, startStartRef, startEndRef, _, _, _, _, _, startRefList, _)=self.getEdgeEntryForEdgeId(startEdgeId)                       
+                (startEdgeId, startStartRef, startEndRef, length, _, _, _, _, startRefList, _)=self.getEdgeEntryForEdgeId(startEdgeId)                       
             
                 if firstStartRef==startStartRef or firstEndRef==startStartRef:
                     startRefList.reverse()
@@ -1006,9 +1007,11 @@ class OSMParserData():
                 self.printEdgeForRefList(startRefList, startEdgeId, trackWayList, None, routeStartRefId)
                 currentRefList=startRefList
                 routeStartRefId=None
+                # TODO maybe not the complete length
+                allLength=allLength+length
 
             for edgeId in edgeList:
-                (edgeId, currentStartRef, currentEndRef, _, _, _, _, _, refList, _)=self.getEdgeEntryForEdgeId(edgeId)                       
+                (edgeId, currentStartRef, currentEndRef, length, _, _, _, _, refList, _)=self.getEdgeEntryForEdgeId(edgeId)                       
     
                 if currentRefList!=None:
                     if currentRefList[-1]!=refList[0]:
@@ -1024,14 +1027,18 @@ class OSMParserData():
                 
                 currentRefList=refList
                 routeStartRefId=None
+                # TODO maybe not the complete length
+                allLength=allLength+length
                                          
             if not routeEndRefId in currentRefList:      
-                (endEdgeId, _, _, _, _, _, _, _, endRefList, _)=self.getEdgeEntryForEdgeId(endEdgeId)
+                (endEdgeId, _, _, length, _, _, _, _, endRefList, _)=self.getEdgeEntryForEdgeId(endEdgeId)
                 if currentRefList[-1]!=endRefList[0]:
                     endRefList.reverse()
                 print("add end edge")
                 self.printEdgeForRefList(endRefList, endEdgeId, trackWayList, routeEndRefId, None)
-
+                # TODO maybe not the complete length
+                allLength=allLength+length
+                
 #            (lat, lon)=self.getCoordsWithRef(routeEndRefId)
 #            if lat!=endPoint.getLat() and lon!=endPoint.getLon():
 #                self.printEdgeToRoutingPoint(endPoint, endPoint.getWayId(), trackWayList)
@@ -1039,7 +1046,7 @@ class OSMParserData():
         track["track"]=trackWayList
         trackList=list()
         trackList.append(track)
-        return trackList    
+        return trackList, allLength   
 
     def getEdgeListForWayLevels(self, wayId, usedRefId, level):
         self.wantLevel=level
@@ -1192,6 +1199,9 @@ class OSMParserData():
                 self.getEdgePartName(result, streetInfo)
 
     def createEdgeTableEntries(self):
+        self.cursor.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
+        self.cursor.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
+
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
         for way in allWays:
@@ -1433,60 +1443,22 @@ class OSMParserData():
         allWays=self.cursor.fetchall()
         for way in allWays:
             wayid, tags, refs, distances=self.wayFromDB(way)          
+            streetInfo=self.getStreetNameInfo(tags) 
                 
-#            oneway=False
-#            if "oneway" in tags:
-#                if tags["oneway"]=="yes":
-#                    oneway=True
-#            if "junction" in tags:
-#                if tags["junction"]=="roundabout":
-#                    oneway=True
-#            elif refs[0]==refs[-1]:
-##                print("found way with same start and end and not roundabout %d %s"%(wayid, str(tags)))
-#                oneway=True
-
-            
             crossingType=1
             for ref in refs:  
                 nextWays=self.findWayWithRefInAllWays(ref, wayid)  
                 if len(nextWays)!=0:
                     wayList=list()
                     for (wayid2, tags2, refs2) in nextWays:
+                        newStreetInfo=self.getStreetNameInfo(tags2) 
+#                        if streetInfo==newStreetInfo:
+#                            continue
+
                         wayList.append((wayid2, crossingType))
                     
                     if len(wayList)!=0:
                         self.addToCrossingsTable(wayid, ref, wayList)
-
-#                        newOneway=False
-#                        newRoundabout=False
-#                        if "oneway" in tags2:
-#                            if tags2["oneway"]=="yes":
-#                                newOneway=True
-#                        if "junction" in tags2:
-#                            if tags2["junction"]=="roundabout":
-#                                newRoundabout=True
-#                        # TODO hack
-#                        elif refs2[0]==refs2[-1]:
-#                            newRoundabout=True
-#                                                        
-#                        if not oneway: 
-#                            if newOneway:
-#                                if not refs2[0]==ref:
-#                                    # crossing only if new oneway starts here
-#                                    crossingType=0
-#                        if newOneway:
-#                            if refs2[-1]==ref:
-#                                # no crossing with end of a oneway
-#                                crossingType=0
-##                        if not oneway and not newOneway:
-##                            if not newRoundabout:
-##                                if ref!=refs2[0] and ref!=refs2[-1]:
-##                                    # crossing in middle of way
-##                                    crossingType=1
-#                            
-#                        if not wayid2 in wayList:
-#                            wayList.append((wayid2, crossingType))
-                    
 
     def parse(self):
         p = OSMParser(1, nodes_callback=self.parse_nodes, 
@@ -1508,7 +1480,7 @@ class OSMParserData():
         
     def initGraph(self):
         if self.dWrapper==None:
-            self.dWrapper=DijkstraWrapper(self.cursor)
+            self.dWrapper=DijkstraWrapperPygraph(self.cursor)
 
         if not self.dWrapper.isGraphLoaded():
             print("init graph")
@@ -1587,8 +1559,8 @@ def main(argv):
         osmFile=argv[1]
     except IndexError:
 #        osmFile='/home/maxl/Downloads/austria.osm.bz2'
-#        osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-        osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+#        osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
+        osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
 #        osmFile='test1.osm'
     
     p = OSMParserData(osmFile)
@@ -1604,6 +1576,8 @@ def main(argv):
 #    p.testCrossingTable()
 #    p.testEdgeTable()
         
+    (lat, lon)=p.getCoordsWithRef(478256761)
+    print(p.countryNameOfPoint(lat, lon))
 #    l=p.getEdgeEntryForWayId(30525406)
 #    for edge in l:
 #        print(edge)
@@ -1664,9 +1638,9 @@ def main(argv):
 #    print(point33)    
 
 
-    l=p.getEdgeEntryForWayId(69489908)
-    for edge in l:
-        print(edge)
+#    l=p.getEdgeEntryForWayId(69489908)
+#    for edge in l:
+#        print(edge)
 #    l=p.getEdgeEntryForWayId(36268167)
 #    for edge in l:
 #        print(edge)

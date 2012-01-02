@@ -36,10 +36,9 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-#osmFile='/home/maxl/Downloads/salzburg-streets.osm.bz2'
-osmFile='/home/maxl/Downloads/salzburg-city-streets.osm'
+osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
+#osmFile='/home/maxl/Downloads/salzburg-city.osm.bz2'
 #osmFile='/home/maxl/Downloads/austria.osm.bz2'
-#osmFile='/home/maxl/workspaces/pydev/car-dash/osmparser/test3.osm'
 osmParserData = OSMParserData(osmFile)
 
 class OSMDownloadTilesWorker(QThread):
@@ -1220,7 +1219,8 @@ class QtOSMWidget(QWidget):
     def routeCalculationDone(self, edgeList, pathCost):
         if edgeList!=None:
             print("cost=%f"%(pathCost))
-            trackList=osmParserData.createTrackForEdgeList(edgeList, self.routingPointList)
+            trackList, length=osmParserData.createTrackForEdgeList(edgeList, self.routingPointList)
+            print("len=%d"%(length))
             self.setTrack(trackList, True)
         
     def showTrackOnMousePos(self, x, y):
