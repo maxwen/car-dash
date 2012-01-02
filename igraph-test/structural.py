@@ -1,8 +1,8 @@
 from igraph import *
 from igraph.compat import isnan
-import testcase
+import unittest
 
-class PathTests():
+class PathTests(unittest.TestCase):
     def testShortestPaths(self):
         g = Graph(10, [(0,1), (0,2), (0,3), (1,2), (1,4), (1,5), (2,3), (2,6), \
             (3,2), (3,6), (4,5), (4,7), (5,6), (5,8), (5,9), (7,5), (7,8), \
@@ -86,7 +86,7 @@ class PathTests():
     def testPathLengthHist(self):
         g = Graph.Tree(15, 2)
         h = g.path_length_hist()
-        self.failUnless(h.unconnected == 0L)
+        self.failUnless(h.unconnected == 0)
         self.failUnless([(int(l),x) for l,_,x in h.bins()] == \
           [(1,14),(2,19),(3,20),(4,20),(5,16),(6,16)])
         g = Graph.Full(5)+Graph.Full(4)
