@@ -68,7 +68,6 @@ class DijkstraWrapperPygraph():
                 
             edge.fillEdge(edgeId, source, target, cost, reverseCost)
             edgeList.append(edge)
-        self.graphLoaded=True
         return edgeList    
 
     def route(self, gr, st, startNode, targetNode):
@@ -81,10 +80,11 @@ class DijkstraWrapperPygraph():
             lastnode = nextnode
 #        path.append((startNode, st[startNode]))
         path.reverse()
-        print(path)
+#        print(path)
         return path
     
     def dijkstra(self, startNode, targetNode):       
+        print("dijkstra:pygraph from %d to %d"%(startNode, targetNode))    
         start=time.time()
         if not self.gr.has_node(startNode):
             print("start node not found %d"%(startNode))
@@ -93,38 +93,27 @@ class DijkstraWrapperPygraph():
         if not self.gr.has_node(targetNode):
             print("target node not found %d"%(targetNode))
             return None, None
-        curr=time.time()
-        dur=int(curr-start)
-        print(str(dur)+"s")
 
         pathEdgeList=list()
         pathCost=0.0
-        start=time.time()
         st, dist = shortest_path(self.gr, startNode)     
-        curr=time.time()
-        dur=int(curr-start)
-        print(str(dur)+"s")
-               
-        start=time.time()
+                
         path=self.route(self.gr, st, startNode, targetNode)        
-        curr=time.time()
-        dur=int(curr-start)
-        print(str(dur)+"s")
       
-        start=time.time()
         for source, target in path:
             pathEdgeList.append(int(self.gr.edge_label((source, target))))
-
-        curr=time.time()
-        dur=int(curr-start)
-        print(str(dur)+"s")
                 
         if targetNode in dist:
             pathCost=float(dist[targetNode])
             
+        curr=time.time()
+        dur=int(curr-start)
+        print("dijkstra:pygraph: "+str(dur)+"s")
+
         return pathEdgeList, pathCost
         
     def initGraph(self):
+        start=time.time()
         self.allEdgesList=self.fillEdges()
         
         self.gr=digraph()
@@ -181,10 +170,16 @@ class DijkstraWrapperPygraph():
 
                         print("edge target=%d source=%d already added"%(target, source))
         
+        self.graphLoaded=True
         
+        curr=time.time()
+        dur=int(curr-start)
+        print("initGraph:pygraph: "+str(dur)+"s")
+
     def computeShortestPath(self, startNode, targetNode):                       
         pathEdgeList, pathCost=self.dijkstra(startNode, targetNode)
 #        if pathCost!=None and pathEdgeList!=None:
 #            print("%s %d"%(str(pathEdgeList), pathCost))
-            
+        
+#        print(pathEdgeList)
         return pathEdgeList, pathCost

@@ -36,10 +36,10 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
+#osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
 #osmFile='/home/maxl/Downloads/salzburg-city.osm.bz2'
 #osmFile='/home/maxl/Downloads/austria.osm.bz2'
-osmParserData = OSMParserData(osmFile)
+osmParserData = OSMParserData()
 
 class OSMDownloadTilesWorker(QThread):
     def __init__(self, parent): 
@@ -1130,7 +1130,7 @@ class QtOSMWidget(QWidget):
         defaultName="favorite"
         wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
         if wayId==None:
-            return
+            return 
         
         (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
 
@@ -1178,20 +1178,22 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            print(osmParserData.countryNameOfPoint(actlat, actlon))
             wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
-            if wayId!=None and wayId!=self.lastWayId:
-                self.lastWayId=wayId
-                print(wayId)
-                wayId, tags, refs, distances=osmParserData.getWayEntryForId(wayId)
-                print(refs)
-                print(tags)
-                print(distances)
-                (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
-                self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
-                if self.gpsPoint!=None:
-                    self.gpsPoint.name=name
-                        
+            if wayId==None:
+                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown")
+            else:   
+                if wayId!=self.lastWayId:
+                    self.lastWayId=wayId
+                    print(wayId)
+                    wayId, tags, refs, distances=osmParserData.getWayEntryForId(wayId)
+                    print(refs)
+                    print(tags)
+                    print(distances)
+                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
+                    if self.gpsPoint!=None:
+                        self.gpsPoint.name=name
+                            
     def showRouteForRoutingPoints(self):
         if self.osmWidget.dbLoaded==True:         
             self.routingPointList=self.getCompleteRoutingPoints()
@@ -1908,10 +1910,10 @@ class OSMWidget(QWidget):
 #        self.testTrackButton.clicked.connect(self._testTrack)
 #        buttons.addWidget(self.testTrackButton)
 
-        self.searchWayButton=QPushButton("Show Way", self)
-        self.searchWayButton.clicked.connect(self._showWay)
-        self.searchWayButton.setDisabled(True)
-        buttons.addWidget(self.searchWayButton)
+#        self.searchWayButton=QPushButton("Show Way", self)
+#        self.searchWayButton.clicked.connect(self._showWay)
+#        self.searchWayButton.setDisabled(True)
+#        buttons.addWidget(self.searchWayButton)
                 
         self.favoritesButton=QPushButton("Favorites", self)
         self.favoritesButton.clicked.connect(self._showFavorites)
@@ -1944,7 +1946,6 @@ class OSMWidget(QWidget):
     def _cleanup(self):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()        
-#        osmParserData.closeDB()
         
     def updateTrackDisplay(self, track):
         self.trackLabel.setText(track)
@@ -2122,9 +2123,9 @@ class OSMWidget(QWidget):
           
     def updateDataThreadState(self, state):
         if state=="stopped":
-            self.searchWayButton.setDisabled(False)
+#            self.searchWayButton.setDisabled(False)
             self.favoritesButton.setDisabled(False)
-            osmParserData.openDB()
+            osmParserData.openAllDB()
             self.dbLoaded=True
 
     def loadData(self):
@@ -2136,22 +2137,22 @@ class OSMWidget(QWidget):
 
         self.dataThread.setup()
         
-    @pyqtSlot()
-    def _showWay(self):
-        searchDialog=OSMWaySearchDialog(self)
-        result=searchDialog.exec()
-        if result==QDialog.Accepted:
-            (name, ref)=searchDialog.getStreetName()           
-            trackList=osmParserData.showWayWithName(name, ref)
-            if trackList!=None:
-                self.showWay(trackList)
-                self.app.processEvents()
-        
-                # TODO hack
-                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
-                               self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
-            else:
-                print("no waylist for %s-%s"%(name, ref))
+#    @pyqtSlot()
+#    def _showWay(self):
+#        searchDialog=OSMWaySearchDialog(self)
+#        result=searchDialog.exec()
+#        if result==QDialog.Accepted:
+#            (name, ref)=searchDialog.getStreetName()           
+#            trackList=osmParserData.showWayWithName(name, ref)
+#            if trackList!=None:
+#                self.showWay(trackList)
+#                self.app.processEvents()
+#        
+#                # TODO hack
+#                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
+#                               self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
+#            else:
+#                print("no waylist for %s-%s"%(name, ref))
                 
     @pyqtSlot()
     def _showFavorites(self):

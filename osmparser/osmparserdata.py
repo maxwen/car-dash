@@ -10,6 +10,8 @@ import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
 from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
+from osmparser.dijkstraigraph import DijkstraWrapperIgraph
+
 from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 
@@ -102,42 +104,83 @@ class OSMRoutingPoint():
         self.lon=float(lon)
         
 class OSMParserData():
-    def __init__(self, file):
-        self.nodes = dict()
-        self.coords = dict()
-        self.relations = dict()
-        self.track=list()
-        self.trackWayList=list()
-        self.streetNameIndex=dict()
-        self.streetIndex=dict()
-        self.file=file
-        self.wayRefIndex=dict()
-        self.wayToStreetIndex=dict()
+    def __init__(self):
         self.connection=None
         self.cursor=None
+        self.connectionGlobal=None
+        self.cursorGlobal=None
+        self.connectionAdress=None
+        self.cursorAdress=None
         self.edgeId=0
-        self.actLevel=0
-        self.wantLevel=0
         self.trackItemList=list()
         self.doneEdges=list()
         self.edgeList=list()
-        self.crossingId=0
         self.nodeId=1
+        self.streetId=0
         self.dWrapper=None
         self.osmutils=OSMUtils()
         self.initBoarders()
-        self.initOSMDataInfo()
+        self.osmList=self.getOSMDataInfo()
         
-    def createTables(self):
+    def initCountryData(self):
+        self.crossingId=0
+        self.nodes = dict()
+        self.coords = dict()
+        self.relations = dict()
+        self.streetNameIndex=dict()
+        self.streetIndex=dict()
+        self.wayRefIndex=dict()
+        self.wayToStreetIndex=dict()
+
+    def createCountryTables(self):
         self.createRefTable()
         self.createWayTable()
-        self.createStreetTable()
+#        self.createStreetTable()
         self.createCrossingsTable()
-        self.createEdgeTable()
 
-    def openDB(self):
-        self.connection=sqlite3.connect(self.getDBFile())
-        self.cursor=self.connection.cursor()   
+    def createGlobalTables(self):
+        self.createEdgeTable()
+        self.createRefCountryTable()
+        self.createNodeWayCountryTable()
+        
+    def createAdressTable(self):
+        self.createStreetTable2()
+        
+    def openGlobalDB(self):
+        self.connectionGlobal=sqlite3.connect(self.getGlobalDBFile())
+        self.cursorGlobal=self.connectionGlobal.cursor()
+
+    def openAdressDB(self):
+        self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
+        self.cursorAdress=self.connectionAdress.cursor()
+        
+    def openAllDB(self):
+        self.openGlobalDB()
+        self.openAdressDB()
+        for country in self.osmList.keys():
+            self.openCountryDB(country)
+        
+    def closeAllDB(self):
+        self.closeGlobalDB()
+        self.closeAdressDB()
+        for country in self.osmList.keys():
+            self.closeCountryDB(country)
+            
+    def setDBCursorForCountry(self, country):
+        self.connection=self.osmList[country]["connection"]
+        self.cursor=self.osmList[country]["cursor"]
+      
+    def getCountryForPolyCountry(self, polyCountry):
+        for country, osmData in self.osmList.items():
+            if osmData["polyCountry"]==polyCountry:
+                return country
+        return None
+    
+    def openCountryDB(self, country):
+        self.connection=sqlite3.connect(self.getDBFile(country))
+        self.cursor=self.connection.cursor()
+        self.osmList[country]["cursor"]=self.cursor
+        self.osmList[country]["connection"]=self.connection
 
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, ways BLOB)')
@@ -145,32 +188,79 @@ class OSMParserData():
     def createWayTable(self):
         self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, refsDistance BLOB)')
 
-    def createStreetTable(self):
-        self.cursor.execute('CREATE TABLE streetTable (street TEXT PRIMARY KEY, wayIdList BLOB)')
+#    def createStreetTable(self):
+#        self.cursor.execute('CREATE TABLE streetTable (street TEXT PRIMARY KEY, wayIdList BLOB)')
+
+    def createStreetTable2(self):
+        self.cursorAdress.execute('CREATE TABLE streetTable (id INTEGER PRIMARY KEY, country STRING, street TEXT, wayIdList BLOB)')
     
     def createCrossingsTable(self):
         self.cursor.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
 
     def createEdgeTable(self):
-        self.cursor.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, oneway BOOL, wayID INTEGER, source INTEGER, target INTEGER, refList BLOB, maxspeed INTEGER)')
+        self.cursorGlobal.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, oneway BOOL, wayID INTEGER, source INTEGER, target INTEGER, refList BLOB, maxspeed INTEGER)')
  
+    def createRefCountryTable(self):
+        self.cursorGlobal.execute('CREATE TABLE refCountryTable (id INTEGER PRIMARY KEY, country STRING)')
+    
+    def addToCountryRefTable(self, refId, country):
+        self.cursorGlobal.execute('INSERT INTO refCountryTable VALUES( ?, ?)', (refId, country))
+
+    def getCountryOfRef(self, refId):
+        self.cursorGlobal.execute('SELECT country FROM refCountryTable where id=="%s"'%(str(refId)))
+        allentries=self.cursorGlobal.fetchall()
+        if len(allentries)==1:
+            return allentries[0][0]
+        return None
+
+    def testCountryRefTable(self):
+        self.cursorGlobal.execute('SELECT * FROM refCountryTable')
+        allentries=self.cursorGlobal.fetchall()
+        for x in allentries:
+            print( "refId: "+str(x[0]) +" country: " + x[1])
+
+    def createNodeWayCountryTable(self):
+        self.cursorGlobal.execute('CREATE TABLE wayCountryTable (id INTEGER PRIMARY KEY, country STRING)')
+
+    def addToCountryWayTable(self, wayId, country):
+        self.cursorGlobal.execute('INSERT INTO wayCountryTable VALUES( ?, ?)', (wayId, country))
+
+    def getCountryOfWay(self, wayId):
+        self.cursorGlobal.execute('SELECT country FROM wayCountryTable where id=="%s"'%(str(wayId)))
+        allentries=self.cursorGlobal.fetchall()
+        if len(allentries)==1:
+            return allentries[0][0]
+        return None
+    
+    def testCountryWayTable(self):
+        self.cursorGlobal.execute('SELECT * FROM wayCountryTable')
+        allentries=self.cursorGlobal.fetchall()
+        for x in allentries:
+            print( "wayId: "+str(x[0]) +" country: " + x[1])
+
     def addToRefTable(self, refid, lat, lon, wayIdList):
         self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList)))
 
     def addToWayTable(self, wayid, tags, refs, distances):
         self.cursor.execute('INSERT INTO wayTable VALUES( ?, ?, ?, ?)', (wayid, pickle.dumps(tags), pickle.dumps(refs), pickle.dumps(distances)))
 
-    def addToStreetTable(self, streetInfo, wayidList):
+#    def addToStreetTable(self, streetInfo, wayidList):
+#        (name, ref)=streetInfo
+#        streetInfoString=name+"_"+ref
+#        self.cursor.execute('INSERT INTO streetTable VALUES( ?, ?)', (streetInfoString, pickle.dumps(wayidList)))
+
+    def addToStreetTable2(self, country, streetInfo, wayidList):
         (name, ref)=streetInfo
         streetInfoString=name+"_"+ref
-        self.cursor.execute('INSERT INTO streetTable VALUES( ?, ?)', (streetInfoString, pickle.dumps(wayidList)))
-
+        self.cursorAdress.execute('INSERT INTO streetTable VALUES( ?, ?, ?, ?)', (self.streetId, country, streetInfoString, pickle.dumps(wayidList)))
+        self.streetId=self.streetId+1
+        
     def addToCrossingsTable(self, wayid, refId, nextWaysList):
         self.cursor.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
         self.crossingId=self.crossingId+1
 
     def addToEdgeTable(self, startRef, endRef, length, oneway, wayId, refList, maxspeed):
-        self.cursor.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, oneway, wayId, 0, 0, pickle.dumps(refList), maxspeed))
+        self.cursorGlobal.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, oneway, wayId, 0, 0, pickle.dumps(refList), maxspeed))
         self.edgeId=self.edgeId+1
     
     def updateSourceOfEdge(self, edgeId, sourceId):
@@ -178,45 +268,45 @@ class OSMParserData():
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, sourceId, target, pickle.dumps(refList), maxspeed))
+        self.cursorGlobal.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, sourceId, target, pickle.dumps(refList), maxspeed))
 
     def updateTargetOfEdge(self, edgeId, targetId):
         existingEdgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursor.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, source, targetId, pickle.dumps(refList), maxspeed))     
+        self.cursorGlobal.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, source, targetId, pickle.dumps(refList), maxspeed))     
       
     def getEdgeEntryForSource(self, sourceId):
-        self.cursor.execute('SELECT * FROM edgeTable where source=="%s"'%(str(sourceId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where source=="%s"'%(str(sourceId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList      
     
     def getEdgeEntryForTarget(self, targetId):
-        self.cursor.execute('SELECT * FROM edgeTable where target=="%s"'%(str(targetId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where target=="%s"'%(str(targetId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList      
     
     def getEdgeEntryForSourceAndTarget(self, sourceId, targetId):
-        self.cursor.execute('SELECT * FROM edgeTable where source=="%s" AND target=="%s"'%(str(sourceId), str(targetId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where source=="%s" AND target=="%s"'%(str(sourceId), str(targetId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList   
     
     def getEdgeEntryForEdgeId(self, edgeId):
-        self.cursor.execute('SELECT * FROM edgeTable where id=="%s"'%(str(edgeId)))
-        allentries=self.cursor.fetchall()
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where id=="%s"'%(str(edgeId)))
+        allentries=self.cursorGlobal.fetchall()
         if len(allentries)==1:
             edge=self.edgeFromDB(allentries[0])
             return edge
@@ -224,33 +314,38 @@ class OSMParserData():
         return (None, None, None, None, None, None, None, None, None, None)
         
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
-        self.cursor.execute('SELECT * FROM edgeTable where startRef="%s" AND id!="%s"'%(str(startRef), str(edgeId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where startRef="%s" AND id!="%s"'%(str(startRef), str(edgeId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
  
     def getEdgeEntryForEndPoint(self, endRef, edgeId):
-        self.cursor.execute('SELECT * FROM edgeTable where endRef=="%s" AND id!="%s"'%(str(endRef), str(edgeId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where endRef=="%s" AND id!="%s"'%(str(endRef), str(edgeId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
     
     def getEdgeEntryForWayId(self, wayId):
-        self.cursor.execute('SELECT * FROM edgeTable where wayId=="%s"'%(str(wayId)))
+        self.cursorGlobal.execute('SELECT * FROM edgeTable where wayId=="%s"'%(str(wayId)))
         resultList=list()
-        allentries=self.cursor.fetchall()
+        allentries=self.cursorGlobal.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
     
     def getRefEntryForId(self, refId):
+        country=self.getCountryOfRef(refId)
+        if country==None:
+            return (None, None, None, None)
+        self.setDBCursorForCountry(country)
+        
         self.cursor.execute('SELECT * FROM refTable where refId==%s'%(str(refId)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
@@ -259,6 +354,11 @@ class OSMParserData():
         return (None, None, None, None)
 
     def getWayEntryForId(self, wayId):
+        country=self.getCountryOfWay(wayId)
+        if country==None:
+            return (None, None, None, None)
+        self.setDBCursorForCountry(country)
+
         self.cursor.execute('SELECT * FROM wayTable where wayId==%s'%(str(wayId)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
@@ -266,15 +366,25 @@ class OSMParserData():
         
         return (None, None, None, None)
     
-    def getStreetEntryForName(self, streetInfo):
+#    def getStreetEntryForName(self, streetInfo):
+#        (name, ref)=streetInfo
+#        streetInfoString=name+"_"+ref
+#        self.cursor.execute('SELECT * FROM streetTable where street=="%s"'%(str(streetInfoString)))
+#        allentries=self.cursor.fetchall()
+#        if len(allentries)==1:
+#            return self.streetFromDB(allentries[0])
+#        
+#        return (None, None, None)
+
+    def getStreetEntryForName2(self, streetInfo):
         (name, ref)=streetInfo
         streetInfoString=name+"_"+ref
-        self.cursor.execute('SELECT * FROM streetTable where street=="%s"'%(str(streetInfoString)))
+        self.cursorAdress.execute('SELECT * FROM streetTable where street=="%s"'%(str(streetInfoString)))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
-            return self.streetFromDB(allentries[0])
+            return self.streetFromDB2(allentries[0])
         
-        return (None, None, None)
+        return (None, None, None, None, None)
     
     def getCrossingEntryFor(self, wayid):
         self.cursor.execute('SELECT * FROM crossingTable where wayId=="%s"'%(str(wayid)))
@@ -325,6 +435,13 @@ class OSMParserData():
         return (None, None)
     
     def getWayIdForPos(self, actlat, actlon):
+        polyCountry=self.countryNameOfPoint(actlat, actlon)
+        country=self.getCountryForPolyCountry(polyCountry)
+        if country==None:
+            return None, None, (None, None)
+
+        self.setDBCursorForCountry(country)
+
         nodes=self.getNearNodes(actlat, actlon)
 #        print(nodes)
         minDistance=1000
@@ -418,12 +535,19 @@ class OSMParserData():
             wayId, tags, refs, distances=self.wayFromDB(x)
             print( "way: " + str(wayId) + "  tags: " + str(tags) + "  refs: " + str(refs) + " distances: "+str(distances))
 
-    def testStreetTable(self):
-        self.cursor.execute('SELECT * FROM streetTable')
-        allentries=self.cursor.fetchall()
+#    def testStreetTable(self):
+#        self.cursor.execute('SELECT * FROM streetTable')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            name, ref, wayIdList=self.streetFromDB(x)
+#            print( "name: " + name + " ref:"+ref+ " wayIdList: " + str(wayIdList))
+
+    def testStreetTable2(self):
+        self.cursorAdress.execute('SELECT * FROM streetTable')
+        allentries=self.cursorAdress.fetchall()
         for x in allentries:
-            name, ref, wayIdList=self.streetFromDB(x)
-            print( "name: " + name + " ref:"+ref+ " wayIdList: " + str(wayIdList))
+            streetId, country, name, ref, wayIdList=self.streetFromDB2(x)
+            print( "id:"+str(streetId) +" country: "+country+" name: " + name + " ref:"+ref+ " wayIdList: " + str(wayIdList))
 
     def testCrossingTable(self):
         self.cursor.execute('SELECT * FROM crossingTable')
@@ -433,8 +557,8 @@ class OSMParserData():
             print( "id: "+ str(id) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
         
     def testEdgeTable(self):
-        self.cursor.execute('SELECT * FROM edgeTable')
-        allentries=self.cursor.fetchall()
+        self.cursorGlobal.execute('SELECT * FROM edgeTable')
+        allentries=self.cursorGlobal.fetchall()
         for x in allentries:
             edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=self.edgeFromDB(x)
             print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " oneway: "+str(oneway)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) +" refList:"+str(refList) + " maxspeed: "+str(maxspeed))
@@ -458,6 +582,14 @@ class OSMParserData():
         (name, ref)=streetInfoString.split("_")
         wayIdList=pickle.loads(x[1])
         return (name, ref, wayIdList)
+
+    def streetFromDB2(self, x):
+        streetId=x[0]
+        country=x[1]
+        streetInfoString=x[2]
+        (name, ref)=streetInfoString.split("_")
+        wayIdList=pickle.loads(x[3])
+        return (streetId, country, name, ref, wayIdList)
         
     def crossingFromDB(self, x):
         id=x[0]
@@ -478,13 +610,20 @@ class OSMParserData():
         refList=pickle.loads(x[8])
         maxspeed=x[9]
         return (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)
-                
-    def commitDB(self):
-        self.connection.commit()
+                        
+    def closeCountryDB(self, country):
+        cursor=self.osmList[country]["cursor"]
+        connection=self.osmList[country]["connection"]
+        connection.commit()
+        cursor.close()
+
+    def closeGlobalDB(self):
+        self.connectionGlobal.commit()        
+        self.cursorGlobal.close()
         
-    def closeDB(self):
-        self.commitDB()
-        self.cursor.close()
+    def closeAdressDB(self):
+        self.connectionAdress.commit()
+        self.cursorAdress.close()
         
     def addAllRefsToDB(self):
         for ref, wayIdList in self.wayRefIndex.items():
@@ -494,7 +633,7 @@ class OSMParserData():
             except KeyError:
                 continue
             self.addToRefTable(ref, lat, lon, wayIdList)
-            
+            self.addToCountryRefTable(ref, self.country)
 
     def locationToGridIndex(self, lat, lon):
         normLat=lat+180.0
@@ -517,7 +656,6 @@ class OSMParserData():
             self.coords[int(osmid)]=(float(lat), float(lon))
                 
     def parse_ways(self, way):
-
         for wayid, tags, refs in way:
             if "highway" in tags:
                 streetType=tags["highway"]
@@ -573,6 +711,7 @@ class OSMParserData():
                     self.wayRefIndex[ref]=wayRefList     
                         
                 self.addToWayTable(wayid, tags, refs, distances)
+                self.addToCountryWayTable(wayid, self.country)
 
     def collectWaysByName(self):
         street_by_name=dict()
@@ -606,7 +745,8 @@ class OSMParserData():
 
         for name, ref in street_by_name.keys():
             wayIdList=street_by_name[(name, ref)]
-            self.addToStreetTable((name, ref), wayIdList)
+#            self.addToStreetTable((name, ref), wayIdList)
+            self.addToStreetTable2(self.country, (name, ref), wayIdList)
         
     def parse_relations(self, relation):
         for osmid, tags, ways in relation:
@@ -633,7 +773,8 @@ class OSMParserData():
         if streetType=="motorway" or streetType=="motorway_link":
             if ref!="":
                 ref=ref.replace(' ', '')
-            name=ref   
+                if name=="":
+                    name=ref    
         elif streetType=="primary" or streetType=="primary_link":
             if ref!="":
                 ref=ref.replace(' ', '')    
@@ -770,38 +911,35 @@ class OSMParserData():
         
         if len(routingPointList)!=0:  
             i=0   
-            for point in routingPointList[:-1]:
+            startPoint=routingPointList[0]
+            if startPoint.getSource()==0:
+                # should not happen
+                print("startPoint NOT resolved in calc route")
+                startPoint.resolveFromPos(self)
+            source=startPoint.getSource()
+
+            for targetPoint in routingPointList[1:]:
             # find out if last edge goes through the end point
             # if yes we need to shorten it
             # if no we need to add the last points
             # same is true for the actual starting point
 
-                if point.getSource()==0:
-                    point.resolveFromPos(self)
-                source=point.getSource()
-                
-                targetPoint=routingPointList[i+1]
-                if targetPoint.getSource()==0:
+                if targetPoint.getTarget()==0:
+                    # should not happen
+                    print("targetPoint NOT resolved in calc route")
                     targetPoint.resolveFromPos(self)
-                        
                 target=targetPoint.getTarget()
-                
-                print(point.getWayId())
-                print(point.getRefId())
-
-                print(targetPoint.getWayId())
-                print(targetPoint.getRefId())
-                
-                print(source)
-                print(target) 
+                            
+                print("%d %d %d"%(source, startPoint.getWayId(), startPoint.getRefId()))
+                print("%d %d %d"%(target, targetPoint.getWayId(), targetPoint.getRefId()))
                 
                 if source==0 and target==0:
                     print("source and target==0!")
                     break
 
-                if targetPoint.getSource()==point.getSource() and targetPoint.getTarget()==point.getTarget() and targetPoint.getWayId()==point.getWayId():
+                if targetPoint.getSource()==startPoint.getSource() and targetPoint.getTarget()==startPoint.getTarget() and targetPoint.getWayId()==startPoint.getWayId():
                     print("source and target equal!")
-                    allEdgeList.append(point.getEdgeId())
+                    allEdgeList.append(startPoint.getEdgeId())
 #                    allPathCost=allPathCost+pathCost            
                 else:                  
                     if self.dWrapper!=None:
@@ -809,6 +947,8 @@ class OSMParserData():
                         allEdgeList.extend(edgeList)
                         allPathCost=allPathCost+pathCost            
                 
+                startPoint=targetPoint
+                source=startPoint.getTarget()
                 i=i+1
                 
             return allEdgeList, allPathCost
@@ -825,7 +965,7 @@ class OSMParserData():
         return self.printEdgeList(self.edgeList)
     
     def showWayWithName(self, name, ref):
-        name, ref, wayIdList=self.getStreetEntryForName((name, ref))
+        name, ref, wayIdList=self.getStreetEntryForName2((name, ref))
         if name==None:
             print("street with name %s and ref %snot found"%(name, ref))
             return
@@ -1047,95 +1187,6 @@ class OSMParserData():
         trackList=list()
         trackList.append(track)
         return trackList, allLength   
-
-    def getEdgeListForWayLevels(self, wayId, usedRefId, level):
-        self.wantLevel=level
-        self.level=0
-        print(wayId)
-        print(usedRefId)
-                
-        startRefFound=False
-
-        resultList=self.getEdgeEntryForWayId(wayId)
-        for result in resultList:
-            if startRefFound:
-                break
-            
-            (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=result
-
-            for edgeRef in refList:
-                if edgeRef==usedRefId:
-                    startEdge=edgeId
-                    startRefFound=True
-                    break
-                
-        print(startEdge)
-        self.doneEdges=list()
-        result=self.getEdgeEntryForEdgeId(startEdge)
-
-        self.getEdgePartLevels(result)
-        print(self.edgeList)
-
-    def getEdgePartLevels(self, edge):
-        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed)=edge
-
-        self.doneEdges.append(edgeId)
-        self.edgeList.append(edgeId)
-
-        if self.level==self.wantLevel:
-            return
-        
-        print(edge)
-        
-        if target!=0:
-            resultList=self.getEdgeEntryForSource(target)  
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
-                if edgeId in self.doneEdges:
-                    continue
-                
-                self.level=self.level+1
-                self.getEdgePartLevels(result)
-                self.level=self.level-1
-        
-        if target!=0:
-            resultList=self.getEdgeEntryForTarget(target)  
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway1==1:
-                    continue
-                
-                self.level=self.level+1
-                self.getEdgePartLevels(result)
-                self.level=self.level-1      
-      
-        if source!=0:
-            resultList=self.getEdgeEntryForTarget(source)
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway1==1:
-                    continue
-
-                self.level=self.level+1
-                self.getEdgePartLevels(result)
-                self.level=self.level-1
-            
-        if source!=0:
-            resultList=self.getEdgeEntryForSource(source)
-            for result in resultList:
-                edgeId, startRef, endRef, length, oneway1, wayId, source1, target1, refList, maxspeed=result
-                if edgeId in self.doneEdges:
-                    continue
-                if oneway==1 and oneway1==1:
-                    continue
-
-                self.level=self.level+1
-                self.getEdgePartLevels(result)
-                self.level=self.level-1
                 
     def getEdgeListForWayName(self, edge, streetInfo):        
         self.doneEdges=list()
@@ -1199,8 +1250,8 @@ class OSMParserData():
                 self.getEdgePartName(result, streetInfo)
 
     def createEdgeTableEntries(self):
-        self.cursor.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
-        self.cursor.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
+        self.cursorGlobal.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
+        self.cursorGlobal.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
 
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
@@ -1209,8 +1260,8 @@ class OSMParserData():
             self.createEdgeTableEntriesForWay(wayId)
 
     def createEdgeTableNodeEntries(self):
-        self.cursor.execute('SELECT id FROM edgeTable')
-        allEdges=self.cursor.fetchall()
+        self.cursorGlobal.execute('SELECT id FROM edgeTable')
+        allEdges=self.cursorGlobal.fetchall()
         for id in allEdges:
             edgeId=id[0]
             edge=self.getEdgeEntryForEdgeId(edgeId)
@@ -1226,27 +1277,27 @@ class OSMParserData():
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSourceEnriesFor(edge)
 
-        self.cursor.execute('SELECT id FROM edgeTable WHERE source==0 OR target==0')
-        allEdges=self.cursor.fetchall()
+        self.cursorGlobal.execute('SELECT id FROM edgeTable WHERE source==0 OR target==0')
+        allEdges=self.cursorGlobal.fetchall()
 
         # TODO this includes edges with refs maybe outside of
         # the actual country
-        currentCountry=self.osmDataList[0]["polyCountry"]
+#        currentCountry=self.osmDataList[0]["polyCountry"]
         for id in allEdges:
             edgeId=id[0]
             edge=self.getEdgeEntryForEdgeId(edgeId)
             edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed=edge
             
-            (lat, lon)=self.getCoordsWithRef(endRef)
-            if lat!=None and lon!=None:
-                pointCountry=self.countryNameOfPoint(lat, lon)
-                if currentCountry!=pointCountry:
-                    print("ref %d is in country %s"%(endRef, pointCountry))
-            (lat, lon)=self.getCoordsWithRef(startRef)
-            if lat!=None and lon!=None:
-                pointCountry=self.countryNameOfPoint(lat, lon)
-                if currentCountry!=pointCountry:
-                    print("ref %d is in country %s"%(startRef, pointCountry))
+#            (lat, lon)=self.getCoordsWithRef(endRef)
+#            if lat!=None and lon!=None:
+#                pointCountry=self.countryNameOfPoint(lat, lon)
+#                if currentCountry!=pointCountry:
+#                    print("ref %d is in country %s"%(endRef, pointCountry))
+#            (lat, lon)=self.getCoordsWithRef(startRef)
+#            if lat!=None and lon!=None:
+#                pointCountry=self.countryNameOfPoint(lat, lon)
+#                if currentCountry!=pointCountry:
+#                    print("ref %d is in country %s"%(startRef, pointCountry))
             
             if source==0:
                 sourceId=self.nodeId
@@ -1257,8 +1308,8 @@ class OSMParserData():
                 self.nodeId=self.nodeId+1
                 self.updateTargetOfEdge(edgeId, targetId)
 
-        self.cursor.execute("CREATE INDEX source_idx ON edgeTable (source)")
-        self.cursor.execute("CREATE INDEX target_idx ON edgeTable (target)")
+        self.cursorGlobal.execute("CREATE INDEX source_idx ON edgeTable (source)")
+        self.cursorGlobal.execute("CREATE INDEX target_idx ON edgeTable (target)")
    
     def createEdgeTableNodeSameStartEnriesFor(self, edge):
         edgeId, startRef, endRef, length, oneway, wayId, sourceId, targetId, refList, maxspeed =edge
@@ -1367,7 +1418,7 @@ class OSMParserData():
             elif refs[0]==refs[-1]:
                 oneway=1
                 roundabout=1
-                print("street with same start and end and not roundabout %d %s"%(wayId, str(tags)))
+#                print("street with same start and end and not roundabout %d %s"%(wayId, str(tags)))
                 
             if "access" in tags:
                 if tags["access"]=="destination":
@@ -1395,7 +1446,7 @@ class OSMParserData():
                 elif streetType=="motorway":
                     maxspeed=100
                 else:
-                    maxspeed=80
+                    maxspeed=50
                 
             doneRefs=list()
             for ref in refs:                  
@@ -1442,8 +1493,11 @@ class OSMParserData():
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
         for way in allWays:
-            wayid, tags, refs, distances=self.wayFromDB(way)          
-            streetInfo=self.getStreetNameInfo(tags) 
+            wayid, tags, refs, distances=self.wayFromDB(way)     
+            
+#            streetInfo=None
+#            if "name" in tags or "ref" in tags:
+#                streetInfo=self.getStreetNameInfo(tags) 
                 
             crossingType=1
             for ref in refs:  
@@ -1451,36 +1505,55 @@ class OSMParserData():
                 if len(nextWays)!=0:
                     wayList=list()
                     for (wayid2, tags2, refs2) in nextWays:
-                        newStreetInfo=self.getStreetNameInfo(tags2) 
-#                        if streetInfo==newStreetInfo:
-#                            continue
+#                        if streetInfo!=None:
+#                            if "name" in tags or "ref" in tags2:
+#                                newStreetInfo=self.getStreetNameInfo(tags2) 
+#                                if streetInfo==newStreetInfo:
+#                                    continue
 
                         wayList.append((wayid2, crossingType))
                     
                     if len(wayList)!=0:
                         self.addToCrossingsTable(wayid, ref, wayList)
+                        
+        self.cursor.execute("CREATE INDEX wayId_idx ON crossingTable (wayId)")
+        self.cursor.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
-    def parse(self):
+    def parse(self, country):
         p = OSMParser(1, nodes_callback=self.parse_nodes, 
                   ways_callback=self.parse_ways, 
                   relations_callback=None,
                   coords_callback=self.parse_coords)
-        p.parse(self.file)
+        p.parse(self.getOSMFile(country))
 
-
+    def getOSMFile(self, country):
+        return self.osmList[country]["osmFile"]
+    
     def getDataDir(self):
         return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
     
-    def getDBFile(self):
-        file=os.path.basename(self.file)+".db"
+    def getDBFile(self, country):
+        file=os.path.basename(self.getOSMFile(country))+".db"
+        return os.path.join(self.getDataDir(), file)
+
+    def getGlobalDBFile(self):
+        file="global.db"
         return os.path.join(self.getDataDir(), file)
     
-    def dbExists(self):
-        return os.path.exists(self.getDBFile())
+    def getAdressDBFile(self):
+        file="adress.db"
+        return os.path.join(self.getDataDir(), file)
+    
+    def dbExists(self, country):
+        return os.path.exists(self.getDBFile(country))
+
+    def globalDBExists(self):
+        return os.path.exists(self.getGlobalDBFile())
         
     def initGraph(self):
         if self.dWrapper==None:
-            self.dWrapper=DijkstraWrapperPygraph(self.cursor)
+#            self.dWrapper=DijkstraWrapperPygraph(self.cursorGlobal)
+            self.dWrapper=DijkstraWrapperIgraph(self.cursorGlobal)
 
         if not self.dWrapper.isGraphLoaded():
             print("init graph")
@@ -1488,41 +1561,55 @@ class OSMParserData():
             print("init graph done")
 
     def initDB(self):
-        createDB=not self.dbExists()
+        createAllDB=not self.globalDBExists()
+        if createAllDB:
+            self.openGlobalDB()
+            self.createGlobalTables()
+            
+            self.openAdressDB()
+            self.createAdressTable()
+            
+            for country in self.osmList.keys():
+                self.country=country
+                
+                createDB=not self.dbExists(country)
         
-        if createDB:
-            self.openDB()
-            self.createTables()
-            print("start parsing")
-            self.parse()
-            print("end parsing")
+                if createDB:
+                    print(self.osmList[self.country])
+                    self.initCountryData()
+                    self.openCountryDB(country)
+                    self.createCountryTables()
+                    print("start parsing")
+                    self.parse(country)
+                    print("end parsing")
+                    
+                    print("add refs")
+                    self.addAllRefsToDB()
+                    print("end add refs")
+        
+                    print("collect streets")
+                    self.collectWaysByName()
+                    print("end collect streets")
+                    
+                    print("create crossings")
+                    self.createCrossingEntries()
+                    print("end create crossings")
+                    
+                    print("create edges")
+                    self.createEdgeTableEntries()
+                    print("end create edges")                    
             
-            print("add refs")
-            self.addAllRefsToDB()
-            print("end add refs")
-
-            print("collect streets")
-            self.collectWaysByName()
-            print("end collect streets")
-            
-            print("create crossings")
-            self.createCrossingEntries()
-            print("end create crossings")
-            
-            print("create edges")
-            self.createEdgeTableEntries()
-            print("end create edges")
-            
+                    self.closeCountryDB(country)
+                    print("commited DB")
+                    
             print("create edge nodes")
             self.createEdgeTableNodeEntries()
             print("end create edge nodes")
+
+            self.closeGlobalDB()
+            self.closeAdressDB()
             
-            self.closeDB()
-            print("commited DB")
-            
-#        print("postprocess streets")
-#        self.postprocessWays()
-#        print("end postprocess streets")
+            self.initGraph()
             
     def initBoarders(self):
         self.bu=OSMBoarderUtils()
@@ -1531,169 +1618,50 @@ class OSMParserData():
     def countryNameOfPoint(self, lat, lon):
         return self.bu.countryNameOfPoint(lat, lon)
     
-    def initOSMDataInfo(self):
-        self.osmDataList=list()
+    def getOSMDataInfo(self):
+        osmDataList=dict()
         osmData=dict()
         osmData["country"]="austria"
         osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
-        self.osmDataList.append(osmData)
+        osmDataList["austria"]=osmData
         
         osmData=dict()
         osmData["country"]="switzerland"
         osmData["osmFile"]='/home/maxl/Downloads/switzerland.osm.bz2'
         osmData["poly"]="switzerland.poly"
         osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-        self.osmDataList.append(osmData)
+        osmDataList["switzerland"]=osmData
     
-        osmData=dict()
-        osmData["country"]="germany"
-        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
-        osmData["poly"]="germany.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Germany"
-        self.osmDataList.append(osmData)
+#        osmData=dict()
+#        osmData["country"]="germany"
+#        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
+#        osmData["poly"]="germany.poly"
+#        osmData["polyCountry"]="Europe / Western Europe / Germany"
+#        osmDataList["germany"]=osmData
+        return osmDataList
     
 def main(argv):    
-    try:
-        osmFile=argv[1]
-    except IndexError:
+#    try:
+#        osmFile=argv[1]
+#    except IndexError:
 #        osmFile='/home/maxl/Downloads/austria.osm.bz2'
 #        osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
-        osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
+#        osmFile='/home/maxl/Downloads/salzburg-city.osm.bz2'
 #        osmFile='test1.osm'
     
-    p = OSMParserData(osmFile)
+    p = OSMParserData()
     
     p.initDB()
     
-    p.openDB()
+    p.openAllDB()
+#    p.testCountryRefTable()
+#    p.testCountryWayTable()
+#    p.testStreetTable2()
+        
 #    p.initGraph()
-    
-#    p.testRefTable()
-#    p.testWayTable()
-#    p.testStreetTable()
-#    p.testCrossingTable()
-#    p.testEdgeTable()
-        
-    (lat, lon)=p.getCoordsWithRef(478256761)
-    print(p.countryNameOfPoint(lat, lon))
-#    l=p.getEdgeEntryForWayId(30525406)
-#    for edge in l:
-#        print(edge)
-#
-#    l=p.getEdgeEntryForWayId(30510253)
-#    for edge in l:
-#        print(edge)
-#        
-#    l=p.getEdgeEntryForWayId(82173348)
-#    for edge in l:
-#        print(edge)
-        
-#    print(p.getEdgeEntryForSourceAndTarget(3773, 1703))
-#    print(p.getEdgeEntryForSourceAndTarget(1703, 3773))
-#    print(p.getEdgeEntryForSourceAndTarget(3024, 821))
-#    print(p.getEdgeEntryForSourceAndTarget(877, 887))
-    
-    # home to work
-#    start=time.time()
-#    print(p.dWrapper.computeShortestPath(1507, 7229))
-#    stop=time.time()
-#    dur=int(stop-start)
-#    print(str(dur)+"s")
-    
-#    config=Config("routingTest.cfg")
-#    section="routing"
-#    if not config.hasSection(section):
-#        config.addSection(section)
-#
-#    point1=OSMRoutingPoint("start", 0, 10.0, 20.0)
-#    point2=OSMRoutingPoint("end", 1, 20.0, 30.0)
-#    point3=OSMRoutingPoint("way", 2, 30.0, 40.0)
-#
-#    print(point1)    
-#    print(point2)    
-#    print(point3)    
-#
-#    point1.saveToConfig(config, section, "start")
-#    point2.saveToConfig(config, section, "end")
-#    point3.saveToConfig(config, section, "way")
-#    
-#    config.writeConfig()
-#    
-#    config.readConfig()
-#    for name, value in config.items(section):
-#        if name=="start":
-#            point11=OSMRoutingPoint()
-#            point11.readFromConfig(value)
-#        if name=="end":
-#            point22=OSMRoutingPoint()
-#            point22.readFromConfig(value)
-#        if name=="way":
-#            point33=OSMRoutingPoint()
-#            point33.readFromConfig(value)
-#
-#    print(point11)    
-#    print(point22)    
-#    print(point33)    
-
-
-#    l=p.getEdgeEntryForWayId(69489908)
-#    for edge in l:
-#        print(edge)
-#    l=p.getEdgeEntryForWayId(36268167)
-#    for edge in l:
-#        print(edge)
-#
-#    l=p.getEdgeEntryForWayId(12138807)
-#    for edge in l:
-#        print(edge)        
-#        82173657
-#        10711379
-#        4064363
-#        4064350
-#    l=p.getEdgeEntryForWayId(62074609)
-#    for edge in l:
-#        print(edge)
-
-#    print(p.getWayEntryForId(62074609))
-#    print(p.getEdgeEntryForWayId(62074609))
-#    print(p.getWayEntryForId(82173348))
-#    print(p.getEdgeEntryForWayId(82173348))
-
-    
-    
-#    p.printWay(3, 99)
-#    streetList=p.getStreetList()
-#    lat1=47.8
-#    lon1=13.0
-##    print(p.getNearNodes(lat, lon))
-#    lat2=47.8
-#    lon2=13.1
-#    
-#    osmutils=OSMUtils()
-#    print(osmutils.headingDegrees(lat1, lon1, lat2, lon2))
-#    distance=int(osmutils.distance(lat, lon, lat1, lon1))
-#    frac=10
-#    print(distance)
-#    newLat=lat1
-#    newLon=lon1
-#    if distance>frac:
-#        doneDistance=0
-#        while doneDistance<distance:
-#            newLat, newLon=osmutils.linepart(lat, lon, lat1, lon1, doneDistance/distance)
-#            print("%f-%f"%(newLat, newLon))
-#            doneDistance=doneDistance+frac
-    
-#    for name, ref in streetList.keys():
-#        waylist=p.getTrackListByName(name, ref)
-##        p.postprocessWay(name, ref)
-##        print(p.streetNameIndex[(name, ref)])
-#        for wayid in waylist:
-#            print(p.getStreetTrackList(wayid))
-##            print(p.streetIndex[way])
-        
-#    p.closeDB()
+    p.closeAllDB()
 
 
 if __name__ == "__main__":
