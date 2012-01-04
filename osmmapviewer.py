@@ -36,9 +36,6 @@ downloadIdleState="idle"
 downloadRunState="run"
 downloadStoppedState="stopped"
 
-#osmFile='/home/maxl/Downloads/salzburg.osm.bz2'
-#osmFile='/home/maxl/Downloads/salzburg-city.osm.bz2'
-#osmFile='/home/maxl/Downloads/austria.osm.bz2'
 osmParserData = OSMParserData()
 
 class OSMDownloadTilesWorker(QThread):
@@ -1128,11 +1125,11 @@ class QtOSMWidget(QWidget):
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
         defaultName="favorite"
-        wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
+        wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(lat, lon)
         if wayId==None:
             return 
         
-        (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+        (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
         favNameDialog=QInputDialog(self)
         favNameDialog.setLabelText("Favorite Name")
@@ -1150,27 +1147,27 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(lat, lon)
+        wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(lat, lon)
         if wayId==None:
             return
         
         if pointType==0:
             defaultName="start"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
             self.startPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             self.startPoint.resolveFromPos(osmParserData)
             
         elif pointType==1:
             defaultName="end"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
                 
             self.endPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             self.endPoint.resolveFromPos(osmParserData)
 
         elif pointType==2:
             defaultName="way"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId)
+            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
             wayPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             wayPoint.resolveFromPos(osmParserData)
@@ -1178,19 +1175,16 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            wayId, usedRefId, usedPos=osmParserData.getWayIdForPos(actlat, actlon)
+            wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId==None:
                 self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown")
             else:   
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
-                    print(wayId)
-                    wayId, tags, refs, distances=osmParserData.getWayEntryForId(wayId)
-                    print(refs)
-                    print(tags)
-                    print(distances)
-                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId)
-                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s-%s"%(name, ref))
+                    wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+                    (name, ref)=osmParserData.getStreetNameInfo(tags)
+                    print("%d %s %s"%(wayId, str(tags), str(refs)))
+                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, country))
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
                             
