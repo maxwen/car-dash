@@ -1642,8 +1642,8 @@ def main(argv):
     p.initGraph()
 #    p.testCountryRefTable()
 #    p.testCountryWayTable()
-    p.testStreetTable2()
-    p.testEdgeTable()
+#    p.testStreetTable2()
+#    p.testEdgeTable()
         
 #    p.initGraph()
     p.closeAllDB()

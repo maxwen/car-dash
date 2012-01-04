@@ -51,30 +51,39 @@ class DijkstraWrapperIgraph():
         nodeList=set()
         weightList=list()
         idList=list()
+        edgeListForIgraph=list()
         
         self.cursor.execute("SELECT id, length, oneway, source, target, maxspeed from edgeTable")
         allentries=self.cursor.fetchall()
         for x in allentries:
             edgeId, length, oneway, source, target, maxspeed=self.edgeFromDB(x)
             
-            idList.append(edgeId)
-            nodeList.add(str(source))
-            nodeList.add(str(target))
             # TODO length calculation
             edge=Edge()
 #            cost=length
             cost=(length / (maxspeed/3.6))*100
             
-            weightList.append(cost)
             if oneway:
                 reverseCost=cost*100000
             else:
                 reverseCost=cost
-            weightList.append(reverseCost)
             
             edge.fillEdge(edgeId, source, target, cost, reverseCost)
             edgeList.append(edge)
-        return edgeList, nodeList, weightList, idList    
+            
+            nodeList.add(str(source))
+            nodeList.add(str(target))
+
+            edgeListForIgraph.append((str(source), str(target)))
+            edgeListForIgraph.append((str(target), str(source)))
+            
+            weightList.append(cost)
+            weightList.append(reverseCost)
+
+            idList.append(edgeId)
+            idList.append(edgeId)
+
+        return edgeList, nodeList, weightList, idList, edgeListForIgraph   
 
     def dijkstra(self, startNode, targetNode):   
         print("dijkstra:igraph from %d to %d"%(startNode, targetNode))    
@@ -103,35 +112,38 @@ class DijkstraWrapperIgraph():
             self.graph=Graph.Read_Picklez(self.getGraphFile())
             
         else:
-            edgeList, nodeSet, weightList, idList=self.fillEdges()
+            edgeList, nodeSet, weightList, idList, edgeListForIgraph=self.fillEdges()
             
             self.graph = Graph(directed=self.directed)
             
             nodeList=list()
             nodeList.extend(nodeSet)
             self.graph.add_vertices(nodeList)
+            self.graph.add_edges(edgeListForIgraph)
+            self.graph.es["weight"] = weightList
+            self.graph.es["id"]=idList
             
-            for edge in edgeList:
-                edgeId=edge.id
-                source=str(edge.source)
-                target=str(edge.target)
-                cost=edge.cost
-                reverseCost=edge.reverseCost            
-                
-#                self.graph.add_vertex(str(source))
-#                self.graph.add_vertex(str(target))
-                
-                attr=dict()
-                attr["id"]=edgeId
-                attr["weight"]=cost
-#                eid = self.graph.ecount()   
-                self.graph.add_edge(source, target, **attr)  
-#                print(self.graph.es[eid]["weight"])
-                
-                attr=dict()
-                attr["id"]=edgeId
-                attr["weight"]=reverseCost
-                self.graph.add_edge(target, source, **attr)            
+#            for edge in edgeList:
+#                edgeId=edge.id
+#                source=str(edge.source)
+#                target=str(edge.target)
+#                cost=edge.cost
+#                reverseCost=edge.reverseCost            
+#                
+##                self.graph.add_vertex(str(source))
+##                self.graph.add_vertex(str(target))
+#                
+#                attr=dict()
+#                attr["id"]=edgeId
+#                attr["weight"]=cost
+##                eid = self.graph.ecount()   
+#                self.graph.add_edge(source, target, **attr)  
+##                print(self.graph.es[eid]["weight"])
+#                
+#                attr=dict()
+#                attr["id"]=edgeId
+#                attr["weight"]=reverseCost
+#                self.graph.add_edge(target, source, **attr)            
     
 #            self.graph.es["weight"] = weightList
 #            self.graph.es["id"]=idList
