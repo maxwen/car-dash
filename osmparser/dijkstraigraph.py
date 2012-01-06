@@ -8,32 +8,33 @@ from igraph import *
 import time
 import os
 
-class Edge():
-    def __init__(self):
-        self.source=0
-        self.target=0
-        self.id=0
-        self.cost=0
-        self.reverseCost=0
-        
-    def __repr__(self):
-        return "%d %d %d %d %d"%(self.id, self.source, self.target, self.cost, self.reverseCost)
-    
-    def fillEdge(self, id, source, target, cost, reverseCost):
-        self.source=source
-        self.target=target
-        self.id=id
-        self.cost=cost
-        self.reverseCost=reverseCost
+#class Edge():
+#    def __init__(self):
+#        self.source=0
+#        self.target=0
+#        self.id=0
+#        self.cost=0
+#        self.reverseCost=0
+#        
+#    def __repr__(self):
+#        return "%d %d %d %d %d"%(self.id, self.source, self.target, self.cost, self.reverseCost)
+#    
+#    def fillEdge(self, id, source, target, cost, reverseCost):
+#        self.source=source
+#        self.target=target
+#        self.id=id
+#        self.cost=cost
+#        self.reverseCost=reverseCost
         
 class DijkstraWrapperIgraph():
-    def __init__(self, cursor):
+    def __init__(self, cursor, dataDir):
         self.cursor=cursor
         self.graph=None
         self.directed=True
         self.hasReverseCost=True
         self.graphLoaded=False
-
+        self.dataDir=dataDir
+        
     def isGraphLoaded(self):
         return self.graphLoaded
     
@@ -47,7 +48,7 @@ class DijkstraWrapperIgraph():
         return (edgeId, length, oneway, source, target, maxspeed)
 
     def fillEdges(self):
-        edgeList=list()
+#        edgeList=list()
         nodeList=set()
         weightList=list()
         idList=list()
@@ -59,17 +60,18 @@ class DijkstraWrapperIgraph():
             edgeId, length, oneway, source, target, maxspeed=self.edgeFromDB(x)
             
             # TODO length calculation
-            edge=Edge()
+#            edge=Edge()
 #            cost=length
-            cost=(length / (maxspeed/3.6))*100
+            # cost are seconds needed to drive length with maxspeed
+            cost=int(length / (maxspeed/3.6))
             
             if oneway:
                 reverseCost=cost*100000
             else:
                 reverseCost=cost
             
-            edge.fillEdge(edgeId, source, target, cost, reverseCost)
-            edgeList.append(edge)
+#            edge.fillEdge(edgeId, source, target, cost, reverseCost)
+#            edgeList.append(edge)
             
             nodeList.add(str(source))
             nodeList.add(str(target))
@@ -83,7 +85,7 @@ class DijkstraWrapperIgraph():
             idList.append(edgeId)
             idList.append(edgeId)
 
-        return edgeList, nodeList, weightList, idList, edgeListForIgraph   
+        return nodeList, weightList, idList, edgeListForIgraph   
 
     def dijkstra(self, startNode, targetNode):   
         print("dijkstra:igraph from %d to %d"%(startNode, targetNode))    
@@ -112,7 +114,7 @@ class DijkstraWrapperIgraph():
             self.graph=Graph.Read_Picklez(self.getGraphFile())
             
         else:
-            edgeList, nodeSet, weightList, idList, edgeListForIgraph=self.fillEdges()
+            nodeSet, weightList, idList, edgeListForIgraph=self.fillEdges()
             
             self.graph = Graph(directed=self.directed)
             
@@ -159,7 +161,7 @@ class DijkstraWrapperIgraph():
         return os.path.join(self.getDataDir(), "igraph.file")
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return self.dataDir
         
     def computeShortestPath(self, startNode, targetNode):                       
         pathEdgeList, pathCost=self.dijkstra(startNode, targetNode)

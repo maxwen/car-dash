@@ -178,7 +178,7 @@ class OSMDataLoadWorker(QThread):
         self.startProgress()
         while not self.exiting and True:
             self.updateStatusLabel("OSM init DB")
-            osmParserData.initDB()
+#            osmParserData.initDB()
             self.exiting=True
 
         self.updateDataThreadState("stopped")
@@ -683,6 +683,11 @@ class QtOSMWidget(QWidget):
             redCrossingPen.setWidth(min(self.map_zoom, 10))
             redCrossingPen.setCapStyle(Qt.RoundCap);
             
+            greenCrossingPen=QPen()
+            greenCrossingPen.setColor(Qt.green)
+            greenCrossingPen.setWidth(min(self.map_zoom, 10))
+            greenCrossingPen.setCapStyle(Qt.RoundCap);
+
             motorwayPen=QPen()
             motorwayPen.setColor(Qt.blue)
             motorwayPen.setWidth(4)
@@ -783,10 +788,15 @@ class QtOSMWidget(QWidget):
                         lastY=y
                             
                         if crossing:
-                            if crossingType==1:
-                                self.painter.setPen(blueCrossingPen)
-                            else:
+                            if crossingType==0:
+                                self.painter.setPen(greenCrossingPen)
+                            elif crossingType==1:
+                                # with traffic signs
                                 self.painter.setPen(redCrossingPen)
+                            elif crossingType==2:
+                                # motorway junction
+                                self.painter.setPen(blueCrossingPen)
+
                             self.painter.drawPoint(x, y)
 
                     elif start:
@@ -1155,15 +1165,22 @@ class QtOSMWidget(QWidget):
             defaultName="start"
             (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
-            self.startPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
-            self.startPoint.resolveFromPos(osmParserData)
-            
+            point=OSMRoutingPoint(defaultName, pointType, lat, lon)
+            point.resolveFromPos(osmParserData)
+            if point.getSource()!=0:
+                self.startPoint=point
+            else:
+                print("point not usable for routing")
         elif pointType==1:
             defaultName="end"
             (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
                 
-            self.endPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
-            self.endPoint.resolveFromPos(osmParserData)
+            point=OSMRoutingPoint(defaultName, pointType, lat, lon)
+            point.resolveFromPos(osmParserData)
+            if point.getSource()!=0:
+                self.endPoint=point
+            else:
+                print("point not usable for routing")
 
         elif pointType==2:
             defaultName="way"
@@ -1171,29 +1188,43 @@ class QtOSMWidget(QWidget):
 
             wayPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             wayPoint.resolveFromPos(osmParserData)
-            self.wayPoints.append(wayPoint)
+            if wayPoint.getSource()!=0:
+                self.wayPoints.append(wayPoint)
+            else:
+                print("point not usable for routing")
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
+            polyCountry=osmParserData.countryNameOfPoint(actlat, actlon)
+            country=osmParserData.getCountryForPolyCountry(polyCountry)
+            print(country)
+
             wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId==None:
                 self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown")
             else:   
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
+                    print(osmParserData.getCountrysOfWay(wayId))
                     wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
-                    (name, ref)=osmParserData.getStreetNameInfo(tags)
                     print("%d %s %s"%(wayId, str(tags), str(refs)))
-                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, country))
+                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+                    print("%s %s"%(name, ref))
+                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
+
+                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForIdCountry(country)))
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
                             
     def showRouteForRoutingPoints(self):
         if self.osmWidget.dbLoaded==True:         
-            self.routingPointList=self.getCompleteRoutingPoints()
+            routingPointList=self.getCompleteRoutingPoints()
+            if routingPointList==None:
+                return
+            
             # make sure all are resolved because we cannot access
             # the db from the thread
-            for point in self.routingPointList:
+            for point in routingPointList:
                 if point.getSource()==0:
                     point.resolveFromPos(osmParserData)
 
@@ -1204,7 +1235,7 @@ class QtOSMWidget(QWidget):
             self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
 
             if not self.routeCalculationThread.isRunning():
-                self.routeCalculationThread.setup(self.routingPointList)
+                self.routeCalculationThread.setup(routingPointList)
 
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -1215,7 +1246,7 @@ class QtOSMWidget(QWidget):
     def routeCalculationDone(self, edgeList, pathCost):
         if edgeList!=None:
             print("cost=%f"%(pathCost))
-            trackList, length=osmParserData.createTrackForEdgeList(edgeList, self.routingPointList)
+            trackList, length=osmParserData.createTrackForEdgeList(edgeList, self.getCompleteRoutingPoints())
             print("len=%d"%(length))
             self.setTrack(trackList, True)
         
@@ -1266,10 +1297,11 @@ class QtOSMWidget(QWidget):
         config.addSection(section)
         
         routingPointList=self.getCompleteRoutingPoints()
-        i=0
-        for point in routingPointList:
-            point.saveToConfig(config, section, "point%d"%(i))
-            i=i+1
+        if routingPointList!=None:
+            i=0
+            for point in routingPointList:
+                point.saveToConfig(config, section, "point%d"%(i))
+                i=i+1
             
 #        if self.startPoint!=None:
 #            self.startPoint.saveToConfig(config, section, "start")
@@ -1297,7 +1329,7 @@ class QtOSMWidget(QWidget):
         self.wayPoints.append(point)
         self.update()
         
-class OSMWayListTableModel(QAbstractTableModel):
+class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
         
@@ -1305,7 +1337,7 @@ class OSMWayListTableModel(QAbstractTableModel):
         return len(self.streetList)
     
     def columnCount(self, parent): 
-        return 2
+        return 5
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -1315,19 +1347,31 @@ class OSMWayListTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (name, ref)=self.streetList[index.row()]
+        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
-            return name
+            return osmParserData.getCountryNameForIdCountry(country)
         elif index.column()==1:
-            return ref
+            return city
+        elif index.column()==2:
+            return postCode
+        elif index.column()==3:
+            return streetName
+        elif index.column()==4:
+            return houseNumber
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
                 if col==0:
-                    return "Street"
+                    return "Country"
                 elif col==1:
-                    return "Ref"
+                    return "City"
+                elif col==2:
+                    return "Postcode"
+                elif col==3:
+                    return "Street"
+                elif col==4:
+                    return "Number"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -1337,7 +1381,7 @@ class OSMWayListTableModel(QAbstractTableModel):
         self.streetList=streetList
         self.reset()
         
-class OSMWaySearchDialog(QDialog):
+class OSMAdressDialog(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent) 
 
@@ -1345,26 +1389,33 @@ class OSMWaySearchDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
-        self.streetList=sorted(osmParserData.getStreetList().keys())
+        self.streetList=sorted(osmParserData.getAddressList(), key=self.streetNameSort)
+#        sorted(self.streetList, key=self.houseNumberSort)
         self.filteredStreetList=self.streetList
-
+        
+        self.pointType=0
+        self.startPointIcon=QIcon("images/source.png")
+        self.endPointIcon=QIcon("images/target.png")
+        self.wayPointIcon=QIcon("images/waypoint.png")
+        self.selectedAddress=None
         self.initUI()
-        self.selectedStreet=None
          
-#    def nameSort(self, item):
-#       (name, ref)=item
-#       return name
+    def streetNameSort(self, item):
+        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=item
+        return item[5]
+
+    def houseNumberSort(self, item):
+        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=item
+        return item[6]
    
-    def getStreetName(self):
-        return self.selectedStreet
-#        return "Münchner Bundesstraße"
-    
+    def getResult(self):
+        return (self.selectedAddress, self.pointType)
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         
         self.filterEdit=QLineEdit(self)
-        self.filterEdit.setToolTip('Id Filter')
         self.filterEdit.returnPressed.connect(self._applyFilter)
         self.filterEdit.textChanged.connect(self._applyFilter)
         top.addWidget(self.filterEdit)
@@ -1372,30 +1423,53 @@ class OSMWaySearchDialog(QDialog):
         self.streetView=QTableView(self)
         top.addWidget(self.streetView)
         
-        self.streetViewModel=OSMWayListTableModel(self)
+        self.streetViewModel=OSMAdressTableModel(self)
         self.streetViewModel.update(self.filteredStreetList)
         self.streetView.setModel(self.streetViewModel)
         header=QHeaderView(Qt.Horizontal, self.streetView)
         header.setStretchLastSection(True)
         self.streetView.setHorizontalHeader(header)
-        self.streetView.setColumnWidth(0, 300)
+        self.streetView.setColumnWidth(3, 300)
+
+        actionButtons=QHBoxLayout()
+        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.setStartPointButton=QPushButton("Start", self)
+        self.setStartPointButton.clicked.connect(self._setStartPoint)
+        self.setStartPointButton.setIcon(self.startPointIcon)
+        self.setStartPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setStartPointButton)
+        
+        self.setEndPointButton=QPushButton("End", self)
+        self.setEndPointButton.clicked.connect(self._setEndPoint)
+        self.setEndPointButton.setIcon(self.endPointIcon)
+        self.setEndPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setEndPointButton)
+        
+        self.setWayPointButton=QPushButton("Way", self)
+        self.setWayPointButton.clicked.connect(self._setWayPoint)
+        self.setWayPointButton.setIcon(self.wayPointIcon)
+        self.setWayPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setWayPointButton)
+
+        top.addLayout(actionButtons)
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
         style=QCommonStyle()
                 
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        self.cancelButton=QPushButton("Close", self)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
         self.cancelButton.clicked.connect(self._cancel)
         buttons.addWidget(self.cancelButton)
 
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        self.okButton.setEnabled(False)
-        self.okButton.setDefault(True)
-        buttons.addWidget(self.okButton)
+#        self.okButton=QPushButton("End Point", self)
+#        self.okButton.clicked.connect(self._ok)
+#        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+#        self.okButton.setEnabled(False)
+#        self.okButton.setDefault(True)
+#        buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
         
@@ -1404,33 +1478,67 @@ class OSMWaySearchDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Way Search')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 700, 400)
         
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.streetView.selectionModel()
         current = selmodel.currentIndex()
-        self.okButton.setEnabled(current.isValid())
+#        self.okButton.setEnabled(current.isValid())
+        self.setEndPointButton.setEnabled(current.isValid())
+        self.setStartPointButton.setEnabled(current.isValid())
+        self.setWayPointButton.setEnabled(current.isValid())
+
         
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
         
     @pyqtSlot()
-    def _ok(self):
+#    def _ok(self):
+#        selmodel = self.streetView.selectionModel()
+#        current = selmodel.currentIndex()
+#        if current.isValid():
+##            print(self.filteredStreetList[current.row()])
+#            self.selectedAddress=self.filteredStreetList[current.row()]
+##            print(self.selectedAddress)
+#        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _setWayPoint(self):
         selmodel = self.streetView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
-#            print(self.filteredStreetList[current.row()])
-            self.selectedStreet=self.filteredStreetList[current.row()]
-#            print(self.selectedStreet)
+            self.selectedAddress=self.filteredStreetList[current.row()]
+            self.pointType=2
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setStartPoint(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedAddress=self.filteredStreetList[current.row()]
+            self.pointType=0
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setEndPoint(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedAddress=self.filteredStreetList[current.row()]
+            self.pointType=1
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _clearTableSelection(self):
         self.streetView.clearSelection()
-        self.okButton.setEnabled(False)
-        
+#        self.okButton.setEnabled(False)
+        self.setWayPointButton.setEnabled(False)
+        self.setStartPointButton.setEnabled(False)
+        self.setEndPointButton.setEnabled(False)
+
     @pyqtSlot()
     def _applyFilter(self):
         self._clearTableSelection()
@@ -1441,10 +1549,10 @@ class OSMWaySearchDialog(QDialog):
             self.filteredStreetList=list()
             filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (name, ref) in self.streetList:
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+            for (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
+                if not fnmatch.fnmatch(streetName.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredStreetList.append((name, ref))
+                self.filteredStreetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
         
@@ -1904,10 +2012,10 @@ class OSMWidget(QWidget):
 #        self.testTrackButton.clicked.connect(self._testTrack)
 #        buttons.addWidget(self.testTrackButton)
 
-#        self.searchWayButton=QPushButton("Show Way", self)
-#        self.searchWayButton.clicked.connect(self._showWay)
-#        self.searchWayButton.setDisabled(True)
-#        buttons.addWidget(self.searchWayButton)
+        self.adressButton=QPushButton("Addresses", self)
+        self.adressButton.clicked.connect(self._showAdress)
+        self.adressButton.setDisabled(True)
+        buttons.addWidget(self.adressButton)
                 
         self.favoritesButton=QPushButton("Favorites", self)
         self.favoritesButton.clicked.connect(self._showFavorites)
@@ -2117,7 +2225,7 @@ class OSMWidget(QWidget):
           
     def updateDataThreadState(self, state):
         if state=="stopped":
-#            self.searchWayButton.setDisabled(False)
+            self.adressButton.setDisabled(False)
             self.favoritesButton.setDisabled(False)
             osmParserData.openAllDB()
             self.dbLoaded=True
@@ -2131,22 +2239,32 @@ class OSMWidget(QWidget):
 
         self.dataThread.setup()
         
-#    @pyqtSlot()
-#    def _showWay(self):
-#        searchDialog=OSMWaySearchDialog(self)
-#        result=searchDialog.exec()
-#        if result==QDialog.Accepted:
-#            (name, ref)=searchDialog.getStreetName()           
-#            trackList=osmParserData.showWayWithName(name, ref)
+    @pyqtSlot()
+    def _showAdress(self):
+        searchDialog=OSMAdressDialog(self)
+        result=searchDialog.exec()
+        if result==QDialog.Accepted:
+            address, pointType=searchDialog.getResult()
+            (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=address
+            
+            if pointType==0:
+                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                self.mapWidgetQt.setStartPoint(routingPoint) 
+            elif pointType==1:
+                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                self.mapWidgetQt.setEndPoint(routingPoint) 
+            elif pointType==2:
+                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                self.mapWidgetQt.setWayPoint(routingPoint) 
+
+#            trackList, length=osmParserData.showWayWithName(searchDialog.getAddressInfo())
 #            if trackList!=None:
-#                self.showWay(trackList)
+#                self.mapWidgetQt.setTrack(trackList, True)
 #                self.app.processEvents()
 #        
 #                # TODO hack
 #                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
 #                               self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
-#            else:
-#                print("no waylist for %s-%s"%(name, ref))
                 
     @pyqtSlot()
     def _showFavorites(self):

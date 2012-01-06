@@ -12,12 +12,13 @@ import sys
 from PyQt4.QtCore import QRect, QPoint
 
 class OSMBoarderUtils():
-    def __init__(self):
+    def __init__(self, dataDir):
         self.polyData=list()
         self.bbox=list()
-    
+        self.dataDir=dataDir
+        
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return self.dataDir
 
     def getAllPolyFiles(self):
         polyFiles=list()

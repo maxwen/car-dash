@@ -173,3 +173,58 @@ class OSMUtils():
         if h >= 360.0:
             h -= 360.0
         return h;
+    
+    def azimuth(self, crossPoint, fromPoint, toPoint):
+        fromDegree=int(self.headingDegrees(fromPoint[0], fromPoint[1], crossPoint[0], crossPoint[1]))
+        toDegree=int(self.headingDegrees(crossPoint[0], crossPoint[1], toPoint[0], toPoint[1]))
+        diff=fromDegree - toDegree+180
+        return diff%360
+
+def main():    
+    # 84194738 
+    latCross=47.8027471
+    lonCross=13.0290138
+    
+    # 455994015
+    latFrom=47.8029724
+    lonFrom=13.0299361
+    
+    # rechts 11840580
+    latRight=47.8033938
+    lonRight=13.028636
+    
+    #links 336748981
+    latLeft=47.8020688
+    lonLeft=13.0294019
+    
+    # gerade 84194737
+    latStraight=47.8026081
+    lonStraight=13.0284631
+    
+    osmutils=OSMUtils()
+
+    # coming from right
+    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latRight, lonRight)))
+    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latStraight, lonStraight)))
+    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latLeft, lonLeft)))
+ 
+    # comming from top
+    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latStraight, lonStraight)))
+    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latLeft, lonLeft)))
+    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latFrom, lonFrom)))
+
+    # comming from left
+    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latLeft, lonLeft)))
+    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latFrom, lonFrom)))
+    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latRight, lonRight)))
+
+    # comming from down
+    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latFrom, lonFrom)))
+    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latRight, lonRight)))
+    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latStraight, lonStraight)))
+
+if __name__ == "__main__":
+    main()  
+
+
+                                   
