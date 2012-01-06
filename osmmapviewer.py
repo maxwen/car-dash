@@ -299,6 +299,9 @@ class QtOSMWidget(QWidget):
         self.wayPointImage=QPixmap("images/waypoint.png")
         self.routeCalculationThread=None
         
+        self.turnRightImage=QPixmap("images/turn-right-icon.png")
+        self.turnLeftImage=QPixmap("images/turn-left-icon.png")
+        
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
             return self.getTileHome()
@@ -742,14 +745,18 @@ class QtOSMWidget(QWidget):
                     crossingType=0
                     oneway=False
                     streetType=""
+                    direction=None
                     if "start" in item:
                         start=True
                     if "end" in item:
                         end=True
                     if "crossing" in item:
                         crossing=True
-                        crossingType=item["crossing"]
-  
+                        crossingType=item["crossing"][0]
+                    if "crossingInfo" in item:
+                        crossingInfo=item["crossingInfo"]
+                    if "direction" in item:
+                        direction=item["direction"]
                     if"oneway" in item:
                         oneway=item["oneway"]=="yes"
                     if "type" in item:
@@ -798,7 +805,19 @@ class QtOSMWidget(QWidget):
                                 self.painter.setPen(blueCrossingPen)
 
                             self.painter.drawPoint(x, y)
-
+                        if direction!=None:
+                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                            if crossingType==2:
+                                if "exit:" in crossingInfo:
+                                    self.painter.drawPixmap(x, y, self.turnRightImage)
+                            else:
+                                if direction==1:
+                                    #right
+                                    self.painter.drawPixmap(x, y, self.turnRightImage)
+                                elif direction==-1:
+                                    #left
+                                    self.painter.drawPixmap(x, y, self.turnLeftImage)
+                                    
                     elif start:
                         startNode.append((lastX, lastY))
                         lastX=0

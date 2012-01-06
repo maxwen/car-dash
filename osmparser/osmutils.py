@@ -180,8 +180,21 @@ class OSMUtils():
         diff=fromDegree - toDegree+180
         return diff%360
 
+    def direction(self, azimuth):
+        # 45 to 135=right=1
+        # 135 to 225=straight=0
+        # 225 to 315=left=-1
+
+        if azimuth>45 and azimuth<135:
+            return 1
+        if azimuth>135 and azimuth<225:
+            return 0
+        if azimuth>225 and azimuth<315:
+            return -1
 def main():    
     # 84194738 
+    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
+
     latCross=47.8027471
     lonCross=13.0290138
     
