@@ -424,11 +424,11 @@ class OSMParserData():
 
     def getStreetEntryForNameAndCountry(self, streetInfo, country):
         (name, ref)=streetInfo
-        self.cursorAdress.execute('SELECT * FROM streetTable where name=="%s" and ref=="%s" and country=="%s"'%(str(name), str(ref), str(country)))
+        self.cursorAdress.execute('SELECT * FROM addressTable where streetName=="%s" and country=="%s"'%(str(name), str(country)))
         allentries=self.cursorAdress.fetchall()
         resultList=list()
         for x in allentries:
-            resultList.append(self.streetFromDB(x))
+            resultList.append(self.addressFromDB(x))
         
         return resultList
     
@@ -838,74 +838,57 @@ class OSMParserData():
                     self.nodes[osmid]=(tags, coords)
                 if tags["highway"]=="traffic_signals":
                     self.nodes[osmid]=(tags, coords)
-                
-#   <node id="652701965" version="2" timestamp="2011-10-03T18:04:48Z" uid="47756" user="tunnelbauer" changeset="9462694" lat="47.8182158" lon="13.0495882">
+            else:
+                self.parseAddress(tags, osmid, coords[1], coords[0])
+
+    def parse_coords(self, coord):
+        for osmid, lon, lat in coord:
+            self.coords[int(osmid)]=(float(lat), float(lon))
+              
+    def parseAddress(self, tags, refId, lat, lon):  
+        #   <node id="652701965" version="2" timestamp="2011-10-03T18:04:48Z" uid="47756" user="tunnelbauer" changeset="9462694" lat="47.8182158" lon="13.0495882">
 #    <tag k="addr:city" v="Salzburg"/>
 #    <tag k="addr:country" v="AT"/>
 #    <tag k="addr:housenumber" v="9"/>
 #    <tag k="addr:postcode" v="5020"/>
 #    <tag k="addr:street" v="Magazinstraße"/>
 #  </node>
-            city=None
-            postCode=None
-            houseNumber=None
-            streetName=None
-            countryCode=None
-            if "addr:city" in tags:
-                city=tags["addr:city"]
-            if "addr:housenumber" in tags:
-                houseNumber=tags["addr:housenumber"]
-            if "addr:postcode" in tags:
-                postCode=tags["addr:postcode"]
-            if "addr:street" in tags:
-                streetName=tags["addr:street"]
-            if "addr:country" in tags:
-                countryCode=tags["addr:country"]
-            
-            if city==None and postCode==None:
-                continue
-            if streetName==None:
-                continue
-            country=self.getCountryIdForAddrCountry(countryCode)
-            if country==None:
-                country=self.country
-                
-            self.addToAddressTable(osmid, country, city, postCode, streetName, houseNumber, coords[1], coords[0])
 
-    def parse_coords(self, coord):
-        for osmid, lon, lat in coord:
-            self.coords[int(osmid)]=(float(lat), float(lon))
-                
+        city=None
+        postCode=None
+        houseNumber=None
+        streetName=None
+        countryCode=None
+        if "addr:city" in tags:
+            city=tags["addr:city"]
+        if "addr:housenumber" in tags:
+            houseNumber=tags["addr:housenumber"]
+        if "addr:postcode" in tags:
+            postCode=tags["addr:postcode"]
+        if "addr:street" in tags:
+            streetName=tags["addr:street"]
+        if "addr:country" in tags:
+            countryCode=tags["addr:country"]
+        
+        if city==None and postCode==None:
+            return
+        if streetName==None:
+            return
+        if houseNumber==None:
+            return
+        country=self.getCountryIdForAddrCountry(countryCode)
+        if country==None:
+            country=self.country
+        
+        self.addToAddressTable(refId, country, city, postCode, streetName, houseNumber, lat, lon)
+
     def parse_ways(self, way):
         for wayid, tags, refs in way:
             if "building" in tags:
-                city=None
-                postCode=None
-                houseNumber=None
-                streetName=None
-                countryCode=None
-                if "addr:city" in tags:
-                    city=tags["addr:city"]
-                if "addr:housenumber" in tags:
-                    houseNumber=tags["addr:housenumber"]
-                if "addr:postcode" in tags:
-                    postCode=tags["addr:postcode"]
-                if "addr:street" in tags:
-                    streetName=tags["addr:street"]
-                if "addr:country" in tags:
-                    countryCode=tags["addr:country"]
-                
-                if city==None and postCode==None:
-                    continue
-                if streetName==None:
-                    continue
-                country=self.getCountryIdForAddrCountry(countryCode)
-                if country==None:
-                    country=self.country
-                
-                (lat, lon)=self.coords[refs[0]]
-                if lat!=None and lon!=None:
-                    self.addToAddressTable(refs[0], country, city, postCode, streetName, houseNumber, lat, lon)
+                if refs[0] in self.coords:
+                    (lat, lon)=self.coords[refs[0]]
+                    if lat!=None and lon!=None:
+                        self.parseAddress(tags, refs[0], lat, lon)
 
             if "highway" in tags:
                 streetType=tags["highway"]
@@ -1876,7 +1859,7 @@ class OSMParserData():
                         self.addToCrossingsTable(wayid, ref, wayList)
                 
     def parse(self, country):
-        p = OSMParser(2, nodes_callback=self.parse_nodes, 
+        p = OSMParser(1, nodes_callback=self.parse_nodes, 
                   ways_callback=self.parse_ways, 
                   relations_callback=self.parse_relations,
                   coords_callback=self.parse_coords)

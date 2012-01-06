@@ -15,7 +15,7 @@ from collections import deque
 import fnmatch
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint
 from osmparser.osmutils import OSMUtils
 from config import Config
@@ -1430,10 +1430,16 @@ class OSMAdressDialog(QDialog):
         header.setStretchLastSection(True)
         self.streetView.setHorizontalHeader(header)
         self.streetView.setColumnWidth(3, 300)
+        self.streetView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
+        self.showPointButton=QPushButton("Show", self)
+        self.showPointButton.clicked.connect(self._showPoint)
+        self.showPointButton.setEnabled(False)
+        actionButtons.addWidget(self.showPointButton)
+
         self.setStartPointButton=QPushButton("Start", self)
         self.setStartPointButton.clicked.connect(self._setStartPoint)
         self.setStartPointButton.setIcon(self.startPointIcon)
@@ -1488,6 +1494,7 @@ class OSMAdressDialog(QDialog):
         self.setEndPointButton.setEnabled(current.isValid())
         self.setStartPointButton.setEnabled(current.isValid())
         self.setWayPointButton.setEnabled(current.isValid())
+        self.showPointButton.setEnabled(current.isValid())
 
         
     @pyqtSlot()
@@ -1495,6 +1502,14 @@ class OSMAdressDialog(QDialog):
         self.done(QDialog.Rejected)
         
     @pyqtSlot()
+    def _showPoint(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedAddress=self.filteredStreetList[current.row()]
+            self.pointType=-1
+        self.done(QDialog.Accepted)
+
 #    def _ok(self):
 #        selmodel = self.streetView.selectionModel()
 #        current = selmodel.currentIndex()
@@ -1538,6 +1553,7 @@ class OSMAdressDialog(QDialog):
         self.setWayPointButton.setEnabled(False)
         self.setStartPointButton.setEnabled(False)
         self.setEndPointButton.setEnabled(False)
+        self.showPointButton.setEnabled(False)
 
     @pyqtSlot()
     def _applyFilter(self):
@@ -1646,6 +1662,11 @@ class OSMFavoritesDialog(QDialog):
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
+        self.showPointButton=QPushButton("Show", self)
+        self.showPointButton.clicked.connect(self._showPoint)
+        self.showPointButton.setEnabled(False)
+        actionButtons.addWidget(self.showPointButton)
+
         self.setStartPointButton=QPushButton("Start", self)
         self.setStartPointButton.clicked.connect(self._setStartPoint)
         self.setStartPointButton.setIcon(self.startPointIcon)
@@ -1692,10 +1713,20 @@ class OSMFavoritesDialog(QDialog):
         self.setEndPointButton.setEnabled(current.isValid())
         self.setStartPointButton.setEnabled(current.isValid())
         self.setWayPointButton.setEnabled(current.isValid())
+        self.showPointButton.setEnabled(current.isValid())
         
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _showPoint(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedFavorite=self.filteredFavoriteList[current.row()]
+            self.pointType=-1
+        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _setWayPoint(self):
@@ -1730,6 +1761,7 @@ class OSMFavoritesDialog(QDialog):
         self.setWayPointButton.setEnabled(False)
         self.setStartPointButton.setEnabled(False)
         self.setEndPointButton.setEnabled(False)
+        self.showPointButton.setEnabled(False)
         
     @pyqtSlot()
     def _applyFilter(self):
@@ -2256,16 +2288,10 @@ class OSMWidget(QWidget):
             elif pointType==2:
                 routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
-
-#            trackList, length=osmParserData.showWayWithName(searchDialog.getAddressInfo())
-#            if trackList!=None:
-#                self.mapWidgetQt.setTrack(trackList, True)
-#                self.app.processEvents()
-#        
-#                # TODO hack
-#                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLat),
-#                               self.mapWidgetQt.osmutils.deg2rad(self.mapWidgetQt.trackStartLon))
-                
+            elif pointType==-1:
+                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(lat),
+                               self.mapWidgetQt.osmutils.deg2rad(lon))
+  
     @pyqtSlot()
     def _showFavorites(self):
         favoritesDialog=OSMFavoritesDialog(self, self.favoriteList)
@@ -2281,6 +2307,9 @@ class OSMWidget(QWidget):
             elif pointType==2:
                 routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getLat(), point.getLon())  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
+            elif pointType==-1:
+                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(point.getLat()),
+                               self.mapWidgetQt.osmutils.deg2rad(point.getLon()))
 
 
 class OSMWindow(QMainWindow):
