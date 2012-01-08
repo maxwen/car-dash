@@ -990,16 +990,22 @@ class Editor(Writer):
 #    doctest.testfile("README.txt", verbose=1)
 
 def test1():
-    sf = Reader("/home/maxl/mapnik/world_boundaries/world_bnd_m")
+    sf = Reader("/home/maxl/Downloads/poly/dach/shape/admin_level2")
 #    print(sf.shapes())
-    for field in sf.fields:
-        print(field)
+#    for field in sf.fields:
+#        print(field)
+#    for shape in sf.shapes():
+#        print(shape)
+#        print(shape.points)
+    i=0
     for record in sf.records():
 #        print(record)
-        if record[3]=="AU":
+        if record[1]=="Österreich":
             print(record)
-            print(sf.shapes()[record[0]].points)
-            print(sf.shapes()[record[0]].bbox)
+            for point in sf.shapes()[i].points:
+                print("%f %f"%(point[0], point[1]))
+        i=i+1
+#            print(sf.shapes()[record[0]].bbox)
 #    print(sf.shapeRecord(13).shape.points)
 #    print(sf.shapeRecord(13).shape.bbox)
 #    for shape in sf.shapes():

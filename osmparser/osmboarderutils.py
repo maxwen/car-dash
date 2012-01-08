@@ -167,7 +167,7 @@ class OSMBoarderUtils():
             self.readPolyFile(polyFile)
             
 def main(argv):    
-    bu=OSMBoarderUtils()
+    bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data")
     bu.initData()
     
     lat=47.8205
