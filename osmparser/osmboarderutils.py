@@ -9,7 +9,12 @@ Created on Dec 31, 2011
 # return country name
 import os
 import sys
-from PyQt4.QtCore import QRect, QPoint
+import time
+from ctypes import *
+
+class point(Structure):
+    _fields_ = [("y", c_double),
+             ("x", c_double)]
 
 class OSMBoarderUtils():
     def __init__(self, dataDir):
@@ -112,6 +117,19 @@ class OSMBoarderUtils():
 #        print(self.bbox)
         self.polyData.append(poly)
 
+    def pointInsideBBox(self, bbox, lat, lon):
+        topLeft=(bbox[0], bbox[1])
+        bottomRight=(bbox[2], bbox[3])
+
+        if topLeft[0] > bottomRight[0]:
+            if topLeft[0] >= lon and bottomRight[0] <= lon and topLeft[1] <= lat and bottomRight[1] >= lat:
+                return True
+        else:
+            if topLeft[0] <= lon and bottomRight[0] >= lon and topLeft[1] <= lat and bottomRight[1] >= lat:
+                return True
+            
+        return False
+    
     def countryNameOfPoint(self, lat, lon):
         if lat==None or lon==None:
             return None
@@ -120,28 +138,14 @@ class OSMBoarderUtils():
             name=poly["name"]
             coords=poly["coords"]
             bbox=poly["bbox"]
-            
-#            print(name)
-#            print(lat)
-#            print(lon)
-#            print(bbox)
-#            if self.pointInPoly(lon, lat, coords):
-#                return name
-            
-            topLeft=(bbox[0], bbox[1])
-            bottomRight=(bbox[2], bbox[3])
-            
-            # checks to see if bounding box crosses 180 degrees
-            if topLeft[0] > bottomRight[0]:
-                if topLeft[0] >= lon and bottomRight[0] <= lon and topLeft[1] <= lat and bottomRight[1] >= lat:
-                    if self.pointInPoly(lon, lat, coords):
-                        return name
-            else:
-                if topLeft[0] <= lon and bottomRight[0] >= lon and topLeft[1] <= lat and bottomRight[1] >= lat:
-                    if self.pointInPoly(lon, lat, coords):
-                        return name
-
+            cData=poly["cData"]
+            if self.pointInsideBBox(bbox, lat, lon):
+#                if self.pointInPoly(lon, lat, coords):
+#                    return name
         
+                if self.callC(lon, lat, coords, cData):
+                    return name
+                
         return None
     
     def pointInPoly(self, x, y, poly):
@@ -165,7 +169,36 @@ class OSMBoarderUtils():
     def initData(self):
         for polyFile in self.getAllPolyFiles():
             self.readPolyFile(polyFile)
+           
+        for poly in self.polyData:
+            poly["cData"]=self.createCData(poly["coords"])
+        
+        self.lib_pip = cdll.LoadLibrary("point_in_poly.so")
+
+    def createCData(self, poly):
+        pCArrayType=point*len(poly)
+        pCArray=pCArrayType()
+        
+        i=0
+        for p in poly:
+            pCArray[i].x=p[0]
+            pCArray[i].y=p[1]
+            i=i+1
+        
+#        for p in pCArray:
+#            print("%f %f"%(p.x, p.y))
+
+        return pCArray
             
+    def callC(self, lon, lat, poly, cData):
+        N=c_int(len(poly))
+            
+        p=point()
+        p.x=lon
+        p.y=lat
+        ret=self.lib_pip.InsidePolygon(byref(cData), N, p)
+        return ret
+        
 def main(argv):    
     bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data")
     bu.initData()
@@ -173,12 +206,26 @@ def main(argv):
     lat=47.8205
     lon=13.0170
 
+    start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
     
     lat=47.7692939563131    
     lon=12.91818334579633
     
+    start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
+    
+    lat=47.8356243
+    lon=12.9949712
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
 
+    
 if __name__ == "__main__":
     main(sys.argv)  

@@ -1223,13 +1223,15 @@ class QtOSMWidget(QWidget):
                 self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown")
             else:   
                 if wayId!=self.lastWayId:
-                    self.lastWayId=wayId
+#                    self.lastWayId=wayId
                     print(osmParserData.getCountrysOfWay(wayId))
                     wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
                     print("%d %s %s"%(wayId, str(tags), str(refs)))
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
                     print("%s %s"%(name, ref))
-                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
+#                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
+                    print(osmParserData.getEdgeEntryForWayId(wayId))
+                    print(osmParserData.getEdgeEntryForWayIdShootingStar(wayId))
 
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForIdCountry(country)))
                     if self.gpsPoint!=None:

@@ -57,6 +57,7 @@ class ShootingStarTest():
             edgeList=list()
             for i in range(num):
                 edgeList.append(pathPointer[i].edge_id)
+#                print(pathPointer[i].cost)
             return edgeList
         else:
             print("error during routing")
@@ -99,6 +100,8 @@ def main(argv):
     
     print(p.calcRoute(20,8))
     print(p.calcRoute(8,20))
+    print(p.calcRoute(12,13))
+    print(p.calcRoute(13,12))
 
 if __name__ == "__main__":
     main(sys.argv)  
