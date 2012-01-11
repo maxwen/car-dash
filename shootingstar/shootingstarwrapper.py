@@ -43,6 +43,7 @@ class ShootingStarWrapper():
             edgeList=list()
             for i in range(num):
                 edgeList.append(pathPointer[i].edge_id)
+                print(pathPointer[i].cost)
             return edgeList
         else:
             print("error during routing")

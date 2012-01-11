@@ -54,22 +54,14 @@ class DijkstraWrapperIgraph():
         idList=list()
         edgeListForIgraph=list()
         
-        self.cursor.execute("SELECT id, length, oneway, source, target, maxspeed from edgeTable")
+        self.cursor.execute("SELECT id, length, oneway, source, target, maxspeed, cost, reverseCost from edgeTable")
         allentries=self.cursor.fetchall()
         for x in allentries:
-            edgeId, length, oneway, source, target, maxspeed=self.edgeFromDB(x)
+            edgeId, length, oneway, source, target, maxspeed, cost, reverseCost=self.edgeFromDB(x)
             
             # TODO length calculation
 #            edge=Edge()
-#            cost=length
-            # cost are seconds needed to drive length with maxspeed
-            cost=int(length / (maxspeed/3.6))
-            
-            if oneway:
-                reverseCost=cost*100000
-            else:
-                reverseCost=cost
-            
+#            cost=length            
 #            edge.fillEdge(edgeId, source, target, cost, reverseCost)
 #            edgeList.append(edge)
             
