@@ -18,7 +18,7 @@ class ShootingStarWrapper():
         return os.path.join(self.dataDir, "edge.db")
     
     def getSQLQuery(self):
-        return "SELECT id, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule FROM edgeTableShootingStar"
+        return "SELECT id, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule FROM edgeTableShootingStar ORDER BY id "
     
     def computeShortestPath(self, startEdge, endEdge):
         lib_routing = cdll.LoadLibrary("_compute_path.so")

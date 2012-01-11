@@ -9,10 +9,10 @@ import os
 import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
-from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
+#from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
 from osmparser.dijkstraigraph import DijkstraWrapperIgraph
 
-from config import Config
+#from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 from shootingstar.shootingstarwrapper import ShootingStarWrapper
 
@@ -116,6 +116,7 @@ class OSMParserData():
         self.connectionCountry=None
         self.cursorCountry=None
         self.edgeId=1
+        self.edgeGid=1
         self.edgeIdShootingStar=1
         self.trackItemList=list()
 #        self.doneEdges=list()
@@ -305,11 +306,13 @@ class OSMParserData():
         allentries=self.cursorAdress.fetchall()
         return len(allentries)
     
+    # TODO create index after inserting
     def createCrossingsTable(self):
         self.cursor.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
         self.cursor.execute("CREATE INDEX wayId_idx ON crossingTable (wayId)")
         self.cursor.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
+    # TODO create index after inserting
     def createEdgeTable(self):
         self.cursorEdge.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, oneway BOOL, wayId INTEGER, source INTEGER, target INTEGER, refList BLOB, maxspeed INTEGER, country INTEGER)')
         self.cursorEdge.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
@@ -318,19 +321,21 @@ class OSMParserData():
         self.cursorEdge.execute("CREATE INDEX target_idx ON edgeTable (target)")
         self.cursorEdge.execute("CREATE INDEX wayId_idx ON edgeTable (wayId)")
 
+    # TODO create index after inserting
     def createEdgeTableShootingStar(self):
-        self.cursorEdge.execute('CREATE TABLE edgeTableShootingStar (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, x1 REAL, y1 REAL, x2 REAL, y2 REAL, toCost REAL, rule TEXT, wayId INTEGER)')
+        self.cursorEdge.execute('CREATE TABLE edgeTableShootingStar (gid INTEGER PRIMARY KEY, id INTEGER, startRef INTEGER, endRef INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, x1 REAL, y1 REAL, x2 REAL, y2 REAL, toCost REAL, rule TEXT, wayId INTEGER)')
         self.cursorEdge.execute("CREATE INDEX startRefShootingStar_idx ON edgeTableShootingStar (startRef)")
         self.cursorEdge.execute("CREATE INDEX endRefShootingStar_idx ON edgeTableShootingStar (endRef)")
         self.cursorEdge.execute("CREATE INDEX sourceShootingStar_idx ON edgeTableShootingStar (source)")
         self.cursorEdge.execute("CREATE INDEX targetShootingStar_idx ON edgeTableShootingStar (target)")
         self.cursorEdge.execute("CREATE INDEX wayIdShootingStar_idx ON edgeTableShootingStar (wayId)")
+        self.cursorEdge.execute("CREATE INDEX edgeIdShootingStar_idx ON edgeTableShootingStar (id)")
 
     def createRefCountryTable(self):
         self.cursorCountry.execute('CREATE TABLE refCountryTable (id INTEGER PRIMARY KEY, country INTEGER)')
     
     def addToCountryRefTable(self, refId, country, lat, lon):
-        storedRefId, storedCountry=self.getCountryOfRef(refId)
+        storedRefId, _=self.getCountryOfRef(refId)
         if storedRefId!=None:
 #            if refId==373118950:
 #                print("skipping DB INSERT ref %d %s"%(refId), str(storedCountry))
@@ -403,7 +408,7 @@ class OSMParserData():
         resultList=self.getCountrysOfWay(wayId)
         if len(resultList)!=0:
             for result in resultList:
-                _, storedWayId, storedCountry=result
+                _, _, storedCountry=result
                 if country==storedCountry:
                     return
         
@@ -464,7 +469,7 @@ class OSMParserData():
             return False
         
         for result in resultList:
-            storedWayCountId, storedWayId, storedCountry=result
+            _, _, storedCountry=result
             if storedCountry==country:
                 return True
 
@@ -534,8 +539,15 @@ class OSMParserData():
     def addToEdgeTableShootingStar(self, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId):
         resultList=self.getEdgeEntryForStartAndEndPointShootingStar(startRef, endRef)
         if len(resultList)==0:
-            self.cursorEdge.execute('INSERT INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeIdShootingStar, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
+            self.cursorEdge.execute('INSERT INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeGid, self.edgeIdShootingStar, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
             self.edgeIdShootingStar=self.edgeIdShootingStar+1
+            self.edgeGid=self.edgeGid+1
+
+    def addToEdgeTableShootingStarForRule(self, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId):
+#        resultList=self.getEdgeEntryForStartAndEndPointShootingStar(startRef, endRef)
+#        if len(resultList)==0:
+        self.cursorEdge.execute('INSERT INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
+        self.edgeGid=self.edgeGid+1
 
     def getLenOfEdgeTable(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')
@@ -561,32 +573,43 @@ class OSMParserData():
             return
         self.cursorEdge.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, oneway, wayId, source, targetId, pickle.dumps(refList), maxspeed, country))     
     
-    def updateRuleOfEdgeShootingStar(self, edgeId, rule):
-        existingEdgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, existingRule, wayId=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
-        if existingEdgeId==None:
-            print("no edge with id %d"%(edgeId))
+    def updateRuleOfEdgeShootingStar(self, edgeGid, rule):
+        edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, _, existingRule, wayId=self.getEdgeEntryForEdgeGidShootingStar(edgeGid)
+        if edgeGid==None:
+            print("no edge with gid %d"%(edgeGid))
             return
-        self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, 10000, rule, wayId))
+        if existingRule!=None:
+            print("need a new edge for new rule for %d"%(edgeId))
+            self.cursorEdge.execute('INSERT INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, 10000, rule, wayId))
+            self.edgeGid=self.edgeGid+1
+        else:
+            self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, 10000, rule, wayId))
+        
+    def updateCostOfEdgeShootingStar(self, edgeId, cost, reverseCost):
+        resultList=self.getEdgeEntrysForEdgeIdShootingStar(edgeId)
+        for result in resultList:
+            edgeGid, edgeId, startRef, endRef, source, target, _, _, x1, y1, x2, y2, toCost, rule, wayId=result
+            self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
 
     def updateSourceOfEdgeShootingStar(self, edgeId, sourceId):
-        existingEdgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
+        edgeGid, existingEdgeId, startRef, endRef, _, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, sourceId, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
+        self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeGid, edgeId, startRef, endRef, sourceId, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
 
     def updateTargetOfEdgeShootingStar(self, edgeId, targetId):
-        existingEdgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
+        edgeGid, existingEdgeId, startRef, endRef, source, _, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, source, targetId, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
+        self.cursorEdge.execute('REPLACE INTO edgeTableShootingStar VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeGid, edgeId, startRef, endRef, source, targetId, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId))
   
     def clearSourceAndTargetOfEdges(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed, country=self.edgeFromDB(x)
+            edgeId, _, _, _, _, _, _, _, _, _, _=self.edgeFromDB(x)
             self.updateSourceOfEdge(edgeId, 0)
             self.updateTargetOfEdge(edgeId, 0)
 
@@ -594,7 +617,7 @@ class OSMParserData():
         self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.edgeFromDBShootingStar(x)
+            _, edgeId, _, _, _, _, _, _, _, _, _, _, _, _, _=self.edgeFromDBShootingStar(x)
             self.updateSourceOfEdgeShootingStar(edgeId, 0)
             self.updateTargetOfEdgeShootingStar(edgeId, 0)
 
@@ -661,14 +684,37 @@ class OSMParserData():
         print("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None, None, None)
 
+    # TODO can return more then one entry if we have multiple rules :(
     def getEdgeEntryForEdgeIdShootingStar(self, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar where id=="%s"'%(str(edgeId)))
+        allentries=self.cursorEdge.fetchall()
+        if len(allentries)==0:
+            print("getEdgeEntryForEdgeIdShootingStar: no edge with id %d"%(edgeId))
+            return (None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)  
+        elif len(allentries)==1:
+            edge=self.edgeFromDBShootingStar(allentries[0])
+            return edge
+        else:
+            print("getEdgeEntryForEdgeIdShootingStar: multiple edges with id %d"%(edgeId))
+            return (None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
+
+    def getEdgeEntrysForEdgeIdShootingStar(self, edgeId):
+        self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar where id=="%s"'%(str(edgeId)))
+        resultList=list()
+        allentries=self.cursorEdge.fetchall()
+        for result in allentries:
+            edge=self.edgeFromDBShootingStar(result)
+            resultList.append(edge)
+        return resultList
+
+    def getEdgeEntryForEdgeGidShootingStar(self, edgeGid):
+        self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar where gid=="%s"'%(str(edgeGid)))
         allentries=self.cursorEdge.fetchall()
         if len(allentries)==1:
             edge=self.edgeFromDBShootingStar(allentries[0])
             return edge
-        print("no edge with %d"%(edgeId))
-        return (None, None, None, None, None, None, None, None, None, None, None, None, None)
+        print("getEdgeEntryForEdgeGidShootingStar: no edge with %d"%(edgeGid))
+        return (None, None, None, None, None, None, None, None, None, None, None, None, None, None, None)
         
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where startRef="%s" AND id!="%s"'%(str(startRef), str(edgeId)))
@@ -724,6 +770,15 @@ class OSMParserData():
             resultList.append(edge)
         return resultList
 
+    def getEdgeEntryForStartOrEndPointShootingStar(self, ref):
+        self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar where startRef=="%s" OR endRef=="%s"'%(str(ref), str(ref)))
+        resultList=list()
+        allentries=self.cursorEdge.fetchall()
+        for result in allentries:
+            edge=self.edgeFromDBShootingStar(result)
+            resultList.append(edge)
+        return resultList
+    
     def getEdgeEntryForWayId(self, wayId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=="%s"'%(str(wayId)))
         resultList=list()
@@ -953,14 +1008,16 @@ class OSMParserData():
         self.cursorEdge.execute('SELECT * FROM edgeTableShootingStar')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.edgeFromDBShootingStar(x)
-            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " source:"+str(source)+ " target: "+str(target)+ " cost:"+str(cost) +" reverseCost:"+str(reverseCost)+" x1:"+str(x1) +" y1:"+str(y1) + " x2:"+str(x2) + " y2:"+str(y2) + " toCost:"+str(toCost)+ " rule:"+str(rule) + " wayId:"+str(wayId))
+            edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId=self.edgeFromDBShootingStar(x)
+            print( "edgeGid;" + edgeGid+ " edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " source:"+str(source)+ " target: "+str(target)+ " cost:"+str(cost) +" reverseCost:"+str(reverseCost)+" x1:"+str(x1) +" y1:"+str(y1) + " x2:"+str(x2) + " y2:"+str(y2) + " toCost:"+str(toCost)+ " rule:"+str(rule) + " wayId:"+str(wayId))
 
     def testEdgeTableShootingStar2(self):
-        self.cursorEdge.execute("SELECT id, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule FROM edgeTableShootingStar")
+        self.cursorEdge.execute("SELECT gid, id, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule FROM edgeTableShootingStar ORDER BY gid")
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            print(x)
+            rule=x[11]
+            if rule!=None:
+                print(x)
             
     def wayFromDB(self, x):
         wayId=x[0]
@@ -1006,21 +1063,22 @@ class OSMParserData():
         return (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed, country)
 
     def edgeFromDBShootingStar(self, x):
-        edgeId=x[0]
-        startRef=x[1]
-        endRef=x[2]
-        source=x[3]
-        target=x[4]
-        cost=x[5]     
-        reverseCost=x[6]
-        x1=x[7]
-        y1=x[8]
-        x2=x[9]
-        y2=x[10]
-        toCost=x[11]
-        rule=x[12]
-        wayId=x[13]
-        return (edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId)
+        edgeGid=x[0]
+        edgeId=x[1]
+        startRef=x[2]
+        endRef=x[3]
+        source=x[4]
+        target=x[5]
+        cost=x[6]     
+        reverseCost=x[7]
+        x1=x[8]
+        y1=x[9]
+        x2=x[10]
+        y2=x[11]
+        toCost=x[12]
+        rule=x[13]
+        wayId=x[14]
+        return (edgeGid, edgeId, startRef, endRef, source, target, cost, reverseCost, x1, y1, x2, y2, toCost, rule, wayId)
         
     def addAllRefsToDB(self):
         for ref, wayIdList in self.wayRefIndex.items():
@@ -1135,6 +1193,10 @@ class OSMParserData():
 
     def parse_ways(self, way):
         for wayid, tags, refs in way:
+            if len(refs)==1:
+                print("way with len(ref)==1 %d"%(wayid))
+                continue
+
             if "building" in tags:
                 if refs[0] in self.coords:
                     (lat, lon)=self.coords[refs[0]]
@@ -1178,9 +1240,6 @@ class OSMParserData():
                     if tags["building"]=="yes":
                         continue
                 distances=list()
-    
-                if len(refs)==1:
-                    print("way with len(ref)==1 %d"%(wayid))
                     
                 startRef=refs[0]
                 if startRef in self.coords:
@@ -1285,15 +1344,18 @@ class OSMParserData():
                             elif role=="to":
                                 toWayId=wayId
                             elif role=="via":
-                                viaNode=wayId
+                                viaData=wayId
                         if isWay:
                             restrictionEntry=dict()
                             restrictionEntry["type"]=restrictionType
                             restrictionEntry["to"]=toWayId
                             restrictionEntry["from"]=fromWayId
-                            if viaNode!=None:
-                                restrictionEntry["via"]=viaNode
+                            if viaData!=None:
+                                restrictionEntry["via"]=viaData
                             
+#                            if fromWayId==96379189 and toWayId==96379222:
+#                                print("added restriction %s"%(restrictionEntry))
+
                             restrictionList=list()
                             if fromWayId in self.wayRestricitionListFrom:
                                 restrictionList=self.wayRestricitionListFrom[fromWayId]
@@ -1426,14 +1488,14 @@ class OSMParserData():
     def findWayWithEndRef(self, ways, endRef, country):
         possibleWays=list()
         for wayId  in ways:
-            (actWayId, tags, refs, distances)=self.getWayEntryForIdAndCountry(wayId, country)
+            (actWayId, _, refs, _)=self.getWayEntryForIdAndCountry(wayId, country)
             if refs[-1]==endRef:
                 possibleWays.append(actWayId)
         return possibleWays
     
     def findStartWay(self, ways, country):
         for wayId  in ways:
-            (actWayId, tags, refs, distances)=self.getWayEntryForIdAndCountry(wayId, country)
+            (actWayId, _, refs, _)=self.getWayEntryForIdAndCountry(wayId, country)
             startRef=refs[0]
             possibleWays=self.findWayWithEndRef(ways, startRef, country)
             if len(possibleWays)==0:
@@ -1551,14 +1613,14 @@ class OSMParserData():
 #                    allEdgeList.append(targetPoint.getEdgeId())
                       
                 else:                  
-                    if self.dWrapper!=None:
-                        edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
-                        allEdgeList.extend(edgeList)
-                        allPathCost=allPathCost+pathCost            
-                
-#                    if self.dWrapperShootingStar!=None:
-#                        edgeList=self.dWrapperShootingStar.computeShortestPath(sourceEdge, targetEdge)
+#                    if self.dWrapper!=None:
+#                        edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
 #                        allEdgeList.extend(edgeList)
+#                        allPathCost=allPathCost+pathCost            
+                
+                    if self.dWrapperShootingStar!=None:
+                        edgeList=self.dWrapperShootingStar.computeShortestPath(sourceEdge, targetEdge)
+                        allEdgeList.extend(edgeList)
                         
                 startPoint=targetPoint
                 source=startPoint.getTarget()
@@ -1756,7 +1818,7 @@ class OSMParserData():
                     if crossingType!=-1:
                         break
                     (_, wayId, _, nextWayIdList)=result
-                    for nextWayId, crossingType, crossingInfo in nextWayIdList:
+                    for _, crossingType, crossingInfo in nextWayIdList:
                         if crossingType!=-1:
                             break
                 if crossingType!=-1:
@@ -1861,7 +1923,7 @@ class OSMParserData():
              
         for edgeId in edgeList:
             self.createStartTrackItem()
-            (edgeId, currentStartRef, _, length, _, _, _, _, refList, _, _)=self.getEdgeEntryForEdgeId(edgeId)                       
+            (edgeId, _, _, _, _, _, _, _, refList, _, _)=self.getEdgeEntryForEdgeId(edgeId)                       
             self.printEdgeForRefList(refList, edgeId, trackWayList, None, None)
             self.createEndTrackItem()
             
@@ -1876,7 +1938,7 @@ class OSMParserData():
         self.getEdgePartName(edge, streetInfo)
         
     def getEdgePartName(self, edge, streetInfo):
-        (edgeId, startRef, endRef, length, oneway, wayId, source, target, refList, maxspeed, country)=edge
+        (edgeId, _, _, _, oneway, wayId, source, target, _, _, country)=edge
 
         self.doneEdges.append(edgeId)
         if wayId in self.possibleWays:
@@ -1887,7 +1949,7 @@ class OSMParserData():
         
         resultList=self.getEdgeEntryForSource(target)  
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed, country=result
+            edgeId, _, _, _, oneway1, wayId1, _, _, _, _, country=result
             if edgeId in self.doneEdges:
                 continue
             
@@ -1897,7 +1959,7 @@ class OSMParserData():
        
         resultList=self.getEdgeEntryForTarget(target)  
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed, country=result
+            edgeId, _, _, _, oneway1, wayId1, _, _, _, _, country=result
             if edgeId in self.doneEdges:
                 continue
             if oneway1==1:
@@ -1909,7 +1971,7 @@ class OSMParserData():
       
         resultList=self.getEdgeEntryForTarget(source)
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed, country=result
+            edgeId, _, _, _, oneway1, wayId1, _, _, _, _, country=result
             if edgeId in self.doneEdges:
                 continue
             if oneway1==1:
@@ -1921,7 +1983,7 @@ class OSMParserData():
             
         resultList=self.getEdgeEntryForSource(source)
         for result in resultList:
-            edgeId, startRef, endRef, length, oneway1, wayId1, source1, target1, refList, maxspeed, country=result
+            edgeId, _, _, _, oneway1, wayId1, _, _, _, _, country=result
             if edgeId in self.doneEdges:
                 continue
             if oneway==1 and oneway1==1:
@@ -2062,7 +2124,7 @@ class OSMParserData():
         for edgeEntryId in allEdges:
             edgeId=edgeEntryId[0]
             edge=self.getEdgeEntryForEdgeIdShootingStar(edgeId)
-            edgeId, _, _, source, target, _, _, _, _, _, _, _, _, _=edge
+            _, edgeId, _, _, source, target, _, _, _, _, _, _, _, _, _=edge
             
 #            (lat, lon)=self.getCoordsWithRef(endRef)
 #            if lat!=None and lon!=None:
@@ -2084,9 +2146,16 @@ class OSMParserData():
                 self.nodeIdShootingStar=self.nodeIdShootingStar+1
                 self.updateTargetOfEdgeShootingStar(edgeId, targetId)
         
+        pickle.dump(self.wayRestricitionListFrom, "/tmp/restrictions.pickle")
         self.createWayRestrictions()
 
+    def createWayRestrictionsFromDump(self):
+        self.wayRestricitionListFrom=pickle.load("/tmp/restrictions.pickle")
+        self.createWayRestrictions()
+        
     def createWayRestrictions(self):
+        # TODO left turns should increase costs
+        toAddRules=list()
         for fromWayId, wayRestrictionList in self.wayRestricitionListFrom.items():
             for wayRestrictionItem in wayRestrictionList:
                 toWayId=wayRestrictionItem["to"]
@@ -2094,97 +2163,124 @@ class OSMParserData():
 
                 resultList=self.getEdgeEntryForWayIdShootingStar(fromWayId)
                 for fromWayIdResult in resultList:
-                    (fromEdgeId, startRefFrom, endRefFrom, _, _, _, _, x1From, y1From, x2From, y2From, _, _, fromWayId)=fromWayIdResult
+                    (_, fromEdgeId, startRefFrom, endRefFrom, _, _, _, _, x1From, y1From, x2From, y2From, _, _, fromWayId)=fromWayIdResult
         
-                    resultList=self.getEdgeEntryForWayIdShootingStar(toWayId)
-                    if len(resultList)!=0:
-                        for toWayIdResult in resultList:
-                            (toEdgeId, startRefTo, endRefTo, _, _, _, _, x1To, y1To, x2To, y2To, _, _, toWayId)=toWayIdResult
+                    resultList1=self.getEdgeEntryForWayIdShootingStar(toWayId)
+                    if len(resultList1)!=0:
+                        for toWayIdResult in resultList1:
+                            (_, _, startRefTo, endRefTo, _, _, _, _, _, _, _, _, _, _, toWayId)=toWayIdResult
                                 
-                            latCross=None
-                            lonCross=None
-                            latFrom=None
-                            lonFrom=None
-                            latTo=None
-                            lonTo=None
+                            if fromWayId==96379189 and toWayId==96379222:
+                                None
                             
-                            if startRefTo==startRefFrom:
-                                latCross=y1From
-                                lonCross=x1From
-                                latFrom=y2From
-                                lonFrom=x2From
-                                latTo=y2To
-                                lonTo=x2To
-                            elif endRefTo==endRefFrom:
-                                latCross=y2From
-                                lonCross=x2From
-                                latFrom=y1From
-                                lonFrom=x1From
-                                latTo=y1To
-                                lonTo=x1To
-                            elif startRefTo==endRefFrom:
-                                latCross=y2From
-                                lonCross=x2From
-                                latFrom=y1From
-                                lonFrom=x1From
-                                latTo=y1To
-                                lonTo=x1To
-                            elif endRefTo==startRefFrom:
-                                latCross=y2From
-                                lonCross=x2From
-                                latFrom=y1From
-                                lonFrom=x1From
-                                latTo=y1To
-                                lonTo=x1To  
-                                
-                            if latCross==None:
-                                print("calc direction not possible")
-                                print("way restriction from %d"%(fromWayId))
-                                print("way restriction to %d"%(toWayId))
-                                print("way restriction type %s"%(restrictionType))
+                            crossingRef=None
+                            if startRefTo==startRefFrom or endRefTo==startRefFrom:
+                                crossingRef=startRefFrom
+                            
+                            if endRefTo==endRefFrom or startRefTo==endRefFrom:
+                                crossingRef=endRefFrom
+                                                                
+                            if crossingRef==None:
                                 continue
                             
-                            print("way restriction from %d"%(fromWayId))
-                            print("way restriction to %d"%(toWayId))
-                            print("way restriction type %s"%(restrictionType))
+                            resultList2=self.getEdgeEntryForStartOrEndPointShootingStar(crossingRef)
 
-                            azimuth=self.osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo))   
-                            direction=self.osmutils.direction(azimuth)
-                            
-                            print(direction)
-                            addRestriction=False
-                            # no_left_turn 
-                            # no_right_turn, 
-                            # only_right_turn 
-                            # only_left_turn 
-                            # only_straight_on 
-                            # no_straight_on
-                            if direction==1:
-                                # right
-                                if restrictionType=="no_right_turn":
-                                    addRestriction=True
-                                if restrictionType=="only_left_turn":
-                                    addRestriction=True
-                                if restrictionType=="only_straight_on":
-                                    addRestriction=True
-                            elif direction==-1:
-                                # left
-                                if restrictionType=="no_left_turn":
-                                    addRestriction=True
-                                if restrictionType=="only_right_turn":
-                                    addRestriction=True
-                                if restrictionType=="only_straight_on":
-                                    addRestriction=True
-                            elif direction==0:
-                                if restrictionType=="no_straight_on":
-                                    addRestriction=True
+                            if len(resultList2)!=0:
+                                for edge in resultList2:
+                                    (edgeGid, startRefTo, endRefTo, _, _, _, _, _, x1To, y1To, x2To, y2To, _, _, wayId)=edge
                                     
-                            if addRestriction:
-                                print("need rule %d to edge %d"%(fromEdgeId, toEdgeId))
-        #                        self.updateRuleOfEdgeShootingStar(toEdgeId, fromEdgeId)
+                                    if wayId==fromWayId or wayId==toWayId:
+                                        continue
+                                    
+                                    if wayId==4811410:
+                                        None
+                                        
+                                    latCross=None
+                                    lonCross=None
+                                    latFrom=None
+                                    lonFrom=None
+                                    latTo=None
+                                    lonTo=None
+                                    
+                                    if startRefTo==startRefFrom:
+                                        latCross=y1From
+                                        lonCross=x1From
+                                        latFrom=y2From
+                                        lonFrom=x2From
+                                        latTo=y2To
+                                        lonTo=x2To
+                                    elif endRefTo==endRefFrom:
+                                        latCross=y2From
+                                        lonCross=x2From
+                                        latFrom=y1From
+                                        lonFrom=x1From
+                                        latTo=y1To
+                                        lonTo=x1To
+                                    elif startRefTo==endRefFrom or endRefTo==startRefFrom:
+                                        latCross=y2From
+                                        lonCross=x2From
+                                        latFrom=y1From
+                                        lonFrom=x1From
+                                        latTo=y2To
+                                        lonTo=x2To
+                                        
+                                    if latCross==None:
+                                        continue
+                                        
+                                    azimuth=self.osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo))   
+#                                    print(azimuth)
+                                    direction=self.osmutils.direction(azimuth)
+                                    
+#                                    print(direction)
+                                    addRestriction=False
+                                    # no_left_turn 
+                                    # no_right_turn, 
+                                    # only_right_turn 
+                                    # only_left_turn 
+                                    # only_straight_on 
+                                    # no_straight_on
+                                    if direction==1:
+                                        # right
+                                        if restrictionType=="no_right_turn":
+                                            addRestriction=True
+                                        if restrictionType=="only_left_turn":
+                                            addRestriction=True
+                                        if restrictionType=="only_straight_on":
+                                            addRestriction=True
+                                    elif direction==-1:
+                                        # left
+                                        if restrictionType=="no_left_turn":
+                                            addRestriction=True
+                                        if restrictionType=="only_right_turn":
+                                            addRestriction=True
+                                        if restrictionType=="only_straight_on":
+                                            addRestriction=True
+                                    elif direction==0:
+                                        if restrictionType=="no_straight_on":
+                                            addRestriction=True
+                                            
+                                    if addRestriction:
+                                        print("way restriction from %d"%(fromWayId))
+                                        print("way restriction to %d"%(toWayId))
+                                        print("way restriction type %s"%(restrictionType))      
+                                        print("wayId %d"%(wayId))   
+                                        print("crossing=%f-%f from=%f-%f to=%f-%f"%(latCross, lonCross, latFrom, lonFrom, latTo, lonTo))
+                                        print(azimuth)
+                                        print(direction)                          
+
+                                        print("need rule for edgeGid %d from edge %d"%(edgeGid, fromEdgeId))
+                                        toAddRules.append((edgeGid, fromEdgeId))
+        doneEdgeGids=list()
+        for edgeGid, fromEdgeId in toAddRules:
+            if doneEdgeGids.count(edgeGid)==2:
+                print("more then two rules for the same edge")
+#                continue
+            print("change rule of edgeGid %d from edge %d"%(edgeGid, fromEdgeId))
+            self.updateRuleOfEdgeShootingStar(edgeGid, fromEdgeId)
+            doneEdgeGids.append(edgeGid)
                     
     def createEdgeTableNodeSameStartEnriesForShootingStar(self, edge):
-        edgeId, startRef, _, sourceId, _, _, _, _, _, _, _, _, _, _=edge
+        _, edgeId, startRef, _, sourceId, _, _, _, _, _, _, _, _, _, _=edge
 
         resultList=self.getEdgeEntryForStartPointShootingStar(startRef, edgeId)
         if len(resultList)!=0:
@@ -2193,7 +2289,7 @@ class OSMParserData():
                 self.nodeIdShootingStar=self.nodeIdShootingStar+1
     
         for result in resultList:
-            edgeId1, _, _, source1, _, _, _, _, _, _, _, _, _, _=result
+            _, edgeId1, _, _, source1, _, _, _, _, _, _, _, _, _, _=result
             if source1!=0:
                 continue
 
@@ -2201,7 +2297,7 @@ class OSMParserData():
             self.updateSourceOfEdgeShootingStar(edgeId1, sourceId)
 
     def createEdgeTableNodeSameEndEnriesForShootingStar(self, edge):
-        edgeId, _, endRef, _, targetId, _, _, _, _, _, _, _, _, _=edge
+        _, edgeId, _, endRef, _, targetId, _, _, _, _, _, _, _, _, _=edge
                            
         resultList=self.getEdgeEntryForEndPointShootingStar(endRef, edgeId)
         if len(resultList)!=0:
@@ -2210,7 +2306,7 @@ class OSMParserData():
                 self.nodeIdShootingStar=self.nodeIdShootingStar+1
             
         for result in resultList:
-            edgeId1, _, _, _, target1, _, _, _, _, _, _, _, _, _=result
+            _, edgeId1, _, _, _, target1, _, _, _, _, _, _, _, _, _=result
             if target1!=0:
                 continue
             
@@ -2218,7 +2314,7 @@ class OSMParserData():
             self.updateTargetOfEdgeShootingStar(edgeId1, targetId)
             
     def createEdgeTableNodeSourceEnriesForShootingStar(self, edge):
-        edgeId, _, endRef, _, targetId, _, _, _, _, _, _, _, _, _=edge
+        _, edgeId, _, endRef, _, targetId, _, _, _, _, _, _, _, _, _=edge
         
         resultList=self.getEdgeEntryForStartPointShootingStar(endRef, edgeId)        
         if len(resultList)!=0:
@@ -2227,7 +2323,7 @@ class OSMParserData():
                 self.nodeIdShootingStar=self.nodeIdShootingStar+1
 
         for result in resultList:
-            edgeId1, _, _, source1, _, _, _, _, _, _, _, _, _, _=result
+            _, edgeId1, _, _, source1, _, _, _, _, _, _, _, _, _, _=result
             
             if source1==0:
                 self.updateSourceOfEdgeShootingStar(edgeId1, targetId)
@@ -2245,7 +2341,7 @@ class OSMParserData():
             
             nextWayDict=dict()
             for result in resultList:
-                crossingEntryId, wayId, refId, nextWayIdList=result
+                _, wayId, refId, nextWayIdList=result
                 nextWayDict[refId]=nextWayIdList
             
 #            wayRestrictionList=None
@@ -2300,6 +2396,7 @@ class OSMParserData():
                     maxspeed=50
                 
             doneRefs=list()
+            doneRefsCrossingType=dict()
             for ref in refs:                  
                 if ref in nextWayDict:
 #                    if wayRestrictionList!=None:
@@ -2316,12 +2413,12 @@ class OSMParserData():
 #                                    self.wayRestriction[nextWayId]=wayRestrictionItem
 #                                    print("added restriction %d %s"%(nextWayId, str(wayRestrictionItem)))
                                                                         
-                    # TODO crossings with traffic lights should increase cost for this edge
-#                    nextWayIdList=nextWayDict[ref]
-#                    for nextWayId, crossingType in nextWayIdList:
-#                        if crossingType==1:
-#                            # with traffic lights
-#                            None
+                    # crossings with traffic lights should increase cost for this edge
+                    nextWayIdList=nextWayDict[ref]
+                    for _, crossingType, crossingInfo in nextWayIdList:
+                        if crossingType==1:
+                            # with traffic lights
+                            doneRefsCrossingType[ref]=1
                     doneRefs.append(ref)
             
             refNodeList=list()
@@ -2335,9 +2432,13 @@ class OSMParserData():
                         startRef=refNodeList[0]
                         endRef=refNodeList[-1]
 
-                        cost=distance
+                        cost=int(distance / (maxspeed/3.6))
+                        
+                        if ref in doneRefsCrossingType:
+                            cost=cost+30
+                            
                         if oneway:
-                            reverseCost=10000
+                            reverseCost=cost*100000
                         else:
                             reverseCost=cost
                             
@@ -2369,9 +2470,13 @@ class OSMParserData():
                     startRef=refNodeList[0]
                     endRef=refNodeList[-1]
                     
-                    cost=distance
+                    cost=int(distance / (maxspeed/3.6))
+                    
+                    if ref in doneRefsCrossingType:
+                        cost=cost+30
+                    
                     if oneway:
-                        reverseCost=10000
+                        reverseCost=cost*100000
                     else:
                         reverseCost=cost
 
@@ -2418,7 +2523,7 @@ class OSMParserData():
                 nextWays=self.findWayWithRefInAllWays(ref, wayid)  
                 if len(nextWays)!=0:
                     if ref in self.nodes:
-                        nodeTags, coords=self.nodes[ref]
+                        nodeTags, _=self.nodes[ref]
 #                        <tag k="highway" v="traffic_signals"/>
                         if "highway" in nodeTags:
                             if nodeTags["highway"]=="traffic_signals":
@@ -2589,8 +2694,8 @@ class OSMParserData():
             self.commitCountryDB(country)
             
         if updateEdgeDB:
-            self.clearSourceAndTargetOfEdges()
-            self.clearSourceAndTargetOfEdgesShootingStar()
+#            self.clearSourceAndTargetOfEdges()
+#            self.clearSourceAndTargetOfEdgesShootingStar()
             print("create edge nodes")
             self.createEdgeTableNodeEntries()
             self.createEdgeTableNodeEntriesShootingStar()
@@ -2684,21 +2789,19 @@ class OSMParserData():
 
         print(self.calcRouteForNodes(3636, 3647))
         print(self.calcRouteForEdgesShootingStar(38097, 38100))  
+        
+        print(self.getEdgeEntryForEdgeId(100254))
 
-        print(self.osmutils.distance(47.8319964, 13.0002369, 47.8302117, 13.0023321))
-        print(self.osmutils.distance(47.8311136, 12.9937238, 47.8309124, 12.994559))
 def main(argv):    
     p = OSMParserData()
     
     p.initDB()
     
     p.openAllDB()
-    p.initGraph()
 #    p.testCountryRefTable()
 #    p.testCountryWayTable()
 #    p.testStreetTable2()
 #    p.testEdgeTable()
-#    p.testEdgeTableShootingStar2()
         
 
 #    print(p.getLenOfEdgeTable())
@@ -2710,7 +2813,9 @@ def main(argv):
 #    print(p.getEdgeEntryForEdgeIdShootingStar(2024))
 
 
-    p.test()
+#    p.test()
+#    p.testEdgeTableShootingStar2()
+
     p.closeAllDB()
 
 

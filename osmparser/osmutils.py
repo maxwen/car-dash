@@ -185,12 +185,17 @@ class OSMUtils():
         # 135 to 225=straight=0
         # 225 to 315=left=-1
 
-        if azimuth>45 and azimuth<135:
+        if azimuth>=0 and azimuth<135:
             return 1
-        if azimuth>135 and azimuth<225:
+        if azimuth>=135 and azimuth<225:
             return 0
-        if azimuth>225 and azimuth<315:
+        if azimuth>=225 and azimuth<360:
             return -1
+#        if azimuth>=0 and azimuth<45:
+#            return 1
+#        if azimuth>=315 and azimuth<360:
+#            return -1
+
 def main():    
     # 84194738 
     #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
@@ -235,6 +240,17 @@ def main():
     print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latFrom, lonFrom)))
     print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latRight, lonRight)))
     print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latStraight, lonStraight)))
+
+    latCross=47.8380837
+    lonCross=12.9875343
+    
+    latFrom=47.8387129
+    lonFrom=12.9882358
+    
+    latTo=47.8383155
+    lonTo=12.9885131
+    
+    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo)))
 
 if __name__ == "__main__":
     main()  
