@@ -16,7 +16,7 @@ import fnmatch
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint
+from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmutils import OSMUtils
 from config import Config
 
@@ -194,10 +194,10 @@ class OSMRouteCalcWorker(QThread):
 #        self.exiting = True
 #        self.wait()
         
-    def setup(self, routingPointList):
+    def setup(self, route):
         self.updateStatusLabel("OSM starting route calculation thread")
         self.exiting = False
-        self.routingPointList=routingPointList
+        self.route=route
         self.startProgress()
         osmParserData.initGraph()
         self.start()
@@ -208,8 +208,8 @@ class OSMRouteCalcWorker(QThread):
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
     
-    def updateEdgeList(self, edgeList, pathCost):
-        self.emit(SIGNAL("updateEdgeList(PyQt_PyObject, int)"), edgeList, pathCost)
+    def routeCalculationDone(self):
+        self.emit(SIGNAL("routeCalculationDone()"))
         
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -225,12 +225,12 @@ class OSMRouteCalcWorker(QThread):
         self.updateRouteCalcThreadState("run")
         self.startProgress()
         while not self.exiting and True:
-            edgeList, pathCost=osmParserData.calcRouteForPoints(self.routingPointList)
-            self.updateEdgeList(edgeList, pathCost)
+            osmParserData.calcRoute(self.route)
             self.exiting=True
 
         self.updateRouteCalcThreadState("stopped")
         self.updateStatusLabel("OSM stopped route calculation thread")
+        self.routeCalculationDone()
         self.stopProgress()
         
 class QtOSMWidget(QWidget):
@@ -716,116 +716,115 @@ class QtOSMWidget(QWidget):
             linkPen.setWidth(4)
             linkPen.setCapStyle(Qt.RoundCap);
             
-            for track in self.track:
-                self.trackStartLon=0.0
-                self.trackStartLat=0.0
-                lastX=0
-                lastY=0
-                startNode=deque()
-                node=None
-    
+            self.trackStartLon=0.0
+            self.trackStartLat=0.0
+            lastX=0
+            lastY=0
+            startNode=deque()
+            node=None
+
 #                track= osmParserData.getStreetTrackList(wayid)
 #                if track==None:
 #                    print("no track found for %d"%(wayid))
 #                    continue
-                
-                for item in track["track"]:
-                    if "lat" in item:
-                        lat=item["lat"]
-                    if "lon" in item:
-                        lon=item["lon"]
-                    if "ref" in item:
-                        ref=item["ref"]
+            
+            for item in self.track:
+                if "lat" in item:
+                    lat=item["lat"]
+                if "lon" in item:
+                    lon=item["lon"]
+                if "ref" in item:
+                    ref=item["ref"]
 #                        if ref in osmParserData.nodes:
 #                            node=osmParserData.nodes[ref]
-                            
-                    start=False
-                    end=False
-                    crossing=False
-                    crossingType=0
-                    oneway=False
-                    streetType=""
-                    direction=None
-                    if "start" in item:
-                        start=True
-                    if "end" in item:
-                        end=True
-                    if "crossing" in item:
-                        crossing=True
-                        crossingType=item["crossing"][0]
-                    if "crossingInfo" in item:
-                        crossingInfo=item["crossingInfo"]
-                    if "direction" in item:
-                        direction=item["direction"]
-                    if"oneway" in item:
-                        oneway=item["oneway"]=="yes"
-                    if "type" in item:
-                        streetType=item["type"]
-                    if not start and not end:
-                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                        
+                start=False
+                end=False
+                crossing=False
+                crossingType=0
+                oneway=False
+                streetType=""
+                direction=None
+                if "start" in item:
+                    start=True
+                if "end" in item:
+                    end=True
+                if "crossing" in item:
+                    crossing=True
+                    crossingType=item["crossing"][0]
+                if "crossingInfo" in item:
+                    crossingInfo=item["crossingInfo"]
+                if "direction" in item:
+                    direction=item["direction"]
+                if"oneway" in item:
+                    oneway=item["oneway"]=="yes"
+                if "type" in item:
+                    streetType=item["type"]
+                if not start and not end:
+                    (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
 #                        x=self.osmutils.lon2pixel(self.map_zoom, self.osmutils.deg2rad(lon)) - map_x0
 #                        y=self.osmutils.lat2pixel(self.map_zoom, self.osmutils.deg2rad(lat)) - map_y0
-        
-                        if lastX!=0 and lastY!=0:
-                            if streetType[-5:]=="_link":
-                                pen=linkPen
-                            elif streetType=="motorway":
-                                pen=motorwayPen
-                            elif streetType=="primary":
-                                pen=primaryPen
-                            elif streetType=="residential":
-                                pen=residentialPen
-                            elif streetType=="tertiary":
-                                pen=tertiaryPen
-                            else:
-                                pen=redPen
-                                
-                            if oneway:
-                                pen.setStyle(Qt.DashLine)
-                            else:
-                                pen.setStyle(Qt.SolidLine)
-                                
-                            self.painter.setPen(pen)
-                            self.painter.drawLine(x, y, lastX, lastY)
-                        else:
-                            self.trackStartLon=lon
-                            self.trackStartLat=lat
     
-                        lastX=x
-                        lastY=y
+                    if lastX!=0 and lastY!=0:
+                        if streetType[-5:]=="_link":
+                            pen=linkPen
+                        elif streetType=="motorway":
+                            pen=motorwayPen
+                        elif streetType=="primary":
+                            pen=primaryPen
+                        elif streetType=="residential":
+                            pen=residentialPen
+                        elif streetType=="tertiary":
+                            pen=tertiaryPen
+                        else:
+                            pen=redPen
                             
-                        if crossing:
-                            if crossingType==0:
-                                self.painter.setPen(greenCrossingPen)
-                            elif crossingType==1:
-                                # with traffic signs
-                                self.painter.setPen(redCrossingPen)
-                            elif crossingType==2:
-                                # motorway junction
-                                self.painter.setPen(blueCrossingPen)
+                        if oneway:
+                            pen.setStyle(Qt.DashLine)
+                        else:
+                            pen.setStyle(Qt.SolidLine)
+                            
+                        self.painter.setPen(pen)
+                        self.painter.drawLine(x, y, lastX, lastY)
+                    else:
+                        self.trackStartLon=lon
+                        self.trackStartLat=lat
 
-                            self.painter.drawPoint(x, y)
-                        if direction!=None:
-                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                            if crossingType==2:
-                                if "exit:" in crossingInfo:
-                                    self.painter.drawPixmap(x, y, self.turnRightImage)
-                            else:
-                                if direction==1:
-                                    #right
-                                    self.painter.drawPixmap(x, y, self.turnRightImage)
-                                elif direction==-1:
-                                    #left
-                                    self.painter.drawPixmap(x, y, self.turnLeftImage)
-                                    
-                    elif start:
-                        startNode.append((lastX, lastY))
-                        lastX=0
-                        lastY=0
-                    elif end:
-                        lastX, lastY=startNode.pop()
-                if len(startNode)!=0:
-                    print("unbalanced start-end nodes %s"%str(startNode))
+                    lastX=x
+                    lastY=y
+                        
+                    if crossing:
+                        if crossingType==0:
+                            self.painter.setPen(greenCrossingPen)
+                        elif crossingType==1:
+                            # with traffic signs
+                            self.painter.setPen(redCrossingPen)
+                        elif crossingType==2:
+                            # motorway junction
+                            self.painter.setPen(blueCrossingPen)
+
+                        self.painter.drawPoint(x, y)
+                    if direction!=None:
+                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                        if crossingType==2:
+                            if "exit:" in crossingInfo:
+                                self.painter.drawPixmap(x, y, self.turnRightImage)
+                        else:
+                            if direction==1:
+                                #right
+                                self.painter.drawPixmap(x, y, self.turnRightImage)
+                            elif direction==-1:
+                                #left
+                                self.painter.drawPixmap(x, y, self.turnLeftImage)
+                                
+                elif start:
+                    startNode.append((lastX, lastY))
+                    lastX=0
+                    lastY=0
+                elif end:
+                    lastX, lastY=startNode.pop()
+            if len(startNode)!=0:
+                print("unbalanced start-end nodes %s"%str(startNode))
             
     def minimumSizeHint(self):
         return QSize(minWidth, minHeight)
@@ -1242,20 +1241,19 @@ class QtOSMWidget(QWidget):
             if routingPointList==None:
                 return
             
+            self.currentRoute=OSMRoute("current", routingPointList)
             # make sure all are resolved because we cannot access
             # the db from the thread
-            for point in routingPointList:
-                if point.getSource()==0:
-                    point.resolveFromPos(osmParserData)
+            self.currentRoute.resolveRoutingPoints(osmParserData)
 
             self.routeCalculationThread=OSMRouteCalcWorker(self)
-            self.connect(self.routeCalculationThread, SIGNAL("updateEdgeList(PyQt_PyObject, int)"), self.routeCalculationDone)
+            self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
             self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
             self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
             self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
 
             if not self.routeCalculationThread.isRunning():
-                self.routeCalculationThread.setup(routingPointList)
+                self.routeCalculationThread.setup(self.currentRoute)
 
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -1263,10 +1261,10 @@ class QtOSMWidget(QWidget):
     def stopProgress(self):
         self.emit(SIGNAL("stopProgress()"))
 
-    def routeCalculationDone(self, edgeList, pathCost):
-        if edgeList!=None:
-            print("cost=%f"%(pathCost))
-            trackList, length=osmParserData.createTrackForEdgeList(edgeList, self.getCompleteRoutingPoints())
+    def routeCalculationDone(self):
+        if self.currentRoute.getEdgeList()!=None:
+            print("cost=%f"%(self.currentRoute.getPathCost()))
+            trackList, length=self.currentRoute.printEdgeList(osmParserData)
             print("len=%d"%(length))
             self.setTrack(trackList, True)
         
@@ -1333,6 +1331,9 @@ class QtOSMWidget(QWidget):
 #        for point in self.wayPoints:
 #            point.saveToConfig(config, section, "way%d"%(i))
 #            i=i+1
+        if self.currentRoute!=None:
+            self.currentRoute.saveToConfig(config, section, "route0")
+
         
     def setStartPoint(self, point):
         self.startPoint=point
@@ -2263,6 +2264,7 @@ class OSMWidget(QWidget):
             point.saveToConfig(config, section, "favorite%d"%(i))
             i=i+1
         
+            
         self.mapWidgetQt.saveConfig(config)
         
     def updateDownloadThreadState(self, state):

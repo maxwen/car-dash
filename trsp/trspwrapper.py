@@ -44,7 +44,7 @@ class TrspWrapper():
         ret=lib_routing.compute_shortest_path(file, sqlEdge, startNodeC, endNodeC, sqlRestriction, byref(pathPointer), byref(path_count))
         if ret>=0:
             num=path_count.value
-            if pathPointer[-1].edge_id==-1:
+            if pathPointer[num-1].edge_id==-1:
                 num=num-1
             edgeList=list()
             cost=0
