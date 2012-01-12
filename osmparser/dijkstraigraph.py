@@ -45,7 +45,9 @@ class DijkstraWrapperIgraph():
         source=x[3]
         target=x[4]
         maxspeed=x[5]
-        return (edgeId, length, oneway, source, target, maxspeed)
+        cost=x[6]
+        reverseCost=x[7]
+        return (edgeId, length, oneway, source, target, maxspeed, cost, reverseCost)
 
     def fillEdges(self):
 #        edgeList=list()

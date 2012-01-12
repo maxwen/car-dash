@@ -1231,7 +1231,6 @@ class QtOSMWidget(QWidget):
                     print("%s %s"%(name, ref))
 #                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
                     print(osmParserData.getEdgeEntryForWayId(wayId))
-                    print(osmParserData.getEdgeEntryForWayIdShootingStar(wayId))
 
                     self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForIdCountry(country)))
                     if self.gpsPoint!=None:
