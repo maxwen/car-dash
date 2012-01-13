@@ -17,11 +17,13 @@ from osmparser.osmboarderutils import OSMBoarderUtils
 from trsp.trspwrapper import TrspWrapper
 
 class OSMRoute():
-    def __init__(self, name, routingPointList):
+    def __init__(self, name="", routingPointList=None):
         self.name=name
         self.routingPointList=routingPointList
         self.edgeList=None
-        self.pathCost=None
+        self.pathCost=0.0
+        self.length=0.0
+        self.trackList=None
         
     def getName(self):
         return self.name
@@ -39,17 +41,27 @@ class OSMRoute():
     def getPathCost(self):
         return self.pathCost
     
-    def printEdgeList(self, osmParserData):
+    def getLength(self):
+        return self.length
+    
+    def getTrackList(self):
+        return self.trackList
+    
+    def printRoute(self, osmParserData):
         if self.edgeList!=None:
-            return osmParserData.printEdgeList(self)
-    
-        return None, None
-    
+            self.trackList, self.length=osmParserData.printRoute(self)
+        
     def resolveRoutingPoints(self, osmParserData):
         for point in self.routingPointList:
             if point.getSource()==0:
                 point.resolveFromPos(osmParserData)
 
+    def routingPointValid(self):
+        for point in self.routingPointList:
+            if point.getSource()==0:
+                return False
+        return True
+    
     def saveToConfig(self, config, section, name):    
         routeString="%s:"%(self.name)
         for point in self.routingPointList:
@@ -59,7 +71,28 @@ class OSMRoute():
         config.set(section, name, "%s"%(routeString))
 
     def readFromConfig(self, value):
-        None
+        self.routingPointList=list()
+        parts=value.split(":")
+        self.name=parts[0]
+        for i in range(1, len(parts)-1, 4):
+            name=parts[i]
+            pointType=parts[i+1]
+            lat=parts[i+2]
+            lon=parts[i+3]
+            point=OSMRoutingPoint()
+            point.readFromConfig("%s:%s:%s:%s"%(name, pointType, lat, lon))
+            self.routingPointList.append(point)
+    
+    def __repr__(self):
+        routeString="%s:"%(self.name)
+        for point in self.routingPointList:
+            routeString=routeString+point.toString()+":"
+        
+        routeString=routeString[:-1]
+        return routeString
+
+        return "%s:%d:%f:%f"%(self.name, self.type, self.lat, self.lon)
+
         
 class OSMRoutingPoint():
     def __init__(self, name="", pointType=0, lat=0.0, lon=0.0):
@@ -980,6 +1013,8 @@ class OSMParserData():
                         continue
                     if tags["access"]=="destination":
                         continue
+                    if tags["access"]=="permissive":
+                        continue
 
                 
                 if "area" in tags:
@@ -1458,8 +1493,7 @@ class OSMParserData():
         self.latFrom=latFrom
         self.lonFrom=lonFrom
 
-           
-    def printEdgeList(self, route):
+    def printRoute(self, route):
         edgeList=route.getEdgeList()
         routingPointList=route.getRoutingPointList()
         
@@ -1779,8 +1813,9 @@ class OSMParserData():
 
                         cost=int(distance / (maxspeed/3.6))
                         
-                        if ref in doneRefsCrossingType:
-                            cost=cost+30
+                        # TODO streettype dependend costs
+#                        if ref in doneRefsCrossingType:
+#                            cost=cost+30
                             
                         if oneway:
                             reverseCost=100000
@@ -1815,10 +1850,11 @@ class OSMParserData():
                     startRef=refNodeList[0]
                     endRef=refNodeList[-1]
                     
+                    # TODO streettype dependend costs
                     cost=int(distance / (maxspeed/3.6))
                     
-                    if ref in doneRefsCrossingType:
-                        cost=cost+30
+#                    if ref in doneRefsCrossingType:
+#                        cost=cost+30
                     
                     if oneway:
                         reverseCost=100000

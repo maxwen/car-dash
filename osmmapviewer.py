@@ -282,7 +282,6 @@ class QtOSMWidget(QWidget):
         self.tileHome=defaultTileHome
         self.tileServer=defaultTileServer
         
-        self.track=None
         self.trackStartLat=0.0
         self.trackStartLon=0.0
         self.lastMouseMoveX=0
@@ -301,6 +300,9 @@ class QtOSMWidget(QWidget):
         
         self.turnRightImage=QPixmap("images/turn-right-icon.png")
         self.turnLeftImage=QPixmap("images/turn-left-icon.png")
+        
+        self.currentRoute=None
+        self.routeList=list()
         
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
@@ -325,11 +327,6 @@ class QtOSMWidget(QWidget):
     
     def setTileServer(self, value):
         self.tileServer=value
-
-    def setTrack(self, track, update):
-        self.track=track
-        if update:
-            self.update()
 
     def init(self):
         self.setMinimumWidth(minWidth)
@@ -602,7 +599,7 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
-        self.showTrack()
+        self.displayRoute(self.currentRoute)
         self.showControlOverlay()
         self.showRoutingPoints()
         self.painter.end()
@@ -659,7 +656,7 @@ class QtOSMWidget(QWidget):
 #        self.painter.rotate(90)
 #        self.painter.translate(-TILESIZE/2,-TILESIZE/2);
     
-    def showTrack(self):
+    def displayRoute(self, route):
 #        There are 20 predefined QColors: Qt::white, Qt::black, Qt::red, 
 #        Qt::darkRed, Qt::green, Qt::darkGreen, Qt::blue, Qt::darkBlue, 
 #        Qt::cyan, Qt::darkCyan, Qt::magenta, Qt::darkMagenta, Qt::yellow, 
@@ -669,7 +666,11 @@ class QtOSMWidget(QWidget):
 #        Qt::SolidLine    Qt::DashLine    Qt::DotLine        
 #        Qt::DashDotLine    Qt::DashDotDotLine    Qt::CustomDashLine
 
-        if self.track!=None:
+        if route!=None:
+            # before calculation is done
+            if route.getTrackList()==None:
+                return
+            
             redPen=QPen()
             redPen.setColor(Qt.red)
             redPen.setWidth(4)
@@ -728,7 +729,7 @@ class QtOSMWidget(QWidget):
 #                    print("no track found for %d"%(wayid))
 #                    continue
             
-            for item in self.track:
+            for item in route.getTrackList():
                 if "lat" in item:
                     lat=item["lat"]
                 if "lon" in item:
@@ -1066,14 +1067,7 @@ class QtOSMWidget(QWidget):
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
         editRoutingPointAction.setDisabled(self.getCompleteRoutingPoints()==None)
         
-        showRouteDisabled=not self.osmWidget.dbLoaded or (self.routeCalculationThread!=None and self.routeCalculationThread.isRunning())
-        if self.gpsPoint!=None:
-            if self.endPoint==None:
-                showRouteDisabled=True
-        else:
-            if self.startPoint==None or self.endPoint==None:
-                showRouteDisabled=True
-                
+        showRouteDisabled=not self.osmWidget.dbLoaded or (self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or self.getCompleteRoutingPoints()==None
         showRouteAction.setDisabled(showRouteDisabled)
         
         action = menu.exec_(self.mapToGlobal(event.pos()))
@@ -1087,7 +1081,7 @@ class QtOSMWidget(QWidget):
         elif action==setWayPointAction:
             self.addRoutingPoint(2)
         elif action==showRouteAction:
-            self.showRouteForRoutingPoints()
+            self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
         elif action==clearAllRoutingPointsAction:
             self.startPoint=None
             self.endPoint=None
@@ -1117,22 +1111,24 @@ class QtOSMWidget(QWidget):
         routingPointList.append(self.endPoint)
         return routingPointList
         
+    def setRoutingPointsFromList(self, routingPointList):
+        self.setStartPoint(routingPointList[0])            
+        self.setEndPoint(routingPointList[-1])            
+        self.wayPoints.clear()
+        if len(routingPointList)>2:
+            for point in routingPointList[1:-1]:
+                self.setWayPoint(point)
+
     def editRoutingPoints(self):
         routingPointList=self.getCompleteRoutingPoints()
         if routingPointList==None:
             return
         
-        routeDialog=OSMRouteDialog(self, routingPointList)
+        routeDialog=OSMRouteDialog(self, routingPointList, self.routeList)
         result=routeDialog.exec()
         if result==QDialog.Accepted:
-            routingPointList=routeDialog.getResult()
-            self.setStartPoint(routingPointList[0])            
-            self.setEndPoint(routingPointList[-1])            
-            self.wayPoints.clear()
-            if len(routingPointList)>2:
-                for point in routingPointList[1:-1]:
-                    self.setWayPoint(point)
-                
+            routingPointList, self.routeList=routeDialog.getResult()
+            self.setRoutingPointsFromList(routingPointList)
 
     def getSelectedRoutingPoint(self, mousePos):
 #        (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
@@ -1235,16 +1231,21 @@ class QtOSMWidget(QWidget):
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
                             
-    def showRouteForRoutingPoints(self):
+#    def setCurrentRoute(self, route):
+#        self.setRoutingPointsFromList(route.getRoutingPointList())
+#        self.update()
+#        
+#        self.showRouteForRoutingPoints(route.getRoutingPointList())
+        
+    def showRouteForRoutingPoints(self, routingPointList):
         if self.osmWidget.dbLoaded==True:         
-            routingPointList=self.getCompleteRoutingPoints()
-            if routingPointList==None:
-                return
-            
             self.currentRoute=OSMRoute("current", routingPointList)
             # make sure all are resolved because we cannot access
             # the db from the thread
             self.currentRoute.resolveRoutingPoints(osmParserData)
+            if not self.currentRoute.routingPointValid():
+                print("route has invalid routing points")
+                return
 
             self.routeCalculationThread=OSMRouteCalcWorker(self)
             self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
@@ -1263,10 +1264,10 @@ class QtOSMWidget(QWidget):
 
     def routeCalculationDone(self):
         if self.currentRoute.getEdgeList()!=None:
+            self.currentRoute.printRoute(osmParserData)
             print("cost=%f"%(self.currentRoute.getPathCost()))
-            trackList, length=self.currentRoute.printEdgeList(osmParserData)
-            print("len=%d"%(length))
-            self.setTrack(trackList, True)
+            print("len=%d"%(self.currentRoute.getLength()))
+            self.update()
         
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
@@ -1289,7 +1290,6 @@ class QtOSMWidget(QWidget):
          
     def loadConfig(self, config):
         section="routing"
-
         if config.hasSection(section):
             for name, value in config.items(section):
                 if name[:5]=="point":
@@ -1301,14 +1301,16 @@ class QtOSMWidget(QWidget):
                         self.endPoint=point
                     if point.getType()==2:
                         self.wayPoints.append(point)
-#                if name=="end":
-#                    self.endPoint=OSMRoutingPoint()
-#                    self.endPoint.readFromConfig(value)
-#                if name[:3]=="way":
-#                    wayPoint=OSMRoutingPoint()
-#                    wayPoint.readFromConfig(value)
-#                    self.wayPoints.append(wayPoint)
                     
+        section="route"
+        self.routeList=list()
+        if config.hasSection(section):
+            for name, value in config.items(section):
+                if name[:5]=="route":
+                    route=OSMRoute()
+                    route.readFromConfig(value)
+                    self.routeList.append(route)
+
     def saveConfig(self, config):
         section="routing"
         config.removeSection(section)
@@ -1320,19 +1322,14 @@ class QtOSMWidget(QWidget):
             for point in routingPointList:
                 point.saveToConfig(config, section, "point%d"%(i))
                 i=i+1
-            
-#        if self.startPoint!=None:
-#            self.startPoint.saveToConfig(config, section, "start")
-#            
-#        if self.endPoint!=None:
-#            self.endPoint.saveToConfig(config, section, "end")
-#        
-#        i=0
-#        for point in self.wayPoints:
-#            point.saveToConfig(config, section, "way%d"%(i))
-#            i=i+1
-        if self.currentRoute!=None:
-            self.currentRoute.saveToConfig(config, section, "route0")
+        
+        section="route"
+        config.removeSection(section)
+        config.addSection(section)
+        i=0
+        for route in self.routeList:
+            route.saveToConfig(config, section, "route%d"%(i))
+            i=i+1
 
         
     def setStartPoint(self, point):
@@ -1803,6 +1800,182 @@ class OSMFavoritesDialog(QDialog):
             self.filteredFavoriteList=self.favoriteList
         
         self.favoriteViewModel.update(self.filteredFavoriteList)
+        
+#----------------------------
+
+class OSMRouteListTableModel(QAbstractTableModel):
+    def __init__(self, parent):
+        QAbstractTableModel.__init__(self, parent)
+        
+    def rowCount(self, parent): 
+        return len(self.routeList)
+    
+    def columnCount(self, parent): 
+        return 1
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.routeList):
+            return ""
+        route=self.routeList[index.row()]
+        name=route.getName()
+        
+        if index.column()==0:
+            return name
+       
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Name"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+   
+    def update(self, routeList):
+        self.routeList=routeList
+        self.reset()
+
+#--------------------------------------------------        
+class OSMRouteListDialog(QDialog):
+    def __init__(self, parent, routeList):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+        self.routeList=list()
+        self.routeList.extend(routeList)
+        sorted(self.routeList, key=self.nameSort)
+        self.filteredRouteList=self.routeList
+
+        self.selectedRoute=None
+        self.initUI()
+         
+    def nameSort(self, item):
+        return item.getName()
+   
+    def getResult(self):
+        return (self.selectedRoute, self.routeList)
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        
+        self.filterEdit=QLineEdit(self)
+        self.filterEdit.setToolTip('Name Filter')
+        self.filterEdit.returnPressed.connect(self._applyFilter)
+        self.filterEdit.textChanged.connect(self._applyFilter)
+        top.addWidget(self.filterEdit)
+        
+        self.routeView=QTableView(self)
+        top.addWidget(self.routeView)
+        
+        self.routeViewModel=OSMRouteListTableModel(self)
+        self.routeViewModel.update(self.filteredRouteList)
+        self.routeView.setModel(self.routeViewModel)
+        header=QHeaderView(Qt.Horizontal, self.routeView)
+        header.setStretchLastSection(True)
+        self.routeView.setHorizontalHeader(header)
+        self.routeView.setColumnWidth(0, 300)
+
+#        actionButtons=QHBoxLayout()
+#        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+#        
+#        self.deleteRouteButton=QPushButton("Delete", self)
+#        self.deleteRouteButton.clicked.connect(self._deleteRoute)
+#        self.deleteRouteButton.setEnabled(False)
+#        actionButtons.addWidget(self.deleteRouteButton)
+#
+#        top.addLayout(actionButtons)
+        
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        style=QCommonStyle()
+
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        self.cancelButton.setDefault(True)
+        buttons.addWidget(self.cancelButton)
+        
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setEnabled(False)
+
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+
+        top.addLayout(buttons)
+
+        self.connect(self.routeView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+
+        self.setLayout(top)
+        self.setWindowTitle('Routes')
+        self.setGeometry(0, 0, 400, 400)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.routeView.selectionModel()
+        current = selmodel.currentIndex()
+#        self.deleteRouteButton.setEnabled(current.isValid())
+        self.okButton.setEnabled(current.isValid())
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        selmodel = self.routeView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedRoute=self.filteredRouteList[current.row()]
+
+        self.done(QDialog.Accepted)
+
+#    @pyqtSlot()
+#    def _deleteRoute(self):
+#        selmodel = self.routeView.selectionModel()
+#        current = selmodel.currentIndex()
+#        if current.isValid():
+#            selectedRoute=self.filteredRouteList[current.row()]
+#            self.routeList.remove(selectedRoute)
+#            self._applyFilter()
+        
+    @pyqtSlot()
+    def _clearTableSelection(self):
+        self.routeView.clearSelection()
+#        self.deleteRouteButton.setEnabled(False)
+        self.okButton.setEnabled(False)
+
+    @pyqtSlot()
+    def _applyFilter(self):
+        self._clearTableSelection()
+        self.filterValue=self.filterEdit.text()
+        if len(self.filterValue)!=0:
+            if self.filterValue[-1]!="*":
+                self.filterValue=self.filterValue+"*"
+            self.filteredRouteList=list()
+            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for route in self.routeList:
+                name=route.getName()
+                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+                    continue
+                self.filteredRouteList.append(route)
+        else:
+            self.filteredRouteList=self.routeList
+        
+        self.routeViewModel.update(self.filteredRouteList)
 #----------------------------
 class OSMRouteTableModel(QAbstractTableModel):
     def __init__(self, parent):
@@ -1843,7 +2016,7 @@ class OSMRouteTableModel(QAbstractTableModel):
         self.reset()
         
 class OSMRouteDialog(QDialog):
-    def __init__(self, parent, routingPointList):
+    def __init__(self, parent, routingPointList, routeList):
         QDialog.__init__(self, parent) 
         font = self.font()
         font.setPointSize(14)
@@ -1852,11 +2025,12 @@ class OSMRouteDialog(QDialog):
         self.routingPointList=list()
         self.routingPointList.extend(routingPointList)
         self.selectedRoutePoint=None
-
+        self.routeList=list()
+        self.routeList.extend(routeList)
         self.initUI()
       
     def getResult(self):
-        return self.routingPointList
+        return self.routingPointList, self.routeList
     
     def initUI(self):
         top=QVBoxLayout()
@@ -1902,6 +2076,21 @@ class OSMRouteDialog(QDialog):
 
         top.addLayout(editButtons)
 
+        routeButtons=QHBoxLayout()
+        routeButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+
+        style=QCommonStyle()
+
+        self.loadRoutButton=QPushButton("Load...", self)
+        self.loadRoutButton.clicked.connect(self._loadRoute)
+        routeButtons.addWidget(self.loadRoutButton)
+        
+        self.saveRouteButton=QPushButton("Save...", self)
+        self.saveRouteButton.clicked.connect(self._saveRoute)
+        routeButtons.addWidget(self.saveRouteButton)
+
+        top.addLayout(routeButtons)
+
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1924,6 +2113,33 @@ class OSMRouteDialog(QDialog):
         self.setWindowTitle('Routing Point')
         self.setGeometry(0, 0, 400, 400)
         
+    @pyqtSlot()
+    def _saveRoute(self):
+        routeNameDialog=QInputDialog(self)
+        routeNameDialog.setLabelText("Route Name")
+        routeNameDialog.setWindowTitle("Save Route")
+        font = self.font()
+        font.setPointSize(14)
+        routeNameDialog.setFont(font)
+
+        result=routeNameDialog.exec()
+        if result==QDialog.Accepted:
+            name=routeNameDialog.textValue()
+            route=OSMRoute(name, self.routingPointList)
+            self.routeList.append(route)
+        
+    @pyqtSlot()
+    def _loadRoute(self):
+        loadRouteDialog=OSMRouteListDialog(self, self.routeList)
+        result=loadRouteDialog.exec()
+        if result==QDialog.Accepted:
+            route, routeList=loadRouteDialog.getResult()
+            if route!=None:
+                self.routeList=routeList
+                self.routingPointList=route.getRoutingPointList()
+                self.routeViewModel.update(self.routingPointList)
+                self._selectionChanged()
+       
     @pyqtSlot()
     def _revertRoute(self):
         self.routingPointList.reverse()
@@ -2264,7 +2480,6 @@ class OSMWidget(QWidget):
             point.saveToConfig(config, section, "favorite%d"%(i))
             i=i+1
         
-            
         self.mapWidgetQt.saveConfig(config)
         
     def updateDownloadThreadState(self, state):
