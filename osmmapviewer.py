@@ -15,7 +15,7 @@ from collections import deque
 import fnmatch
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmutils import OSMUtils
 from config import Config
@@ -1050,13 +1050,15 @@ class QtOSMWidget(QWidget):
         clearRoutingPointAction=QAction("Clear Routing Point", self)
         editRoutingPointAction=QAction("Edit Current Route", self)
         showRouteAction=QAction("Show Route", self)
-
+        showPosAction=QAction("Show Position", self)
+        
         menu.addAction(forceDownloadAction)
         menu.addSeparator()
         menu.addAction(setStartPointAction)
         menu.addAction(setEndPointAction)
         menu.addAction(setWayPointAction)
         menu.addAction(addFavoriteAction)
+        menu.addAction(showPosAction)
         menu.addSeparator()
         menu.addAction(clearAllRoutingPointsAction)
         menu.addAction(clearRoutingPointAction)
@@ -1069,6 +1071,7 @@ class QtOSMWidget(QWidget):
         setEndPointAction.setDisabled(addPointDisabled)
         setWayPointAction.setDisabled(addPointDisabled)
         addFavoriteAction.setDisabled(addPointDisabled)
+        showPosAction.setDisabled(addPointDisabled)
         clearRoutingPointAction.setDisabled(self.getSelectedRoutingPoint(self.mousePos)==None)
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
         editRoutingPointAction.setDisabled(self.getCompleteRoutingPoints()==None)
@@ -1098,10 +1101,24 @@ class QtOSMWidget(QWidget):
             self.removeRoutingPoint(self.mousePos)
         elif action==editRoutingPointAction:
             self.editRoutingPoints()
+        elif action==showPosAction:
+            self.showPosOnMap()
             
         self.mousePressed=False
         self.moving=False
         
+    def showPosOnMap(self):
+        posDialog=OSMPositionDialog(self)
+        result=posDialog.exec()
+        if result==QDialog.Accepted:
+            lat, lon=posDialog.getResult()
+
+            if self.map_zoom<15:
+                self.osm_gps_map_set_zoom(15)
+    
+            self.osm_center_map_to(self.osmutils.deg2rad(lat),
+                    self.osmutils.deg2rad(lon))
+
     def getCompleteRoutingPoints(self):
         if self.startPoint==None and self.gpsPoint==None:
             return None
@@ -1216,6 +1233,20 @@ class QtOSMWidget(QWidget):
             else:
                 print("point not usable for routing")
         
+    def showRoutingPointOnMap(self, routingPoint):
+        if self.map_zoom<15:
+            self.osm_gps_map_set_zoom(15)
+
+        self.osm_center_map_to(self.osmutils.deg2rad(routingPoint.getLat()),
+                self.osmutils.deg2rad(routingPoint.getLon()))
+
+    def showPosPointOnMap(self, lat, lon):
+        if self.map_zoom<15:
+            self.osm_gps_map_set_zoom(15)
+
+        self.osm_center_map_to(self.osmutils.deg2rad(lat),
+                self.osmutils.deg2rad(lon))
+
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
             wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
@@ -1271,8 +1302,11 @@ class QtOSMWidget(QWidget):
     def routeCalculationDone(self):
         if self.currentRoute.getEdgeList()!=None:
             self.currentRoute.printRoute(osmParserData)
+#            print("edgeList=%s"%(self.currentRoute.getEdgeList()))
             print("cost=%f"%(self.currentRoute.getPathCost()))
             print("len=%d"%(self.currentRoute.getLength()))
+            # show start pos at zoom level 15
+            self.showRoutingPointOnMap(self.startPoint)
             self.update()
         
     def showTrackOnMousePos(self, x, y):
@@ -2341,6 +2375,101 @@ class OSMRouteDialog(QDialog):
         self.revertPointsButton.setEnabled(False)
         
 #---------------------
+class OSMPositionValidator(QValidator):
+    def __init__(self, parent):
+        QValidator.__init__(self, parent) 
+#        print(help(QValidator.validate))
+        
+    def validate(self, input, pos):
+        if len(input)==0:
+            return (QValidator.Acceptable, input, pos)
+        try:
+            f=float(input)
+        except ValueError:
+            return (QValidator.Invalid, input, pos)
+        return (QValidator.Acceptable, input, pos)
+    
+class OSMPositionDialog(QDialog):
+    def __init__(self, parent):
+        QDialog.__init__(self, parent) 
+        self.lat=0.0
+        self.lon=0.0
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+        self.initUI()
+
+    def getResult(self):
+        return (self.lat, self.lon)
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+            
+        style=QCommonStyle()
+
+        fields=QFormLayout()
+        fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
+
+        label=QLabel(self)
+        label.setText("Latitude:")
+        
+        self.validator=OSMPositionValidator(self)
+        self.latField=QLineEdit(self)
+        self.latField.setToolTip('Latitude')
+        self.latField.textChanged.connect(self._updateEnablement)
+        self.latField.setValidator(self.validator)
+
+        fields.addRow(label, self.latField)
+
+        label=QLabel(self)
+        label.setText("Longitude:")
+
+        self.lonField=QLineEdit(self)
+        self.lonField.setToolTip('Latitude')
+        self.lonField.textChanged.connect(self._updateEnablement)
+        self.lonField.setValidator(self.validator)
+
+        fields.addRow(label, self.lonField)
+        
+        top.addLayout(fields)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDisabled(True)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+        top.addLayout(buttons)
+                
+        self.setLayout(top)
+        self.setWindowTitle('Shiow Position')
+        self.setGeometry(0, 0, 400, 100)
+
+    @pyqtSlot()
+    def _updateEnablement(self):
+        self.okButton.setDisabled(len(self.latField.text())==0 or len(self.lonField.text())==0)
+   
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.lat=float(self.latField.text())
+        self.lon=float(self.lonField.text())
+        self.done(QDialog.Accepted)
+
+#---------------------
 
 class OSMWidget(QWidget):
     def __init__(self, parent, app):
@@ -2657,8 +2786,7 @@ class OSMWidget(QWidget):
                 routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
             elif pointType==-1:
-                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(lat),
-                               self.mapWidgetQt.osmutils.deg2rad(lon))
+                self.mapWidgetQt.showPosPointOnMap(lat, lon)
   
     @pyqtSlot()
     def _showFavorites(self):
@@ -2676,8 +2804,7 @@ class OSMWidget(QWidget):
                 routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getLat(), point.getLon())  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
             elif pointType==-1:
-                self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(point.getLat()),
-                               self.mapWidgetQt.osmutils.deg2rad(point.getLon()))
+                self.mapWidgetQt.showRoutingPointOnMap(point)
 
 
     @pyqtSlot()

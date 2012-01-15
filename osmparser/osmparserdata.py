@@ -218,6 +218,8 @@ class OSMParserData():
         self.wayCount=0
         self.wayRestricitionList=list()
         self.refIdDB=0
+        self.nodes = dict()
+        self.relations = dict()
         
     def initCountryData(self):
         self.crossingId=0
@@ -576,18 +578,24 @@ class OSMParserData():
         self.crossingId=self.crossingId+1
 
     def addToEdgeTable(self, startRef, endRef, length, wayId, refList, cost, reverseCost):
-        resultList=self.getEdgeEntryForStartAndEndPoint(startRef, endRef)
+        resultList=self.getEdgeEntryForStartAndEndPointAndWayId(startRef, endRef, wayId)
         if len(resultList)==0:
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, wayId, 0, 0, pickle.dumps(refList), cost, reverseCost))
             self.edgeId=self.edgeId+1
-#        else:
-#            print("edge with startRef %d and endRef %d already exists in DB"%(startRef, endRef))
+        else:
+            print("addToEdgeTable: edge for wayId %d with startRef %d and endRef %d already exists in DB"%(wayId, startRef, endRef))
             
     def clearEdgeTable(self):
         self.cursorEdge.execute('DROP TABLE edgeTable')
         self.edgeId=1
         self.createEdgeTable()
-#        
+    
+    def clearCrosssingsTable(self, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('DROP table crossingTable')
+        self.crossingId=0
+        self.createCrossingsTable()
+                
     def getLenOfEdgeTable(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
@@ -598,15 +606,17 @@ class OSMParserData():
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, wayId, sourceId, target, pickle.dumps(refList), cost, reverseCost))
+#        self.cursorEdge.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, wayId, sourceId, target, pickle.dumps(refList), cost, reverseCost))
+        self.cursorEdge.execute('UPDATE edgeTable SET source=%d WHERE id==%d'%(sourceId, edgeId))
 
     def updateTargetOfEdge(self, edgeId, targetId):
         existingEdgeId, startRef, endRef, length, wayId, source, _, refList, cost, reverseCost=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, wayId, source, targetId, pickle.dumps(refList), cost, reverseCost))     
-      
+#        self.cursorEdge.execute('REPLACE INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (edgeId, startRef, endRef, length, wayId, source, targetId, pickle.dumps(refList), cost, reverseCost))     
+        self.cursorEdge.execute('UPDATE edgeTable SET target=%d WHERE id==%d'%(targetId, edgeId))
+     
     def clearSourceAndTargetOfEdges(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
@@ -669,8 +679,8 @@ class OSMParserData():
             resultList.append(edge)
         return resultList
     
-    def getEdgeEntryForStartAndEndPoint(self, startRef, endRef):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef==%d AND endRef==%d'%(startRef, endRef))
+    def getEdgeEntryForStartAndEndPointAndWayId(self, startRef, endRef, wayId):
+        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef==%d AND endRef==%d AND wayId==%d'%(startRef, endRef, wayId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -795,7 +805,7 @@ class OSMParserData():
             return None, None, (None, None), None
 
         nodes=self.getNearNodes(actlat, actlon, country)
-        minDistance=1000
+        minDistance=100
         minWayId=0
         usedRefId=0
         if len(nodes)==0:
@@ -875,7 +885,7 @@ class OSMParserData():
         for x in allentries:
             refGid, refId, lat1, lon1, wayId=self.refFromDB(x)
             distance=self.osmutils.distance(lat, lon, lat1, lon1)
-            if distance>1000:
+            if distance>100:
                 continue
             nodes.append((refId, lat1, lon1, wayId))
 
@@ -1070,7 +1080,7 @@ class OSMParserData():
 
             if "highway" in tags:
                 streetType=tags["highway"]
-                if streetType=="services" or streetType=="bridleway" or streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway" or streetType=="service" or streetType=="living_street" or streetType=="steps" or streetType=="platform" or streetType=="crossing" or streetType=="raceway" or streetType=="construction":
+                if streetType=="services" or streetType=="bridleway" or streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway" or streetType=="service" or streetType=="living_street" or streetType=="steps" or streetType=="platform" or streetType=="crossing" or streetType=="raceway" or streetType=="construction" or streetType=="via_ferrata":
                     continue
                 
 #                if streetType=="unclassified":
@@ -1153,6 +1163,7 @@ class OSMParserData():
                         fromWayId=0
                         toWayId=0
                         viaNode=0
+                        viaWay=list()
     
                         for part in ways:
                             roleId=int(part[0])
@@ -1173,6 +1184,7 @@ class OSMParserData():
                                     viaNode=roleId
                                 elif isWay:
                                     print("relation %d with via type way %s"%(int(osmid), str(ways)))
+                                    viaWay.append(roleId)
                         if fromWayId!=0 and toWayId!=0:
                             restrictionEntry=dict()
                             restrictionEntry["type"]=restrictionType
@@ -1180,7 +1192,9 @@ class OSMParserData():
                             restrictionEntry["from"]=fromWayId
                             if viaNode!=None:
                                 restrictionEntry["viaNode"]=viaNode
-                            
+                            elif len(viaWay)!=0:
+                                restrictionEntry["viaWay"]=viaWay
+    
                             self.wayRestricitionList.append(restrictionEntry)
                         
                 if tags["type"]=="multipolygon":
@@ -1285,27 +1299,35 @@ class OSMParserData():
     
     def findWayWithRefInAllWays(self, refId, fromWayId):
         possibleWays=list()
-        refId, country=self.getCountryOfRef(refId)
+        _, country=self.getCountryOfRef(refId)
         if country==None:
+#            print("create crossings: skip crossing for wayId %d at refId %d it is in country==None"%(fromWayId, refId))
             return possibleWays
         
         wayIdList=self.getWaysWithRefAndCountry(refId, country)
         if len(wayIdList)==0:
+            # no crossings at ref
             return possibleWays
         
         for wayid in wayIdList:
             if wayid==fromWayId:
                 continue
             
-            (wayEntryId, tags, refs, _)=self.getWayEntryForIdAndCountry(wayid, country)
-            if wayEntryId==None:
-#                print("no entry in way DB for way %d ref %d country %d"%(wayid, refId, country))
-                continue
-            
-            for wayRef in refs:
-                if wayRef==refId:
-                    possibleWays.append((wayid, tags, refs))
- 
+            resultList=self.getCountrysOfWay(wayid)
+            if len(resultList)!=0:
+                for result in resultList:
+                    _, wayid, storedCountry=result
+    
+                    (wayEntryId, tags, refs, _)=self.getWayEntryForIdAndCountry(wayid, storedCountry)
+                    if wayEntryId==None:
+                        print("create crossings: skip crossing for wayId %s at refId %d to wayId %d to country %d"%(fromWayId, refId, wayid, storedCountry))
+                        continue
+                    
+                    for wayRef in refs:
+                        if wayRef==refId:
+                            possibleWays.append((wayid, tags, refs))
+            else:
+                print("create crossings: skip crossing for wayId %d at refId %d to wayId %s since it is in an unknown country"%(fromWayId, refId, wayid))
         return possibleWays
     
     def findWayWithEndRef(self, ways, endRef, country):
@@ -1676,7 +1698,17 @@ class OSMParserData():
         self.setDBCursorForCountry(country)
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
+#        numWays=len(allWays)
+#        print(numWays, end=" ")
+#        parts=int(numWays/50)
+#        count=0
+
         for way in allWays:
+#            count=count+1
+#            if count>parts:
+#                print(".", end="")
+#                count=0
+                
             self.createEdgeTableEntriesForWay(self.wayFromDB(way), country)
 
     def createEdgeTableNodeEntries(self):
@@ -1684,7 +1716,16 @@ class OSMParserData():
 
         self.cursorEdge.execute('SELECT id FROM edgeTable')
         allEdges=self.cursorEdge.fetchall()
+#        numEdges=len(allEdges)
+#        print(numEdges, end=" ")
+#        parts=int(numEdges/50)
+#        count=0
         for edgeEntryId in allEdges:
+#            count=count+1
+#            if count>parts:
+#                print(".", end="")
+#                count=0
+                
             edgeId=edgeEntryId[0]
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSameStartEnriesFor(edge)
@@ -1807,7 +1848,7 @@ class OSMParserData():
                         if crossingRef==None:
                             continue
                         
-                        self.wayRestricitionList.remove(wayRestrictionEntry)
+#                        self.wayRestricitionList.remove(wayRestrictionEntry)
 
                         if restrictionType[:3]=="no_":
                             if not (toEdgeId, fromEdgeId) in toAddRules:
@@ -1829,9 +1870,9 @@ class OSMParserData():
         for toEdgeId, fromEdgeId in toAddRules:
             self.addToRestrictionTable(toEdgeId, str(fromEdgeId), 10000)
         
-        if len(self.wayRestricitionList)!=0:
-            print("could not resolve this way restricions")
-            print(self.wayRestricitionList)
+#        if len(self.wayRestricitionList)!=0:
+#            print("could not resolve this way restricions")
+#            print(self.wayRestricitionList)
             
     def createEdgeTableEntriesForWay(self, way, country):        
         wayId, tags, refs, distances=way
@@ -1841,6 +1882,9 @@ class OSMParserData():
         for result in resultList:
             _, wayId, refId, nextWayIdList=result
             nextWayDict[refId]=nextWayIdList
+
+        # crossings with traffic lights should increase cost for this edge
+        # motorway exists also
         
         oneway=0
         roundabout=0
@@ -1893,12 +1937,14 @@ class OSMParserData():
         doneRefsCrossingType=dict()
         for ref in refs:                  
             if ref in nextWayDict:                                                                        
-                # crossings with traffic lights should increase cost for this edge
                 nextWayIdList=nextWayDict[ref]
                 for _, crossingType, crossingInfo in nextWayIdList:
                     if crossingType==1:
                         # with traffic lights
                         doneRefsCrossingType[ref]=1
+                    elif crossingType==2:
+                        # motorway junction
+                        None
                 doneRefs.append(ref)
         
         refNodeList=list()
@@ -1912,9 +1958,9 @@ class OSMParserData():
                     startRef=refNodeList[0]
                     endRef=refNodeList[-1]
 
-                    cost=distance
+#                    cost=distance
                     
-#                    cost=int(distance / (maxspeed/3.6))
+                    cost=int(distance / (maxspeed/3.6))
                     
                     # TODO streettype dependend costs
 #                        if ref in doneRefsCrossingType:
@@ -1926,19 +1972,6 @@ class OSMParserData():
                         reverseCost=cost
                         
                     self.addToEdgeTable(startRef, endRef, distance, wayId, refNodeList, cost, reverseCost)
-
-#                    sRef, countryStart=self.getCountryOfRef(startRef)
-#                    eRef, countryEnd=self.getCountryOfRef(endRef)
-#                    
-#                    if sRef==None:
-#                        print("createEdgeTableEntriesForWay: skipping way %d ref %d not in DB"%(wayId, startRef))
-#                    elif eRef==None:
-#                        print("createEdgeTableEntriesForWay: skipping way %d ref %d not in DB"%(wayId, endRef))
-#                    else:
-#                        if countryStart!=None and countryEnd!=None:
-#                            self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList, maxspeed, countryStart, cost, reverseCost)
-#                        else:
-#                            print("createEdgeTableEntriesForWay: skipping way %d because country==None"%(wayId))
                         
                     refNodeList=list()
                     distance=0
@@ -1954,9 +1987,9 @@ class OSMParserData():
                 startRef=refNodeList[0]
                 endRef=refNodeList[-1]
                 
-                cost=distance
+#                cost=distance
                 # TODO streettype dependend costs
-#                cost=int(distance / (maxspeed/3.6))
+                cost=int(distance / (maxspeed/3.6))
                 
 #                    if ref in doneRefsCrossingType:
 #                        cost=cost+30
@@ -1968,24 +2001,20 @@ class OSMParserData():
                     
                 self.addToEdgeTable(startRef, endRef, distance, wayId, refNodeList, cost, reverseCost)
 
-#                sRef, countryStart=self.getCountryOfRef(startRef)
-#                eRef, countryEnd=self.getCountryOfRef(endRef)
-#                                    
-#                if sRef==None:
-#                    print("createEdgeTableEntriesForWay: skipping way %d ref %d not in DB"%(wayId, startRef))
-#                elif eRef==None:
-#                    print("createEdgeTableEntriesForWay: skipping way %d ref %d not in DB"%(wayId, endRef))
-#                else:
-#                    if countryStart!=None and countryEnd!=None:
-#                        self.addToEdgeTable(startRef, endRef, distance, oneway, wayId, refNodeList, maxspeed, countryStart, cost, reverseCost)
-#                    else:
-#                        print("createEdgeTableEntriesForWay: skipping way %d because country==None"%(wayId))
-
     def createCrossingEntries(self, country):
         self.setDBCursorForCountry(country)
         self.cursor.execute('SELECT * FROM wayTable')
         allWays=self.cursor.fetchall()
+#        numWays=len(allWays)
+#        print(len(allWays), end=' ')
+#        parts=int(numWays/50)
+#        count=0
         for way in allWays:
+#            count=count+1
+#            if count>parts:
+#                print(".", end="")
+#                count=0
+
             wayid, tags, refs, _=self.wayFromDB(way)    
              
 #            if not self.isWayInCountry(wayid, self.country):
@@ -2036,7 +2065,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data1")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -2097,7 +2126,7 @@ class OSMParserData():
             self.createEdgeTables()
         else:
             self.openEdgeDB()
-            self.edgeId=self.getLenOfEdgeTable()
+#            self.edgeId=self.getLenOfEdgeTable()
         
         createAdressDB=not self.adressDBExists()
         if createAdressDB:
@@ -2105,7 +2134,7 @@ class OSMParserData():
             self.createAdressTable()
         else:
             self.openAdressDB()
-            self.addressId=self.getLenOfAddressTable()
+#            self.addressId=self.getLenOfAddressTable()
         
         createGlobalCountryDB=not self.globalCountryDBExists()
         if createGlobalCountryDB:
@@ -2113,7 +2142,7 @@ class OSMParserData():
             self.createGlobalCountryTables()
         else:
             self.openGlobalCountryDB()
-            self.wayCount=self.getLenOfCountryWayTable()
+#            self.wayCount=self.getLenOfCountryWayTable()
 
         countryList=list()
         for country in self.osmList.keys():
@@ -2149,6 +2178,7 @@ class OSMParserData():
             self.country=country
             self.debugCountry=country
             self.setDBCursorForCountry(country)
+            print(self.osmList[country])
             
             print("create crossings")
             self.createCrossingEntries(country)
@@ -2368,6 +2398,46 @@ class OSMParserData():
 #                    if len(resultList)!=1:
 #                        print("edge: way %d ref %d not in refTable of country %d"%(wayId, ref, storedCountry))
                 
+    def recreateCrossings(self):
+        for country in self.osmList.keys():
+            self.country=country
+            self.debugCountry=country
+            print(self.osmList[country])
+
+            self.clearCrosssingsTable(country)
+            
+            print("recreate crossings")
+            self.createCrossingEntries(country)
+            print("end recreate crossings")
+                        
+            self.commitCountryDB(country)
+
+    def recreateEdges(self):
+        self.clearEdgeTable()
+        for country in self.osmList.keys():
+            self.country=country
+            self.debugCountry=country
+            print(self.osmList[country])
+
+            print("recreate edges")
+            self.createEdgeTableEntries(country)
+            print("end recreate edges")   
+                        
+        print("recreate edge nodes")
+        self.createEdgeTableNodeEntries()
+        print("end recreate edge nodes")
+
+        self.commitEdgeDB()
+                 
+    def recreateEdgeNodes(self):
+        self.clearSourceAndTargetOfEdges()
+                        
+        print("recreate edge nodes")
+        self.createEdgeTableNodeEntries()
+        print("end recreate edge nodes")
+
+        self.commitEdgeDB()  
+             
 def main(argv):    
     p = OSMParserData()
     
@@ -2384,10 +2454,13 @@ def main(argv):
 #    print(p.getEdgeEntryForEdgeId(6719))
 #    print(p.getEdgeEntryForEdgeId(2024))
 
-    p.test()
+#    p.test()
 #    p.testDBConistency()
 #    p.testRestrictionTable()
+#    p.recreateEdges()
+#    p.recreateEdgeNodes()
 
+#    p.recreateCrossings()
     p.closeAllDB()
 
 
