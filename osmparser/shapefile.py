@@ -1000,8 +1000,8 @@ def test1():
     i=0
     for record in sf.records():
 #        print(record)
-        if record[1]=="Österreich":
-            print(record)
+        if record[3]=="Deutschland  (Landmasse)":
+#            print(record)
             for point in sf.shapes()[i].points:
                 print("%f %f"%(point[0], point[1]))
         i=i+1

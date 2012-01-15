@@ -136,10 +136,16 @@ class OSMBoarderUtils():
         
         for poly in self.polyData:
             name=poly["name"]
+#            print(name)
             coords=poly["coords"]
             bbox=poly["bbox"]
+#            print(bbox)
             cData=poly["cData"]
             if self.pointInsideBBox(bbox, lat, lon):
+#                print("in bbox of %s"%(name))
+#                print(coords[0])
+#                print(coords[-1])
+#                print(len(coords))
 #                if self.pointInPoly(lon, lat, coords):
 #                    return name
         
@@ -219,13 +225,54 @@ def main(argv):
     end=time.time()
     print(end-start)
     
-    lat=47.8356243
+    lat=47.83561
     lon=12.9949712
     start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
     print(end-start)
+    
+    lat=47.3488298
+    lon=8.4264838
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
 
+    lat=48.0226404
+    lon=10.1370363
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
+    
+    lat=49.7012251
+    lon=9.7963434
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
+    
+    lat=49.7861356
+    lon=9.4873953
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
+    
+    lat=47.5052856
+    lon=12.1236208
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
+    
+    lat=47.4540099
+    lon=9.6595912
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
     
 if __name__ == "__main__":
     main(sys.argv)  

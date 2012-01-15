@@ -15,7 +15,7 @@ from collections import deque
 import fnmatch
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmutils import OSMUtils
 from config import Config
@@ -303,6 +303,12 @@ class QtOSMWidget(QWidget):
         
         self.currentRoute=None
         self.routeList=list()
+        
+    def getRouteList(self):
+        return self.routeList
+    
+    def setRouteList(self, routeList):
+        self.routeList=routeList
         
     def getTileHomeFullPath(self):
         if os.path.isabs(self.getTileHome()):
@@ -1111,6 +1117,9 @@ class QtOSMWidget(QWidget):
         routingPointList.append(self.endPoint)
         return routingPointList
         
+    def setRoute(self, route):
+        self.setRoutingPointsFromList(route.getRoutingPointList())
+        
     def setRoutingPointsFromList(self, routingPointList):
         self.setStartPoint(routingPointList[0])            
         self.setEndPoint(routingPointList[-1])            
@@ -1209,15 +1218,12 @@ class QtOSMWidget(QWidget):
         
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            polyCountry=osmParserData.countryNameOfPoint(actlat, actlon)
-            country=osmParserData.getCountryForPolyCountry(polyCountry)
-            print(country)
-
             wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
             if wayId==None:
-                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown")
+                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
             else:   
                 if wayId!=self.lastWayId:
+                    print(country)
 #                    self.lastWayId=wayId
                     print(osmParserData.getCountrysOfWay(wayId))
                     wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
@@ -1225,9 +1231,9 @@ class QtOSMWidget(QWidget):
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
                     print("%s %s"%(name, ref))
 #                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
-                    print(osmParserData.getEdgeEntryForWayId(wayId))
+#                    print(osmParserData.getEdgeIdOnPos(actlat, actlon))
 
-                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForIdCountry(country)))
+                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
                             
@@ -1355,7 +1361,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         return len(self.streetList)
     
     def columnCount(self, parent): 
-        return 5
+        return 2
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -1365,30 +1371,19 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
-            return osmParserData.getCountryNameForIdCountry(country)
-        elif index.column()==1:
-            return city
-        elif index.column()==2:
-            return postCode
-        elif index.column()==3:
             return streetName
-        elif index.column()==4:
+        elif index.column()==1:
             return houseNumber
+        
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
                 if col==0:
-                    return "Country"
-                elif col==1:
-                    return "City"
-                elif col==2:
-                    return "Postcode"
-                elif col==3:
                     return "Street"
-                elif col==4:
+                elif col==1:
                     return "Number"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
@@ -1399,6 +1394,47 @@ class OSMAdressTableModel(QAbstractTableModel):
         self.streetList=streetList
         self.reset()
         
+class OSMAdressTableModelCity(QAbstractTableModel):
+    def __init__(self, parent):
+        QAbstractTableModel.__init__(self, parent)
+        
+    def rowCount(self, parent): 
+        return len(self.cityList)
+    
+    def columnCount(self, parent): 
+        return 2
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.cityList):
+            return ""
+        city, postCode=self.cityList[index.row()]
+
+        if index.column()==0:
+            return city
+        elif index.column()==1:
+            return postCode
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "City"
+                elif col==1:
+                    return "PostCode"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+   
+    def update(self, cityList):
+        self.cityList=cityList
+        self.reset()
+        
 class OSMAdressDialog(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent) 
@@ -1407,9 +1443,13 @@ class OSMAdressDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
-        self.streetList=sorted(osmParserData.getAddressList(), key=self.streetNameSort)
-#        sorted(self.streetList, key=self.houseNumberSort)
-        self.filteredStreetList=self.streetList
+        self.countryList=sorted(osmParserData.getAdressCountryList())
+        self.cityList=list()
+        self.filteredStreetList=list()
+        self.streetList=list()
+        
+        self.currentCountry=-1
+        self.currentCity=None
         
         self.pointType=0
         self.startPointIcon=QIcon("images/source.png")
@@ -1418,14 +1458,29 @@ class OSMAdressDialog(QDialog):
         self.selectedAddress=None
         self.initUI()
          
+    def updateAdressListForCity(self):
+        if self.currentCity!=None:
+            self.streetList=sorted(osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.streetNameSort)
+        else:
+            self.streetList=list()
+        
+        self.filteredStreetList=self.streetList
+
+    def updateCityListForCountry(self):
+        if self.currentCountry!=-1:
+            self.cityList=osmParserData.getAdressCityList(self.currentCountry)
+        else:
+            self.cityList=list()
+        
     def streetNameSort(self, item):
-        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=item
-        return item[5]
+        return item[0]
 
     def houseNumberSort(self, item):
-        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=item
-        return item[6]
+        return item[1]
    
+    def citySort(self, item):
+        return item[0]
+    
     def getResult(self):
         return (self.selectedAddress, self.pointType)
 
@@ -1433,6 +1488,28 @@ class OSMAdressDialog(QDialog):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         
+        self.countryCombo=QComboBox(self)
+        for country in self.countryList:
+            countryName=osmParserData.getCountryNameForId(country)
+            self.countryCombo.addItem(countryName)
+        self.countryCombo.activated.connect(self._countryChanged)
+        top.addWidget(self.countryCombo)
+        
+        self.currentCountry=self.countryList[0]
+        self.updateCityListForCountry()
+
+        self.cityView=QTableView(self)
+        top.addWidget(self.cityView)
+        
+        self.cityViewModel=OSMAdressTableModelCity(self)
+        self.cityViewModel.update(self.cityList)
+        self.cityView.setModel(self.cityViewModel)
+        header=QHeaderView(Qt.Horizontal, self.cityView)
+        header.setStretchLastSection(True)
+        self.cityView.setHorizontalHeader(header)
+        self.cityView.setColumnWidth(0, 300)
+        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
+
         self.filterEdit=QLineEdit(self)
         self.filterEdit.returnPressed.connect(self._applyFilter)
         self.filterEdit.textChanged.connect(self._applyFilter)
@@ -1447,7 +1524,7 @@ class OSMAdressDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.streetView)
         header.setStretchLastSection(True)
         self.streetView.setHorizontalHeader(header)
-        self.streetView.setColumnWidth(3, 300)
+        self.streetView.setColumnWidth(0, 300)
         self.streetView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         actionButtons=QHBoxLayout()
@@ -1500,9 +1577,37 @@ class OSMAdressDialog(QDialog):
         self.connect(self.streetView.selectionModel(),
                      SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
 
+        self.connect(self.cityView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
+
         self.setLayout(top)
         self.setWindowTitle('Way Search')
-        self.setGeometry(0, 0, 700, 400)
+        self.setGeometry(0, 0, 700, 600)
+                
+    @pyqtSlot()
+    def _countryChanged(self):
+        self._clearCityTableSelection()
+        self._clearStreetTableSelection()
+
+        country=self.countryCombo.currentText()
+        self.currentCountry=osmParserData.getCountryIdForName(country)
+        self.updateCityListForCountry()
+        self.cityViewModel.update(self.cityList)
+        
+        self.currentCity=None
+        self.updateAdressListForCity()
+        self._applyFilter()
+        
+    @pyqtSlot()
+    def _cityChanged(self):
+        self._clearStreetTableSelection(
+                                        )
+        selmodel = self.cityView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.currentCity, postCode=self.cityList[current.row()]
+            self.updateAdressListForCity()
+            self._applyFilter()
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -1565,7 +1670,7 @@ class OSMAdressDialog(QDialog):
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
-    def _clearTableSelection(self):
+    def _clearStreetTableSelection(self):
         self.streetView.clearSelection()
 #        self.okButton.setEnabled(False)
         self.setWayPointButton.setEnabled(False)
@@ -1574,8 +1679,12 @@ class OSMAdressDialog(QDialog):
         self.showPointButton.setEnabled(False)
 
     @pyqtSlot()
+    def _clearCityTableSelection(self):
+        self.cityView.clearSelection()
+        
+    @pyqtSlot()
     def _applyFilter(self):
-        self._clearTableSelection()
+        self._clearStreetTableSelection()
         self.filterValue=self.filterEdit.text()
         if len(self.filterValue)!=0:
             if self.filterValue[-1]!="*":
@@ -1583,10 +1692,10 @@ class OSMAdressDialog(QDialog):
             self.filteredStreetList=list()
             filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
+            for (streetName, houseNumber, lat, lon) in self.streetList:
                 if not fnmatch.fnmatch(streetName.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredStreetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+                self.filteredStreetList.append((streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
         
@@ -1843,7 +1952,7 @@ class OSMRouteListTableModel(QAbstractTableModel):
 
 #--------------------------------------------------        
 class OSMRouteListDialog(QDialog):
-    def __init__(self, parent, routeList):
+    def __init__(self, parent, routeList, withDelete, withClose):
         QDialog.__init__(self, parent) 
         font = self.font()
         font.setPointSize(14)
@@ -1855,6 +1964,8 @@ class OSMRouteListDialog(QDialog):
         self.filteredRouteList=self.routeList
 
         self.selectedRoute=None
+        self.withDelete=withDelete
+        self.withClose=withClose
         self.initUI()
          
     def nameSort(self, item):
@@ -1884,15 +1995,16 @@ class OSMRouteListDialog(QDialog):
         self.routeView.setHorizontalHeader(header)
         self.routeView.setColumnWidth(0, 300)
 
-#        actionButtons=QHBoxLayout()
-#        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-#        
-#        self.deleteRouteButton=QPushButton("Delete", self)
-#        self.deleteRouteButton.clicked.connect(self._deleteRoute)
-#        self.deleteRouteButton.setEnabled(False)
-#        actionButtons.addWidget(self.deleteRouteButton)
-#
-#        top.addLayout(actionButtons)
+        if self.withDelete==True:
+            actionButtons=QHBoxLayout()
+            actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+            
+            self.deleteRouteButton=QPushButton("Delete", self)
+            self.deleteRouteButton.clicked.connect(self._deleteRoute)
+            self.deleteRouteButton.setEnabled(False)
+            actionButtons.addWidget(self.deleteRouteButton)
+    
+            top.addLayout(actionButtons)
         
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
@@ -1905,6 +2017,12 @@ class OSMRouteListDialog(QDialog):
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
         
+        if self.withClose==True:
+            self.closeButton=QPushButton("Close", self)
+            self.closeButton.clicked.connect(self._close)
+            self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+            buttons.addWidget(self.closeButton)
+
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
@@ -1926,12 +2044,18 @@ class OSMRouteListDialog(QDialog):
     def _selectionChanged(self):
         selmodel = self.routeView.selectionModel()
         current = selmodel.currentIndex()
-#        self.deleteRouteButton.setEnabled(current.isValid())
+        if self.withDelete==True:
+            self.deleteRouteButton.setEnabled(current.isValid())
         self.okButton.setEnabled(current.isValid())
         
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
+
+    @pyqtSlot()
+    def _close(self):
+        self.selectedRoute=None
+        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _ok(self):
@@ -1942,19 +2066,20 @@ class OSMRouteListDialog(QDialog):
 
         self.done(QDialog.Accepted)
 
-#    @pyqtSlot()
-#    def _deleteRoute(self):
-#        selmodel = self.routeView.selectionModel()
-#        current = selmodel.currentIndex()
-#        if current.isValid():
-#            selectedRoute=self.filteredRouteList[current.row()]
-#            self.routeList.remove(selectedRoute)
-#            self._applyFilter()
+    @pyqtSlot()
+    def _deleteRoute(self):
+        selmodel = self.routeView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            selectedRoute=self.filteredRouteList[current.row()]
+            self.routeList.remove(selectedRoute)
+            self._applyFilter()
         
     @pyqtSlot()
     def _clearTableSelection(self):
         self.routeView.clearSelection()
-#        self.deleteRouteButton.setEnabled(False)
+        if self.withDelete==True:
+            self.deleteRouteButton.setEnabled(False)
         self.okButton.setEnabled(False)
 
     @pyqtSlot()
@@ -2130,7 +2255,7 @@ class OSMRouteDialog(QDialog):
         
     @pyqtSlot()
     def _loadRoute(self):
-        loadRouteDialog=OSMRouteListDialog(self, self.routeList)
+        loadRouteDialog=OSMRouteListDialog(self, self.routeList, False, False)
         result=loadRouteDialog.exec()
         if result==QDialog.Accepted:
             route, routeList=loadRouteDialog.getResult()
@@ -2291,6 +2416,11 @@ class OSMWidget(QWidget):
         self.favoritesButton.setDisabled(True)
         buttons.addWidget(self.favoritesButton)
         
+        self.routesButton=QPushButton("Routes", self)
+        self.routesButton.clicked.connect(self._loadRoute)
+        self.routesButton.setDisabled(True)
+        buttons.addWidget(self.routesButton)
+
         self.trackLabel=QLabel("", self)
         self.trackLabel.setText("")
         buttons.addWidget(self.trackLabel)
@@ -2496,6 +2626,7 @@ class OSMWidget(QWidget):
         if state=="stopped":
             self.adressButton.setDisabled(False)
             self.favoritesButton.setDisabled(False)
+            self.routesButton.setDisabled(False)
             osmParserData.openAllDB()
             self.dbLoaded=True
 
@@ -2514,16 +2645,16 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
-            (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=address
+            (streetName, houseNumber, lat, lon)=address
             
             if pointType==0:
-                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setStartPoint(routingPoint) 
             elif pointType==1:
-                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setEndPoint(routingPoint) 
             elif pointType==2:
-                routingPoint=OSMRoutingPoint(streetName, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
             elif pointType==-1:
                 self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(lat),
@@ -2548,6 +2679,18 @@ class OSMWidget(QWidget):
                 self.mapWidgetQt.osm_center_map_to(self.mapWidgetQt.osmutils.deg2rad(point.getLat()),
                                self.mapWidgetQt.osmutils.deg2rad(point.getLon()))
 
+
+    @pyqtSlot()
+    def _loadRoute(self):
+        routeList=self.mapWidgetQt.getRouteList()
+        loadRouteDialog=OSMRouteListDialog(self, routeList, True, True)
+        result=loadRouteDialog.exec()
+        if result==QDialog.Accepted:
+            route, routeList=loadRouteDialog.getResult()
+            self.mapWidgetQt.setRouteList(routeList)
+            if route!=None:
+                self.mapWidgetQt.setRoute(route)
+                
 
 class OSMWindow(QMainWindow):
     def __init__(self, parent, app):
