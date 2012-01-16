@@ -23,7 +23,7 @@ class TrspWrapper():
     def getSQLQueryRestriction(self):
         return "SELECT target, toCost, viaPath FROM restrictionTable"
     
-    def computeShortestPath(self, startNode, endNode):
+    def computeShortestPath(self, startNode, endNode, bbox):
         lib_routing = cdll.LoadLibrary("_compute_path_trsp.so")
 
         startNodeC=c_int(startNode)
@@ -32,6 +32,9 @@ class TrspWrapper():
         file=c_char_p(self.getDB().encode(encoding='utf_8', errors='strict'))
         sqlEdge=c_char_p(self.getSQLQueryEdge().encode(encoding='utf_8', errors='strict'))
         sqlRestriction=c_char_p(self.getSQLQueryRestriction().encode(encoding='utf_8', errors='strict'))
+        
+        bboxCtype = c_float*len(bbox)
+        bboxC = bboxCtype(*bbox)
         
         class path_element_t(Structure):
             _fields_ = [("vertex_id", c_int),

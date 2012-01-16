@@ -1413,6 +1413,24 @@ class OSMParserData():
     def calcRoute(self, route):
         route.calcRoute(self)
         
+    def createBBox(self, lat1, lon1, lat2, lon2):
+        bbox=[0.0, 0.0, 0.0, 0.0]
+        if lat2>lat1:
+            bbox[3]=lat2
+            bbox[1]=lat1
+        else:
+            bbox[3]=lat1
+            bbox[1]=lat2
+        
+        if lon2>lon1:
+            bbox[2]=lon2
+            bbox[0]=lon1
+        else:
+            bbox[2]=lon1
+            bbox[0]=lon2
+            
+        return bbox
+
     def calcRouteForPoints(self, routingPointList):        
         allPathCost=0.0
         allEdgeList=list()
@@ -1466,8 +1484,9 @@ class OSMParserData():
 #                        allEdgeList.extend(edgeList)
 #                        allPathCost=allPathCost+pathCost            
                 
+                    bbox=self.createBBox(startPoint.getLat(), startPoint.getLon(), targetPoint.getLat(), targetPoint.getLon())
                     if self.dWrapperTrsp!=None:
-                        edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target)
+                        edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox)
                         allEdgeList.extend(edgeList)
                         allPathCost=allPathCost+pathCost 
                         
@@ -1960,8 +1979,14 @@ class OSMParserData():
 
 #                    cost=distance
                     
-                    cost=int(distance / (maxspeed/3.6))
                     
+                    try:
+                        cost=int(distance / (maxspeed/3.6))
+                    except ZeroDivisionError:
+                        # TODO
+                        cost=42
+                        print("%d %s %d %d"%(wayId, tags, maxspeed, distance))
+                        
                     # TODO streettype dependend costs
 #                        if ref in doneRefsCrossingType:
 #                            cost=cost+30
@@ -1989,7 +2014,12 @@ class OSMParserData():
                 
 #                cost=distance
                 # TODO streettype dependend costs
-                cost=int(distance / (maxspeed/3.6))
+                try:
+                    cost=int(distance / (maxspeed/3.6))
+                except ZeroDivisionError:
+                    # TODO
+                    cost=42
+                    print("%d %s %d %d"%(wayId, tags, maxspeed, distance))
                 
 #                    if ref in doneRefsCrossingType:
 #                        cost=cost+30
