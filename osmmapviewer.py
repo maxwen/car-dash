@@ -13,6 +13,7 @@ import io
 import socket
 from collections import deque
 import fnmatch
+import time
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
@@ -341,36 +342,15 @@ class QtOSMWidget(QWidget):
         self.updateGeometry()
         #self.update()
         
-    def osm_gps_map_set_center(self, latitude, longitude):
-        self.center_rlat = self.osmutils.deg2rad(latitude)
-        self.center_rlon = self.osmutils.deg2rad(longitude)
-
-#        print("%f %f %d"%(self.center_rlat, self.center_rlon, self.map_zoom))
-
-        (pixel_y, pixel_x)=self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon, False)
-
-#        pixel_x = self.osmutils.lon2pixel(self.map_zoom, self.center_rlon)
-#        pixel_y = self.osmutils.lat2pixel(self.map_zoom, self.center_rlat)
-#        print("%d %d"%(pixel_x, pixel_y))
-
-        self.map_x = int(pixel_x - self.width()/2)
-        self.map_y = int(pixel_y - self.height()/2)
+    def osm_center_map_to_position(self, latitude, longitude):
+        self.osm_center_map_to(self.osmutils.deg2rad(latitude), self.osmutils.deg2rad(longitude))
         
-#        print("after center %f %f %d %d %d"%(latitude, longitude, self.map_x, self.map_y, self.map_zoom))
-        
-    def osm_gps_map_set_zoom (self, zoom):
-#        width_center  = self.width() / 2
-#        height_center = self.height() / 2
-
+    def osm_map_set_zoom (self, zoom):
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
-        self.osm_gps_map_handle_resize()
+        self.osm_map_handle_resize()
+        self.emit(SIGNAL("updateZoom(int)"), self.map_zoom)
         
-#        (pixel_y, pixel_x)=self.self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon)
-
-#        self.map_x = pixel_x - width_center
-#        self.map_y = pixel_y - height_center
-        
-    def osm_gps_map_handle_resize (self):
+    def osm_map_handle_resize (self):
         width_center  = self.width() / 2
         height_center = self.height() / 2
 
@@ -378,13 +358,6 @@ class QtOSMWidget(QWidget):
 
         self.map_x = pixel_x - width_center
         self.map_y = pixel_y - height_center
-
-#        (self.map_y, self.map_x)=self.self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon)
-#
-#        self.map_x = self.osmutils.lon2pixel(self.map_zoom, self.center_rlon) - width_center
-#        self.map_y = self.osmutils.lat2pixel(self.map_zoom, self.center_rlat) - height_center
-
-#        print("after zoom %d %d %d"%(self.map_x, self.map_y, self.map_zoom))
 
     def CLAMP(self, x, low, high):
         if x>high:
@@ -566,8 +539,6 @@ class QtOSMWidget(QWidget):
     def osm_center_map_to(self, lat, lon):
         if lat!=0.0 and lon!=0.0:
             (pixel_y, pixel_x)=self.getPixelPosForLocationRad(lat, lon, False)
-#            pixel_x = self.osmutils.lon2pixel(self.map_zoom, lon)
-#            pixel_y = self.osmutils.lat2pixel(self.map_zoom, lat)
             width = self.width()
             height = self.height()
             self.map_x = pixel_x - width/2;
@@ -575,26 +546,25 @@ class QtOSMWidget(QWidget):
             self.center_coord_update();
             self.update()
             
-    def osm_gps_map_scroll(self, dx, dy):
+    def osm_map_scroll(self, dx, dy):
         self.map_x += dx
         self.map_y += dy
         self.center_coord_update()
         self.update()
     
     def show(self, zoom, lat, lon):
-        self.osm_gps_map_set_center(lat, lon)
-        self.osm_gps_map_set_zoom(zoom)
+        self.osm_center_map_to_position(lat, lon)
+        self.osm_map_set_zoom(zoom)
         self.update()
     
     def zoom(self, zoom):
-        self.osm_gps_map_set_zoom(zoom)
+        self.osm_map_set_zoom(zoom)
         if self.autocenterGPS==True:
             self.osm_autocenter_map()
         self.update()
-        self.emit(SIGNAL("updateZoom(int)"), zoom)
        
     def resizeEvent(self, event):
-        self.osm_gps_map_handle_resize()
+        self.osm_map_handle_resize()
              
     def paintEvent(self, event):
 #        print("paintEvent %d-%d"%(self.width(), self.height()))
@@ -611,6 +581,11 @@ class QtOSMWidget(QWidget):
         self.painter.end()
               
     def showRoutingPoints(self):
+        showTrackDetails=self.map_zoom>13
+        
+        if showTrackDetails==False:
+            return 
+        
         startPointPen=QPen()
         startPointPen.setColor(Qt.darkBlue)
         startPointPen.setWidth(min(self.map_zoom, 10))
@@ -656,16 +631,16 @@ class QtOSMWidget(QWidget):
             
         return (y, x)
     
-    def getPixelPosForLocationDegForZoom(self, lat, lon, relativeToEdge, zoom):
-        return self.getPixelPosForLocationRadForZoom(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon), relativeToEdge, zoom)
+    def getPixelPosForLocationDegForZoom(self, lat, lon, relativeToEdge, zoom, centerLat, centerLon):
+        return self.getPixelPosForLocationRadForZoom(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon), relativeToEdge, zoom, self.osmutils.deg2rad(centerLat), self.osmutils.deg2rad(centerLon))
      
-    def getPixelPosForLocationRadForZoom(self, lat, lon, relativeToEdge, zoom):
+    def getPixelPosForLocationRadForZoom(self, lat, lon, relativeToEdge, zoom, centerLat, centerLon):
 
         width_center  = self.width() / 2
         height_center = self.height() / 2
 
-        x=self.osmutils.lon2pixel(zoom, self.center_rlon)
-        y=self.osmutils.lat2pixel(zoom, self.center_rlat)
+        x=self.osmutils.lon2pixel(zoom, centerLon)
+        y=self.osmutils.lat2pixel(zoom, centerLat)
 
         map_x = x - width_center
         map_y = y - height_center
@@ -701,6 +676,8 @@ class QtOSMWidget(QWidget):
             # before calculation is done
             if route.getTrackList()==None:
                 return
+            
+            showTrackDetails=self.map_zoom>13
             
             redPen=QPen()
             redPen.setColor(Qt.red)
@@ -837,17 +814,18 @@ class QtOSMWidget(QWidget):
 
                         self.painter.drawPoint(x, y)
                     if direction!=None:
-                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                        if crossingType==2:
-                            if "exit:" in crossingInfo:
-                                self.painter.drawPixmap(x, y, self.turnRightImage)
-                        else:
-                            if direction==1:
-                                #right
-                                self.painter.drawPixmap(x, y, self.turnRightImage)
-                            elif direction==-1:
-                                #left
-                                self.painter.drawPixmap(x, y, self.turnLeftImage)
+                        if showTrackDetails==True:
+                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                            if crossingType==2:
+                                if "exit:" in crossingInfo:
+                                    self.painter.drawPixmap(x, y, self.turnRightImage)
+                            else:
+                                if direction==1:
+                                    #right
+                                    self.painter.drawPixmap(x, y, self.turnRightImage)
+                                elif direction==-1:
+                                    #left
+                                    self.painter.drawPixmap(x, y, self.turnLeftImage)
                                 
                 elif start:
                     startNode.append((lastX, lastY))
@@ -1027,7 +1005,7 @@ class QtOSMWidget(QWidget):
 #            print("move %d-%d"%(event.x(), event.y()))
             dx=self.lastMouseMoveX-event.x()
             dy=self.lastMouseMoveY-event.y()
-            self.osm_gps_map_scroll(dx, dy)
+            self.osm_map_scroll(dx, dy)
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
         else:
@@ -1076,6 +1054,7 @@ class QtOSMWidget(QWidget):
         editRoutingPointAction=QAction("Edit Current Route", self)
         saveRouteAction=QAction("Save Current Route", self)
         showRouteAction=QAction("Show Route", self)
+        clearRouteAction=QAction("Clear Current Route", self)
         showPosAction=QAction("Show Position", self)
         zoomToCompleteRoute=QAction("Zoom to Route", self)
         
@@ -1093,6 +1072,7 @@ class QtOSMWidget(QWidget):
         menu.addAction(saveRouteAction)
         menu.addSeparator()
         menu.addAction(showRouteAction)
+        menu.addAction(clearRouteAction)
         menu.addSeparator()
         menu.addAction(zoomToCompleteRoute)
 
@@ -1108,6 +1088,7 @@ class QtOSMWidget(QWidget):
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
         editRoutingPointAction.setDisabled(routeIncomplete)
         zoomToCompleteRoute.setDisabled(routeIncomplete)
+        clearRouteAction.setDisabled(self.currentRoute==None)
         
         showRouteDisabled=not self.osmWidget.dbLoaded or (self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or routeIncomplete
         showRouteAction.setDisabled(showRouteDisabled)
@@ -1140,9 +1121,14 @@ class QtOSMWidget(QWidget):
             self.saveCurrentRoute()
         elif action==zoomToCompleteRoute:
             self.zoomToCompleteRoute(self.getCompleteRoutingPoints())
+        elif action==clearRouteAction:
+            self.clearCurrentRoute()
             
         self.mousePressed=False
         self.moving=False
+        
+    def clearCurrentRoute(self):
+        self.currentRoute=None
         
     def zoomToCompleteRoute(self, routingPointList):
         if len(routingPointList)==0:
@@ -1152,15 +1138,24 @@ class QtOSMWidget(QWidget):
 
         width = self.width()
         height = self.height()
+        startLat=routingPointList[0].getLat()
+        startLon=routingPointList[0].getLon()
+        endLat=routingPointList[-1].getLat()
+        endLon=routingPointList[-1].getLon()
+        
+        centerLat, centerLon=self.osmutils.linepart(endLat, endLon, startLat, startLon, 0.5)
+#        print("%f %f %f %f %f %f"%(startLat, startLon, endLat, endLon, centerLat, centerLon))
+        
         for zoom in range(MAX_ZOOM, MIN_ZOOM, -1):
-            (pixel_y1, pixel_x1)=self.getPixelPosForLocationDegForZoom(routingPointList[0].getLat(), routingPointList[0].getLon(), True, zoom)
-            (pixel_y2, pixel_x2)=self.getPixelPosForLocationDegForZoom(routingPointList[-1].getLat(), routingPointList[-1].getLon(), True, zoom)
+            (pixel_y1, pixel_x1)=self.getPixelPosForLocationDegForZoom(startLat, startLon, True, zoom, centerLat, centerLon)
+            (pixel_y2, pixel_x2)=self.getPixelPosForLocationDegForZoom(endLat, endLon, True, zoom, centerLat, centerLon)
         
 #            print("%d:%d %d %d %d"%(zoom, pixel_x1, pixel_y1, pixel_x2, pixel_y2))
             if pixel_x1>0 and pixel_x2>0 and pixel_y1>0 and pixel_y2>0:
                 if pixel_x1<width and pixel_x2<width and pixel_y1<height and pixel_y2<height:
-                    print("need zoom %d"%(zoom))
-                    self.osm_gps_map_set_zoom(zoom)
+#                    print("need zoom %d"%(zoom))
+                    self.osm_map_set_zoom(zoom)
+                    self.osm_center_map_to_position(centerLat, centerLon)
                     break
         
     def saveCurrentRoute(self):
@@ -1184,10 +1179,9 @@ class QtOSMWidget(QWidget):
             lat, lon=posDialog.getResult()
 
             if self.map_zoom<15:
-                self.osm_gps_map_set_zoom(15)
+                self.osm_map_set_zoom(15)
     
-            self.osm_center_map_to(self.osmutils.deg2rad(lat),
-                    self.osmutils.deg2rad(lon))
+            self.osm_center_map_to_position(lat, lon)
 
     def getCompleteRoutingPoints(self):
         if self.startPoint==None and self.gpsPoint==None:
@@ -1309,21 +1303,22 @@ class QtOSMWidget(QWidget):
         
     def showRoutingPointOnMap(self, routingPoint):
         if self.map_zoom<15:
-            self.osm_gps_map_set_zoom(15)
+            self.osm_map_set_zoom(15)
 
-        self.osm_center_map_to(self.osmutils.deg2rad(routingPoint.getLat()),
-                self.osmutils.deg2rad(routingPoint.getLon()))
+        self.osm_center_map_to_position(routingPoint.getLat(), routingPoint.getLon())
 
     def showPosPointOnMap(self, lat, lon):
         if self.map_zoom<15:
-            self.osm_gps_map_set_zoom(15)
+            self.osm_map_set_zoom(15)
 
-        self.osm_center_map_to(self.osmutils.deg2rad(lat),
-                self.osmutils.deg2rad(lon))
+        self.osm_center_map_to_position(lat, lon)
 
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
+            start=time.time()
             wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
+            stop=time.time()
+            print(stop-start)
             if wayId==None:
                 self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
             else:   
@@ -1331,8 +1326,8 @@ class QtOSMWidget(QWidget):
 #                    print(country)
 #                    self.lastWayId=wayId
 #                    print(osmParserData.getCountrysOfWay(wayId))
-#                    wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
-#                    print("%d %s %s"%(wayId, str(tags), str(refs)))
+                    wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+                    print("%d %s %s"%(wayId, str(tags), str(refs)))
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 #                    print("%s %s"%(name, ref))
 #                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
@@ -1349,7 +1344,14 @@ class QtOSMWidget(QWidget):
 #        self.showRouteForRoutingPoints(route.getRoutingPointList())
         
     def showRouteForRoutingPoints(self, routingPointList):
-        if self.osmWidget.dbLoaded==True:         
+        if self.osmWidget.dbLoaded==True:  
+            # already calculated
+            if self.currentRoute!=None:
+                if self.currentRoute.getRoutingPointList()==routingPointList:
+                    self.routeCalculationDone()
+                    return
+                  
+            # calculate
             self.currentRoute=OSMRoute("current", routingPointList)
             # make sure all are resolved because we cannot access
             # the db from the thread
@@ -1479,7 +1481,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (id, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
             return streetName
@@ -1553,6 +1555,7 @@ class OSMAdressDialog(QDialog):
 
         self.countryList=sorted(osmParserData.getAdressCountryList())
         self.cityList=list()
+        self.filteredCityList=list()
         self.filteredStreetList=list()
         self.streetList=list()
         
@@ -1580,11 +1583,13 @@ class OSMAdressDialog(QDialog):
         else:
             self.cityList=list()
         
+        self.filteredCityList=self.cityList
+        
     def streetNameSort(self, item):
-        return item[0]
+        return item[1]
 
     def houseNumberSort(self, item):
-        return item[1]
+        return item[2]
    
     def citySort(self, item):
         return item[0]
@@ -1606,11 +1611,15 @@ class OSMAdressDialog(QDialog):
         self.currentCountry=self.countryList[0]
         self.updateCityListForCountry()
 
+        self.cityFilterEdit=QLineEdit(self)
+        self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
+        top.addWidget(self.cityFilterEdit)
+        
         self.cityView=QTableView(self)
         top.addWidget(self.cityView)
         
         self.cityViewModel=OSMAdressTableModelCity(self)
-        self.cityViewModel.update(self.cityList)
+        self.cityViewModel.update(self.filteredCityList)
         self.cityView.setModel(self.cityViewModel)
         header=QHeaderView(Qt.Horizontal, self.cityView)
         header.setStretchLastSection(True)
@@ -1618,10 +1627,9 @@ class OSMAdressDialog(QDialog):
         self.cityView.setColumnWidth(0, 300)
         self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
-        self.filterEdit=QLineEdit(self)
-        self.filterEdit.returnPressed.connect(self._applyFilter)
-        self.filterEdit.textChanged.connect(self._applyFilter)
-        top.addWidget(self.filterEdit)
+        self.streetFilterEdit=QLineEdit(self)
+        self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
+        top.addWidget(self.streetFilterEdit)
         
         self.streetView=QTableView(self)
         top.addWidget(self.streetView)
@@ -1704,7 +1712,8 @@ class OSMAdressDialog(QDialog):
         
         self.currentCity=None
         self.updateAdressListForCity()
-        self._applyFilter()
+        self._applyFilterStreet()
+        self._applyFilterCity()
         
     @pyqtSlot()
     def _cityChanged(self):
@@ -1713,9 +1722,9 @@ class OSMAdressDialog(QDialog):
         selmodel = self.cityView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
-            self.currentCity, postCode=self.cityList[current.row()]
+            self.currentCity, postCode=self.filteredCityList[current.row()]
             self.updateAdressListForCity()
-            self._applyFilter()
+            self._applyFilterStreet()
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -1791,23 +1800,42 @@ class OSMAdressDialog(QDialog):
         self.cityView.clearSelection()
         
     @pyqtSlot()
-    def _applyFilter(self):
+    def _applyFilterStreet(self):
         self._clearStreetTableSelection()
-        self.filterValue=self.filterEdit.text()
-        if len(self.filterValue)!=0:
-            if self.filterValue[-1]!="*":
-                self.filterValue=self.filterValue+"*"
+        filterValue=self.streetFilterEdit.text()
+        if len(filterValue)!=0:
+            if filterValue[-1]!="*":
+                filterValue=filterValue+"*"
             self.filteredStreetList=list()
-            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (streetName, houseNumber, lat, lon) in self.streetList:
-                if not fnmatch.fnmatch(streetName.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
+            for (id, streetName, houseNumber, lat, lon) in self.streetList:
+                if not fnmatch.fnmatch(streetName.upper(), filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredStreetList.append((streetName, houseNumber, lat, lon))
+                self.filteredStreetList.append((id, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
         
         self.streetViewModel.update(self.filteredStreetList)
+    
+    @pyqtSlot()
+    def _applyFilterCity(self):
+        self._clearCityTableSelection()
+        filterValue=self.cityFilterEdit.text()
+        if len(filterValue)!=0:
+            if filterValue[-1]!="*":
+                filterValue=filterValue+"*"
+            self.filteredCityList=list()
+            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for (city, postCode) in self.cityList:
+                if not fnmatch.fnmatch(city.upper(), filterValue.upper()) and not fnmatch.fnmatch(city.upper(), filterValueMod.upper()):
+                    continue
+                self.filteredCityList.append((city, postCode))
+        else:
+            self.filteredCityList=self.cityList
+        
+        self.cityViewModel.update(self.filteredCityList)
 
 #----------------------------
 class OSMFavoriteTableModel(QAbstractTableModel):
@@ -2851,8 +2879,8 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
-            (streetName, houseNumber, lat, lon)=address
-            
+            (id, streetName, houseNumber, lat, lon)=address
+            print(id)
             if pointType==0:
                 routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setStartPoint(routingPoint) 

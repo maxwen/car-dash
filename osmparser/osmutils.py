@@ -57,8 +57,7 @@ class OSMUtils():
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
         d = (RADIUS_EARTH * c)*1000
         return d
-    
- 
+   
     def crossproduct(self, x1, y1, z1, x2, y2, z2):
         xa = y1*z2-y2*z1
         ya = z1*x2-z2*x1
@@ -68,11 +67,34 @@ class OSMUtils():
     def dotproduct(self, x1, y1, z1, x2, y2, z2 ):
         return (x1*x2+y1*y2+z1*z2);
     
+    
+    def distance1(self,  lat1, lon1, lat2, lon2 ):
+        lat1 = self.deg2rad(lat1)
+        lon1 = self.deg2rad(lon1)
+        lat2 = self.deg2rad(lat2)
+        lon2 = self.deg2rad(lon2)
+
+        sdlat = math.sin((lat1 - lat2) / 2.0)
+        sdlon = math.sin((lon1 - lon2) / 2.0)
+
+        res = math.sqrt(sdlat * sdlat + math.cos(lat1) * math.cos(lat2) * sdlon * sdlon)
+
+        if res > 1.0:
+            res = 1.0
+        elif res < -1.0:
+            res = -1.0
+
+        res = math.asin(res)
+
+        c= 2.0 * res
+        d = (RADIUS_EARTH * c)*1000
+        return d
+
+
     #  Compute the position of a point partially along the geodesic from 
     #  lat1,lon1 to lat2,lon2
     #  
     #  Ref: http://mathworld.wolfram.com/RotationFormula.html
-    
     def linepart(self, lat1, lon1, lat2,  lon2, frac):
         x1=0.0
         y1=0.0
@@ -106,6 +128,7 @@ class OSMUtils():
         x1 = math.cos(lon1)*math.cos(lat1)
         y1 = math.sin(lat1)
         z1 = math.sin(lon1)*math.cos(lat1)
+        
         x2 = math.cos(lon2)*math.cos(lat2) 
         y2 = math.sin(lat2)
         z2 = math.sin(lon2)*math.cos(lat2)
@@ -148,7 +171,7 @@ class OSMUtils():
             
             reslat = self.rad2deg(math.asin(yr))
             if xr == 0 and zr == 0:
-                reslon = 0.0;
+                reslon = 0.0
             else:
                 reslon = self.rad2deg(math.atan2( zr, xr ))
             

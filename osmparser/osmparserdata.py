@@ -9,6 +9,7 @@ import os
 import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
+import time
 #from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
 from osmparser.dijkstraigraph import DijkstraWrapperIgraph
 
@@ -380,6 +381,8 @@ class OSMParserData():
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refGid INTEGER PRIMARY KEY, refId INTEGER, lat REAL, lon REAL, wayId INTEGER)')
         self.cursor.execute("CREATE INDEX refTableRefId_idx ON refTable (refId)")
+        self.cursor.execute("CREATE INDEX refTableLat_idx ON refTable (lat)")
+        self.cursor.execute("CREATE INDEX refTableLon_idx ON refTable (lon)")
         
     def createWayTable(self):
         self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, refsDistance BLOB)')
@@ -418,9 +421,9 @@ class OSMParserData():
         return (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
     
     def getLenOfAddressTable(self):
-        self.cursorAdress.execute('SELECT * FROM addressTable')
+        self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
         allentries=self.cursorAdress.fetchall()
-        return len(allentries)
+        return allentries[0][0]
     
     # TODO create index after inserting
     def createCrossingsTable(self):
@@ -542,9 +545,9 @@ class OSMParserData():
             print( "id: "+x[0]+ "wayId: "+str(x[1]) +" country: " + x[2])
 
     def getLenOfCountryWayTable(self):
-        self.cursorCountry.execute('SELECT * FROM wayCountryTable')
+        self.cursorCountry.execute('SELECT COUNT(*) FROM wayCountryTable')
         allentries=self.cursorCountry.fetchall()
-        return len(allentries)
+        return allentries[0][0]
 
     def addToRefTable(self, refid, lat, lon, wayId, country):
         self.setDBCursorForCountry(country)
@@ -597,9 +600,9 @@ class OSMParserData():
         self.createCrossingsTable()
                 
     def getLenOfEdgeTable(self):
-        self.cursorEdge.execute('SELECT * FROM edgeTable')
+        self.cursorEdge.execute('SELECT COUNT(*) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
-        return len(allentries)
+        return allentries[0][0]
     
     def updateSourceOfEdge(self, edgeId, sourceId):
         existingEdgeId, startRef, endRef, length, wayId, _, target, refList, cost, reverseCost=self.getEdgeEntryForEdgeId(edgeId)
@@ -804,10 +807,15 @@ class OSMParserData():
         if country==None:
             return None, None, (None, None), None
 
+        start=time.time()
         nodes=self.getNearNodes(actlat, actlon, country)
+        stop=time.time()
+        print(stop-start)
         minDistance=100
         minWayId=0
         usedRefId=0
+        usedLat=0.0
+        usedLon=0.0
         if len(nodes)==0:
             return None, None, (None, None), None
         
@@ -873,15 +881,21 @@ class OSMParserData():
         return points
             
     def getNearNodes(self, lat, lon, country):
-        latRangeMax=lat+0.003
-        lonRangeMax=lon+0.003
-        latRangeMin=lat-0.003
-        lonRangeMin=lon-0.003
+        latRangeMax=lat+0.001
+        lonRangeMax=lon+0.001
+        latRangeMin=lat-0.001
+        lonRangeMin=lon-0.001
         
         nodes=list()
         self.setDBCursorForCountry(country)
+        
+        start=time.time()
+
         self.cursor.execute('SELECT * FROM refTable where lat>%f AND lat<%f AND lon>%f AND lon<%f'%(latRangeMin, latRangeMax, lonRangeMin, lonRangeMax))
         allentries=self.cursor.fetchall()
+        stop=time.time()
+        print(stop-start)
+        print(len(allentries))
         for x in allentries:
             refGid, refId, lat1, lon1, wayId=self.refFromDB(x)
             distance=self.osmutils.distance(lat, lon, lat1, lon1)
@@ -1080,7 +1094,7 @@ class OSMParserData():
 
             if "highway" in tags:
                 streetType=tags["highway"]
-                if streetType=="services" or streetType=="bridleway" or streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway" or streetType=="service" or streetType=="living_street" or streetType=="steps" or streetType=="platform" or streetType=="crossing" or streetType=="raceway" or streetType=="construction" or streetType=="via_ferrata":
+                if streetType=="services" or streetType=="bridleway" or streetType=="path" or streetType=="track" or streetType=="footway" or streetType=="pedestrian" or streetType=="cycleway" or streetType=="service" or streetType=="steps" or streetType=="platform" or streetType=="crossing" or streetType=="raceway" or streetType=="construction" or streetType=="via_ferrata":
                     continue
                 
 #                if streetType=="unclassified":
@@ -1101,14 +1115,25 @@ class OSMParserData():
                 if "amenity" in tags:
                     continue
                 
-                if "acccess" in tags:
-                    if tags["access"]=="private":
+                if "motorcar" in tags:
+                    if tags["motorcar"]=="no":
                         continue
-                    if tags["access"]=="destination":
+                    if tags["motorcar"]=="private":
                         continue
-                    if tags["access"]=="permissive":
+                
+                if "motor_vehicle" in tags:
+                    if tags["motor_vehicle"]=="no":
                         continue
-
+                    if tags["motor_vehicle"]=="private":
+                        continue
+                    
+                if "bicycle" in tags:
+                    if tags["bicycle"]=="designated":
+                        continue
+                    
+#                if "acccess" in tags:
+#                    if tags["access"]=="private":
+#                        continue
                 
                 if "area" in tags:
                     if tags["area"]=="yes":
@@ -1264,7 +1289,7 @@ class OSMParserData():
                 ref=ref.replace(' ', '')
                 if name=="":
                     name=ref  
-        elif streetType=="trunk":
+        elif streetType=="trunk" or streetType=="trunk_link":
             if ref!="":
                 ref=ref.replace(' ', '')
                 if name=="":
@@ -1377,15 +1402,15 @@ class OSMParserData():
         return postCodeList
 
     def getAdressListForCity(self, country, city):
-        self.cursorAdress.execute('SELECT streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
+        self.cursorAdress.execute('SELECT refId, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3]))
+            streetList.append((x[0], x[1], x[2], x[3], x[4]))
         return streetList
                     
     def getAdressListForPostCode(self, country, postCode):
-        self.cursorAdress.execute('SELECT streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
+        self.cursorAdress.execute('SELECT refId, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
@@ -1893,6 +1918,121 @@ class OSMParserData():
 #            print("could not resolve this way restricions")
 #            print(self.wayRestricitionList)
             
+    def getStreetTypeFactor(self, streetType):
+        if streetType=="motorway" or streetType=="motorway_link":
+            return 1.0
+        if streetType=="trunk" or streetType=="trunk_link":
+            return 1.1
+        if streetType=="primary" or streetType=="tertiary_link":
+            return 1.2
+        if streetType=="secondary" or streetType=="primary_link":
+            return 1.3
+        if streetType=="tertiary" or streetType=="tertiary_link":
+            return 1.4
+        if streetType=="residential":
+            return 1.5
+        
+        return 1.6
+        
+    def getMaxspeed(self, tags, streetType):
+        maxspeedDefault=50
+        maxspeed=50
+        # TODO iplicit
+        #     <tag k="source:maxspeed" v="AT:urban"/>
+        if "zone:maxspeed" in tags:
+            if "urban" in tags["zone:maxspeed"]:
+                maxspeed=50
+            elif "rural" in tags["zone:maxspeed"]:
+                maxspeed=100
+            elif "DE:30" in tags["zone:maxspeed"]:
+                maxspeed=30
+        elif "zone:traffic" in tags:
+            if "urban" in tags["zone:traffic"]:
+                maxspeed=50
+            elif "rural" in tags["zone:traffic"]:
+                maxspeed=100
+            elif "DE:30" in tags["zone:traffic"]:
+                maxspeed=30
+        elif "source:maxspeed" in tags:
+            if "urban" in tags["source:maxspeed"]:
+                maxspeed=50
+            elif "motorway" in tags["source:maxspeed"]:
+                maxspeed=130
+            elif "rural" in tags["source:maxspeed"]:
+                maxspeed=100
+        elif "maxspeed" in tags:
+            if "urban" in tags["maxspeed"]:
+                maxspeed=50
+            elif "motorway" in tags["maxspeed"]:
+                maxspeed=130
+            elif "rural" in tags["maxspeed"]:
+                maxspeed=100
+            else:
+                maxspeed=tags["maxspeed"]
+    
+                if ";" in maxspeed:
+                    try:
+                        maxspeed=int(maxspeed.split(";")[0])
+                    except ValueError:
+                        maxspeed=int(maxspeed.split(";")[1])
+                else:
+                    if maxspeed=="none":
+                        if "motorway" in streetType:
+                            maxspeed=130
+                        elif "trunk" in streetType:
+                            maxspeed=100
+                        else:
+                            maxspeed=50
+                    else:
+                        try:
+                            maxspeed=int(maxspeed)
+                        except ValueError:
+                            print(tags)
+                            maxspeed=maxspeedDefault
+        else:
+            if streetType=="residential":
+                maxspeed=50
+            elif "trunk" in streetType:
+                maxspeed=100
+            elif "motorway" in streetType:
+                maxspeed=130
+            else:
+                maxspeed=50
+        
+        try:
+            maxspeed=int(maxspeed)
+        except ValueError:
+            print(tags)
+            maxspeed=maxspeedDefault
+            
+        return maxspeed
+
+    def getAccessFactor(self, tags):
+        if "motorcar" in tags:
+            if tags["motorcar"]=="destination":
+                return 100
+                
+        if "motor_vehicle" in tags:
+            if tags["motor_vehicle"]=="destination":
+                return 100
+            
+        if "acccess" in tags:
+            if tags["access"]=="destination":
+                return 100
+            elif tags["access"]=="permissive":
+                return 100
+            elif tags["access"]=="private":
+                return 10000
+
+        return 1
+    
+    def getCrossingsFactor(self, crossingType):
+        if crossingType==0:
+            return 1.1
+        if crossingType==1:
+            return 1.2
+        return 1
+    
     def createEdgeTableEntriesForWay(self, way, country):        
         wayId, tags, refs, distances=way
         resultList=self.getCrossingEntryFor(wayId, country)
@@ -1921,49 +2061,27 @@ class OSMParserData():
                 roundabout=1
         elif refs[0]==refs[-1]:
             oneway=1
-#                roundabout=1
-#                print("street with same start and end and not roundabout %d %s"%(wayId, str(tags)))
-            
-#            if "access" in tags:
-#                if tags["access"]=="destination":
-#                    oneway=1
-
-        # TODO iplicit
-        #     <tag k="source:maxspeed" v="AT:urban"/>
-        if "maxspeed" in tags:
-            maxspeed=tags["maxspeed"]
-            if ";" in maxspeed:
-#                    print(maxspeed)
-#                    print(maxspeed.split(";")[0])
-                try:
-                    maxspeed=int(maxspeed.split(";")[0])
-                except ValueError:
-                    maxspeed=int(maxspeed.split(";")[1])
-            else:
-                try:
-                    maxspeed=int(maxspeed)
-                except ValueError:
-                    maxspeed=50
-        else:
-            if streetType=="residential":
-                maxspeed=50
-            elif streetType=="motorway":
-                maxspeed=100
-            else:
-                maxspeed=50
-            
+        
+        accessFactor=self.getAccessFactor(tags)
+                 
+        streetTypeFactor=self.getStreetTypeFactor(streetType)
+        
+        maxspeed=self.getMaxspeed(tags, streetType)
+        if maxspeed==0:
+            return
+        
+        crossingFactor=1
+        
         doneRefs=list()
         doneRefsCrossingType=dict()
         for ref in refs:                  
             if ref in nextWayDict:                                                                        
                 nextWayIdList=nextWayDict[ref]
                 for _, crossingType, crossingInfo in nextWayIdList:
-                    if crossingType==1:
-                        # with traffic lights
-                        doneRefsCrossingType[ref]=1
-                    elif crossingType==2:
-                        # motorway junction
-                        None
+                    cf=self.getCrossingsFactor(crossingType)
+                    if cf>crossingFactor:
+                        crossingFactor=cf
+                        
                 doneRefs.append(ref)
         
         refNodeList=list()
@@ -1981,12 +2099,13 @@ class OSMParserData():
                     
                     
                     try:
-                        cost=int(distance / (maxspeed/3.6))
+                        cost=(distance * streetTypeFactor * accessFactor * crossingFactor) / (maxspeed/3.6)
                     except ZeroDivisionError:
                         # TODO
                         cost=42
-                        print("%d %s %d %d"%(wayId, tags, maxspeed, distance))
-                        
+                        print(tags)
+                    except TypeError:
+                        print(tags)
                     # TODO streettype dependend costs
 #                        if ref in doneRefsCrossingType:
 #                            cost=cost+30
@@ -2015,11 +2134,13 @@ class OSMParserData():
 #                cost=distance
                 # TODO streettype dependend costs
                 try:
-                    cost=int(distance / (maxspeed/3.6))
+                    cost=(distance * streetTypeFactor * accessFactor * crossingFactor) / (maxspeed/3.6)
                 except ZeroDivisionError:
                     # TODO
                     cost=42
-                    print("%d %s %d %d"%(wayId, tags, maxspeed, distance))
+                    print(tags)
+                except TypeError:
+                    print(tags)
                 
 #                    if ref in doneRefsCrossingType:
 #                        cost=cost+30
@@ -2164,7 +2285,7 @@ class OSMParserData():
             self.createAdressTable()
         else:
             self.openAdressDB()
-#            self.addressId=self.getLenOfAddressTable()
+            self.addressId=self.getLenOfAddressTable()
         
         createGlobalCountryDB=not self.globalCountryDBExists()
         if createGlobalCountryDB:
@@ -2172,7 +2293,7 @@ class OSMParserData():
             self.createGlobalCountryTables()
         else:
             self.openGlobalCountryDB()
-#            self.wayCount=self.getLenOfCountryWayTable()
+            self.wayCount=self.getLenOfCountryWayTable()
 
         countryList=list()
         for country in self.osmList.keys():
@@ -2468,6 +2589,21 @@ class OSMParserData():
 
         self.commitEdgeDB()  
              
+    def testAdress(self):
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==0 AND city=="Salzburg" AND streetName=="Münchner Bundesstraße"')
+        allentries=self.cursorAdress.fetchall()
+        for x in allentries:
+            print(self.addressFromDB(x))
+
+    def createRefTableIndexes(self):
+        for country in self.osmList.keys():
+            self.country=country
+            self.debugCountry=country
+            print(self.osmList[country])
+            self.setDBCursorForCountry(country)
+            self.cursor.execute("CREATE INDEX refTableLat_idx ON refTable (lat)")
+            self.cursor.execute("CREATE INDEX refTableLon_idx ON refTable (lon)")
+            
 def main(argv):    
     p = OSMParserData()
     
@@ -2487,10 +2623,12 @@ def main(argv):
 #    p.test()
 #    p.testDBConistency()
 #    p.testRestrictionTable()
-#    p.recreateEdges()
+    p.recreateEdges()
 #    p.recreateEdgeNodes()
+#    p.createRefTableIndexes()
 
 #    p.recreateCrossings()
+#    p.testAdress()
     p.closeAllDB()
 
 
