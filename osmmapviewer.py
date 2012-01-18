@@ -572,7 +572,10 @@ class QtOSMWidget(QWidget):
 #        print("paintEvent %d-%d"%(self.width(), self.height()))
 #        print(self.pos())
 #        self.updateGeometry()
-        self.painter=QPainter(self) 
+        self.painter=QPainter(self)
+        font=self.font()
+        font.setPointSize(16) 
+        self.painter.setFont(font)
         self.painter.setRenderHint(QPainter.Antialiasing)
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
         self.osm_gps_map_fill_tiles_pixel()
@@ -588,7 +591,7 @@ class QtOSMWidget(QWidget):
             wayPos=QPoint(10, self.height()-10)
             self.painter.drawText(wayPos, self.wayInfo)
             
-        zoomPos=QPoint(10, self.controlWidgetRect.height()+15)
+        zoomPos=QPoint(10, self.controlWidgetRect.height()+20)
         self.painter.drawText(zoomPos, "Zoom:%d"%(self.map_zoom))
         
     def showRoutingPoints(self):
@@ -1343,10 +1346,10 @@ class QtOSMWidget(QWidget):
 
     def showTrackOnPos(self, actlat, actlon):
         if self.osmWidget.dbLoaded==True:
-            start=time.time()
+#            start=time.time()
             wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
-            stop=time.time()
-            print(stop-start)
+#            stop=time.time()
+#            print(stop-start)
             if wayId==None:
 #                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
                 self.wayInfo="Unknown way"
@@ -1356,7 +1359,7 @@ class QtOSMWidget(QWidget):
 #                    self.lastWayId=wayId
 #                    print(osmParserData.getCountrysOfWay(wayId))
                     wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
-                    print("%d %s %s"%(wayId, str(tags), str(refs)))
+#                    print("%d %s %s"%(wayId, str(tags), str(refs)))
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 #                    print("%s %s"%(name, ref))
 #                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))

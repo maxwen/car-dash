@@ -2425,10 +2425,12 @@ class OSMParserData():
             self.country=country
             self.debugCountry=country
             print(self.osmList[country])
+            print("create refTable index for lat and lon")
             self.setDBCursorForCountry(country)
             self.cursor.execute("CREATE INDEX refTableLat_idx ON refTable (lat)")
             self.cursor.execute("CREATE INDEX refTableLon_idx ON refTable (lon)")
-        
+            print("end create refTable index for lat and lon")
+            
     def recreateCostsForEdges(self):
         print("recreate costs")
         self.cursorEdge.execute('SELECT * FROM edgeTable')
