@@ -15,10 +15,11 @@ from collections import deque
 import fnmatch
 import time
 
-from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtGui import QFont, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmutils import OSMUtils
+from osmdialogs import *
 from config import Config
 
 TILESIZE=256
@@ -304,6 +305,7 @@ class QtOSMWidget(QWidget):
         
         self.currentRoute=None
         self.routeList=list()
+        self.wayInfo="testtext"
         
     def getRouteList(self):
         return self.routeList
@@ -348,7 +350,7 @@ class QtOSMWidget(QWidget):
     def osm_map_set_zoom (self, zoom):
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
         self.osm_map_handle_resize()
-        self.emit(SIGNAL("updateZoom(int)"), self.map_zoom)
+#        self.emit(SIGNAL("updateZoom(int)"), self.map_zoom)
         
     def osm_map_handle_resize (self):
         width_center  = self.width() / 2
@@ -578,8 +580,17 @@ class QtOSMWidget(QWidget):
         self.displayRoute(self.currentRoute)
         self.showControlOverlay()
         self.showRoutingPoints()
+        self.showTextInfo()
         self.painter.end()
               
+    def showTextInfo(self):
+        if self.wayInfo!=None:
+            wayPos=QPoint(10, self.height()-10)
+            self.painter.drawText(wayPos, self.wayInfo)
+            
+        zoomPos=QPoint(10, self.controlWidgetRect.height()+15)
+        self.painter.drawText(zoomPos, "Zoom:%d"%(self.map_zoom))
+        
     def showRoutingPoints(self):
         showTrackDetails=self.map_zoom>13
         
@@ -750,7 +761,6 @@ class QtOSMWidget(QWidget):
                 start=False
                 end=False
                 crossing=False
-                crossingType=0
                 oneway=False
                 streetType=""
                 direction=None
@@ -760,7 +770,7 @@ class QtOSMWidget(QWidget):
                     end=True
                 if "crossing" in item:
                     crossing=True
-                    crossingType=item["crossing"][0]
+                    crossingList=item["crossing"]
                 if "crossingInfo" in item:
                     crossingInfo=item["crossingInfo"]
                 if "direction" in item:
@@ -803,16 +813,34 @@ class QtOSMWidget(QWidget):
                     lastY=y
                         
                     if crossing:
-                        if crossingType==0:
-                            self.painter.setPen(greenCrossingPen)
-                        elif crossingType==1:
-                            # with traffic signs
-                            self.painter.setPen(redCrossingPen)
-                        elif crossingType==2:
-                            # motorway junction
-                            self.painter.setPen(blueCrossingPen)
-
-                        self.painter.drawPoint(x, y)
+                        if showTrackDetails==True:
+                            useCrossingType=-1
+                            for crossing in crossingList:
+                                _, crossingType, crossingInfo=crossing
+                                if crossingType==0:
+                                    # normal crossing with street that has other name
+                                    useCrossingType=crossingType
+                                elif crossingType==1:
+                                    # crossing with traffic signs overrules all others
+                                    useCrossingType=crossingType
+                                    break
+                                elif crossingType==2:
+                                    # motorway junction
+                                    useCrossingType=crossingType
+    
+                            if useCrossingType!=-1:
+                                if useCrossingType==0:
+                                    self.painter.setPen(greenCrossingPen)
+                                    self.painter.drawPoint(x, y)
+                                elif useCrossingType==1:
+                                    # with traffic signs
+                                    self.painter.setPen(redCrossingPen)
+                                    self.painter.drawPoint(x, y)
+                                elif useCrossingType==2:
+                                    # motorway junction
+                                    self.painter.setPen(blueCrossingPen)
+                                    self.painter.drawPoint(x, y)
+                            
                     if direction!=None:
                         if showTrackDetails==True:
                             (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
@@ -1320,7 +1348,8 @@ class QtOSMWidget(QWidget):
             stop=time.time()
             print(stop-start)
             if wayId==None:
-                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
+#                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
+                self.wayInfo="Unknown way"
             else:   
                 if wayId!=self.lastWayId:
 #                    print(country)
@@ -1333,7 +1362,8 @@ class QtOSMWidget(QWidget):
 #                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
 #                    print(osmParserData.getEdgeIdOnPos(actlat, actlon))
 
-                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
+#                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
+                    self.wayInfo="%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country))
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
                             
@@ -1463,1116 +1493,6 @@ class QtOSMWidget(QWidget):
         self.wayPoints.append(point)
         self.update()
         
-class OSMAdressTableModel(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.streetList)
-    
-    def columnCount(self, parent): 
-        return 2
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.streetList):
-            return ""
-        (id, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
-
-        if index.column()==0:
-            return streetName
-        elif index.column()==1:
-            return houseNumber
-        
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "Street"
-                elif col==1:
-                    return "Number"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, streetList):
-        self.streetList=streetList
-        self.reset()
-        
-class OSMAdressTableModelCity(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.cityList)
-    
-    def columnCount(self, parent): 
-        return 2
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.cityList):
-            return ""
-        city, postCode=self.cityList[index.row()]
-
-        if index.column()==0:
-            return city
-        elif index.column()==1:
-            return postCode
-
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "City"
-                elif col==1:
-                    return "PostCode"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, cityList):
-        self.cityList=cityList
-        self.reset()
-        
-class OSMAdressDialog(QDialog):
-    def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-
-        self.countryList=sorted(osmParserData.getAdressCountryList())
-        self.cityList=list()
-        self.filteredCityList=list()
-        self.filteredStreetList=list()
-        self.streetList=list()
-        
-        self.currentCountry=-1
-        self.currentCity=None
-        
-        self.pointType=0
-        self.startPointIcon=QIcon("images/source.png")
-        self.endPointIcon=QIcon("images/target.png")
-        self.wayPointIcon=QIcon("images/waypoint.png")
-        self.selectedAddress=None
-        self.initUI()
-         
-    def updateAdressListForCity(self):
-        if self.currentCity!=None:
-            self.streetList=sorted(osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.streetNameSort)
-        else:
-            self.streetList=list()
-        
-        self.filteredStreetList=self.streetList
-
-    def updateCityListForCountry(self):
-        if self.currentCountry!=-1:
-            self.cityList=osmParserData.getAdressCityList(self.currentCountry)
-        else:
-            self.cityList=list()
-        
-        self.filteredCityList=self.cityList
-        
-    def streetNameSort(self, item):
-        return item[1]
-
-    def houseNumberSort(self, item):
-        return item[2]
-   
-    def citySort(self, item):
-        return item[0]
-    
-    def getResult(self):
-        return (self.selectedAddress, self.pointType)
-
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-        
-        self.countryCombo=QComboBox(self)
-        for country in self.countryList:
-            countryName=osmParserData.getCountryNameForId(country)
-            self.countryCombo.addItem(countryName)
-        self.countryCombo.activated.connect(self._countryChanged)
-        top.addWidget(self.countryCombo)
-        
-        self.currentCountry=self.countryList[0]
-        self.updateCityListForCountry()
-
-        self.cityFilterEdit=QLineEdit(self)
-        self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
-        top.addWidget(self.cityFilterEdit)
-        
-        self.cityView=QTableView(self)
-        top.addWidget(self.cityView)
-        
-        self.cityViewModel=OSMAdressTableModelCity(self)
-        self.cityViewModel.update(self.filteredCityList)
-        self.cityView.setModel(self.cityViewModel)
-        header=QHeaderView(Qt.Horizontal, self.cityView)
-        header.setStretchLastSection(True)
-        self.cityView.setHorizontalHeader(header)
-        self.cityView.setColumnWidth(0, 300)
-        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
-
-        self.streetFilterEdit=QLineEdit(self)
-        self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
-        top.addWidget(self.streetFilterEdit)
-        
-        self.streetView=QTableView(self)
-        top.addWidget(self.streetView)
-        
-        self.streetViewModel=OSMAdressTableModel(self)
-        self.streetViewModel.update(self.filteredStreetList)
-        self.streetView.setModel(self.streetViewModel)
-        header=QHeaderView(Qt.Horizontal, self.streetView)
-        header.setStretchLastSection(True)
-        self.streetView.setHorizontalHeader(header)
-        self.streetView.setColumnWidth(0, 300)
-        self.streetView.setSelectionBehavior(QAbstractItemView.SelectRows)
-
-        actionButtons=QHBoxLayout()
-        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.showPointButton=QPushButton("Show", self)
-        self.showPointButton.clicked.connect(self._showPoint)
-        self.showPointButton.setEnabled(False)
-        actionButtons.addWidget(self.showPointButton)
-
-        self.setStartPointButton=QPushButton("Start", self)
-        self.setStartPointButton.clicked.connect(self._setStartPoint)
-        self.setStartPointButton.setIcon(self.startPointIcon)
-        self.setStartPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setStartPointButton)
-        
-        self.setEndPointButton=QPushButton("End", self)
-        self.setEndPointButton.clicked.connect(self._setEndPoint)
-        self.setEndPointButton.setIcon(self.endPointIcon)
-        self.setEndPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setEndPointButton)
-        
-        self.setWayPointButton=QPushButton("Way", self)
-        self.setWayPointButton.clicked.connect(self._setWayPoint)
-        self.setWayPointButton.setIcon(self.wayPointIcon)
-        self.setWayPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setWayPointButton)
-
-        top.addLayout(actionButtons)
-
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        style=QCommonStyle()
-                
-        self.cancelButton=QPushButton("Close", self)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-        self.cancelButton.clicked.connect(self._cancel)
-        buttons.addWidget(self.cancelButton)
-
-#        self.okButton=QPushButton("End Point", self)
-#        self.okButton.clicked.connect(self._ok)
-#        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-#        self.okButton.setEnabled(False)
-#        self.okButton.setDefault(True)
-#        buttons.addWidget(self.okButton)
-
-        top.addLayout(buttons)
-        
-        self.connect(self.streetView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.connect(self.cityView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
-
-        self.setLayout(top)
-        self.setWindowTitle('Way Search')
-        self.setGeometry(0, 0, 700, 600)
-                
-    @pyqtSlot()
-    def _countryChanged(self):
-        self._clearCityTableSelection()
-        self._clearStreetTableSelection()
-
-        country=self.countryCombo.currentText()
-        self.currentCountry=osmParserData.getCountryIdForName(country)
-        self.updateCityListForCountry()
-        self.cityViewModel.update(self.cityList)
-        
-        self.currentCity=None
-        self.updateAdressListForCity()
-        self._applyFilterStreet()
-        self._applyFilterCity()
-        
-    @pyqtSlot()
-    def _cityChanged(self):
-        self._clearStreetTableSelection(
-                                        )
-        selmodel = self.cityView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.currentCity, postCode=self.filteredCityList[current.row()]
-            self.updateAdressListForCity()
-            self._applyFilterStreet()
-        
-    @pyqtSlot()
-    def _selectionChanged(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-#        self.okButton.setEnabled(current.isValid())
-        self.setEndPointButton.setEnabled(current.isValid())
-        self.setStartPointButton.setEnabled(current.isValid())
-        self.setWayPointButton.setEnabled(current.isValid())
-        self.showPointButton.setEnabled(current.isValid())
-
-        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _showPoint(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=-1
-        self.done(QDialog.Accepted)
-
-#    def _ok(self):
-#        selmodel = self.streetView.selectionModel()
-#        current = selmodel.currentIndex()
-#        if current.isValid():
-##            print(self.filteredStreetList[current.row()])
-#            self.selectedAddress=self.filteredStreetList[current.row()]
-##            print(self.selectedAddress)
-#        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _setWayPoint(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=2
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _setStartPoint(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=0
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _setEndPoint(self):
-        selmodel = self.streetView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=1
-        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _clearStreetTableSelection(self):
-        self.streetView.clearSelection()
-#        self.okButton.setEnabled(False)
-        self.setWayPointButton.setEnabled(False)
-        self.setStartPointButton.setEnabled(False)
-        self.setEndPointButton.setEnabled(False)
-        self.showPointButton.setEnabled(False)
-
-    @pyqtSlot()
-    def _clearCityTableSelection(self):
-        self.cityView.clearSelection()
-        
-    @pyqtSlot()
-    def _applyFilterStreet(self):
-        self._clearStreetTableSelection()
-        filterValue=self.streetFilterEdit.text()
-        if len(filterValue)!=0:
-            if filterValue[-1]!="*":
-                filterValue=filterValue+"*"
-            self.filteredStreetList=list()
-            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
-            for (id, streetName, houseNumber, lat, lon) in self.streetList:
-                if not fnmatch.fnmatch(streetName.upper(), filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredStreetList.append((id, streetName, houseNumber, lat, lon))
-        else:
-            self.filteredStreetList=self.streetList
-        
-        self.streetViewModel.update(self.filteredStreetList)
-    
-    @pyqtSlot()
-    def _applyFilterCity(self):
-        self._clearCityTableSelection()
-        filterValue=self.cityFilterEdit.text()
-        if len(filterValue)!=0:
-            if filterValue[-1]!="*":
-                filterValue=filterValue+"*"
-            self.filteredCityList=list()
-            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
-            for (city, postCode) in self.cityList:
-                if not fnmatch.fnmatch(city.upper(), filterValue.upper()) and not fnmatch.fnmatch(city.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredCityList.append((city, postCode))
-        else:
-            self.filteredCityList=self.cityList
-        
-        self.cityViewModel.update(self.filteredCityList)
-
-#----------------------------
-class OSMFavoriteTableModel(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.favoriteList)
-    
-    def columnCount(self, parent): 
-        return 1
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.favoriteList):
-            return ""
-        point=self.favoriteList[index.row()]
-        name=point.getName()
-        
-        if index.column()==0:
-            return name
-       
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "Name"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, favoriteList):
-        self.favoriteList=favoriteList
-        self.reset()
-        
-class OSMFavoritesDialog(QDialog):
-    def __init__(self, parent, favoriteList):
-        QDialog.__init__(self, parent) 
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-
-        self.favoriteList=sorted(favoriteList)
-        self.filteredFavoriteList=self.favoriteList
-
-        self.selectedFavorite=None
-        self.pointType=0
-        self.startPointIcon=QIcon("images/source.png")
-        self.endPointIcon=QIcon("images/target.png")
-        self.wayPointIcon=QIcon("images/waypoint.png")
-
-        self.initUI()
-         
-#    def nameSort(self, item):
-#       (name, ref)=item
-#       return name
-   
-    def getResult(self):
-        return (self.selectedFavorite, self.pointType)
-    
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-        
-        self.filterEdit=QLineEdit(self)
-        self.filterEdit.setToolTip('Name Filter')
-        self.filterEdit.returnPressed.connect(self._applyFilter)
-        self.filterEdit.textChanged.connect(self._applyFilter)
-        top.addWidget(self.filterEdit)
-        
-        self.favoriteView=QTableView(self)
-        top.addWidget(self.favoriteView)
-        
-        self.favoriteViewModel=OSMFavoriteTableModel(self)
-        self.favoriteViewModel.update(self.filteredFavoriteList)
-        self.favoriteView.setModel(self.favoriteViewModel)
-        header=QHeaderView(Qt.Horizontal, self.favoriteView)
-        header.setStretchLastSection(True)
-        self.favoriteView.setHorizontalHeader(header)
-        self.favoriteView.setColumnWidth(0, 300)
-
-        actionButtons=QHBoxLayout()
-        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.showPointButton=QPushButton("Show", self)
-        self.showPointButton.clicked.connect(self._showPoint)
-        self.showPointButton.setEnabled(False)
-        actionButtons.addWidget(self.showPointButton)
-
-        self.setStartPointButton=QPushButton("Start", self)
-        self.setStartPointButton.clicked.connect(self._setStartPoint)
-        self.setStartPointButton.setIcon(self.startPointIcon)
-        self.setStartPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setStartPointButton)
-        
-        self.setEndPointButton=QPushButton("End", self)
-        self.setEndPointButton.clicked.connect(self._setEndPoint)
-        self.setEndPointButton.setIcon(self.endPointIcon)
-        self.setEndPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setEndPointButton)
-        
-        self.setWayPointButton=QPushButton("Way", self)
-        self.setWayPointButton.clicked.connect(self._setWayPoint)
-        self.setWayPointButton.setIcon(self.wayPointIcon)
-        self.setWayPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setWayPointButton)
-
-        top.addLayout(actionButtons)
-        
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        style=QCommonStyle()
-
-        self.closeButton=QPushButton("Close", self)
-        self.closeButton.clicked.connect(self._cancel)
-        self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-        self.closeButton.setDefault(True)
-        buttons.addWidget(self.closeButton)
-        top.addLayout(buttons)
-
-        self.connect(self.favoriteView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.setLayout(top)
-        self.setWindowTitle('Favorites')
-        self.setGeometry(0, 0, 400, 400)
-        
-    @pyqtSlot()
-    def _selectionChanged(self):
-        selmodel = self.favoriteView.selectionModel()
-        current = selmodel.currentIndex()
-        self.setEndPointButton.setEnabled(current.isValid())
-        self.setStartPointButton.setEnabled(current.isValid())
-        self.setWayPointButton.setEnabled(current.isValid())
-        self.showPointButton.setEnabled(current.isValid())
-        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _showPoint(self):
-        selmodel = self.favoriteView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=-1
-        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _setWayPoint(self):
-        selmodel = self.favoriteView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=2
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _setStartPoint(self):
-        selmodel = self.favoriteView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=0
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _setEndPoint(self):
-        selmodel = self.favoriteView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=1
-        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _clearTableSelection(self):
-        self.favoriteView.clearSelection()
-        self.setWayPointButton.setEnabled(False)
-        self.setStartPointButton.setEnabled(False)
-        self.setEndPointButton.setEnabled(False)
-        self.showPointButton.setEnabled(False)
-        
-    @pyqtSlot()
-    def _applyFilter(self):
-        self._clearTableSelection()
-        self.filterValue=self.filterEdit.text()
-        if len(self.filterValue)!=0:
-            if self.filterValue[-1]!="*":
-                self.filterValue=self.filterValue+"*"
-            self.filteredFavoriteList=list()
-            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
-            for point in self.favoriteList:
-                name=point.getName()
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredFavoriteList.append(point)
-        else:
-            self.filteredFavoriteList=self.favoriteList
-        
-        self.favoriteViewModel.update(self.filteredFavoriteList)
-        
-#----------------------------
-
-class OSMRouteListTableModel(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.routeList)
-    
-    def columnCount(self, parent): 
-        return 1
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.routeList):
-            return ""
-        route=self.routeList[index.row()]
-        name=route.getName()
-        
-        if index.column()==0:
-            return name
-       
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "Name"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, routeList):
-        self.routeList=routeList
-        self.reset()
-
-#--------------------------------------------------        
-class OSMRouteListDialog(QDialog):
-    def __init__(self, parent, routeList, withDelete, withClose):
-        QDialog.__init__(self, parent) 
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-
-        self.routeList=list()
-        self.routeList.extend(routeList)
-        sorted(self.routeList, key=self.nameSort)
-        self.filteredRouteList=self.routeList
-
-        self.selectedRoute=None
-        self.withDelete=withDelete
-        self.withClose=withClose
-        self.initUI()
-         
-    def nameSort(self, item):
-        return item.getName()
-   
-    def getResult(self):
-        return (self.selectedRoute, self.routeList)
-    
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-        
-        self.filterEdit=QLineEdit(self)
-        self.filterEdit.setToolTip('Name Filter')
-        self.filterEdit.returnPressed.connect(self._applyFilter)
-        self.filterEdit.textChanged.connect(self._applyFilter)
-        top.addWidget(self.filterEdit)
-        
-        self.routeView=QTableView(self)
-        top.addWidget(self.routeView)
-        
-        self.routeViewModel=OSMRouteListTableModel(self)
-        self.routeViewModel.update(self.filteredRouteList)
-        self.routeView.setModel(self.routeViewModel)
-        header=QHeaderView(Qt.Horizontal, self.routeView)
-        header.setStretchLastSection(True)
-        self.routeView.setHorizontalHeader(header)
-        self.routeView.setColumnWidth(0, 300)
-
-        if self.withDelete==True:
-            actionButtons=QHBoxLayout()
-            actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-            
-            self.deleteRouteButton=QPushButton("Delete", self)
-            self.deleteRouteButton.clicked.connect(self._deleteRoute)
-            self.deleteRouteButton.setEnabled(False)
-            actionButtons.addWidget(self.deleteRouteButton)
-    
-            top.addLayout(actionButtons)
-        
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        style=QCommonStyle()
-
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
-        self.cancelButton.setDefault(True)
-        buttons.addWidget(self.cancelButton)
-        
-        if self.withClose==True:
-            self.closeButton=QPushButton("Close", self)
-            self.closeButton.clicked.connect(self._close)
-            self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-            buttons.addWidget(self.closeButton)
-
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDefault(True)
-        self.okButton.setEnabled(False)
-
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        buttons.addWidget(self.okButton)
-
-        top.addLayout(buttons)
-
-        self.connect(self.routeView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.setLayout(top)
-        self.setWindowTitle('Routes')
-        self.setGeometry(0, 0, 400, 400)
-        
-    @pyqtSlot()
-    def _selectionChanged(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if self.withDelete==True:
-            self.deleteRouteButton.setEnabled(current.isValid())
-        self.okButton.setEnabled(current.isValid())
-        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-
-    @pyqtSlot()
-    def _close(self):
-        self.selectedRoute=None
-        self.done(QDialog.Accepted)
-        
-    @pyqtSlot()
-    def _ok(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            self.selectedRoute=self.filteredRouteList[current.row()]
-
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _deleteRoute(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            selectedRoute=self.filteredRouteList[current.row()]
-            self.routeList.remove(selectedRoute)
-            self._applyFilter()
-        
-    @pyqtSlot()
-    def _clearTableSelection(self):
-        self.routeView.clearSelection()
-        if self.withDelete==True:
-            self.deleteRouteButton.setEnabled(False)
-        self.okButton.setEnabled(False)
-
-    @pyqtSlot()
-    def _applyFilter(self):
-        self._clearTableSelection()
-        self.filterValue=self.filterEdit.text()
-        if len(self.filterValue)!=0:
-            if self.filterValue[-1]!="*":
-                self.filterValue=self.filterValue+"*"
-            self.filteredRouteList=list()
-            filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
-            for route in self.routeList:
-                name=route.getName()
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredRouteList.append(route)
-        else:
-            self.filteredRouteList=self.routeList
-        
-        self.routeViewModel.update(self.filteredRouteList)
-#----------------------------
-class OSMRouteTableModel(QAbstractTableModel):
-    def __init__(self, parent):
-        QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
-        return len(self.routingPointList)
-    
-    def columnCount(self, parent): 
-        return 1
-      
-    def data(self, index, role):
-        if role == Qt.TextAlignmentRole:
-            return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
-        
-        if index.row() >= len(self.routingPointList):
-            return ""
-        point=self.routingPointList[index.row()]
-        name=point.getName()
-        
-        if index.column()==0:
-            return name
-       
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal:
-            if role == Qt.DisplayRole:
-                if col==0:
-                    return "Routing Point"
-            elif role == Qt.TextAlignmentRole:
-                return Qt.AlignLeft
-        return None
-    
-   
-    def update(self, routingPointList):
-        self.routingPointList=routingPointList
-        self.reset()
-        
-class OSMRouteDialog(QDialog):
-    def __init__(self, parent, routingPointList, routeList):
-        QDialog.__init__(self, parent) 
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-
-        self.routingPointList=list()
-        self.routingPointList.extend(routingPointList)
-        self.selectedRoutePoint=None
-        self.routeList=list()
-        self.routeList.extend(routeList)
-        self.initUI()
-      
-    def getResult(self):
-        return self.routingPointList, self.routeList
-    
-    def getRouteList(self):
-        return self.routeList
-    
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-                
-        self.routeView=QTableView(self)
-        top.addWidget(self.routeView)
-        
-        self.routeViewModel=OSMRouteTableModel(self)
-        self.routeViewModel.update(self.routingPointList)
-        self.routeView.setModel(self.routeViewModel)
-        header=QHeaderView(Qt.Horizontal, self.routeView)
-        header.setStretchLastSection(True)
-        self.routeView.setHorizontalHeader(header)
-        self.routeView.setColumnWidth(0, 300)
-
-        editButtons=QHBoxLayout()
-        editButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-
-        style=QCommonStyle()
-
-        self.removePointButton=QPushButton("Remove", self)
-        self.removePointButton.clicked.connect(self._removePoint)
-        self.removePointButton.setEnabled(False)
-        editButtons.addWidget(self.removePointButton)
-        
-        self.upPointButton=QPushButton("Up", self)
-        self.upPointButton.clicked.connect(self._upPoint)
-        self.upPointButton.setIcon(style.standardIcon(QStyle.SP_ArrowUp))
-        self.upPointButton.setEnabled(False)
-        editButtons.addWidget(self.upPointButton)
-        
-        self.downPointButton=QPushButton("Down", self)
-        self.downPointButton.clicked.connect(self._downPoint)
-        self.downPointButton.setIcon(style.standardIcon(QStyle.SP_ArrowDown))
-        self.downPointButton.setEnabled(False)
-        editButtons.addWidget(self.downPointButton)
-
-        self.revertPointsButton=QPushButton("Revert", self)
-        self.revertPointsButton.clicked.connect(self._revertRoute)
-        self.revertPointsButton.setEnabled(True)
-        editButtons.addWidget(self.revertPointsButton)
-
-        top.addLayout(editButtons)
-
-        routeButtons=QHBoxLayout()
-        routeButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-
-        style=QCommonStyle()
-
-        self.loadRoutButton=QPushButton("Load...", self)
-        self.loadRoutButton.clicked.connect(self._loadRoute)
-        routeButtons.addWidget(self.loadRoutButton)
-        
-        self.saveRouteButton=QPushButton("Save...", self)
-        self.saveRouteButton.clicked.connect(self._saveRoute)
-        routeButtons.addWidget(self.saveRouteButton)
-
-        top.addLayout(routeButtons)
-
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
-        buttons.addWidget(self.cancelButton)
-
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        buttons.addWidget(self.okButton)
-        top.addLayout(buttons)
-                
-        self.connect(self.routeView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.setLayout(top)
-        self.setWindowTitle('Routing Point')
-        self.setGeometry(0, 0, 400, 400)
-        
-    @pyqtSlot()
-    def _saveRoute(self):
-        routeNameDialog=QInputDialog(self)
-        routeNameDialog.setLabelText("Route Name")
-        routeNameDialog.setWindowTitle("Save Route")
-        font = self.font()
-        font.setPointSize(14)
-        routeNameDialog.setFont(font)
-
-        result=routeNameDialog.exec()
-        if result==QDialog.Accepted:
-            name=routeNameDialog.textValue()
-            route=OSMRoute(name, self.routingPointList)
-            self.routeList.append(route)
-        
-    @pyqtSlot()
-    def _loadRoute(self):
-        loadRouteDialog=OSMRouteListDialog(self, self.routeList, False, False)
-        result=loadRouteDialog.exec()
-        if result==QDialog.Accepted:
-            route, routeList=loadRouteDialog.getResult()
-            if route!=None:
-                self.routeList=routeList
-                self.routingPointList=route.getRoutingPointList()
-                self.routeViewModel.update(self.routingPointList)
-                self._selectionChanged()
-       
-    @pyqtSlot()
-    def _revertRoute(self):
-        self.routingPointList.reverse()
-        self.routeViewModel.update(self.routingPointList)
-        self._selectionChanged()
-        
-    @pyqtSlot()
-    def _ok(self):
-        self.done(QDialog.Accepted)
-
-    @pyqtSlot()
-    def _selectionChanged(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            routingPoint=self.routingPointList[current.row()]
-            self.removePointButton.setEnabled(len(self.routingPointList)>2)
-            index=self.routingPointList.index(routingPoint)
-            self.downPointButton.setEnabled(index>=0 and index<=len(self.routingPointList)-2)                
-            self.upPointButton.setEnabled(index<=len(self.routingPointList)-1 and index>=1)
-        else:
-            self.removePointButton.setEnabled(current.isValid())
-            self.upPointButton.setEnabled(current.isValid())
-            self.downPointButton.setEnabled(current.isValid())
-        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _removePoint(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            routingPoint=self.routingPointList[current.row()]
-            self.routingPointList.remove(routingPoint)
-            self.routeViewModel.update(self.routingPointList)
-            self._selectionChanged()
-
-    @pyqtSlot()
-    def _upPoint(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            routingPoint=self.routingPointList[current.row()]
-            index=self.routingPointList.index(routingPoint)
-            if index<=len(self.routingPointList)-1 and index>=1:
-                self.routingPointList.remove(routingPoint)
-                self.routingPointList.insert(index-1, routingPoint)
-            self.routeViewModel.update(self.routingPointList)
-            selmodel.setCurrentIndex(self.routeViewModel.index(current.row()-1, current.column()), QItemSelectionModel.ClearAndSelect)
-
-
-    @pyqtSlot()
-    def _downPoint(self):
-        selmodel = self.routeView.selectionModel()
-        current = selmodel.currentIndex()
-        if current.isValid():
-            routingPoint=self.routingPointList[current.row()]
-            index=self.routingPointList.index(routingPoint)
-            if index>=0 and index<=len(self.routingPointList)-2:
-                self.routingPointList.remove(routingPoint)
-                self.routingPointList.insert(index+1, routingPoint)
-
-            self.routeViewModel.update(self.routingPointList)
-            selmodel.setCurrentIndex(self.routeViewModel.index(current.row()+1, current.column()), QItemSelectionModel.ClearAndSelect)
-
-    @pyqtSlot()
-    def _clearTableSelection(self):
-        self.routeView.clearSelection()
-        self.removePointButton.setEnabled(False)
-        self.upPointButton.setEnabled(False)
-        self.downPointButton.setEnabled(False)
-        self.revertPointsButton.setEnabled(False)
-        
-#---------------------
-class OSMPositionValidator(QValidator):
-    def __init__(self, parent):
-        QValidator.__init__(self, parent) 
-#        print(help(QValidator.validate))
-        
-    def validate(self, input, pos):
-        if len(input)==0:
-            return (QValidator.Acceptable, input, pos)
-        try:
-            f=float(input)
-        except ValueError:
-            return (QValidator.Invalid, input, pos)
-        return (QValidator.Acceptable, input, pos)
-    
-class OSMPositionDialog(QDialog):
-    def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-        self.lat=0.0
-        self.lon=0.0
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-
-        self.initUI()
-
-    def getResult(self):
-        return (self.lat, self.lon)
-    
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-            
-        style=QCommonStyle()
-
-        fields=QFormLayout()
-        fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
-
-        label=QLabel(self)
-        label.setText("Latitude:")
-        
-        self.validator=OSMPositionValidator(self)
-        self.latField=QLineEdit(self)
-        self.latField.setToolTip('Latitude')
-        self.latField.textChanged.connect(self._updateEnablement)
-        self.latField.setValidator(self.validator)
-
-        fields.addRow(label, self.latField)
-
-        label=QLabel(self)
-        label.setText("Longitude:")
-
-        self.lonField=QLineEdit(self)
-        self.lonField.setToolTip('Latitude')
-        self.lonField.textChanged.connect(self._updateEnablement)
-        self.lonField.setValidator(self.validator)
-
-        fields.addRow(label, self.lonField)
-        
-        top.addLayout(fields)
-
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
-        buttons.addWidget(self.cancelButton)
-
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDisabled(True)
-        self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        buttons.addWidget(self.okButton)
-        top.addLayout(buttons)
-                
-        self.setLayout(top)
-        self.setWindowTitle('Shiow Position')
-        self.setGeometry(0, 0, 400, 100)
-
-    @pyqtSlot()
-    def _updateEnablement(self):
-        self.okButton.setDisabled(len(self.latField.text())==0 or len(self.lonField.text())==0)
-   
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _ok(self):
-        self.lat=float(self.latField.text())
-        self.lon=float(self.lonField.text())
-        self.done(QDialog.Accepted)
 
 #---------------------
 
@@ -2589,85 +1509,120 @@ class OSMWidget(QWidget):
         self.dbLoaded=False
         self.favoriteList=list()
         self.mapWidgetQt=QtOSMWidget(self)
+        self.favoriteIcon=QIcon("images/favorites.png")
+        self.addressIcon=QIcon("images/addresses.png")
+        self.routesIccon=QIcon("images/route.png")
+        self.downloadIcon=QIcon("images/download.png")
+        self.gpsIcon=QIcon("images/gps.png")
+        self.centerGPSIcon=QIcon("images/map-gps.png")
         
-    def addToWidget(self, vbox):       
-        vbox.addWidget(self.mapWidgetQt)
+    def addToWidget(self, vbox):   
+            
+        hbox1=QHBoxLayout()
+        hbox1.addWidget(self.mapWidgetQt)
         
-        hbox=QHBoxLayout()
-        hbox.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
-        vbox.addLayout(hbox)
-        
-        self.centerGPSButton=QPushButton("Center GPS", self)
-        self.centerGPSButton.clicked.connect(self._centerGPS)
-        hbox.addWidget(self.centerGPSButton)
-        
-        self.followGPSButton=QCheckBox("Follow GPS", self)
-        self.followGPSButton.clicked.connect(self._followGPS)
-        hbox.addWidget(self.followGPSButton)
-        
-        self.downloadTilesButton=QCheckBox("Download", self)
-        self.downloadTilesButton.clicked.connect(self._downloadTiles)
-        self.downloadTilesButton.setIcon(self.ampelRot)
-        hbox.addWidget(self.downloadTilesButton)
-        
-#        self.forceDownloadTilesButton=QPushButton("Force Download", self)
-#        self.forceDownloadTilesButton.clicked.connect(self._forceDownloadTiles)
-#        hbox.addWidget(self.forceDownloadTilesButton)
+        buttons=QVBoxLayout()        
+        buttons.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
-        self.zoomLabel=QLabel("", self)
-        self.zoomLabel.setText("z=%d"%(self.getZoomValue()))
-        hbox.addWidget(self.zoomLabel)
-        
-        self.gpsPosLabelLat=QLabel("", self)
-        self.gpsPosLabelLat.setText("+%2.4f"%(0.0))
-        hbox.addWidget(self.gpsPosLabelLat)
-
-        self.gpsPosLabelLon=QLabel("", self)
-        self.gpsPosLabelLon.setText("+%2.4f"%(0.0))
-        hbox.addWidget(self.gpsPosLabelLon)
-        
-        self.mousePosLabelLat=QLabel("", self)
-        self.mousePosLabelLat.setText("+%2.4f"%(0.0))
-        hbox.addWidget(self.mousePosLabelLat)
-
-        self.mousePosLabelLon=QLabel("", self)
-        self.mousePosLabelLon.setText("+%2.4f"%(0.0))
-        hbox.addWidget(self.mousePosLabelLon)
-        
-        buttons=QHBoxLayout()        
-
-#        self.testTrackButton=QPushButton("Test Track", self)
-#        self.testTrackButton.clicked.connect(self._testTrack)
-#        buttons.addWidget(self.testTrackButton)
-
-        self.adressButton=QPushButton("Addresses", self)
+        iconSize=QSize(48, 48)
+        self.adressButton=QPushButton("", self)
+        self.adressButton.setIcon(self.addressIcon)
+        self.adressButton.setToolTip("Addresses")
         self.adressButton.clicked.connect(self._showAdress)
         self.adressButton.setDisabled(True)
+        self.adressButton.setIconSize(iconSize)        
         buttons.addWidget(self.adressButton)
                 
-        self.favoritesButton=QPushButton("Favorites", self)
+        self.favoritesButton=QPushButton("", self)
+        self.favoritesButton.setIcon(self.favoriteIcon)
+        self.favoritesButton.setToolTip("Favorites")
         self.favoritesButton.clicked.connect(self._showFavorites)
         self.favoritesButton.setDisabled(True)
+        self.favoritesButton.setIconSize(iconSize)        
         buttons.addWidget(self.favoritesButton)
         
-        self.routesButton=QPushButton("Routes", self)
+        self.routesButton=QPushButton("", self)
+        self.routesButton.setIcon(self.routesIccon)
+        self.routesButton.setToolTip("Routes")
         self.routesButton.clicked.connect(self._loadRoute)
         self.routesButton.setDisabled(True)
+        self.routesButton.setIconSize(iconSize)        
         buttons.addWidget(self.routesButton)
 
-        self.trackLabel=QLabel("", self)
-        self.trackLabel.setText("")
-        buttons.addWidget(self.trackLabel)
+        self.centerGPSButton=QPushButton("", self)
+        self.centerGPSButton.setToolTip("Center map to GPS")
+        self.centerGPSButton.setIcon(self.centerGPSIcon)
+        self.centerGPSButton.setIconSize(iconSize)        
+        self.centerGPSButton.clicked.connect(self._centerGPS)
+        buttons.addWidget(self.centerGPSButton)
         
-        vbox.addLayout(buttons)
+        self.followGPSButton=QCheckBox("", self)
+        self.followGPSButton.setIcon(self.gpsIcon)
+        self.followGPSButton.setToolTip("Follow GPS")
+        self.followGPSButton.setIconSize(iconSize)        
+        self.followGPSButton.clicked.connect(self._followGPS)
+        buttons.addWidget(self.followGPSButton)
         
+        self.downloadTilesButton=QCheckBox("", self)
+        self.downloadTilesButton.setIcon(self.downloadIcon)
+        self.downloadTilesButton.setToolTip("Download")
+        self.downloadTilesButton.clicked.connect(self._downloadTiles)
+#        self.downloadTilesButton.setIcon(self.ampelRot)
+        self.downloadTilesButton.setIconSize(iconSize)        
+        buttons.addWidget(self.downloadTilesButton)
+        
+        formLayout=QFormLayout()
+        font = QFont("Mono")
+        font.setPointSize(14)
+        font.setStyleHint(QFont.TypeWriter)
+        
+#        self.zoomLabel=QLabel("Zoom:", self)
+#        self.zoomValue=QLabel("%d"%(self.getZoomValue()), self)
+#        self.zoomValue.setFont(font)
+#        formLayout.addRow(self.zoomLabel, self.zoomValue)
+        
+        self.gpsPosLabelLat=QLabel("", self)
+        self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
+        self.gpsPosValueLat.setFont(font)
+        formLayout.addRow(self.gpsPosLabelLat, self.gpsPosValueLat)
+
+        self.gpsPosLabelLon=QLabel("", self)
+        self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
+        self.gpsPosValueLon.setFont(font)
+        formLayout.addRow(self.gpsPosLabelLon, self.gpsPosValueLon)
+        
+        self.mousePosLabelLat=QLabel("", self)
+        self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
+        self.mousePosValueLat.setFont(font)
+        formLayout.addRow(self.mousePosLabelLat, self.mousePosValueLat)
+
+        self.mousePosLabelLon=QLabel("", self)
+        self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
+        self.mousePosValueLon.setFont(font)
+        formLayout.addRow(self.mousePosLabelLon, self.mousePosValueLon)
+
+        buttons.addLayout(formLayout)
+        
+        hbox1.addLayout(buttons)
+
+        vbox.addLayout(hbox1)
+        
+#        hbox=QHBoxLayout()
+#        hbox.setAlignment(Qt.AlignLeft|Qt.AlignVCenter)
+#        vbox.addLayout(hbox)
+#        
+#        self.trackLabel=QLabel("", self)
+#        self.trackLabel.setText("")
+#        hbox.addWidget(self.trackLabel)
+
+                
         self.downloadThread=OSMDownloadTilesWorker(self)
         self.downloadThread.setWidget(self.mapWidgetQt)
         self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
         self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
-        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
+#        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
         self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
-        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
+#        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
         self.connect(self.mapWidgetQt, SIGNAL("startProgress()"), self.startProgress)
         self.connect(self.mapWidgetQt, SIGNAL("stopProgress()"), self.stopProgress)
 
@@ -2682,19 +1637,19 @@ class OSMWidget(QWidget):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()        
         
-    def updateTrackDisplay(self, track):
-        self.trackLabel.setText(track)
+#    def updateTrackDisplay(self, track):
+#        self.trackLabel.setText(track)
         
     def updateMousePositionDisplay(self, lat, lon):
-        self.mousePosLabelLat.setText("+%.4f"%(lat))
-        self.mousePosLabelLon.setText("+%.4f"%(lon)) 
+        self.mousePosValueLat.setText("%.5f"%(lat))
+        self.mousePosValueLon.setText("%.5f"%(lon)) 
  
     def updateGPSPositionDisplay(self, lat, lon):
-        self.gpsPosLabelLat.setText("+%.4f"%(lat))
-        self.gpsPosLabelLon.setText("+%.4f"%(lon))   
+        self.gpsPosValueLat.setText("%.5f"%(lat))
+        self.gpsPosValueLon.setText("%.5f"%(lon))   
             
-    def updateZoom(self, zoom):
-        self.zoomLabel.setText("z=%d"%(zoom))
+#    def updateZoom(self, zoom):
+#        self.zoomValue.setText("%d"%(zoom))
             
     def init(self, lat, lon, zoom):        
         self.mapWidgetQt.init()
@@ -2728,7 +1683,7 @@ class OSMWidget(QWidget):
     
     @pyqtSlot()
     def _followGPS(self):
-        self.mapWidgetQt.setAutocenterGPS(self.followGPSButton.isChecked())   
+        self.setAutocenterGPSValue(self.followGPSButton.isChecked())
                     
     def updateGPSPosition(self, lat, lon):
         self.mapWidgetQt.updateGPSLocation(lat, lon)
@@ -2771,7 +1726,7 @@ class OSMWidget(QWidget):
 
     def setZoomValue(self, value):
         self.mapWidgetQt.map_zoom=value
-        self.updateZoom(value)
+#        self.updateZoom(value)
 
     def getAutocenterGPSValue(self):
         return self.mapWidgetQt.autocenterGPS
@@ -2779,6 +1734,7 @@ class OSMWidget(QWidget):
     def setAutocenterGPSValue(self, value):
         self.mapWidgetQt.autocenterGPS=value
         self.followGPSButton.setChecked(value)
+        self.centerGPSButton.setDisabled(value==True)  
            
     def getWithDownloadValue(self):
         return self.mapWidgetQt.withDownload
@@ -2848,12 +1804,12 @@ class OSMWidget(QWidget):
         
     def updateDownloadThreadState(self, state):
         if state!=self.lastDownloadState:
-            if state==downloadIdleState:
-                self.downloadTilesButton.setIcon(self.ampelGelb)
-            elif state==downloadRunState:
-                self.downloadTilesButton.setIcon(self.ampelGruen)
-            elif state==downloadStoppedState:
-                self.downloadTilesButton.setIcon(self.ampelRot)
+#            if state==downloadIdleState:
+#                self.downloadTilesButton.setIcon(self.ampelGelb)
+#            elif state==downloadRunState:
+#                self.downloadTilesButton.setIcon(self.ampelGruen)
+#            elif state==downloadStoppedState:
+#                self.downloadTilesButton.setIcon(self.ampelRot)
             self.lastDownloadState=state
           
     def updateDataThreadState(self, state):
@@ -2875,7 +1831,7 @@ class OSMWidget(QWidget):
         
     @pyqtSlot()
     def _showAdress(self):
-        searchDialog=OSMAdressDialog(self)
+        searchDialog=OSMAdressDialog(self, osmParserData)
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
@@ -2997,7 +1953,7 @@ class OSMWindow(QMainWindow):
                 
         top.addLayout(buttons)
         
-        self.setGeometry(0, 0, 900, 690)
+        self.setGeometry(0, 0, 960, 600)
         self.setWindowTitle('OSM Test')
         self.show()
         
