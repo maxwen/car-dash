@@ -631,7 +631,8 @@ class CANMonitor(QMainWindow):
 #        toolbar.addAction(self.reconnectGPSAction)
         
         mainWidget=QWidget(self)
-        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+#        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        mainWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
 
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)
@@ -827,7 +828,7 @@ class CANMonitor(QMainWindow):
         self.connectGPSButton.setIcon(self.ampelRot)
         connectBox.addWidget(self.connectGPSButton)
         
-        self.setGeometry(10, 10, 850, 500)
+        self.setGeometry(0, 0, 900, 600)
         self.setWindowTitle("candash")
         self.show()
         

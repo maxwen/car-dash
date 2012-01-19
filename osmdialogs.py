@@ -1105,7 +1105,7 @@ class OSMPositionDialog(QDialog):
         top.addLayout(buttons)
                 
         self.setLayout(top)
-        self.setWindowTitle('Shiow Position')
+        self.setWindowTitle('Show Position')
         self.setGeometry(0, 0, 400, 100)
 
     @pyqtSlot()
@@ -1120,4 +1120,66 @@ class OSMPositionDialog(QDialog):
     def _ok(self):
         self.lat=float(self.latField.text())
         self.lon=float(self.lonField.text())
+        self.done(QDialog.Accepted)
+
+class OSMOptionsDialog(QDialog):
+    def __init__(self, parent):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        self.downloadIcon=QIcon("images/download.png")
+        self.gpsIcon=QIcon("images/gps.png")
+        self.followGPS=parent.getAutocenterGPSValue()
+        self.withDownload=parent.getWithDownloadValue()
+        self.initUI()
+
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+            
+        style=QCommonStyle()
+        iconSize=QSize(48, 48)
+
+        self.followGPSButton=QCheckBox("Follow GPS", self)
+        self.followGPSButton.setIcon(self.gpsIcon)
+#        self.followGPSButton.setToolTip("Follow GPS")
+        self.followGPSButton.setIconSize(iconSize) 
+        self.followGPSButton.setChecked(self.followGPS)       
+        top.addWidget(self.followGPSButton)
+        
+        self.downloadTilesButton=QCheckBox("Download missing tiles", self)
+        self.downloadTilesButton.setIcon(self.downloadIcon)
+#        self.downloadTilesButton.setToolTip("Download")
+        self.downloadTilesButton.setChecked(self.withDownload)
+        self.downloadTilesButton.setIconSize(iconSize)        
+        top.addWidget(self.downloadTilesButton)
+        
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+        
+        top.addLayout(buttons)
+        self.setLayout(top)
+        self.setWindowTitle('Settings')
+        self.setGeometry(0, 0, 400, 100)
+
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.withDownload=self.downloadTilesButton.isChecked()
+        self.followGPS=self.followGPSButton.isChecked()
         self.done(QDialog.Accepted)
