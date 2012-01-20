@@ -17,8 +17,15 @@ class TrspWrapper():
     def getDB(self):
         return os.path.join(self.dataDir, "edge.db")
     
-    def getSQLQueryEdge(self):
-        return "SELECT id, source, target, cost, reverseCost FROM edgeTable ORDER BY id"
+    def getSQLQueryEdge(self, bbox):
+        ymin=bbox[1]-0.1
+        xmin=bbox[0]-0.1
+        ymax=bbox[3]+0.1
+        xmax=bbox[2]+0.1
+        
+        return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
+
+#        return "SELECT id, source, target, cost, reverseCost FROM edgeTable ORDER BY id"
 
     def getSQLQueryRestriction(self):
         return "SELECT target, toCost, viaPath FROM restrictionTable"
@@ -33,11 +40,9 @@ class TrspWrapper():
         endNodeC=c_int(endNode)
         path_count=c_int(0)
         file=c_char_p(self.getDB().encode(encoding='utf_8', errors='strict'))
-        sqlEdge=c_char_p(self.getSQLQueryEdge().encode(encoding='utf_8', errors='strict'))
+        sqlEdge=c_char_p(self.getSQLQueryEdge(bbox).encode(encoding='utf_8', errors='strict'))
         sqlRestriction=c_char_p(self.getSQLQueryRestriction().encode(encoding='utf_8', errors='strict'))
         
-        bboxCtype = c_float*len(bbox)
-        bboxC = bboxCtype(*bbox)
         
         class path_element_t(Structure):
             _fields_ = [("vertex_id", c_int),

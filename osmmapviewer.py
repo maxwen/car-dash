@@ -816,7 +816,7 @@ class QtOSMWidget(QWidget):
                         if showTrackDetails==True:
                             useCrossingType=-1
                             for crossing in crossingList:
-                                _, crossingType, crossingInfo=crossing
+                                _, crossingType, crossingInfo, crossingRef=crossing
                                 if crossingType==0:
                                     # normal crossing with street that has other name
                                     useCrossingType=crossingType
@@ -1257,8 +1257,8 @@ class QtOSMWidget(QWidget):
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
         defaultName="favorite"
-        wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(lat, lon)
-        if wayId==None:
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+        if edgeId==None:
             return 
         
         (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
@@ -1279,8 +1279,8 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(lat, lon)
-        if wayId==None:
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+        if edgeId==None:
             return
         
         if pointType==0:
@@ -1327,26 +1327,19 @@ class QtOSMWidget(QWidget):
 
         self.osm_center_map_to_position(lat, lon)
 
-    def showTrackOnPos(self, actlat, actlon):
+    def showTrackOnPos(self, lat, lon):
         if self.osmWidget.dbLoaded==True:
-#            start=time.time()
-            wayId, usedRefId, usedPos, country=osmParserData.getWayIdForPos(actlat, actlon)
-#            stop=time.time()
-#            print(stop-start)
-            if wayId==None:
+            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+            if edgeId==None:
 #                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
                 self.wayInfo="Unknown way"
             else:   
                 if wayId!=self.lastWayId:
 #                    print(country)
 #                    self.lastWayId=wayId
-#                    print(osmParserData.getCountrysOfWay(wayId))
                     wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
                     print("%d %s %s"%(wayId, str(tags), str(refs)))
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
-#                    print("%s %s"%(name, ref))
-#                    print(osmParserData.getStreetEntryForNameAndCountry((name, ref), country))
-#                    print(osmParserData.getEdgeIdOnPos(actlat, actlon))
 
 #                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
                     self.wayInfo="%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country))
@@ -1398,9 +1391,20 @@ class QtOSMWidget(QWidget):
 #            print("edgeList=%s"%(self.currentRoute.getEdgeList()))
             print("cost=%f"%(self.currentRoute.getPathCost()))
             print("len=%d"%(self.currentRoute.getLength()))
+            self.printRouteDescription()
             # show start pos at zoom level 15
             self.showRoutingPointOnMap(self.startPoint)
             self.update()
+        
+    def printRouteDescription(self):
+        trackList=self.currentRoute.getTrackList()
+        print("start:")
+        for trackItem in trackList:
+            streetInfo=trackItem["info"]
+            length=trackItem["length"]
+            if "direction" in trackItem and "crossingInfo" in trackItem:
+                print("%s %d"%(streetInfo, length))
+                print("%s %d"%(trackItem["crossingInfo"], trackItem["direction"]))
         
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
