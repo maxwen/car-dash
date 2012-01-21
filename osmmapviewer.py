@@ -283,8 +283,6 @@ class QtOSMWidget(QWidget):
         self.tileHome=defaultTileHome
         self.tileServer=defaultTileServer
         
-        self.trackStartLat=0.0
-        self.trackStartLon=0.0
         self.lastMouseMoveX=0
         self.lastMouseMoveY=0
         
@@ -594,10 +592,10 @@ class QtOSMWidget(QWidget):
         self.painter.drawText(zoomPos, "Zoom:%d"%(self.map_zoom))
         
     def showRoutingPoints(self):
-        showTrackDetails=self.map_zoom>13
+#        showTrackDetails=self.map_zoom>13
         
-        if showTrackDetails==False:
-            return 
+#        if showTrackDetails==False:
+#            return 
         
         startPointPen=QPen()
         startPointPen.setColor(Qt.darkBlue)
@@ -713,6 +711,16 @@ class QtOSMWidget(QWidget):
             greenCrossingPen.setWidth(min(self.map_zoom, 10))
             greenCrossingPen.setCapStyle(Qt.RoundCap);
 
+            blackCrossingPen=QPen()
+            blackCrossingPen.setColor(Qt.black)
+            blackCrossingPen.setWidth(min(self.map_zoom, 10))
+            blackCrossingPen.setCapStyle(Qt.RoundCap);
+            
+            yellowCrossingPen=QPen()
+            yellowCrossingPen.setColor(Qt.yellow)
+            yellowCrossingPen.setWidth(min(self.map_zoom, 10))
+            yellowCrossingPen.setCapStyle(Qt.RoundCap);
+
             motorwayPen=QPen()
             motorwayPen.setColor(Qt.blue)
             motorwayPen.setWidth(4)
@@ -738,50 +746,27 @@ class QtOSMWidget(QWidget):
             linkPen.setWidth(4)
             linkPen.setCapStyle(Qt.RoundCap);
             
-            self.trackStartLon=0.0
-            self.trackStartLat=0.0
             lastX=0
             lastY=0
-            startNode=deque()
-            node=None
 
-#                track= osmParserData.getStreetTrackList(wayid)
-#                if track==None:
-#                    print("no track found for %d"%(wayid))
-#                    continue
-            
             for item in route.getTrackList():
-                if "lat" in item:
-                    lat=item["lat"]
-                if "lon" in item:
-                    lon=item["lon"]
-                if "ref" in item:
-                    ref=item["ref"]
-#                        if ref in osmParserData.nodes:
-#                            node=osmParserData.nodes[ref]
+                streetType=item["type"]
+                
+                for itemRef in item["refs"]:
+                    lat=itemRef["lat"]
+                    lon=itemRef["lon"]
                         
-                start=False
-                end=False
-                crossing=False
-                oneway=False
-                streetType=""
-                direction=None
-                if "start" in item:
-                    start=True
-                if "end" in item:
-                    end=True
-                if "crossing" in item:
-                    crossing=True
-                    crossingList=item["crossing"]
-                if "crossingInfo" in item:
-                    crossingInfo=item["crossingInfo"]
-                if "direction" in item:
-                    direction=item["direction"]
-                if"oneway" in item:
-                    oneway=item["oneway"]=="yes"
-                if "type" in item:
-                    streetType=item["type"]
-                if not start and not end:
+                    crossing=False
+                    direction=None
+                    
+                    if "crossing" in itemRef:
+                        crossing=True
+                        crossingList=itemRef["crossing"]
+                    if "crossingInfo" in item:
+                        crossingInfo=itemRef["crossingInfo"]
+                    if "direction" in item:
+                        direction=itemRef["direction"]
+    
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
     
                     if lastX!=0 and lastY!=0:
@@ -798,16 +783,10 @@ class QtOSMWidget(QWidget):
                         else:
                             pen=redPen
                             
-                        if oneway:
-                            pen.setStyle(Qt.DashLine)
-                        else:
-                            pen.setStyle(Qt.SolidLine)
+                        pen.setStyle(Qt.SolidLine)
                             
                         self.painter.setPen(pen)
                         self.painter.drawLine(x, y, lastX, lastY)
-                    else:
-                        self.trackStartLon=lon
-                        self.trackStartLat=lat
 
                     lastX=x
                     lastY=y
@@ -821,11 +800,18 @@ class QtOSMWidget(QWidget):
                                     # normal crossing with street that has other name
                                     useCrossingType=crossingType
                                 elif crossingType==1:
-                                    # crossing with traffic signs overrules all others
+                                    # crossing with traffic light have higher priorty
+                                    useCrossingType=crossingType
+                                    break
+                                elif crossingType==3 or crossingType==4:
+                                    # roundabout crossing have higher priorty
                                     useCrossingType=crossingType
                                     break
                                 elif crossingType==2:
                                     # motorway junction
+                                    useCrossingType=crossingType
+                                elif crossingType==42:
+                                    # no enter oneway
                                     useCrossingType=crossingType
     
                             if useCrossingType!=-1:
@@ -840,6 +826,18 @@ class QtOSMWidget(QWidget):
                                     # motorway junction
                                     self.painter.setPen(blueCrossingPen)
                                     self.painter.drawPoint(x, y)
+                                elif useCrossingType==3:
+                                    # roundabout enter
+                                    self.painter.setPen(yellowCrossingPen)
+                                    self.painter.drawPoint(x, y)
+                                elif useCrossingType==4:
+                                    # roundabout exit
+                                    self.painter.setPen(yellowCrossingPen)
+                                    self.painter.drawPoint(x, y)
+#                                elif useCrossingType==42:
+#                                    # no enter oneway
+#                                    self.painter.setPen(blackCrossingPen)
+#                                    self.painter.drawPoint(x, y)
                             
                     if direction!=None:
                         if showTrackDetails==True:
@@ -855,14 +853,6 @@ class QtOSMWidget(QWidget):
                                     #left
                                     self.painter.drawPixmap(x, y, self.turnLeftImage)
                                 
-                elif start:
-                    startNode.append((lastX, lastY))
-                    lastX=0
-                    lastY=0
-                elif end:
-                    lastX, lastY=startNode.pop()
-            if len(startNode)!=0:
-                print("unbalanced start-end nodes %s"%str(startNode))
             
 #    def minimumSizeHint(self):
 #        return QSize(minWidth, minHeight)
@@ -1400,12 +1390,17 @@ class QtOSMWidget(QWidget):
         trackList=self.currentRoute.getTrackList()
         print("start:")
         for trackItem in trackList:
-            streetInfo=trackItem["info"]
-            length=trackItem["length"]
-            if "direction" in trackItem and "crossingInfo" in trackItem:
-                print("%s %d"%(streetInfo, length))
-                print("%s %d"%(trackItem["crossingInfo"], trackItem["direction"]))
-        
+            if "info" in trackItem and "length" in trackItem and "type" in trackItem:
+                streetInfo=trackItem["info"]
+                length=trackItem["length"]
+                streetType=trackItem["type"]
+                print("%s - %d - %s"%(streetInfo, length, streetType))
+                
+            for trackItemRef in trackItem["refs"]:
+                if "direction" in trackItemRef and "crossingInfo" in trackItemRef:
+                    print("%s %d"%(trackItemRef["crossingInfo"], trackItemRef["direction"]))
+        print("end:")
+
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
             (actlat, actlon)=self.getMousePosition(x, y)
