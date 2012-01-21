@@ -21,6 +21,8 @@ from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmutils import OSMUtils
 from osmdialogs import *
 from config import Config
+from gpsutils import GPSMonitorUpateWorker
+from gps import gps, misc
 
 TILESIZE=256
 #minWidth=800
@@ -762,9 +764,9 @@ class QtOSMWidget(QWidget):
                     if "crossing" in itemRef:
                         crossing=True
                         crossingList=itemRef["crossing"]
-                    if "crossingInfo" in item:
+                    if "crossingInfo" in itemRef:
                         crossingInfo=itemRef["crossingInfo"]
-                    if "direction" in item:
+                    if "direction" in itemRef:
                         direction=itemRef["direction"]
     
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
@@ -814,6 +816,7 @@ class QtOSMWidget(QWidget):
                                     # no enter oneway
                                     useCrossingType=crossingType
     
+#                            print(useCrossingType)
                             if useCrossingType!=-1:
                                 if useCrossingType==0:
                                     self.painter.setPen(greenCrossingPen)
@@ -1327,7 +1330,7 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
 #                    print(country)
 #                    self.lastWayId=wayId
-                    wayId, tags, refs, distances=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+                    wayId, tags, refs=osmParserData.getWayEntryForIdAndCountry(wayId, country)
                     print("%d %s %s"%(wayId, str(tags), str(refs)))
                     (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
@@ -1386,6 +1389,16 @@ class QtOSMWidget(QWidget):
             self.showRoutingPointOnMap(self.startPoint)
             self.update()
         
+    def directionName(self, direction):
+        if direction==0:
+            return "straight"
+        if direction==-1:
+            return "left"
+        if direction==1:
+            return "right"
+        
+        return "unknown"
+    
     def printRouteDescription(self):
         trackList=self.currentRoute.getTrackList()
         print("start:")
@@ -1398,7 +1411,7 @@ class QtOSMWidget(QWidget):
                 
             for trackItemRef in trackItem["refs"]:
                 if "direction" in trackItemRef and "crossingInfo" in trackItemRef:
-                    print("%s %d"%(trackItemRef["crossingInfo"], trackItemRef["direction"]))
+                    print("%s %s"%(trackItemRef["crossingInfo"], self.directionName(trackItemRef["direction"])))
         print("end:")
 
     def showTrackOnMousePos(self, x, y):
@@ -1538,6 +1551,13 @@ class OSMWidget(QWidget):
         self.centerGPSButton.clicked.connect(self._centerGPS)
         buttons.addWidget(self.centerGPSButton)
         
+        self.showGPSDataButton=QPushButton("GPS", self)
+        self.showGPSDataButton.setToolTip("Show data from GPS")
+#        self.showGPSDataButton.setIcon(self.centerGPSIcon)
+#        self.showGPSDataButton.setIconSize(iconSize)        
+        self.showGPSDataButton.clicked.connect(self._showGPSData)
+        buttons.addWidget(self.showGPSDataButton)
+
         self.optionsButton=QPushButton("", self)
         self.optionsButton.setToolTip("Settings")
         self.optionsButton.setIcon(self.settingsIcon)
@@ -1591,6 +1611,10 @@ class OSMWidget(QWidget):
     def stopProgress(self):
         self.emit(SIGNAL("stopProgress()"))
 
+    @pyqtSlot()
+    def _showGPSData(self):
+        None
+        
     @pyqtSlot()
     def _showSettings(self):
         optionsDialog=OSMOptionsDialog(self)
@@ -1829,6 +1853,7 @@ class OSMWindow(QMainWindow):
         self.incLon=0.0
         self.app=app
         self.config=Config("osmmapviewer.cfg")
+        self.updateGPSThread=None
         self.initUI()
 
     def stopProgress(self):
@@ -1851,20 +1876,12 @@ class OSMWindow(QMainWindow):
 
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)        
-        tabs = QTabWidget(self)
-        top.addWidget(tabs)
         
-        osmTab = QWidget()
-        osmTabLayout=QVBoxLayout(osmTab)
-        osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-
-        tabs.addTab(osmTab, "OSM")
-
         self.osmWidget=OSMWidget(self, self.app)
         self.osmWidget.setStartLatitude(47.8205)
         self.osmWidget.setStartLongitude(13.0170)
 
-        self.osmWidget.addToWidget(osmTabLayout)
+        self.osmWidget.addToWidget(top)
         self.osmWidget.loadConfig(self.config)
 
         self.osmWidget.initHome()
@@ -1882,13 +1899,52 @@ class OSMWindow(QMainWindow):
         self.testGPSButton=QPushButton("Test GPS", self)
         self.testGPSButton.clicked.connect(self._testGPS)
         buttons.addWidget(self.testGPSButton)
+
+        self.connectPSButton=QCheckBox("Connect GPS", self)
+        self.connectPSButton.clicked.connect(self._testGPS)
+        buttons.addWidget(self.connectPSButton)
                 
         top.addLayout(buttons)
         
+        self.updateGPSThread=GPSMonitorUpateWorker(self)
+        self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
+        self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
+        self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
+#        self.connectGPS()
+
         self.setGeometry(0, 0, 900, 600)
         self.setWindowTitle('OSM Test')
         self.show()
         
+    @pyqtSlot()
+    def _connectGPS(self):
+        value=self.connectPSButton.isChecked()
+        if value==True:
+            self.updateGPSThread.setup(True)
+        else:
+            self.disconnectGPS()
+        
+    def disconnectGPS(self):
+        if self.updateGPSThread.isRunning():
+            self.updateGPSThread.stop()
+        
+    def updateGPSThreadState(self, state):
+        print("updateGPSThreadState:%s"%(state))
+    
+    def connectGPSFailed(self):
+        self.connectPSButton.setChecked(False)
+    
+    def updateGPSDisplay(self, session):
+        print("updateGPSDisplay")
+        if session!=None:            
+            if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
+                self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
+            else:
+                self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+        else:            
+            self.osmWidget.updateGPSPosition(0.0, 0.0)
+
     @pyqtSlot()
     def _testGPS(self):
         if self.incLat==0.0:
@@ -1907,10 +1963,11 @@ class OSMWindow(QMainWindow):
 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
-        print(text)
 
     @pyqtSlot()
     def _cleanup(self):
+        self.disconnectGPS()
+        
         self.osmWidget.saveConfig(self.config)
         self.config.writeConfig()
 

@@ -273,6 +273,13 @@ def main(argv):
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
     print(end-start)
+    
+    lat=47.1381654
+    lon=9.5227332
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    print(end-start)
 
 if __name__ == "__main__":
     main(sys.argv)  
