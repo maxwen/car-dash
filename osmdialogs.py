@@ -30,7 +30,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (id, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (refId, country, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
             return streetName
@@ -153,10 +153,10 @@ class OSMAdressDialog(QDialog):
         self.filteredCityList=self.cityList
         
     def streetNameSort(self, item):
-        return item[3]
+        return item[4]
 
     def houseNumberSort(self, item):
-        houseNumberStr=item[4]
+        houseNumberStr=item[5]
         try:
             houseNumber=int(houseNumberStr)
             return houseNumber
@@ -410,10 +410,10 @@ class OSMAdressDialog(QDialog):
             self.filteredStreetList=list()
             filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (refId, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
+            for (refId, country, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
                 if not fnmatch.fnmatch(streetName.upper(), filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredStreetList.append((refId, city, postCode, streetName, houseNumber, lat, lon))
+                self.filteredStreetList.append((refId, country, city, postCode, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
         

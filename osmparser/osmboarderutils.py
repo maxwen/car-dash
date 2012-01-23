@@ -346,20 +346,26 @@ def main(argv):
     end=time.time()
     print(end-start)
 
-    lat=47.936814
-    lon=12.93
+    lat=48.4109412
+    lon=13.4256467
     start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
     
-    x=bu.encode(11,1,0)
-    print(bu.decode(x))
-    x=bu.encode(9,0,1)
-    print(bu.decode(x))
-    x=bu.encode(8,0,0)
-    print(bu.decode(x))
-    x=bu.encode(7,1,1)
-    print(bu.decode(x))
+    lat=48.4098733
+    lon=13.4266383
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    
+#    x=bu.encode(11,1,0)
+#    print(bu.decode(x))
+#    x=bu.encode(9,0,1)
+#    print(bu.decode(x))
+#    x=bu.encode(8,0,0)
+#    print(bu.decode(x))
+#    x=bu.encode(7,1,1)
+#    print(bu.decode(x))
     
 if __name__ == "__main__":
     main(sys.argv)  

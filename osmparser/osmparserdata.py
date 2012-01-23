@@ -37,6 +37,14 @@ class OSMRoute():
         if self.edgeList==None:
             self.edgeList, self.pathCost=osmParserData.calcRouteForPoints(self.routingPointList)
     
+    def calcRouteTest(self, osmParserData):
+        osmParserData.calcRouteForPointsTest(self.routingPointList)
+        
+    def changeRouteFromPos(self, currentPoint, osmParserData):        
+        self.routingPointList[0]=currentPoint
+        self.edgeList=None
+        self.trackList=None
+        
     def getEdgeList(self):
         return self.edgeList
     
@@ -107,13 +115,18 @@ class OSMRoutingPoint():
         # 2 way
         # 3 gps
         # 4 favorite
+        # 5 temporary
         self.type=pointType
         self.wayId=None
         self.edgeId=None
         self.name=name
         self.usedRefId=0
+        self.country=None
     
     def resolveFromPos(self, osmParserData):
+        if self.source!=0:
+            return
+        
         edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon)
         if edgeId==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
@@ -127,6 +140,7 @@ class OSMRoutingPoint():
         self.source=source
         self.usedRefId=usedRefId
         self.wayId=wayId
+        self.country=country
     
     def __repr__(self):
         return "%s:%d:%f:%f"%(self.name, self.type, self.lat, self.lon)
@@ -163,6 +177,9 @@ class OSMRoutingPoint():
         
     def getTarget(self):
         return self.target
+    
+    def getCountry(self):
+        return self.country
     
     def saveToConfig(self, config, section, name):        
         config.set(section, name, "%s"%(self.toString()))
@@ -613,10 +630,20 @@ class OSMParserData():
         self.createCrossingsTable()
                 
     def getLenOfEdgeTable(self):
-        self.cursorEdge.execute('SELECT COUNT(*) FROM edgeTable')
+        self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         return allentries[0][0]
     
+    def getLenOfEdgeTableForRouting(self, bbox):
+        ymin=bbox[1]-0.1
+        xmin=bbox[0]-0.1
+        ymax=bbox[3]+0.1
+        xmax=bbox[2]+0.1
+        
+        self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax))
+        allentries=self.cursorEdge.fetchall()
+        return allentries[0][0]
+
     def updateSourceOfEdge(self, edgeId, sourceId):
         existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
@@ -796,7 +823,30 @@ class OSMParserData():
                 points.append((newLat, newLon))
                 doneDistance=doneDistance+frac
         return points
-            
+       
+    def isPosOnCurrenRoute(self, lat, lon, route):
+        if route==None:
+            return
+        
+        edgeId, wayId, usedRefId, usedPos, country=self.getEdgeIdOnPos(lat, lon)
+        if edgeId==None:
+            return
+        
+        edgeList=route.getEdgeList()
+        if edgeList==None:
+            return
+        
+        trackList=route.getTrackList()
+        if trackList==None:
+            return
+        
+        if not edgeId in edgeList:
+            return
+        
+        index=edgeList.index(edgeId)
+        currentTrackItem=trackList[index]
+        print(currentTrackItem)
+        
     def getEdgeIdOnPos(self, lat, lon):
         start=time.time()
         usedEdgeId=None
@@ -1122,7 +1172,7 @@ class OSMParserData():
         
         if city==None and postCode==None:
             return
-        # TODO parse postcode for city?
+        # TODO: parse postcode for city?
         if streetName==None:
             return
         if houseNumber==None:
@@ -1278,7 +1328,7 @@ class OSMParserData():
                         continue
                     
                 if "addr:" in tags:
-                    # TODO parse address in way tags
+                    # TODO: parse address in way tags
                     None
                            
                 streetTypeId=self.getStreetTypeId(streetType)
@@ -1541,27 +1591,27 @@ class OSMParserData():
         return postCodeList
 
     def getAdressListForCity(self, country, city):
-        self.cursorAdress.execute('SELECT refId, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
+        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6]))
+            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]))
         return streetList
                     
     def getAdressListForPostCode(self, country, postCode):
-        self.cursorAdress.execute('SELECT refId, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
+        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6]))
+            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]))
         return streetList
     
     def getAdressListForCountry(self, country):
-        self.cursorAdress.execute('SELECT refId, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d'%(country))
+        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d'%(country))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6]))
+            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6],x[7]))
         return streetList
     
     def createStartTrackItem(self):
@@ -1651,6 +1701,25 @@ class OSMParserData():
             return allEdgeList, allPathCost
 
         return None, None
+
+    def calcRouteForPointsTest(self, routingPointList):                
+        if len(routingPointList)!=0:  
+            i=0   
+            startPoint=routingPointList[0]
+            if startPoint.getSource()==0:
+                return
+
+            for targetPoint in routingPointList[1:]:
+                if targetPoint.getTarget()==0:
+                    return
+                            
+                bbox=self.createBBox(startPoint.getLat(), startPoint.getLon(), targetPoint.getLat(), targetPoint.getLon())
+                print("all edges len:%d"%self.getLenOfEdgeTable())
+                print("bbox edges len:%d"%self.getLenOfEdgeTableForRouting(bbox))
+                        
+                startPoint=targetPoint
+                i=i+1
+                
 
     def calcRouteForNodes(self, source, target):        
         if source==0 and target==0:
@@ -1955,7 +2024,7 @@ class OSMParserData():
                 self.printEdgeForRefList(startRefList, startEdgeId, trackWayList, None, routeStartRefId)
                 currentRefList=startRefList
                 routeStartRefId=None
-                # TODO maybe not the complete length
+                # TODO: maybe not the complete length
                 allLength=allLength+length
             i=0
             for edgeId in edgeList:
@@ -1979,7 +2048,7 @@ class OSMParserData():
                 
                 currentRefList=refList
                 routeStartRefId=None
-                # TODO maybe not the complete length
+                # TODO: maybe not the complete length
                 allLength=allLength+length
                 i=i+1
                                          
@@ -1991,7 +2060,7 @@ class OSMParserData():
                     endRefList.reverse()
                 print("printRoute: add end edge")
                 self.printEdgeForRefList(endRefList, endEdgeId, trackWayList, routeEndRefId, None)
-                # TODO maybe not the complete length
+                # TODO: maybe not the complete length
                 allLength=allLength+length
                             
         return trackWayList, allLength   
@@ -2089,7 +2158,7 @@ class OSMParserData():
                 self.updateTargetOfEdge(edgeId, source1)
     
     def createWayRestrictionsDB(self):
-        # TODO left turns should increase costs
+        # TODO: left turns should increase costs
         toAddRules=list()
         for wayRestrictionEntry in self.wayRestricitionList:
             fromWayId=int(wayRestrictionEntry["from"])
@@ -2154,8 +2223,6 @@ class OSMParserData():
     def getMaxspeed(self, tags, streetTypeId):
         maxspeedDefault=50
         maxspeed=0
-        # TODO iplicit
-        #     <tag k="source:maxspeed" v="AT:urban"/>
         if "source:maxspeed" in tags:
             if "urban" in tags["source:maxspeed"]:
                 maxspeed=50
@@ -2199,7 +2266,7 @@ class OSMParserData():
                     if maxspeedString=="city_limit":
                         if maxspeed==0:
                             maxspeed=50
-                    elif maxspeedString=="no" or maxspeedString=="sign" or maxspeedString=="unknown" or maxspeedString=="none" or maxspeedString=="variable" or maxspeedString=="signals" or maxspeedString=="implicit":
+                    elif maxspeedString=="undefined" or maxspeedString=="no" or maxspeedString=="sign" or maxspeedString=="unknown" or maxspeedString=="none" or maxspeedString=="variable" or maxspeedString=="signals" or maxspeedString=="implicit":
                         if maxspeed==0:
                             if streetTypeId==12:
                                 maxspeed=50
@@ -2282,9 +2349,8 @@ class OSMParserData():
             
         if roundabout==1:
             oneway=1
-        elif refs[0]==refs[-1]:
-            # TODO
-            oneway=1
+#        elif refs[0]==refs[-1]:
+#            oneway=1
         
         accessFactor=self.getAccessFactor(tags)  
         streetTypeFactor=self.getStreetTypeFactor(streetTypeId)
@@ -2473,7 +2539,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data1")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -2627,14 +2693,18 @@ class OSMParserData():
         self.bu.initData()
         
     def countryNameOfPoint(self, lat, lon):
-        return self.bu.countryNameOfPoint(lat, lon)
+        country=self.bu.countryNameOfPoint(lat, lon)
+        if country==None:
+            # TODO: HACK if the point is exactly on the border:(
+            country=self.bu.countryNameOfPoint(lat+0.0001, lon+0.0001)
+        return country
     
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
         osmData["country"]="Austria"
-#        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
+        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -2650,7 +2720,7 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-        osmData["osmFile"]='/home/maxl/Downloads/bayern-south.osm'
+        osmData["osmFile"]='/home/maxl/Downloads/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
@@ -2799,7 +2869,6 @@ class OSMParserData():
 #                (wayId, tags, refs, _)=self.getWayEntryForIdAndCountry(wayId, country)
 #                if wayId==None:
 #                    continue
-#                # TODO crossings factor
 #                cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, length, 1)
 #                self.updateCostsOfEdge(edgeId, cost, reverseCost)
 #
