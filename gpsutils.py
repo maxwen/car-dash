@@ -12,7 +12,7 @@ import sys
 from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
 from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from gaugecompass import QtPngCompassGauge
-from osmmapviewer import OSMUtils
+#from osmmapviewer import OSMUtils
 from config import Config
 
 gpsIdleState="idle"
@@ -294,9 +294,9 @@ class GPSMonitor(QWidget):
                 
             if self.canMonitor.hasOSMWidget():
                 if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                    self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
+                    self.canMonitor.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude)
                 else:
-                    self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+                    self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0)
 
             if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
                 self.updateDistanceDisplay(session.fix.latitude, session.fix.longitude)
@@ -315,7 +315,7 @@ class GPSMonitor(QWidget):
             self.speedDisplay.display(0)
             
             if self.canMonitor.hasOSMWidget():
-                self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+                self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0)
 
     def loadConfig(self, config):
         self.globalDistance=config.getDefaultSection().getint("globalDistance", 0)
@@ -341,14 +341,14 @@ class GPSSimpleMonitor(QWidget):
         self.valueLabelList=list()
         
     def createGPSLabel(self, form, key, value):
-        lbl = QLabel(self.canMonitor)
+        lbl = QLabel(self)
         lbl.setMinimumHeight(50)
         font = lbl.font()
         font.setPointSize(14)
         lbl.setFont(font)
         lbl.setText(key)
         
-        lbl2 = QLabel(self.canMonitor)
+        lbl2 = QLabel(self)
         lbl2.setMinimumHeight(50)
         font = lbl2.font()
         font.setPointSize(14)
@@ -538,11 +538,8 @@ def main(argv):
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
-#    widget = OSMWidget(None)
-#    widget.initUI()
 
     widget1 = GPSWindow(None)
-    widget1.initUI()
     app.aboutToQuit.connect(widget1._cleanup)
 
     sys.exit(app.exec_())

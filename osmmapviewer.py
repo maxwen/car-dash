@@ -16,13 +16,13 @@ import fnmatch
 import time
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QFont, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
-from osmparser.osmutils import OSMUtils
-from osmdialogs import *
 from config import Config
+from osmparser.osmutils import OSMUtils
 from gpsutils import GPSMonitorUpateWorker
 from gps import gps, misc
+from osmdialogs import *
 
 TILESIZE=256
 #minWidth=800
@@ -67,7 +67,6 @@ class OSMDownloadTilesWorker(QThread):
             
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
-#        print(text)
 
     def updateMap(self):
         self.emit(SIGNAL("updateMap()"))
@@ -801,8 +800,8 @@ class QtOSMWidget(QWidget):
                                 if crossingType==0:
                                     # normal crossing with street that has other name
                                     useCrossingType=crossingType
-                                elif crossingType==1:
-                                    # crossing with traffic light have higher priorty
+                                elif crossingType==1 or crossingType==6:
+                                    # crossing with traffic light or stop have higher priorty
                                     useCrossingType=crossingType
                                     break
                                 elif crossingType==3 or crossingType==4:
@@ -812,17 +811,21 @@ class QtOSMWidget(QWidget):
                                 elif crossingType==2:
                                     # motorway junction
                                     useCrossingType=crossingType
-                                elif crossingType==42:
-                                    # no enter oneway
+#                                elif crossingType==42:
+#                                    # no enter oneway
+#                                    useCrossingType=crossingType
+                                elif crossingType==5:
+                                    # mini-roundabout
                                     useCrossingType=crossingType
+                                    break
     
 #                            print(useCrossingType)
                             if useCrossingType!=-1:
                                 if useCrossingType==0:
                                     self.painter.setPen(greenCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==1:
-                                    # with traffic signs
+                                elif useCrossingType==1 or useCrossingType==6:
+                                    # with traffic signs or stop
                                     self.painter.setPen(redCrossingPen)
                                     self.painter.drawPoint(x, y)
                                 elif useCrossingType==2:
@@ -835,6 +838,10 @@ class QtOSMWidget(QWidget):
                                     self.painter.drawPoint(x, y)
                                 elif useCrossingType==4:
                                     # roundabout exit
+                                    self.painter.setPen(yellowCrossingPen)
+                                    self.painter.drawPoint(x, y)
+                                elif useCrossingType==5:
+                                    # mini_roundabout
                                     self.painter.setPen(yellowCrossingPen)
                                     self.painter.drawPoint(x, y)
 #                                elif useCrossingType==42:
@@ -1330,12 +1337,12 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
 #                    print(country)
 #                    self.lastWayId=wayId
-                    wayId, tags, refs=osmParserData.getWayEntryForIdAndCountry(wayId, country)
-                    print("%d %s %s"%(wayId, str(tags), str(refs)))
-                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+                    wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+#                    print("%d %s %s"%(wayId, str(tags), str(refs)))
+#                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
 
 #                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
-                    self.wayInfo="%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country))
+                    self.wayInfo="%s %s %s"%(name, nameRef, osmParserData.getCountryNameForId(country))
                     if self.gpsPoint!=None:
                         self.gpsPoint.name=name
             self.update()
@@ -1496,12 +1503,11 @@ class QtOSMWidget(QWidget):
 #---------------------
 
 class OSMWidget(QWidget):
-    def __init__(self, parent, app):
+    def __init__(self, parent):
         QWidget.__init__(self, parent)
         self.startLat=47.8
         self.startLon=13.0
         self.lastDownloadState=downloadStoppedState
-        self.app=app
         self.dbLoaded=False
         self.favoriteList=list()
         self.mapWidgetQt=QtOSMWidget(self)
@@ -1510,6 +1516,7 @@ class OSMWidget(QWidget):
         self.routesIccon=QIcon("images/route.png")
         self.centerGPSIcon=QIcon("images/map-gps.png")
         self.settingsIcon=QIcon("images/settings.png")
+        self.gpsIcon=QIcon("images/gps.png")
         
     def addToWidget(self, vbox):   
             
@@ -1551,10 +1558,10 @@ class OSMWidget(QWidget):
         self.centerGPSButton.clicked.connect(self._centerGPS)
         buttons.addWidget(self.centerGPSButton)
         
-        self.showGPSDataButton=QPushButton("GPS", self)
+        self.showGPSDataButton=QPushButton("", self)
         self.showGPSDataButton.setToolTip("Show data from GPS")
-#        self.showGPSDataButton.setIcon(self.centerGPSIcon)
-#        self.showGPSDataButton.setIconSize(iconSize)        
+        self.showGPSDataButton.setIcon(self.gpsIcon)
+        self.showGPSDataButton.setIconSize(iconSize)        
         self.showGPSDataButton.clicked.connect(self._showGPSData)
         buttons.addWidget(self.showGPSDataButton)
 
@@ -1563,8 +1570,11 @@ class OSMWidget(QWidget):
         self.optionsButton.setIcon(self.settingsIcon)
         self.optionsButton.setIconSize(iconSize)        
         self.optionsButton.clicked.connect(self._showSettings)
-        buttons.addWidget(self.optionsButton)        
+        buttons.addWidget(self.optionsButton)  
+              
         formLayout=QFormLayout()
+        formLayout.setAlignment(Qt.AlignRight|Qt.AlignTop)
+
         font = QFont("Mono")
         font.setPointSize(14)
         font.setStyleHint(QFont.TypeWriter)
@@ -1572,21 +1582,36 @@ class OSMWidget(QWidget):
         self.gpsPosLabelLat=QLabel("", self)
         self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLat.setFont(font)
+        self.gpsPosValueLat.setAlignment(Qt.AlignRight)
         formLayout.addRow(self.gpsPosLabelLat, self.gpsPosValueLat)
 
         self.gpsPosLabelLon=QLabel("", self)
         self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLon.setFont(font)
+        self.gpsPosValueLon.setAlignment(Qt.AlignRight)
         formLayout.addRow(self.gpsPosLabelLon, self.gpsPosValueLon)
         
+        self.gpsAltitudeLabel=QLabel("", self)
+        self.gpsAltitudeValue=QLabel("%.1f"%(0.0), self)
+        self.gpsAltitudeValue.setFont(font)
+        self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
+        formLayout.addRow(self.gpsAltitudeLabel, self.gpsAltitudeValue)
+
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        formLayout.addWidget(line)
+    
         self.mousePosLabelLat=QLabel("", self)
         self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
         self.mousePosValueLat.setFont(font)
+        self.mousePosValueLat.setAlignment(Qt.AlignRight)
         formLayout.addRow(self.mousePosLabelLat, self.mousePosValueLat)
 
         self.mousePosLabelLon=QLabel("", self)
         self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
         self.mousePosValueLon.setFont(font)
+        self.mousePosValueLon.setAlignment(Qt.AlignRight)
         formLayout.addRow(self.mousePosLabelLon, self.mousePosValueLon)
 
         buttons.addLayout(formLayout)
@@ -1613,7 +1638,8 @@ class OSMWidget(QWidget):
 
     @pyqtSlot()
     def _showGPSData(self):
-        None
+        gpsDataDialog=OSMGPSDataDialog(self)
+        result=gpsDataDialog.exec()
         
     @pyqtSlot()
     def _showSettings(self):
@@ -1632,9 +1658,12 @@ class OSMWidget(QWidget):
         self.mousePosValueLat.setText("%.5f"%(lat))
         self.mousePosValueLon.setText("%.5f"%(lon)) 
  
-    def updateGPSPositionDisplay(self, lat, lon):
+    def updateGPSDataDisplay(self, lat, lon, altitude):
+        self.mapWidgetQt.updateGPSLocation(lat, lon)
+
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
+        self.gpsAltitudeValue.setText("%.1f"%(altitude))
             
     def init(self, lat, lon, zoom):        
         self.mapWidgetQt.init()
@@ -1665,10 +1694,6 @@ class OSMWidget(QWidget):
     def _centerGPS(self):
         self.mapWidgetQt.osm_center_map_to_GPS()   
                         
-    def updateGPSPosition(self, lat, lon):
-        self.mapWidgetQt.updateGPSLocation(lat, lon)
-        self.updateGPSPositionDisplay(lat, lon)
-
     def checkDownloadServer(self):
         try:
             socket.gethostbyname(self.getTileServer())
@@ -1790,8 +1815,8 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
-            (id, streetName, houseNumber, lat, lon)=address
-            print(id)
+            (refId, city, postCode, streetName, houseNumber, lat, lon)=address
+            print(refId)
             if pointType==0:
                 routingPoint=OSMRoutingPoint(streetName+" "+houseNumber, pointType, lat, lon)  
                 self.mapWidgetQt.setStartPoint(routingPoint) 
@@ -1844,14 +1869,13 @@ class OSMWidget(QWidget):
                 
 
 class OSMWindow(QMainWindow):
-    def __init__(self, parent, app):
+    def __init__(self, parent):
         QMainWindow.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
         self.incLat=0.0
         self.incLon=0.0
-        self.app=app
         self.config=Config("osmmapviewer.cfg")
         self.updateGPSThread=None
         self.initUI()
@@ -1877,7 +1901,7 @@ class OSMWindow(QMainWindow):
         self.setCentralWidget(mainWidget)
         top=QVBoxLayout(mainWidget)        
         
-        self.osmWidget=OSMWidget(self, self.app)
+        self.osmWidget=OSMWidget(self)
         self.osmWidget.setStartLatitude(47.8205)
         self.osmWidget.setStartLongitude(13.0170)
 
@@ -1901,20 +1925,20 @@ class OSMWindow(QMainWindow):
         buttons.addWidget(self.testGPSButton)
 
         self.connectPSButton=QCheckBox("Connect GPS", self)
-        self.connectPSButton.clicked.connect(self._testGPS)
+        self.connectPSButton.clicked.connect(self._connectGPS)
         buttons.addWidget(self.connectPSButton)
                 
         top.addLayout(buttons)
+        
+        self.setGeometry(0, 0, 900, 600)
+        self.setWindowTitle('OSM Test')
         
         self.updateGPSThread=GPSMonitorUpateWorker(self)
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
         self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
         self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
-#        self.connectGPS()
 
-        self.setGeometry(0, 0, 900, 600)
-        self.setWindowTitle('OSM Test')
         self.show()
         
     @pyqtSlot()
@@ -1930,20 +1954,23 @@ class OSMWindow(QMainWindow):
             self.updateGPSThread.stop()
         
     def updateGPSThreadState(self, state):
-        print("updateGPSThreadState:%s"%(state))
+#        print("updateGPSThreadState:%s"%(state))
+        None
     
     def connectGPSFailed(self):
         self.connectPSButton.setChecked(False)
     
     def updateGPSDisplay(self, session):
-        print("updateGPSDisplay")
+#        print("OSMWindow:updateGPSDisplay")
+
         if session!=None:            
             if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                self.canMonitor.osmWidget.updateGPSPosition(session.fix.latitude, session.fix.longitude)
+                altitude=session.fix.altitude
+                self.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude, altitude)
             else:
-                self.canMonitor.osmWidget.updateGPSPosition(0.0, 0.0)
+                self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0)
         else:            
-            self.osmWidget.updateGPSPosition(0.0, 0.0)
+            self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0)
 
     @pyqtSlot()
     def _testGPS(self):
@@ -1957,16 +1984,18 @@ class OSMWindow(QMainWindow):
         osmutils=OSMUtils()
         print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
 
-        self.osmWidget.updateGPSPosition(self.incLat, self.incLon) 
+        self.osmWidget.updateGPSDataDisplay(self.incLat, self.incLon, 42.01) 
         
         print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
+        print(text)
 
     @pyqtSlot()
     def _cleanup(self):
-        self.disconnectGPS()
+        if self.updateGPSThread.isRunning():
+            self.updateGPSThread.stop()
         
         self.osmWidget.saveConfig(self.config)
         self.config.writeConfig()
@@ -1977,11 +2006,9 @@ def main(argv):
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
-#    widget = OSMWidget(None)
-#    widget.initUI()
 
-    widget1 = OSMWindow(None, app)
-    app.aboutToQuit.connect(widget1._cleanup)
+    osmWindow = OSMWindow(None)
+    app.aboutToQuit.connect(osmWindow._cleanup)
 
     sys.exit(app.exec_())
 

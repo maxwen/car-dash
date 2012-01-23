@@ -5,10 +5,12 @@ Created on Jan 17, 2012
 '''
 
 import fnmatch
+import re
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
+from gpsutils import GPSSimpleMonitor
 
 class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, parent):
@@ -18,7 +20,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         return len(self.streetList)
     
     def columnCount(self, parent): 
-        return 2
+        return 4
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -28,13 +30,16 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (id, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (id, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
             return streetName
         elif index.column()==1:
             return houseNumber
-        
+        elif index.column()==2:
+            return city
+        elif index.column()==3:
+            return postCode
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -42,6 +47,10 @@ class OSMAdressTableModel(QAbstractTableModel):
                     return "Street"
                 elif col==1:
                     return "Number"
+                elif col==2:
+                    return "City"
+                elif col==3:
+                    return "Post Code"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -82,7 +91,7 @@ class OSMAdressTableModelCity(QAbstractTableModel):
                 if col==0:
                     return "City"
                 elif col==1:
-                    return "PostCode"
+                    return "Post Code"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -120,6 +129,16 @@ class OSMAdressDialog(QDialog):
     def updateAdressListForCity(self):
         if self.currentCity!=None:
             self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.streetNameSort)
+            self.streetList=sorted(self.streetList, key=self.houseNumberSort)
+        else:
+            self.streetList=list()
+        
+        self.filteredStreetList=self.streetList
+
+    def updateAddressListForCountry(self):
+        if self.currentCountry!=None:
+            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountry), key=self.streetNameSort)
+            self.streetList=sorted(self.streetList, key=self.houseNumberSort)
         else:
             self.streetList=list()
         
@@ -134,10 +153,16 @@ class OSMAdressDialog(QDialog):
         self.filteredCityList=self.cityList
         
     def streetNameSort(self, item):
-        return item[1]
+        return item[3]
 
     def houseNumberSort(self, item):
-        return item[2]
+        houseNumberStr=item[4]
+        try:
+            houseNumber=int(houseNumberStr)
+            return houseNumber
+        except ValueError:
+            numbers=re.split('\D+',houseNumberStr)
+            return int(numbers[0])
    
     def citySort(self, item):
         return item[0]
@@ -159,10 +184,16 @@ class OSMAdressDialog(QDialog):
         self.currentCountry=self.countryList[0]
         self.updateCityListForCountry()
 
+        hbox=QHBoxLayout()
         self.cityFilterEdit=QLineEdit(self)
         self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
-        top.addWidget(self.cityFilterEdit)
+        hbox.addWidget(self.cityFilterEdit)
         
+        self.ignoreCityButton=QCheckBox("Show All", self)
+        self.ignoreCityButton.clicked.connect(self._ignoreCity)
+        hbox.addWidget(self.ignoreCityButton)
+        top.addLayout(hbox)
+
         self.cityView=QTableView(self)
         top.addWidget(self.cityView)
         
@@ -178,7 +209,7 @@ class OSMAdressDialog(QDialog):
         self.streetFilterEdit=QLineEdit(self)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
         top.addWidget(self.streetFilterEdit)
-        
+                
         self.streetView=QTableView(self)
         top.addWidget(self.streetView)
         
@@ -248,6 +279,23 @@ class OSMAdressDialog(QDialog):
         self.setWindowTitle('Way Search')
         self.setGeometry(0, 0, 700, 600)
                 
+    @pyqtSlot()
+    def _ignoreCity(self):
+        self._clearCityTableSelection()
+        self._clearStreetTableSelection()
+
+        value=self.ignoreCityButton.isChecked()
+        if value==True:
+            self.updateAddressListForCountry()
+            self._applyFilterStreet()
+            self.cityView.setDisabled(True)
+            self.cityFilterEdit.setDisabled(True)
+        else:
+            self.updateAdressListForCity()
+            self._applyFilterStreet()
+            self.cityView.setDisabled(False)
+            self.cityFilterEdit.setDisabled(False)
+            
     @pyqtSlot()
     def _countryChanged(self):
         self._clearCityTableSelection()
@@ -346,6 +394,7 @@ class OSMAdressDialog(QDialog):
     @pyqtSlot()
     def _clearCityTableSelection(self):
         self.cityView.clearSelection()
+        self.currentCity=-1
         
     @pyqtSlot()
     def _applyFilterStreet(self):
@@ -357,10 +406,10 @@ class OSMAdressDialog(QDialog):
             self.filteredStreetList=list()
             filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (id, streetName, houseNumber, lat, lon) in self.streetList:
+            for (refId, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
                 if not fnmatch.fnmatch(streetName.upper(), filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredStreetList.append((id, streetName, houseNumber, lat, lon))
+                self.filteredStreetList.append((refId, city, postCode, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
         
@@ -1182,4 +1231,44 @@ class OSMOptionsDialog(QDialog):
     def _ok(self):
         self.withDownload=self.downloadTilesButton.isChecked()
         self.followGPS=self.followGPSButton.isChecked()
+        self.done(QDialog.Accepted)
+
+class OSMGPSDataDialog(QDialog):
+    def __init__(self, parent):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        self.initUI()
+
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+            
+        style=QCommonStyle()
+
+        self.gpsBox=GPSSimpleMonitor(self)
+        self.gpsBox.addToWidget(top)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.okButton=QPushButton("Close", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        buttons.addWidget(self.okButton)
+        
+        top.addLayout(buttons)
+        self.setLayout(top)
+        self.setWindowTitle('GPS Data')
+        self.setGeometry(0, 0, 400, 100)
+        
+        self.connect(self.parent().parent().updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
+        
+    def updateGPSDisplay(self, session):
+        self.gpsBox.update(session)
+                
+    @pyqtSlot()
+    def _ok(self):
         self.done(QDialog.Accepted)

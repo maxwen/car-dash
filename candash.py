@@ -797,7 +797,7 @@ class CANMonitor(QMainWindow):
 
         self.gpsBox.addToWidget(gpsTabLayout)
 
-        self.osmWidget=OSMWidget(self, self.app)
+        self.osmWidget=OSMWidget(self)
         osmTabLayout.setAlignment(Qt.AlignLeft|Qt.AlignTop)
 
         self.osmWidget.addToWidget(osmTabLayout)
