@@ -2603,8 +2603,8 @@ class OSMParserData():
 
         
         if createEdgeDB:            
-            print("create edge nodes")
             self.createEdgeTableIndexesPost()
+            print("create edge nodes")
             self.createEdgeTableNodeEntries()
             print("end create edge nodes")
             
@@ -2892,7 +2892,7 @@ def main(argv):
 #    p.testCountryRefTable()
 #    p.testCountryWayTable()
 #    p.testStreetTable2()
-    p.testEdgeTable()
+#    p.testEdgeTable()
 #    p.testRefTable(0)
 #    p.testRefTable(1)
        

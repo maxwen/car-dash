@@ -771,15 +771,15 @@ class QtOSMWidget(QWidget):
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
     
                     if lastX!=0 and lastY!=0:
-                        if streetType[-5:]=="_link":
+                        if streetType==3 or streetType==5 or streetType==7 or streetType==9 or streetType==11:
                             pen=linkPen
-                        elif streetType=="motorway":
+                        elif streetType==2:
                             pen=motorwayPen
-                        elif streetType=="primary":
+                        elif streetType==6:
                             pen=primaryPen
-                        elif streetType=="residential":
+                        elif streetType==12:
                             pen=residentialPen
-                        elif streetType=="tertiary":
+                        elif streetType==10:
                             pen=tertiaryPen
                         else:
                             pen=redPen
