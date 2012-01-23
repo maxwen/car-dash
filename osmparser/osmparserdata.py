@@ -961,6 +961,9 @@ class OSMParserData():
 #        print(len(allentries))
         for x in allentries:
             refId, lat1, lon1, wayIdList, _=self.refFromDB(x)
+            if wayIdList==None:
+                # node ref not way ref
+                continue
 
             distance=self.osmutils.distance(lat, lon, lat1, lon1)
             if distance>maxDistance:
@@ -1453,11 +1456,11 @@ class OSMParserData():
         
         return wayIdList
 
-    def getStreetInfoWithWayId(self, wayId, country):
-        (streetEntryId, tags, _, streetTypeId, name, nameRef)=self.getWayEntryForIdAndCountry(wayId, country)
-        if streetEntryId!=None:
-            return (name, nameRef)
-        return (None, None)
+#    def getStreetInfoWithWayId(self, wayId, country):
+#        (streetEntryId, tags, _, streetTypeId, name, nameRef)=self.getWayEntryForIdAndCountry(wayId, country)
+#        if streetEntryId!=None:
+#            return (name, nameRef)
+#        return (None, None)
         
     def getCoordsWithRefAndCountry(self, refId, country):
         resultList=self.getRefEntryForIdAndCountry(refId, country)
@@ -2661,6 +2664,7 @@ class OSMParserData():
 #        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
 #        osmData["countryCode"]="LI"
 #        osmDataList[3]=osmData
+
         return osmDataList
 
     def test(self):

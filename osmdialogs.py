@@ -162,7 +162,9 @@ class OSMAdressDialog(QDialog):
             return houseNumber
         except ValueError:
             numbers=re.split('\D+',houseNumberStr)
-            return int(numbers[0])
+            if len(numbers[0])!=0:
+                return int(numbers[0])
+        return 0
    
     def citySort(self, item):
         return item[0]
@@ -173,6 +175,7 @@ class OSMAdressDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
         
         self.countryCombo=QComboBox(self)
         for country in self.countryList:
@@ -205,6 +208,7 @@ class OSMAdressDialog(QDialog):
         self.cityView.setHorizontalHeader(header)
         self.cityView.setColumnWidth(0, 300)
         self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.cityView.setFixedHeight(150)
 
         self.streetFilterEdit=QLineEdit(self)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
@@ -501,6 +505,7 @@ class OSMFavoritesDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
         
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
@@ -710,6 +715,7 @@ class OSMRouteListDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
         
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
@@ -896,6 +902,7 @@ class OSMRouteDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
                 
         self.routeView=QTableView(self)
         top.addWidget(self.routeView)
@@ -976,16 +983,10 @@ class OSMRouteDialog(QDialog):
         
     @pyqtSlot()
     def _saveRoute(self):
-        routeNameDialog=QInputDialog(self)
-        routeNameDialog.setLabelText("Route Name")
-        routeNameDialog.setWindowTitle("Save Route")
-        font = self.font()
-        font.setPointSize(14)
-        routeNameDialog.setFont(font)
-
+        routeNameDialog=OSMInputDialog(self, "", "Save Route", "Name:")
         result=routeNameDialog.exec()
         if result==QDialog.Accepted:
-            name=routeNameDialog.textValue()
+            name=routeNameDialog.getResult()
             route=OSMRoute(name, self.routingPointList)
             self.routeList.append(route)
         
@@ -1108,7 +1109,8 @@ class OSMPositionDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-            
+        top.setSpacing(0)
+        
         style=QCommonStyle()
 
         fields=QFormLayout()
@@ -1186,6 +1188,7 @@ class OSMOptionsDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
             
         style=QCommonStyle()
         iconSize=QSize(48, 48)
@@ -1244,7 +1247,8 @@ class OSMGPSDataDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-            
+        top.setSpacing(0)
+        
         style=QCommonStyle()
 
         self.gpsBox=GPSSimpleMonitor(self)
@@ -1271,4 +1275,76 @@ class OSMGPSDataDialog(QDialog):
                 
     @pyqtSlot()
     def _ok(self):
+        self.done(QDialog.Accepted)
+
+class OSMInputDialog(QDialog):
+    def __init__(self, parent, defaultValue, windowTitle, labelText):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+        self.text=None
+        self.windowTitle=windowTitle
+        self.labelText=labelText
+        self.defaultValue=defaultValue
+        self.initUI()
+
+    def getResult(self):
+        return self.text
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
+        
+        style=QCommonStyle()
+
+        fields=QFormLayout()
+        fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
+
+        label=QLabel(self)
+        label.setText(self.labelText)
+        
+        self.textField=QLineEdit(self)
+        self.textField.setText(self.defaultValue)
+        self.textField.textChanged.connect(self._updateEnablement)
+        self.textField.setMinimumWidth(300)
+
+        fields.addRow(label, self.textField)
+        
+        top.addLayout(fields)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDisabled(True)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+        top.addLayout(buttons)
+                
+        self.setLayout(top)
+        self.setWindowTitle(self.windowTitle)
+        self.setGeometry(0, 0, 400, 50)
+        self._updateEnablement()
+
+    @pyqtSlot()
+    def _updateEnablement(self):
+        self.okButton.setDisabled(len(self.textField.text())==0)
+   
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.text=self.textField.text()
         self.done(QDialog.Accepted)

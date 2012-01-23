@@ -25,8 +25,8 @@ from gps import gps, misc
 from osmdialogs import *
 
 TILESIZE=256
-#minWidth=800
-#minHeight=500
+minWidth=640
+minHeight=480
 EXTRA_BORDER=0
 MIN_ZOOM=1
 MAX_ZOOM=18
@@ -303,7 +303,7 @@ class QtOSMWidget(QWidget):
         
         self.currentRoute=None
         self.routeList=list()
-        self.wayInfo=""
+        self.wayInfo=None
         
     def getRouteList(self):
         return self.routeList
@@ -335,11 +335,11 @@ class QtOSMWidget(QWidget):
     def setTileServer(self, value):
         self.tileServer=value
 
+    def minimumSizeHint(self):
+        return QSize(minWidth, minHeight)
+    
     def init(self):
-#        self.setMinimumWidth(minWidth)
-#        self.setMinimumHeight(minHeight)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
-#        self.updateGeometry()
         
     def osm_center_map_to_position(self, latitude, longitude):
         self.osm_center_map_to(self.osmutils.deg2rad(latitude), self.osmutils.deg2rad(longitude))
@@ -579,7 +579,7 @@ class QtOSMWidget(QWidget):
         pen.setColor(Qt.black)
         self.painter.setPen(pen)
         fm = self.painter.fontMetrics();
-        
+                    
         if self.wayInfo!=None:
             textBackground=QRect(5, self.height()-30, fm.width(self.wayInfo)+10, self.font().pointSize()+10)
             self.painter.fillRect(textBackground, Qt.white)
@@ -903,13 +903,20 @@ class QtOSMWidget(QWidget):
             gpsLatitudeNew=self.osmutils.deg2rad(lat)
             gpsLongitudeNew=self.osmutils.deg2rad(lon)
             
-            self.gpsPoint=OSMRoutingPoint("gps", 3, lat, lon)
-            self.showTrackOnGPSPos(lat, lon)
 
-            if self.gpsLatitude!=gpsLatitudeNew or self.gpsLongitude!=gpsLongitudeNew:
+            # only update if gps position changed at least 0.0001
+            if abs(gpsLatitudeNew-self.gpsLatitude)>0.0001 or abs(gpsLongitudeNew-self.gpsLongitude)>0.0001:     
                 self.stop=False
                 self.gpsLatitude=gpsLatitudeNew
                 self.gpsLongitude=gpsLongitudeNew
+                
+                self.showTrackOnGPSPos(self.gpsLatitude, self.gpsLongitude)
+
+                if self.wayInfo!=None:
+                    self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, self.gpsLatitude, self.gpsLongitude)
+                else:
+                    self.gpsPoint=None  
+
                 if self.autocenterGPS==True:
                     self.osm_autocenter_map()
                 else:
@@ -921,6 +928,7 @@ class QtOSMWidget(QWidget):
                 else:
                     self.update()           
         else:
+            self.stop=True
             self.gpsLatitude=0.0
             self.gpsLongitude=0.0
             self.gpsPoint=None
@@ -1140,6 +1148,7 @@ class QtOSMWidget(QWidget):
             
         self.mousePressed=False
         self.moving=False
+        self.update()
         
     def clearCurrentRoute(self):
         self.currentRoute=None
@@ -1173,16 +1182,10 @@ class QtOSMWidget(QWidget):
                     break
         
     def saveCurrentRoute(self):
-        routeNameDialog=QInputDialog(self)
-        routeNameDialog.setLabelText("Route Name")
-        routeNameDialog.setWindowTitle("Save Route")
-        font = self.font()
-        font.setPointSize(14)
-        routeNameDialog.setFont(font)
-
+        routeNameDialog=OSMInputDialog(self, "", "Save Route", "Name:")
         result=routeNameDialog.exec()
         if result==QDialog.Accepted:
-            name=routeNameDialog.textValue()
+            name=routeNameDialog.getResult()
             route=OSMRoute(name, self.getCompleteRoutingPoints())
             self.routeList.append(route)
 
@@ -1261,19 +1264,18 @@ class QtOSMWidget(QWidget):
         if edgeId==None:
             return 
         
-        (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+        wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+        defaultPointTag=self.getDefaultPositionTag(lat, lon, name, nameRef, country)
 
-        favNameDialog=QInputDialog(self)
-        favNameDialog.setLabelText("Favorite Name")
-        favNameDialog.setTextValue(defaultName)
-        favNameDialog.setWindowTitle("Add Favorite")
-        font = self.font()
-        font.setPointSize(14)
-        favNameDialog.setFont(font)
-
+        if defaultPointTag!=None:
+            defaultName=defaultPointTag
+        else:
+            defaultName="unknown"
+            
+        favNameDialog=OSMInputDialog(self, defaultName, "Add Favorite", "Name:")
         result=favNameDialog.exec()
         if result==QDialog.Accepted:
-            favoriteName=favNameDialog.textValue()
+            favoriteName=favNameDialog.getResult()
             favoritePoint=OSMRoutingPoint(favoriteName, 4, lat, lon)
             self.osmWidget.favoriteList.append(favoritePoint)
             
@@ -1283,9 +1285,14 @@ class QtOSMWidget(QWidget):
         if edgeId==None:
             return
         
+        wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
+        defaultPointTag=self.getDefaultPositionTag(lat, lon, name, nameRef, country)
+
         if pointType==0:
-            defaultName="start"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+            if defaultPointTag!=None:
+                defaultName=defaultPointTag
+            else:
+                defaultName="start"
 
             point=OSMRoutingPoint(defaultName, pointType, lat, lon)
             point.resolveFromPos(osmParserData)
@@ -1294,8 +1301,10 @@ class QtOSMWidget(QWidget):
             else:
                 print("point not usable for routing")
         elif pointType==1:
-            defaultName="end"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+            if defaultPointTag!=None:
+                defaultName=defaultPointTag
+            else:
+                defaultName="end"
                 
             point=OSMRoutingPoint(defaultName, pointType, lat, lon)
             point.resolveFromPos(osmParserData)
@@ -1305,8 +1314,10 @@ class QtOSMWidget(QWidget):
                 print("point not usable for routing")
 
         elif pointType==2:
-            defaultName="way"
-            (defaultName, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+            if defaultPointTag!=None:
+                defaultName=defaultPointTag
+            else:
+                defaultName="way"
 
             wayPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
             wayPoint.resolveFromPos(osmParserData)
@@ -1327,24 +1338,29 @@ class QtOSMWidget(QWidget):
 
         self.osm_center_map_to_position(lat, lon)
 
+    def getDefaultPositionTag(self, lat, lon, name, nameRef, country):
+        if nameRef!=None and name!=None:
+            return "%s %s - %s"%(name, nameRef, osmParserData.getCountryNameForId(country))
+        elif nameRef==None and name!=None:
+            return "%s - %s"%(name, osmParserData.getCountryNameForId(country))
+        elif nameRef!=None and name==None:
+            return "%s - %s"%(nameRef, osmParserData.getCountryNameForId(country))
+        else:
+            return "No name - %s"%(osmParserData.getCountryNameForId(country))
+        return None
+
     def showTrackOnPos(self, lat, lon):
         if self.osmWidget.dbLoaded==True:
             edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
             if edgeId==None:
 #                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
-                self.wayInfo="Unknown way"
+                self.wayInfo=None
             else:   
                 if wayId!=self.lastWayId:
-#                    print(country)
-#                    self.lastWayId=wayId
+                    self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
-#                    print("%d %s %s"%(wayId, str(tags), str(refs)))
-#                    (name, ref)=osmParserData.getStreetInfoWithWayId(wayId, country)
+                    self.wayInfo=self.getDefaultPositionTag(lat, lon, name, nameRef, country)                        
 
-#                    self.emit(SIGNAL("updateTrackDisplay(QString)"), "%s %s %s"%(name, ref, osmParserData.getCountryNameForId(country)))
-                    self.wayInfo="%s %s %s"%(name, nameRef, osmParserData.getCountryNameForId(country))
-                    if self.gpsPoint!=None:
-                        self.gpsPoint.name=name
             self.update()
             
 #    def setCurrentRoute(self, route):
@@ -1525,6 +1541,7 @@ class OSMWidget(QWidget):
         
         buttons=QVBoxLayout()        
         buttons.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+        buttons.setSpacing(0)
 
         iconSize=QSize(48, 48)
         self.adressButton=QPushButton("", self)
@@ -1572,49 +1589,83 @@ class OSMWidget(QWidget):
         self.optionsButton.clicked.connect(self._showSettings)
         buttons.addWidget(self.optionsButton)  
               
-        formLayout=QFormLayout()
-        formLayout.setAlignment(Qt.AlignRight|Qt.AlignTop)
-
+#        tab=QTabWidget(self)
+#        tab.setMaximumSize(QSize(100, 100))
+#        buttons.addWidget(tab)
+        
         font = QFont("Mono")
         font.setPointSize(14)
         font.setStyleHint(QFont.TypeWriter)
-        
-        self.gpsPosLabelLat=QLabel("", self)
+
+        coords=QVBoxLayout()        
+        coords.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+        coords.setSpacing(0)
+#        coords.setContentsMargins(0, 0, 0, 0)
+
+        buttons.addLayout(coords)
+
+#        gpsTab=QWidget(self)
+#        formLayoutGPS=QFormLayout()
+#        formLayoutGPS.setAlignment(Qt.AlignRight|Qt.AlignTop)
+#        formLayoutGPS.setContentsMargins(0, 0, 0, 0)
+#        formLayoutGPS.setSpacing(1)
+
+#        tab.addTab(gpsTab, "GPS") 
+
+#        self.gpsPosLabelLat=QLabel("", self)
         self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLat.setFont(font)
         self.gpsPosValueLat.setAlignment(Qt.AlignRight)
-        formLayout.addRow(self.gpsPosLabelLat, self.gpsPosValueLat)
+        coords.addWidget(self.gpsPosValueLat)
+#        formLayoutGPS.addRow(self.gpsPosLabelLat, self.gpsPosValueLat)
 
-        self.gpsPosLabelLon=QLabel("", self)
+#        self.gpsPosLabelLon=QLabel("", self)
         self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLon.setFont(font)
         self.gpsPosValueLon.setAlignment(Qt.AlignRight)
-        formLayout.addRow(self.gpsPosLabelLon, self.gpsPosValueLon)
+        coords.addWidget(self.gpsPosValueLon)
+#        formLayoutGPS.addRow(self.gpsPosLabelLon, self.gpsPosValueLon)
         
-        self.gpsAltitudeLabel=QLabel("", self)
+#        self.gpsAltitudeLabel=QLabel("", self)
         self.gpsAltitudeValue=QLabel("%.1f"%(0.0), self)
         self.gpsAltitudeValue.setFont(font)
         self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
-        formLayout.addRow(self.gpsAltitudeLabel, self.gpsAltitudeValue)
+        coords.addWidget(self.gpsAltitudeValue)
 
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        formLayout.addWidget(line)
+#        formLayoutGPS.addRow(self.gpsAltitudeLabel, self.gpsAltitudeValue)
+
+#        buttons.addLayout(formLayoutGPS)
+
+#        line = QFrame()
+#        line.setFrameShape(QFrame.HLine)
+#        line.setFrameShadow(QFrame.Sunken)
+#        formLayout.addWidget(line)
     
-        self.mousePosLabelLat=QLabel("", self)
+#        mouseTab=QWidget(self)
+#        formLayoutMouse=QFormLayout()
+#        formLayoutMouse.setAlignment(Qt.AlignRight|Qt.AlignTop)
+#        formLayoutMouse.setContentsMargins(0, 0, 0, 0)
+#        formLayoutMouse.setSpacing(1)
+
+#        tab.addTab(mouseTab, "Map") 
+
+#        self.mousePosLabelLat=QLabel("", self)
         self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
         self.mousePosValueLat.setFont(font)
         self.mousePosValueLat.setAlignment(Qt.AlignRight)
-        formLayout.addRow(self.mousePosLabelLat, self.mousePosValueLat)
+        coords.addWidget(self.mousePosValueLat)
 
-        self.mousePosLabelLon=QLabel("", self)
+#        formLayoutMouse.addRow(self.mousePosLabelLat, self.mousePosValueLat)
+
+#        self.mousePosLabelLon=QLabel("", self)
         self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
         self.mousePosValueLon.setFont(font)
         self.mousePosValueLon.setAlignment(Qt.AlignRight)
-        formLayout.addRow(self.mousePosLabelLon, self.mousePosValueLon)
+        coords.addWidget(self.mousePosValueLon)
 
-        buttons.addLayout(formLayout)
+#        formLayoutMouse.addRow(self.mousePosLabelLon, self.mousePosValueLon)
+        
+#        buttons.addLayout(formLayoutMouse)
         
         hbox1.addLayout(buttons)
 
@@ -1918,19 +1969,21 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.loadData()
         
-        buttons=QHBoxLayout()        
-
-        self.testGPSButton=QPushButton("Test GPS", self)
-        self.testGPSButton.clicked.connect(self._testGPS)
-        buttons.addWidget(self.testGPSButton)
+#        buttons=QHBoxLayout()        
+#
+#        self.testGPSButton=QPushButton("Test GPS", self)
+#        self.testGPSButton.clicked.connect(self._testGPS)
+#        buttons.addWidget(self.testGPSButton)
 
         self.connectPSButton=QCheckBox("Connect GPS", self)
         self.connectPSButton.clicked.connect(self._connectGPS)
-        buttons.addWidget(self.connectPSButton)
+#        buttons.addWidget(self.connectPSButton)
                 
-        top.addLayout(buttons)
+#        top.addLayout(buttons)
         
-        self.setGeometry(0, 0, 900, 600)
+        self.statusbar.addPermanentWidget(self.connectPSButton)
+
+        self.setGeometry(0, 0, 900, 500)
         self.setWindowTitle('OSM Test')
         
         self.updateGPSThread=GPSMonitorUpateWorker(self)
