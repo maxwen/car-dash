@@ -17,6 +17,7 @@
 from marshal import dumps
 
 from osmparser.parser.xml.util import log_file_on_exception, iterparse
+from osmparser.parser.util import fileinput
 
 class XMLParser(object):
     def __init__(self, nodes_callback=None, ways_callback=None,
@@ -31,7 +32,25 @@ class XMLParser(object):
         self.relations_tag_filter = relations_tag_filter
         self.marshal_elem_data = marshal_elem_data
     
-    def parse(self, xml):
+    def parse(self, filename):
+        """
+        Parse the given file. Detects the filetype based on the file suffix.
+        Supports``.osm`` and ``.osm.bz2``.
+        """
+        if filename.endswith(('.osm', '.osm.bz2')):
+            return self.parse_xml_file(filename)
+        else:
+            raise NotImplementedError('unknown file extension')
+            
+    def parse_xml_file(self, filename):
+        """
+        Parse a XML file.
+        Supports BZip2 compressed files if the filename ends with ``.bz2``.
+        """
+        with fileinput(filename) as input:
+            return self._parse(input)
+        
+    def _parse(self, xml):
         with log_file_on_exception(xml):
             coords = []
             nodes = []

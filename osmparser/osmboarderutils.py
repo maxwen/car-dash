@@ -358,6 +358,18 @@ def main(argv):
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
     
+    lat=49.4682774
+    lon=11.0271253
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    
+    lat=49.467988
+    lon=11.0278791
+    start=time.time()
+    print(bu.countryNameOfPoint(lat, lon))  
+    end=time.time()
+    
 #    x=bu.encode(11,1,0)
 #    print(bu.decode(x))
 #    x=bu.encode(9,0,1)
