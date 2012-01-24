@@ -57,6 +57,12 @@ class OSMRoute():
     def getTrackList(self):
         return self.trackList
         
+    def getTrackListForEdges(self, edgeListPart):
+        if self.edgeList!=None and self.trackList!=None:
+            index=self.edgeList.index(edgeListPart[0])
+            return self.trackList[index:index+len(edgeListPart)]
+        return None
+    
     def printRoute(self, osmParserData):
         if self.edgeList!=None:
             self.trackList, self.length=osmParserData.printRoute(self)
@@ -824,28 +830,21 @@ class OSMParserData():
                 doneDistance=doneDistance+frac
         return points
        
-    def isPosOnCurrenRoute(self, lat, lon, route):
+    def getNextEdgesOnCurrenRoute(self, lat, lon, route, numOfNextEdges):
         if route==None:
-            return
+            return None
         
         edgeId, wayId, usedRefId, usedPos, country=self.getEdgeIdOnPos(lat, lon)
         if edgeId==None:
-            return
+            return None
         
         edgeList=route.getEdgeList()
-        if edgeList==None:
-            return
+        if edgeList==None or not edgeId in edgeList:
+            return None
         
-        trackList=route.getTrackList()
-        if trackList==None:
-            return
-        
-        if not edgeId in edgeList:
-            return
-        
-        index=edgeList.index(edgeId)
-        currentTrackItem=trackList[index]
-        print(currentTrackItem)
+        index=edgeList.index(edgeId)+1
+        nextEdgesList=edgeList[index:index+numOfNextEdges]
+        return nextEdgesList
         
     def getEdgeIdOnPos(self, lat, lon):
         start=time.time()
@@ -1973,6 +1972,28 @@ class OSMParserData():
             subRefList=refs[indexStart:indexEnd+1]
         return subRefList
     
+    def getRemainingDistanceOnEdge(self, edgeId, refList, lat, lon):
+        usedEdgeId, _, usedRefId, usedPos, country=self.getEdgeIdOnPos(lat, lon)
+        if usedEdgeId==edgeId:
+            if usedRefId in refList:
+                refListPart=refList[refList.index(usedRefId):]
+                distance=0
+                lastLat=None
+                lastLon=None
+                for ref in refListPart:
+                    refLat, refLon=self.getCoordsWithRefAndCountry(ref, country)
+                    if refLat==None or refLon==None:
+                        continue
+                    if lastLat!=None and lastLon!=None:
+                        distance=distance+int(self.osmutils.distance(refLat, refLon, lastLat, lastLon))
+                    else:
+                        distance=int(self.osmutils.distance(lat, lon, refLat, refLon))
+
+                    lastLat=refLat
+                    lastLon=refLon
+                return distance
+        return None
+                    
     def getRefListOfEdge(self, edgeId, wayId, startRef, endRef):
         _, country=self.getCountryOfRef(startRef) 
         wayId, _, refs, streetTypeId, name, nameRef=self.getWayEntryForIdAndCountry(wayId, country)
@@ -2539,7 +2560,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data1")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -2703,8 +2724,8 @@ class OSMParserData():
         osmDataList=dict()
         osmData=dict()
         osmData["country"]="Austria"
-        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -2720,7 +2741,8 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-        osmData["osmFile"]='/home/maxl/Downloads/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/bayern-south.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
