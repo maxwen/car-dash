@@ -1368,9 +1368,9 @@ class QtOSMWidget(QWidget):
 #                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
                 self.wayInfo=None
             else:   
-                nextEdgesList=osmParserData.getNextEdgesOnCurrenRoute(lat, lon, self.currentRoute, 4)
+                nextEdgesList, nextTrackList=osmParserData.getNextTrackItemsOnCurrenRoute(lat, lon, self.currentRoute, 4)
                 if nextEdgesList!=None:
-                    self.printRouteDescriptionForEdges(nextEdgesList, lat, lon)
+                    self.printRouteDescriptionForEdges(nextEdgesList, nextTrackList, lat, lon, self.currentRoute)
                 else:
                     print("not on route")
                     
@@ -1446,7 +1446,7 @@ class QtOSMWidget(QWidget):
 #            print("edgeList=%s"%(self.currentRoute.getEdgeList()))
             print("cost=%f"%(self.currentRoute.getPathCost()))
             print("len=%d"%(self.currentRoute.getLength()))
-            self.printRouteDescription()
+#            self.printRouteDescription()
             # show start pos at zoom level 15
             self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             self.update()
@@ -1461,50 +1461,54 @@ class QtOSMWidget(QWidget):
         
         return "unknown"        
 
-    def printRouteDescriptionForEdges(self, edgeList, lat, lon):
-        trackList=self.currentRoute.getTrackListForEdges(edgeList)
-        if trackList!=None and len(trackList)!=0:
-            changeLength=0
-            lastStreetInfo=None
-            
-            refList=list()
-            coordsList=list()
+    def printRouteDescriptionForEdges(self, edgeList, trackList, lat, lon, route):
+        print("next:")
+        print(edgeList)
+        if trackList!=None and len(trackList)!=0:      
+            lastEdgeId=route.getEdgeList()[-1]   
+            print(lastEdgeId)
             firstTrackItem=trackList[0]
             edgeId=firstTrackItem["edgeId"]
             streetInfo=firstTrackItem["info"]
+            sumLength=firstTrackItem["sumLength"]     
+            length=firstTrackItem["length"]     
+                               
+            print(streetInfo)
+            (direction, crossingLength, crossingInfo)=osmParserData.getNextCrossingInfo(edgeId, trackList, lat, lon)
+            if direction!=None and crossingInfo!=None:
+                print("distance to next crossing=%d direction=%d %s"%(crossingLength, direction, crossingInfo))
 
-            for trackItemRef in firstTrackItem["refs"]:
-                refList.append(trackItemRef["ref"])
-                coordsList.append(trackItemRef["coords"])
-               
-            remainingDistance=osmParserData.getRemainingDistanceOnEdge(edgeId, refList, coordsList, lat, lon)
-            print("%s - %d"%(streetInfo, remainingDistance))
-            
-            for trackItemRef in firstTrackItem["refs"]:
-                if "direction" in trackItemRef and "crossingInfo" in trackItemRef:
-                    print("%s %s"%(trackItemRef["crossingInfo"], self.directionName(trackItemRef["direction"])))
+            lastStreetInfo=streetInfo
 
-            lastStreetInfo=None
+            if edgeId==lastEdgeId:
+                print("length to end=%d"%(length))
+            else:
+                if crossingLength==None:
+                    print("length to end=%d"%(self.currentRoute.getLength()-sumLength+length))
+                else:
+                    print("length to end=%d"%(self.currentRoute.getLength()-sumLength+crossingLength))
 
             for trackItem in trackList[1:]:
+                edgeId=trackItem["edgeId"]
                 if "info" in trackItem and "length" in trackItem and "type" in trackItem:
                     streetInfo=trackItem["info"]
-                    if lastStreetInfo==None:
-                        lastStreetInfo=streetInfo
                     
                     if streetInfo!=lastStreetInfo:
-                        print("%s - %d"%(lastStreetInfo, changeLength))
-                        changeLength=0
+                        print(streetInfo)
+                    
+                        sumLength=trackItem["sumLength"]
+                        length=trackItem["length"]
+                        if edgeId==lastEdgeId:
+                            print("length to end=%d"%(length))
+                        else:
+                            print("length to end=%d"%(self.currentRoute.getLength()-sumLength+length))
                         lastStreetInfo=streetInfo
                         
                         for trackItemRef in trackItem["refs"]:
                             if "direction" in trackItemRef and "crossingInfo" in trackItemRef:
                                 print("%s %s"%(trackItemRef["crossingInfo"], self.directionName(trackItemRef["direction"])))
                         
-                    length=trackItem["length"]
-                    changeLength=changeLength+length
-                    
-        
+                            
     def printRouteDescription(self):
         trackList=self.currentRoute.getTrackList()
         print("start:")
