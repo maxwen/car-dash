@@ -208,11 +208,11 @@ class OSMUtils():
         # 135 to 225=straight=0
         # 225 to 315=left=-1
 
-        if azimuth>=0 and azimuth<135:
+        if azimuth>=0 and azimuth<170:
             return 1
-        if azimuth>=135 and azimuth<225:
+        if azimuth>=170 and azimuth<190:
             return 0
-        if azimuth>=225 and azimuth<360:
+        if azimuth>=190 and azimuth<360:
             return -1
 #        if azimuth>=0 and azimuth<45:
 #            return 1
