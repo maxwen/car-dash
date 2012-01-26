@@ -1475,7 +1475,7 @@ class QtOSMWidget(QWidget):
                                
             print(streetInfo)
             (direction, crossingLength, crossingInfo)=osmParserData.getNextCrossingInfo(edgeId, trackList, lat, lon)
-            if direction!=None and crossingInfo!=None:
+            if direction!=None and crossingInfo!=None and crossingLength!=None:
                 print("distance to next crossing=%d direction=%d %s"%(crossingLength, direction, crossingInfo))
 
             lastStreetInfo=streetInfo

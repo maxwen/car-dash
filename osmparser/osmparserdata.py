@@ -858,7 +858,7 @@ class OSMParserData():
         nextEdgesList=list()
         nextTrackItemList=list()
         
-        index=edgeList.index(edgeId)+1
+        index=edgeList.index(edgeId)
         remainingTrackWayList=route.getTrackList()[index:]
         
         numTracks=1
@@ -2132,6 +2132,8 @@ class OSMParserData():
 
     def printRoute(self, route):
         edgeList=route.getEdgeList()
+        addedStartEdge=None
+        addedEndEdge=None
         routingPointList=route.getRoutingPointList()
         
         trackWayList=list()
@@ -2173,7 +2175,7 @@ class OSMParserData():
                 if firstStartRef==startStartRef or firstEndRef==startStartRef:
                     startRefList.reverse()
                 print("printRoute: add start edge")
-                edgeList.insert(0, startEdgeId)
+                addedStartEdge=startEdgeId
                 length=self.printEdgeForRefList(startRefList, startEdgeId, trackWayList, None, routeStartRefId)
                 currentRefList=startRefList
                 routeStartRefId=None
@@ -2211,11 +2213,16 @@ class OSMParserData():
                 if currentRefList[-1]!=endRefList[0]:
                     endRefList.reverse()
                 print("printRoute: add end edge")
-                edgeList.append(endEdgeId)
+                addedEndEdge=endEdgeId
                 length=self.printEdgeForRefList(endRefList, endEdgeId, trackWayList, routeEndRefId, None)
                 # TODO: maybe not the complete length
                 allLength=allLength+length
-                            
+                        
+        if addedStartEdge!=None:
+            edgeList.insert(0, addedStartEdge)
+        if addedEndEdge!=None:
+            edgeList.append(addedEndEdge)
+                
         return trackWayList, allLength   
 
     def createEdgeTableEntries(self, country):
