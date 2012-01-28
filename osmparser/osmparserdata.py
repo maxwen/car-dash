@@ -36,10 +36,10 @@ class OSMRoute():
     
     def calcRoute(self, osmParserData):
         if self.edgeList==None:
-            self.edgeList, self.pathCost=osmParserData.calcRouteForPoints(self.routingPointList)
+            self.edgeList, self.pathCost=osmParserData.calcRouteForPoints(self)
     
     def calcRouteTest(self, osmParserData):
-        osmParserData.calcRouteForPointsTest(self.routingPointList)
+        osmParserData.calcRouteForPointsTest(self)
         
     def changeRouteFromPos(self, currentPoint, osmParserData):        
         self.routingPointList[0]=currentPoint
@@ -86,6 +86,12 @@ class OSMRoute():
             # not on route
             return None, None
         
+    def setStartNode(self, node):
+        self.startNode=node
+        
+    def getStartNode(self):
+        return self.startNode
+    
     def saveToConfig(self, config, section, name):    
         routeString="%s:"%(self.name)
         for point in self.routingPointList:
@@ -136,6 +142,14 @@ class OSMRoutingPoint():
         self.name=name
         self.usedRefId=0
         self.country=None
+        self.targetOneway=0
+        
+        self.refLat=0.0
+        self.refLon=0.0
+        self.startRefLat=0.0
+        self.startRefLon=0.0
+        self.endRefLat=0.0
+        self.endRefLon=0.0
     
     def resolveFromPos(self, osmParserData):
         if self.source!=0:
@@ -148,17 +162,25 @@ class OSMRoutingPoint():
 
         (wayEntryId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout)=osmParserData.getWayEntryForIdAndCountry2(wayId, country)
 
-        (edgeId, startRef, endRef, _, wayId, source, target, _, _)=osmParserData.getEdgeEntryForEdgeId(edgeId)
+        (edgeId, startRef, endRef, _, wayId, source, target, _, _, self.startRefLat, self.startRefLon, self.endRefLat, self.endRefLon)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         self.lat=usedPos[0]
         self.lon=usedPos[1]
         self.edgeId=edgeId
         self.target=target
-        if oneway==1:
-            self.target=source
         self.source=source
+        if oneway==1:
+            self.targetOneway=oneway
         self.usedRefId=usedRefId
+        
+        self.refLat, self.refLon=osmParserData.getCoordsWithRefAndCountry(self.usedRefId, country)
+
         self.wayId=wayId
         self.country=country
+        
+        print("resolvFromPos: %d %d %d"%(edgeId, wayId, usedRefId))
+    
+    def getTargetOneway(self):
+        return self.targetOneway
     
     def __repr__(self):
         return "%s:%d:%f:%f"%(self.name, self.type, self.lat, self.lon)
@@ -175,11 +197,17 @@ class OSMRoutingPoint():
     def getType(self):
         return self.type
     
-    def getLat(self):
-        return self.lat
+    def getPos(self):
+        return (self.lat, self.lon)
     
-    def getLon(self):
-        return self.lon
+    def getRefPos(self):
+        return (self.refLat, self.refLon)
+        
+    def getStartRefPos(self):
+        return (self.startRefLat, self.startRefLon)
+    
+    def getEndRefPos(self):
+        return (self.endRefLat, self.endRefLon)
     
     def getEdgeId(self):
         return self.edgeId
@@ -744,7 +772,17 @@ class OSMParserData():
             return edge
         print("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None)
+
+    def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
+        self.cursorEdge.execute('SELECT * FROM edgeTable where id==%d'%(edgeId))
+        allentries=self.cursorEdge.fetchall()
+        if len(allentries)==1:
+            edge=self.edgeFromDBWithCoords(allentries[0])
+            return edge
+        print("no edge with %d"%(edgeId))
+        return (None, None, None, None, None, None, None, None, None, None, None, None, None)
         
+    
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d AND id!=%d'%(startRef, edgeId))
         resultList=list()
@@ -818,6 +856,15 @@ class OSMParserData():
         
         return (None, None, None, None, None, None, None, None)
     
+    def getWayEntryForIdAndCountry3(self, wayId, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM wayTable where wayId==%d'%(wayId))
+        allentries=self.cursor.fetchall()
+        if len(allentries)==1:
+            return self.wayFromDB3(allentries[0])
+        
+        return (None, None, None, None, None, None, None, None, None)
+
     def getCrossingEntryFor(self, wayid, country):
         self.setDBCursorForCountry(country)
         self.cursor.execute('SELECT * FROM crossingTable where wayId==%d'%(wayid))      
@@ -869,7 +916,7 @@ class OSMParserData():
         usedLon=None
         usedCountry=None
         usedRefs=None
-        maxDistance=100.0
+        maxDistance=1000.0
  
         refCountry=self.getCountryOfPos(lat, lon)
         if refCountry==None:
@@ -883,6 +930,7 @@ class OSMParserData():
 #                print("%s %s"%(tags, refs))
                 lastLat, lastLon=self.getCoordsWithRefAndCountry(refs[0], refCountry)
                 lastRef=refs[0]
+#                print("check %d %s"%(wayEntryId, refs))
                 for ref in refs[1:]:
                     refLat, refLon=self.getCoordsWithRefAndCountry(ref, refCountry)
                     if refLat==None or refLon==None:
@@ -903,12 +951,12 @@ class OSMParserData():
                             distanceTmpRef=self.osmutils.distance1(refLat, refLon, tmpLat, tmpLon)
                             if distanceTmpLast < distanceTmpRef:
                                 usedRefId=lastRef
-                                usedLat=lastLat
-                                usedLon=lastLon
+                                usedLat=tmpLat
+                                usedLon=tmpLon
                             else:
                                 usedRefId=ref
-                                usedLat=refLat
-                                usedLon=refLon
+                                usedLat=tmpLat
+                                usedLon=tmpLon
                                 
                             usedCountry=refCountry
                             usedRefs=refs
@@ -918,17 +966,35 @@ class OSMParserData():
                     lastRef=ref
                         
         if usedWayId!=None:
+#            print(usedWayId)
+#            print(usedRefId)
+            maxDistance=1000.0
+            usedEdgeId=None
             resultList=self.getEdgeEntryForWayId(usedWayId)
-            for edge in resultList:
-                edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=edge
+            if len(resultList)==1:
+                edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=resultList[0]
+                usedEdgeId=edgeId
+            else:
+                for edge in resultList:
+                    edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=edge
+                    refList=self.getRefListSubset(usedRefs, startRef, endRef)
+                    if len(refList)!=0:
+                        if usedRefId in refList:
+                            if usedEdgeId==None:
+                                usedEdgeId=edgeId
+                                    
+                            startLat, startLon=self.getCoordsWithRefAndCountry(startRef, refCountry)
+                            endLat, endLon=self.getCoordsWithRefAndCountry(endRef, refCountry)
         
-                refList=self.getRefListSubset(usedRefs, startRef, endRef)
-                if len(refList)!=0:
-                    if usedRefId in refList:
-                        usedEdgeId=edgeId
-                        break
-
+                            points=self.createTemporaryPoint(startLat, startLon, endLat, endLon)
+                            for tmpLat, tmpLon in points:
+                                distance=self.osmutils.distance1(usedLat, usedLon, tmpLat, tmpLon)
+                                if distance<maxDistance:
+                                    maxDistance=distance
+                                    usedEdgeId=edgeId
+                        
         stop=time.time()
+#        print(usedEdgeId)
 #        print(stop-start)
         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
@@ -1673,8 +1739,12 @@ class OSMParserData():
     def calcRoute(self, route):
         route.calcRoute(self)
         
-    def createBBox(self, lat1, lon1, lat2, lon2):
+    def createBBox(self, pos1, pos2):
         bbox=[0.0, 0.0, 0.0, 0.0]
+        lat1=pos1[0]
+        lon1=pos1[1]
+        lat2=pos2[0]
+        lon2=pos2[1]
         if lat2>lat1:
             bbox[3]=lat2
             bbox[1]=lat1
@@ -1691,7 +1761,9 @@ class OSMParserData():
             
         return bbox
 
-    def calcRouteForPoints(self, routingPointList):        
+    def calcRouteForPoints(self, route):  
+        routingPointList=route.getRoutingPointList()                
+      
         allPathCost=0.0
         allEdgeList=list()
         
@@ -1702,20 +1774,54 @@ class OSMParserData():
                 # should not happen
                 print("startPoint NOT resolved in calc route")
                 return None, None
-            source=startPoint.getSource()
             sourceEdge=startPoint.getEdgeId()
-
+            
+            if startPoint.getTargetOneway()==1: #and targetPoint.getType()==2:
+                source=startPoint.getSource()
+            else:
+                lat1, lon1=startPoint.getRefPos()
+                            
+                lat2, lon2=startPoint.getStartRefPos()
+                distanceStartRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
+                
+                lat2, lon2=startPoint.getEndRefPos()
+                distanceEndRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
+    
+                if distanceStartRef<distanceEndRef:
+                    source=startPoint.getSource()
+                else:
+                    source=startPoint.getTarget()
+                    
+            route.setStartNode(source)
+            
             for targetPoint in routingPointList[1:]:
                 if targetPoint.getTarget()==0:
                     # should not happen
                     print("targetPoint NOT resolved in calc route")
                     return None, None
                 
-                target=targetPoint.getTarget()
                 targetEdge=targetPoint.getEdgeId()
+
+                # make sure we are going through the target if it is
+                # on a oneway
+                if targetPoint.getTargetOneway()==1: #and targetPoint.getType()==2:
+                    target=targetPoint.getSource()
+                else:
+                    lat1, lon1=targetPoint.getRefPos()
+                        
+                    lat2, lon2=targetPoint.getStartRefPos()
+                    distanceStartRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
+                    
+                    lat2, lon2=targetPoint.getEndRefPos()
+                    distanceEndRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
+
+                    if distanceStartRef<distanceEndRef:
+                        target=targetPoint.getSource()
+                    else:
+                        target=targetPoint.getTarget()                    
                             
-                print("%d %d %d %d"%(source, sourceEdge, startPoint.getWayId(), startPoint.getRefId()))
-                print("%d %d %d %d"%(target, targetEdge, targetPoint.getWayId(), targetPoint.getRefId()))
+                print("calcRouteForPoints: source %d %d %d %d"%(source, sourceEdge, startPoint.getWayId(), startPoint.getRefId()))
+                print("calcRouteForPoints: target %d %d %d %d"%(target, targetEdge, targetPoint.getWayId(), targetPoint.getRefId()))
                 
                 if source==0 and target==0:
                     print("source and target==0!")
@@ -1723,8 +1829,8 @@ class OSMParserData():
 
                 if source==target:
                     print("source and target equal!")
-                    allEdgeList.append(startPoint.getEdgeId())
-                    allEdgeList.append(targetPoint.getEdgeId())
+#                    allEdgeList.append(startPoint.getEdgeId())
+#                    allEdgeList.append(targetPoint.getEdgeId())
                       
                 else:                  
 #                    if self.dWrapper!=None:
@@ -1732,21 +1838,27 @@ class OSMParserData():
 #                        allEdgeList.extend(edgeList)
 #                        allPathCost=allPathCost+pathCost            
                 
-                    bbox=self.createBBox(startPoint.getLat(), startPoint.getLon(), targetPoint.getLat(), targetPoint.getLon())
+                    bbox=self.createBBox(startPoint.getPos(), targetPoint.getPos())
                     if self.dWrapperTrsp!=None:
                         edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox)
                         if edgeList==None:
                             return None, None
-                        # TODO: when using way point has last edge again as first edge
-                        firstEdge=edgeList[0]
-                        if firstEdge in allEdgeList:
-                            allEdgeList.extend(edgeList[1:])
-                        else:
-                            allEdgeList.extend(edgeList)
+
+                        allEdgeList.extend(edgeList)
                         allPathCost=allPathCost+pathCost 
-                        
+                
+                # add the edge between
+                if targetPoint.getTargetOneway()==1: #and targetPoint.getType()==2:
+                    if not targetEdge in allEdgeList:
+                        allEdgeList.append(targetEdge) 
+
                 startPoint=targetPoint
-                source=startPoint.getTarget()
+                
+                if startPoint.getTargetOneway()==1: #and targetPoint.getType()==2:
+                    source=startPoint.getTarget()
+                else:
+                    source=target
+                    
                 sourceEdge=startPoint.getEdgeId()
                 i=i+1
                 
@@ -1754,7 +1866,8 @@ class OSMParserData():
 
         return None, None
 
-    def calcRouteForPointsTest(self, routingPointList):                
+    def calcRouteForPointsTest(self, route):
+        routingPointList=route.getRoutingPointList()                
         if len(routingPointList)!=0:  
             i=0   
             startPoint=routingPointList[0]
@@ -1765,7 +1878,7 @@ class OSMParserData():
                 if targetPoint.getTarget()==0:
                     return
                             
-                bbox=self.createBBox(startPoint.getLat(), startPoint.getLon(), targetPoint.getLat(), targetPoint.getLon())
+                bbox=self.createBBox(startPoint.getPos(), targetPoint.getPos())
                 print("all edges len:%d"%self.getLenOfEdgeTable())
                 print("bbox edges len:%d"%self.getLenOfEdgeTableForRouting(bbox))
                         
@@ -1816,12 +1929,12 @@ class OSMParserData():
                 
         return None, None
         
-    def getLastCrossingOnTrack(self, trackWayList):
+    def getLastCrossingListOnTrack(self, trackWayList):
         if len(trackWayList)>0:
             trackItemRefs=trackWayList[-1]["refs"]
             for trackItemRef in trackItemRefs[::-1]:
                 if "crossing" in trackItemRef:
-                    return trackItemRef
+                    return trackItemRef["crossing"]
         return None
     
     def printEdgeForRefList(self, refListPart, edgeId, trackWayList, routeEndRefId, routeStartRefId):
@@ -1846,6 +1959,7 @@ class OSMParserData():
         trackItem["edgeId"]=edgeId
 
         lastWayId=None
+        lastEdgeId=None
         lastName=None
         lastTrackItemRef=None
         
@@ -1853,6 +1967,7 @@ class OSMParserData():
         if lastTrackItem!=None:
             lastTrackItemRef=lastTrackItem["refs"][-1]
             lastWayId=lastTrackItem["wayId"]
+            lastEdgeId=lastTrackItem["edgeId"]
             if "info" in lastTrackItem:
                 (lastName, lastRefName)=lastTrackItem["info"]
         else:
@@ -1874,6 +1989,7 @@ class OSMParserData():
               
         trackItemRefs=list()
         for ref in refListPart:  
+            # TODO: print passed waypoint
             _, country=self.getCountryOfRef(ref)
             if country==None:
                 continue
@@ -1918,15 +2034,28 @@ class OSMParserData():
                      
             if lastTrackItemRef!=None:                     
                 if ref==refListPart[0]:   
+                    if edgeId==lastEdgeId:
+                        # u-turn
+                        lastTrackItemRef["direction"]=42
+                        lastTrackItemRef["azimuth"]=360
+                        lastTrackItemRef["crossingInfo"]="u-turn"
+                        crossingList=list()
+                        crossingList.append((wayId, 10, None, ref))                                        
+                        lastTrackItemRef["crossing"]=crossingList
+
                     resultList=self.getCrossingEntryForRefId(lastWayId, ref, country)
                     if len(resultList)!=0:
                         crossingList=list()
+                        crossingFound=False
                         for result in resultList:
+                            if crossingFound==True:
+                                break
                             (_, _, _, nextWayIdList)=result
                                     
                             for nextWayId, crossingType, crossingInfo in nextWayIdList:
                                 if wayId==nextWayId:
                                     crossingList.append((nextWayId, crossingType, crossingInfo, ref))                                        
+                                    crossingFound=True
                                     break
                                 
                         if len(crossingList)!=0:
@@ -1944,18 +2073,19 @@ class OSMParserData():
                     crossingType=None
                     crossingInfo=None
           
-                    crossingList=self.getLastCrossingOnTrack(trackWayList)
-                    if crossingList!=None and len(crossingList)==1:
-                        _, crossingType, crossingInfo, crossingRef=crossingList[0]
-                    else:
-                        print("printEdgeForRefList: more then one crossing at ref %d"%(ref))
+                    crossingList=self.getLastCrossingListOnTrack(trackWayList)
+                    if crossingList!=None:
+                        if len(crossingList)==1:
+                            _, crossingType, crossingInfo, crossingRef=crossingList[0]
+                        else:
+                            print("printEdgeForRefList: more then one crossing at ref %d"%(ref))
                         
                     if crossingType!=None:   
                         if crossingType!=-1:
                             lastTrackItemRef["direction"]=direction
                             lastTrackItemRef["azimuth"]=azimuth
  
-                        if crossingType==1 or crossingType==0:
+                        if crossingType==1 or crossingType==0 or crossingType==9:
                             if lastName!=None:
                                 if lastName!=name:
                                     lastTrackItemRef["crossingInfo"]="change:%s:%s"%(name, nameRef)
@@ -2114,11 +2244,11 @@ class OSMParserData():
             refList.append(trackItemRef["ref"])
             coordsList.append(trackItemRef["coords"])
            
-        print(edgeId)
-        print(firstTrackItem["info"])
+#        print(edgeId)
+#        print(firstTrackItem["info"])
         crossingLength=self.getRemainingDistanceOnEdge(edgeId, refList, coordsList, lat, lon)
         for trackItemRef in firstTrackItem["refs"]:
-            print(trackItemRef)
+#            print(trackItemRef)
             if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
                 crossingList=trackItemRef["crossing"]
                 direction=trackItemRef["direction"]
@@ -2129,11 +2259,11 @@ class OSMParserData():
         for trackItem in trackList[1:]:            
             length=trackItem["length"]
             edgeId=trackItem["edgeId"]
-            print(edgeId)
-            print(trackItem["info"])
+#            print(edgeId)
+#            print(trackItem["info"])
             crossingLength=crossingLength+length
             for trackItemRef in trackItem["refs"]:
-                print(trackItemRef)
+#                print(trackItemRef)
                 if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
                     crossingList=trackItemRef["crossing"]
                     direction=trackItemRef["direction"]
@@ -2221,10 +2351,12 @@ class OSMParserData():
         startPoint=routingPointList[0]
         routeStartRefId=startPoint.getRefId()
         startEdgeId=startPoint.getEdgeId()
+        
+        startNode=route.getStartNode()
      
         currentRefList=None
         if len(edgeList)==0:
-            (startEdgeId, startStartRef, startEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(startEdgeId)
+            (startEdgeId, startStartRef, startEndRef, _, wayId, source, target, _, _)=self.getEdgeEntryForEdgeId(startEdgeId)
             startRefList=self.getRefListOfEdge(startEdgeId, wayId, startStartRef, startEndRef)
                       
             indexStart=startRefList.index(routeStartRefId)
@@ -2235,14 +2367,15 @@ class OSMParserData():
         else:
             firstEdgeId=edgeList[0]
                 
-            (firstEdgeId, firstStartRef, firstEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(firstEdgeId)                       
+            (firstEdgeId, firstStartRef, firstEndRef, _, wayId, source, target, _, _)=self.getEdgeEntryForEdgeId(firstEdgeId)                       
             refList=self.getRefListOfEdge(firstEdgeId, wayId, firstStartRef, firstEndRef)
 
             if not routeStartRefId in refList:
-                (startEdgeId, startStartRef, startEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(startEdgeId)                       
+                (startEdgeId, startStartRef, startEndRef, _, wayId, source, target, _, _)=self.getEdgeEntryForEdgeId(startEdgeId)                       
                 startRefList=self.getRefListOfEdge(startEdgeId, wayId, startStartRef, startEndRef)
             
-                if firstStartRef==startStartRef or firstEndRef==startStartRef:
+                if startNode==target:
+#                if firstStartRef==startStartRef or firstEndRef==startStartRef:
                     startRefList.reverse()
                 print("printRoute: add start edge")
                 addedStartEdge=startEdgeId
@@ -2252,7 +2385,7 @@ class OSMParserData():
                 allLength=allLength+length
             i=0
             for edgeId in edgeList:
-                (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)                       
+                (edgeId, currentStartRef, currentEndRef, _, wayId, source, target, _, _)=self.getEdgeEntryForEdgeId(edgeId)                       
                 refList=self.getRefListOfEdge(edgeId, wayId, currentStartRef, currentEndRef)
 
                 if currentRefList!=None:
@@ -2261,18 +2394,23 @@ class OSMParserData():
                     if currentRefList[-1]!=refList[0]:
                         refList.reverse()
                 else:
-                    if len(edgeList)>1:
-                        nextEdgeId=edgeList[1]
-                        (nextEdgeId, nextStartRef, nextEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(nextEdgeId)                       
-        
-                        if nextStartRef==currentStartRef or nextEndRef==currentStartRef:
-                            refList.reverse()
-    
-                length=self.printEdgeForRefList(refList, edgeId, trackWayList, routeEndRefId, routeStartRefId)
-                
+                    if startNode==target:
+                        refList.reverse()
+#                    if len(edgeList)>1:
+#                        nextEdgeId=edgeList[1]
+#                        (nextEdgeId, nextStartRef, nextEndRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(nextEdgeId)                       
+#        
+#                        if nextStartRef==currentStartRef or nextEndRef==currentStartRef:
+#                            refList.reverse()
+                if edgeId==edgeList[0]:
+                    length=self.printEdgeForRefList(refList, edgeId, trackWayList, None, routeStartRefId)
+                elif edgeId==edgeList[-1]:
+                    length=self.printEdgeForRefList(refList, edgeId, trackWayList, routeEndRefId, None)
+                else:
+                    length=self.printEdgeForRefList(refList, edgeId, trackWayList, None, None)
+                    
                 currentRefList=refList
                 routeStartRefId=None
-                # TODO: maybe not the complete length
                 allLength=allLength+length
                 i=i+1
                                          
@@ -2285,7 +2423,6 @@ class OSMParserData():
                 print("printRoute: add end edge")
                 addedEndEdge=endEdgeId
                 length=self.printEdgeForRefList(endRefList, endEdgeId, trackWayList, routeEndRefId, None)
-                # TODO: maybe not the complete length
                 allLength=allLength+length
                         
         if addedStartEdge!=None:
@@ -2576,11 +2713,11 @@ class OSMParserData():
         return 1
     
     def getCrossingsFactor(self, crossingType):
-        if crossingType==0:
-            return 1.1
-        elif crossingType==1 or crossingType==6:
-            # traffic lights or stop
-            return 1.2
+#        if crossingType==0:
+#            return 1.1
+#        elif crossingType==1 or crossingType==6:
+#            # traffic lights or stop
+#            return 1.2
         return 1
     
     def getCostsOfWay(self, wayId, tags, refs, distance, crossingFactor, streetTypeId, oneway, roundabout, maxspeed):
@@ -2747,7 +2884,7 @@ class OSMParserData():
                             # roundabout exit
                             minorCrossingType=4
                             
-                        if minorCrossingType!=3:
+                        if minorCrossingType!=3 and minorCrossingType!=4:
                             if streetTypeId!=3 and streetTypeId2==3:
                                 # motorway_link enter
                                 minorCrossingType=7              
@@ -2756,11 +2893,16 @@ class OSMParserData():
                                 minorCrossingType=8  
                         
                         if minorCrossingType!=8:
-                            if oneway2==1 and wayid2!=wayid and refs2[0]!=ref:
-                                # oneway - not allowed to enter
-                                minorCrossingType=42
-                                    
-                        
+                            if oneway2==1 and wayid2!=wayid:
+                                if ref==refs2[0] or ref in refs2[1:]:
+                                    # oneway start or in the middle
+                                    if name!=None and name2!=None:  
+                                        if name!=name2:
+                                            minorCrossingType=9
+                                else:
+                                    # oneway end - not allowed to enter
+                                    minorCrossingType=42
+                                         
                         if majorCrossingType!=0:
                             crossingType=majorCrossingType
                             if streetTypeId2==2:
@@ -2795,7 +2937,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data1")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -2963,8 +3105,8 @@ class OSMParserData():
         osmDataList=dict()
         osmData=dict()
         osmData["country"]="Austria"
-#        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
+        osmData["osmFile"]='/home/maxl/Downloads/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -2980,8 +3122,8 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-        osmData["osmFile"]='/home/maxl/Downloads/bayern-south.osm'
-#        osmData["osmFile"]='/home/maxl/Downloads/bayern.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/bayern-south.osm'
+        osmData["osmFile"]='/home/maxl/Downloads/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"

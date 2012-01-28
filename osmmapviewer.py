@@ -712,6 +712,11 @@ class QtOSMWidget(QWidget):
             greenCrossingPen.setWidth(min(self.map_zoom, 10))
             greenCrossingPen.setCapStyle(Qt.RoundCap);
 
+            grayCrossingPen=QPen()
+            grayCrossingPen.setColor(Qt.gray)
+            grayCrossingPen.setWidth(min(self.map_zoom, 10))
+            grayCrossingPen.setCapStyle(Qt.RoundCap);
+            
             blackCrossingPen=QPen()
             blackCrossingPen.setColor(Qt.black)
             blackCrossingPen.setWidth(min(self.map_zoom, 10))
@@ -793,62 +798,39 @@ class QtOSMWidget(QWidget):
                         
                     if crossing:
                         if showTrackDetails==True:
-                            useCrossingType=-1
-                            for crossing in crossingList:
-                                _, crossingType, crossingInfo, crossingRef=crossing
+                            if len(crossingList)==1:
+                                _, crossingType, crossingInfo, crossingRef=crossingList[0]
+                                
                                 if crossingType==0:
-                                    # normal crossing with street that has other name
-                                    useCrossingType=crossingType
-                                elif crossingType==1 or crossingType==6:
-                                    # crossing with traffic light or stop have higher priorty
-                                    useCrossingType=crossingType
-                                    break
-                                elif crossingType==3 or crossingType==4:
-                                    # roundabout crossing have higher priorty
-                                    useCrossingType=crossingType
-                                    break
-                                elif crossingType==2 or crossingType==7 or crossingType==8:
-                                    # motorway junction or motorway_link
-                                    useCrossingType=crossingType
-                                    break
-                                elif crossingType==42:
-                                    # no enter oneway
-                                    useCrossingType=crossingType
-                                elif crossingType==5:
-                                    # mini-roundabout
-                                    useCrossingType=crossingType
-                                    break
-    
-#                            print(useCrossingType)
-                            if useCrossingType!=-1:
-                                if useCrossingType==0:
                                     self.painter.setPen(greenCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==1 or useCrossingType==6:
-                                    # with traffic signs or stop
+                                elif crossingType==1 or crossingType==6:
+                                    # with traffic signs or stop or with oneway
                                     self.painter.setPen(redCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==2 or useCrossingType==7 or crossingType==8:
+                                elif crossingType==2 or crossingType==7 or crossingType==8:
                                     # motorway junction or motorway_link
                                     self.painter.setPen(blueCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==3:
+                                elif crossingType==3:
                                     # roundabout enter
                                     self.painter.setPen(yellowCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==4:
+                                elif crossingType==4:
                                     # roundabout exit
                                     self.painter.setPen(yellowCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==5:
+                                elif crossingType==5:
                                     # mini_roundabout
                                     self.painter.setPen(yellowCrossingPen)
                                     self.painter.drawPoint(x, y)
-                                elif useCrossingType==42:
+                                elif crossingType==42:
                                     # no enter oneway
                                     self.painter.setPen(blackCrossingPen)
                                     self.painter.drawPoint(x, y)
-                            
+                                elif crossingType==9:
+                                    self.painter.setPen(grayCrossingPen)
+                                    self.painter.drawPoint(x, y)
                     if direction!=None:
                         if showTrackDetails==True:
                             (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
@@ -856,10 +838,10 @@ class QtOSMWidget(QWidget):
 #                                if "exit:" in crossingInfo:
 #                                    self.painter.drawPixmap(x, y, self.turnRightImage)
 #                            else:
-                            if direction==1:
+                            if direction in range(1, 3, 1):
                                 #right
                                 self.painter.drawPixmap(x, y, self.turnRightImage)
-                            elif direction==-1:
+                            elif direction in range(-1, -3, -1):
                                 #left
                                 self.painter.drawPixmap(x, y, self.turnLeftImage)
                                 
@@ -1174,10 +1156,8 @@ class QtOSMWidget(QWidget):
 
         width = self.width()
         height = self.height()
-        startLat=routingPointList[0].getLat()
-        startLon=routingPointList[0].getLon()
-        endLat=routingPointList[-1].getLat()
-        endLon=routingPointList[-1].getLon()
+        startLat, startLon=routingPointList[0].getPos()
+        endLat, endLon=routingPointList[-1].getPos()
         
         centerLat, centerLon=self.osmutils.linepart(endLat, endLon, startLat, startLon, 0.5)
 #        print("%f %f %f %f %f %f"%(startLat, startLon, endLat, endLon, centerLat, centerLon))
@@ -1373,10 +1353,12 @@ class QtOSMWidget(QWidget):
                     self.printRouteInformationForPos(edgeId, lat, lon, self.currentRoute)
                     
                 if wayId!=self.lastWayId:
-                    self.lastWayId=wayId
-                    wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout=osmParserData.getWayEntryForIdAndCountry2(wayId, country)
-                    print(wayId)
-                    print(name)
+#                    self.lastWayId=wayId
+                    wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
+                    print("%d %d"%(edgeId, wayId))
+#                    print(name)
+#                    print(oneway)
+#                    print(maxspeed)
                     self.wayInfo=self.getDefaultPositionTag(lat, lon, name, nameRef, country)      
                     print(osmParserData.getEdgeEntryForEdgeId(edgeId))                  
 #                    print(wayId)
@@ -1405,7 +1387,7 @@ class QtOSMWidget(QWidget):
                 print("route has invalid routing points")
                 return
 
-            self.currentRoute.calcRouteTest(osmParserData)
+#            self.currentRoute.calcRouteTest(osmParserData)
 
             self.routeCalculationThread=OSMRouteCalcWorker(self)
             self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
@@ -1450,17 +1432,8 @@ class QtOSMWidget(QWidget):
             self.printRouteDescription(self.currentRoute)
             # show start pos at zoom level 15
 #            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
-            self.update()
-        
-    def directionName(self, direction):
-        if direction==0:
-            return "straight"
-        if direction==-1:
-            return "left"
-        if direction==1:
-            return "right"
-        
-        return "unknown"        
+            print(self.currentRoute.getEdgeList())
+            self.update()       
 
     def printRouteInformationForPos(self, edgeId, lat, lon, route):
         edgeList, trackList=route.getTrackListFromEdge(edgeId)
@@ -1471,24 +1444,34 @@ class QtOSMWidget(QWidget):
         
         (direction, crossingLength, crossingInfo, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon)
         if direction!=None and crossingInfo!=None and crossingLength!=None:
-            print("distance to next crossing=%d direction=%s %s"%(crossingLength, self.directionName(direction), crossingInfo))
+            print("distance to next crossing=%d direction=%s %s"%(crossingLength, self.osmutils.directionName(direction), crossingInfo))
 
         distanceToEnd=osmParserData.getDistanceToEnd(edgeId, trackList, lat, lon, route)
         print("distance to end=%d"%(distanceToEnd))                        
-                            
+               
+    def getTrackListFromEdge(self, indexEnd, edgeList, trackList):
+        if indexEnd < len(edgeList):
+            restEdgeList=edgeList[indexEnd:]
+            restTrackList=trackList[indexEnd:]
+            return restEdgeList, restTrackList
+        else:
+            return None, None      
+               
     def printRouteDescription(self, route):        
         print("start:")
-        edgeId=route.getEdgeList()[0]
+        indexEnd=0
+        edgeList=route.getEdgeList()
+        trackList=route.getTrackList()
         while True:
-            edgeList, trackList=route.getTrackListFromEdge(edgeId)
+            edgeList, trackList=self.getTrackListFromEdge(indexEnd, edgeList, trackList)
 
             (direction, crossingLength, crossingInfo, crossingType, crossingRef, lastEdgeId)=osmParserData.getNextCrossingInfo(trackList)
             
             if lastEdgeId==None:
                 lastEdgeId=edgeList[-1]
             
-            indexEnd=edgeList.index(lastEdgeId)
-            trackListPart=trackList[0:indexEnd+1]
+            indexEnd=edgeList.index(lastEdgeId)+1
+            trackListPart=trackList[0:indexEnd]
 
             name, nameRef=trackListPart[0]["info"]     
             sumLength=0  
@@ -1498,11 +1481,9 @@ class QtOSMWidget(QWidget):
             
             print("%s %s %d"%(name, nameRef, sumLength))
             if crossingInfo!=None:
-                print("%s %s"%(crossingInfo, self.directionName(direction)))
+                print("%s %s"%(crossingInfo, self.osmutils.directionName(direction)))
 
-            if indexEnd<len(edgeList)-1:
-                edgeId=edgeList[indexEnd+1]
-            else:
+            if indexEnd==len(edgeList):
                 break
             
         print("end:")

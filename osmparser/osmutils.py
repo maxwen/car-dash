@@ -204,21 +204,38 @@ class OSMUtils():
         return diff%360
 
     def direction(self, azimuth):
-        # 45 to 135=right=1
-        # 135 to 225=straight=0
-        # 225 to 315=left=-1
-
-        if azimuth>=0 and azimuth<170:
+        if azimuth>=1 and azimuth<50:
+            return 3
+        if azimuth>=50 and azimuth<100:
+            return 2
+        if azimuth>=100 and azimuth<160:
             return 1
-        if azimuth>=170 and azimuth<190:
+        if azimuth>=160 and azimuth<200:
             return 0
-        if azimuth>=190 and azimuth<360:
+        if azimuth>=200 and azimuth<250:
             return -1
-#        if azimuth>=0 and azimuth<45:
-#            return 1
-#        if azimuth>=315 and azimuth<360:
-#            return -1
+        if azimuth>=250 and azimuth<300:
+            return -2
+        if azimuth>=300 and azimuth<359:
+            return -3
 
+    def directionName(self, direction):
+        if direction==0:
+            return "straight"
+        if direction==-3:
+            return "hard left"
+        if direction==-2:
+            return "left"
+        if direction==-1:
+            return "easy left"
+        if direction==1:
+            return "easy right"
+        if direction==2:
+            return "right"
+        if direction==3:
+            return "hard right"
+        
+        return "unknown" 
 def main():    
     # 84194738 
     #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
