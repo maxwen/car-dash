@@ -218,7 +218,8 @@ class OSMUtils():
             return -2
         if azimuth>=300 and azimuth<359:
             return -3
-
+        return 42
+    
     def directionName(self, direction):
         if direction==0:
             return "straight"
@@ -234,6 +235,8 @@ class OSMUtils():
             return "right"
         if direction==3:
             return "hard right"
+        if direction==42:
+            return "u-turn"
         
         return "unknown" 
 def main():    

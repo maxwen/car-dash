@@ -300,6 +300,7 @@ class QtOSMWidget(QWidget):
         
         self.turnRightImage=QPixmap("images/turn-right-icon.png")
         self.turnLeftImage=QPixmap("images/turn-left-icon.png")
+        self.uturnImage=QPixmap("images/u-turn.png")
         
         self.currentRoute=None
         self.routeList=list()
@@ -844,6 +845,8 @@ class QtOSMWidget(QWidget):
                             elif direction in range(-1, -3, -1):
                                 #left
                                 self.painter.drawPixmap(x, y, self.turnLeftImage)
+                            elif direction==42:
+                                self.painter.drawPixmap(x, y, self.uturnImage)
                                 
             
 #    def minimumSizeHint(self):
@@ -1349,8 +1352,8 @@ class QtOSMWidget(QWidget):
 #                self.emit(SIGNAL("updateTrackDisplay(QString)"), "Unknown way")
                 self.wayInfo=None
             else:   
-                if self.currentRoute!=None:
-                    self.printRouteInformationForPos(edgeId, lat, lon, self.currentRoute)
+#                if self.currentRoute!=None:
+#                    self.printRouteInformationForPos(edgeId, lat, lon, self.currentRoute)
                     
                 if wayId!=self.lastWayId:
 #                    self.lastWayId=wayId
@@ -1971,6 +1974,7 @@ class OSMWidget(QWidget):
             if route!=None:
                 self.mapWidgetQt.setRoute(route)
                 # show start pos at zoom level 15
+                self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
 #                self.mapWidgetQt.showRoutingPointOnMap(self.mapWidgetQt.startPoint)
                 
 
