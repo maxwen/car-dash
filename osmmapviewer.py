@@ -1470,10 +1470,11 @@ class QtOSMWidget(QWidget):
 
             (direction, crossingLength, crossingInfo, crossingType, crossingRef, lastEdgeId)=osmParserData.getNextCrossingInfo(trackList)
             
-            if lastEdgeId==None:
-                lastEdgeId=edgeList[-1]
-            
-            indexEnd=edgeList.index(lastEdgeId)+1
+            if lastEdgeId!=None:
+                indexEnd=edgeList.index(lastEdgeId)+1
+            else:
+                indexEnd=len(edgeList)
+                
             trackListPart=trackList[0:indexEnd]
 
             name, nameRef=trackListPart[0]["info"]     

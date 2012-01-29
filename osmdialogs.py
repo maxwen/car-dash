@@ -698,7 +698,7 @@ class OSMRouteListDialog(QDialog):
 
         self.routeList=list()
         self.routeList.extend(routeList)
-        sorted(self.routeList, key=self.nameSort)
+        self.routeList=sorted(self.routeList, key=self.nameSort)
         self.filteredRouteList=self.routeList
 
         self.selectedRoute=None
