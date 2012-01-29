@@ -3384,7 +3384,22 @@ class OSMParserData():
             else:
                 print("routing failed")
             
-            
+    def getCoordsOfEdge(self, edgeId, country):
+        (edgeId, startRef, endRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)
+        wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=self.getWayEntryForIdAndCountry3(wayId, country)
+                    
+        refListPart=self.getRefListSubset(refs, startRef, endRef)
+        coords=list()
+        for ref in refListPart:
+            _, country=self.getCountryOfRef(ref)
+            if country==None:
+                continue
+
+            (lat, lon)=self.getCoordsWithRefAndCountry(ref, country)
+            if lat!=None and lon!=None:
+                coords.append((lat, lon))
+        return coords
+
 def main(argv):    
     p = OSMParserData()
     
