@@ -1802,18 +1802,6 @@ class OSMParserData():
             else:
                 # look if target or source is nearer and start from there
                 source=self.getRoutingForPoint(startPoint)
-#                lat1, lon1=startPoint.getRefPos()
-#                            
-#                lat2, lon2=startPoint.getStartRefPos()
-#                distanceStartRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-#                
-#                lat2, lon2=startPoint.getEndRefPos()
-#                distanceEndRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-#    
-#                if distanceStartRef<distanceEndRef:
-#                    source=startPoint.getSource()
-#                else:
-#                    source=startPoint.getTarget()
                     
             i=1
             for targetPoint in routingPointList[1:]:
@@ -1830,20 +1818,7 @@ class OSMParserData():
                     target=targetPoint.getSource()
                 else:
                     # look if source or target is nearer and stop there
-                    target=self.getRoutingForPoint(targetPoint)
-                    
-#                    lat1, lon1=targetPoint.getRefPos()
-#                        
-#                    lat2, lon2=targetPoint.getStartRefPos()
-#                    distanceStartRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-#                    
-#                    lat2, lon2=targetPoint.getEndRefPos()
-#                    distanceEndRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-#
-#                    if distanceStartRef<distanceEndRef:
-#                        target=targetPoint.getSource()
-#                    else:
-#                        target=targetPoint.getTarget()                    
+                    target=self.getRoutingForPoint(targetPoint)                  
                             
                 print("calcRouteForPoints: source %d %d %d %d"%(source, sourceEdge, startPoint.getWayId(), startPoint.getRefId()))
                 print("calcRouteForPoints: target %d %d %d %d"%(target, targetEdge, targetPoint.getWayId(), targetPoint.getRefId()))
@@ -1879,49 +1854,19 @@ class OSMParserData():
                     else:
                         if startPoint.getType()==2:
                             if sourceEdge!=targetEdge:
-                                # look how to continue after a waypoint
-                                # by using source or target depending on the distance
-                                # to the next point
-                                # this may require adding a u-turn
-                                nextTarget=routingPointList[i+1]
-                                
-                                lat1, lon1=nextTarget.getRefPos()
-                                
-                                lat2, lon2=nextTarget.getStartRefPos()
-                                distanceStartRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-                                
-                                lat2, lon2=nextTarget.getEndRefPos()
-                                distanceEndRef=self.osmutils.distance1(lat1, lon1, lat2, lon2)
-            
-                                if distanceStartRef<distanceEndRef:
-                                    nextTargetPos=nextTarget.getStartRefPos()
-                                else:
-                                    nextTargetPos=nextTarget.getEndRefPos()
-                                    
-                                sourcePos=startPoint.getStartRefPos()
-                                targetPos=startPoint.getEndRefPos()
-                                
-                                distanceSource=self.osmutils.distance1(nextTargetPos[0], nextTargetPos[1], sourcePos[0], sourcePos[1])
-                                distanceTarget=self.osmutils.distance1(nextTargetPos[0], nextTargetPos[1], targetPos[0], targetPos[1])
-                                    
-        
-                                if target==startPoint.getSource():
-                                    # we have not passed this edge
+                                # look how to continue after a waypoint                                    
+                                if edgeList[-1]!=targetEdge:
+                                    # make sure we go through waypoint edge
                                     edgeList.append(targetEdge)
-                                    if distanceSource<distanceTarget:
-                                        source=target
-                                        # force uturn
-                                        edgeList.append(targetEdge)
-                                    else:
+                                    # set next source point
+                                    if target==startPoint.getSource():
                                         source=startPoint.getTarget()
-                                             
-                                if target==startPoint.getTarget():
-                                    if distanceTarget<distanceSource:
-                                        source=target
                                     else:
-                                        source=startPoint.getSource()
-                                        print("targe==startPoint.getTarget() and distanceSource>distanceTarget")
-                                        edgeList.append(targetEdge)
+                                        source=startPoint.getSource() 
+                                else:
+                                    # already passed - go on
+                                    source=target
+                                    
                             else:
                                 # just continue from here
                                 source=target        
@@ -1936,10 +1881,10 @@ class OSMParserData():
                 i=i+1
                 
             # always add start and ende edge if needed
-            if not startEdge in allEdgeList[:1]:
+            if not allEdgeList[0]==startEdge:
                 allEdgeList.insert(0, startEdge)
 
-            if not endEdge in allEdgeList:
+            if not allEdgeList[-1]==endEdge:
                 allEdgeList.append(endEdge)
                 
             return allEdgeList, allPathCost
