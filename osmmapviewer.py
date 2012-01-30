@@ -288,6 +288,7 @@ class QtOSMWidget(QWidget):
         self.lastMouseMoveY=0
         
         self.lastEdgeId=None
+        self.lastWayId=None
         self.mousePos=(0, 0)
         self.startPoint=None
         self.endPoint=None
@@ -305,7 +306,8 @@ class QtOSMWidget(QWidget):
         self.currentRoute=None
         self.routeList=list()
         self.wayInfo=None
-        self.currentEdge=None
+        self.currentEdgeIndexList=None
+        self.currentEdgeIndex=0
         self.currentCoords=None
         
     def getRouteList(self):
@@ -576,8 +578,8 @@ class QtOSMWidget(QWidget):
         self.showControlOverlay()
         self.showRoutingPoints()
         self.showTextInfo()
-        if self.currentEdge!=None and self.currentRoute!=None:
-            self.displayEdgeOfRoute(self.currentRoute, self.currentEdge)
+        if self.currentEdgeIndexList!=None and self.currentRoute!=None:
+            self.displayEdgeOfRoute(self.currentRoute, self.currentEdgeIndexList)
             
         if self.currentCoords!=None:
             self.displayEdge(self.currentCoords)
@@ -707,7 +709,7 @@ class QtOSMWidget(QWidget):
             lastX=x
             lastY=y
 
-    def displayEdgeOfRoute(self, route, currentEdgeId):
+    def displayEdgeOfRoute(self, route, edgeIndexList):
         if route!=None:
             # before calculation is done
             if route.getTrackList()==None:
@@ -722,23 +724,22 @@ class QtOSMWidget(QWidget):
             lastX=0
             lastY=0
 
-            for item in route.getTrackList():
-                edgeId=item["edgeId"]
-                if edgeId!=currentEdgeId:
-                    continue
-                
-                for itemRef in item["refs"]:
-                    lat, lon=itemRef["coords"]   
-                    (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+            for index in edgeIndexList:
+                if index<len(route.getTrackList()):
+                    item=route.getTrackList()[index]
+                    
+                    for itemRef in item["refs"]:
+                        lat, lon=itemRef["coords"]   
+                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+        
+                        if lastX!=0 and lastY!=0:
+                            pen=redPen
+                            pen.setStyle(Qt.SolidLine)
+                            self.painter.setPen(pen)
+                            self.painter.drawLine(x, y, lastX, lastY)
     
-                    if lastX!=0 and lastY!=0:
-                        pen=redPen
-                        pen.setStyle(Qt.SolidLine)
-                        self.painter.setPen(pen)
-                        self.painter.drawLine(x, y, lastX, lastY)
-
-                    lastX=x
-                    lastY=y
+                        lastX=x
+                        lastY=y
                         
         
     def displayRoute(self, route):
@@ -1417,20 +1418,48 @@ class QtOSMWidget(QWidget):
             if edgeId==None:
                 self.wayInfo=None
             else:   
-#                if self.currentRoute!=None:
-#                    self.printRouteInformationForPos(edgeId, lat, lon, self.currentRoute)
+                print(edgeId)
+
+                if self.currentRoute!=None:
+                    if self.currentRoute.containsEdge(edgeId):
+                        self.currentCoords=None
+                        self.currentEdgeIndex=self.currentRoute.getEdgeList().index(edgeId)
+                        distanceToEnd=self.getDistanceToEnd(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
+                        print("distance to end=%d"%(distanceToEnd))                        
+                        self.printRouteInformationForPos(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
                     
                 if edgeId!=self.lastEdgeId:
                     self.lastEdgeId=edgeId
-                    wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
-                    (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-                    print("%d %d %d %d %d %d %d %d %d"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
-                    self.wayInfo=self.getDefaultPositionTag(lat, lon, name, nameRef, country)      
-                    coords=osmParserData.getCoordsOfEdge(edgeId, country)
-                    self.currentCoords=coords
-                else:
-                    self.currentCoords=None
+                    
+                    
+                    if self.currentRoute!=None:
+                        if self.currentRoute.containsEdge(edgeId):
+#                            self.currentCoords=None
+                            
+#                            self.currentEdgeIndex=self.currentRoute.getEdgeList().index(edgeId)
+#                            self.printRouteInformationForPos(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
+                            
+                            self.currentEdgeIndexList=list()
+#                            self.currentEdgeIndexList.append(self.currentEdgeIndex-1)
+                            self.currentEdgeIndexList.append(self.currentEdgeIndex)
+                            self.currentEdgeIndexList.append(self.currentEdgeIndex+1)
+                            self.currentEdgeIndexList.append(self.currentEdgeIndex+2)
+
+                        else:
+                            coords=osmParserData.getCoordsOfEdge(edgeId, country)
+                            self.currentCoords=coords
+                    else:
+                        coords=osmParserData.getCoordsOfEdge(edgeId, country)
+                        self.currentCoords=coords
+                                  
+                    if wayId!=self.lastWayId:
+                        self.lastWayId=wayId
+                        wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
+#                        print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+                        (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
+#                        print("%d %d %d %d %d %d %d %d %d"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+                        self.wayInfo=self.getDefaultPositionTag(lat, lon, name, nameRef, country)      
+               
 
             self.update()
                     
@@ -1501,33 +1530,43 @@ class QtOSMWidget(QWidget):
 
     def printRouteInformationForStep(self, stepNumber, route):
         if route==None or route.getEdgeList()==None:
-            self.currentEdge=None
+            self.currentEdgeIndexList=None
             return
         
         if stepNumber>=len(route.getEdgeList()):
             print("no more steps")
-            self.currentEdge=None
+            self.currentEdgeIndexList=None
             return
 
-        self.currentEdge=route.getEdgeList()[stepNumber]
+        self.currentCoords=None
+        self.currentEdgeIndexList=list()
+        self.currentEdgeIndexList.append(stepNumber)
         trackItem=route.getTrackList()[stepNumber]
         self.update()
         print(trackItem)
 
-    def printRouteInformationForPos(self, edgeId, lat, lon, route):
-        edgeList, trackList=route.getTrackListFromEdge(edgeId)
+    def printRouteInformationForPos(self, edgeListIndex, lat, lon, route, usedRefId):
+        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
         
         if edgeList==None or trackList==None:
             print("not on route")
             return
         
-        (direction, crossingLength, crossingInfo, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon)
+        print("next:")
+        edgeId=edgeList[0]
+        (direction, crossingLength, crossingInfo, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon, usedRefId)
         if direction!=None and crossingInfo!=None and crossingLength!=None:
             print("distance to next crossing=%d direction=%s %s"%(crossingLength, self.osmutils.directionName(direction), crossingInfo))
-
-        distanceToEnd=osmParserData.getDistanceToEnd(edgeId, trackList, lat, lon, route)
-        print("distance to end=%d"%(distanceToEnd))                        
                
+    def getDistanceToEnd(self, edgeListIndex, lat, lon, route, usedRefId):
+        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
+        if edgeList==None or trackList==None:
+            return
+        
+        edgeId=edgeList[0]
+        distance=osmParserData.getDistanceToEnd(edgeId, trackList, lat, lon, route, usedRefId)
+        return distance
+    
     def getTrackListFromEdge(self, indexEnd, edgeList, trackList):
         if indexEnd < len(edgeList):
             restEdgeList=edgeList[indexEnd:]
