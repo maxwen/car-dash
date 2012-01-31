@@ -299,9 +299,14 @@ class QtOSMWidget(QWidget):
         self.wayPointImage=QPixmap("images/waypoint.png")
         self.routeCalculationThread=None
         
-        self.turnRightImage=QPixmap("images/turn-right-icon.png")
-        self.turnLeftImage=QPixmap("images/turn-left-icon.png")
-        self.uturnImage=QPixmap("images/u-turn.png")
+        self.turnRightImage=QPixmap("images/arrow-right.png")
+        self.turnLeftImage=QPixmap("images/arrow-left.png")
+        self.turnRighHardImage=QPixmap("images/arrow-hard-right.png")
+        self.turnLeftHardImage=QPixmap("images/arrow-hard-left.png")
+        self.turnRightEasyImage=QPixmap("images/arrow-easy-right.png")
+        self.turnLeftEasyImage=QPixmap("images/arrow-easy-left.png")
+        self.straightImage=QPixmap("images/arrow-straight.png")
+        self.uturnImage=QPixmap("images/u-turn-black.png")
         
         self.currentRoute=None
         self.routeList=list()
@@ -309,6 +314,11 @@ class QtOSMWidget(QWidget):
         self.currentEdgeIndexList=None
         self.currentEdgeIndex=0
         self.currentCoords=None
+        self.distanceToEnd=0
+        self.routeInfo=None
+        self.track=None
+        self.nextEdgeOnRoute=None
+        self.currentEdgeOnRoute=None
         
     def getRouteList(self):
         return self.routeList
@@ -573,14 +583,16 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
         self.osm_gps_map_fill_tiles_pixel()
         self.osm_gps_show_location()
-        if self.currentRoute!=None:
-            self.displayRoute(self.currentRoute)
         self.showControlOverlay()
         self.showRoutingPoints()
         self.showTextInfo()
-        if self.currentEdgeIndexList!=None and self.currentRoute!=None:
-            self.displayEdgeOfRoute(self.currentRoute, self.currentEdgeIndexList)
-            
+
+        if self.currentRoute!=None and self.currentRoute.getTrackList()!=None:
+            self.displayRoute(self.currentRoute)
+            self.showRouteInfo()
+            if self.currentEdgeIndexList!=None:
+                self.displayEdgeOfRoute(self.currentRoute, self.currentEdgeIndexList)
+        
         if self.currentCoords!=None:
             self.displayEdge(self.currentCoords)
             
@@ -603,6 +615,33 @@ class QtOSMWidget(QWidget):
             
         zoomPos=QPoint(10, self.controlWidgetRect.height()+20)
         self.painter.drawText(zoomPos, "Zoom:%d"%(self.map_zoom))
+        
+    def showRouteInfo(self):
+        pen=QPen()
+        pen.setColor(Qt.black)
+        self.painter.setPen(pen)
+        fm = self.painter.fontMetrics();
+
+        textBackground=QRect(self.width()-400, self.height()-50, 400, 50)
+        self.painter.fillRect(textBackground, Qt.white)
+        
+        pen.setColor(Qt.black)
+        self.painter.setPen(pen)
+        
+        if self.distanceToEnd!=0:
+            distanceToEndPos=QPoint(self.width()-390, self.height()-30)
+            self.painter.drawText(distanceToEndPos, "DTD:%dm"%self.distanceToEnd)
+
+        if self.routeInfo!=None:
+            (direction, crossingLength, crossingInfo, crossingType, crossingRef, edgeId)=self.routeInfo
+            routeInfoPos=QPoint(self.width()-200, self.height()-30)
+            self.painter.drawText(routeInfoPos, "DTA:%dm"%(crossingLength))
+            routeInfoPos1=QPoint(self.width()-390, self.height()-5)
+            self.painter.drawText(routeInfoPos1, "%s"%(crossingInfo))
+        
+            x=self.width()-60
+            y=self.height()-50
+            self.drawDirectionImage(direction, x, y) 
         
     def showRoutingPoints(self):
 #        showTrackDetails=self.map_zoom>13
@@ -906,15 +945,32 @@ class QtOSMWidget(QWidget):
 #                                if "exit:" in crossingInfo:
 #                                    self.painter.drawPixmap(x, y, self.turnRightImage)
 #                            else:
-                            if direction in range(1, 3, 1):
-                                #right
-                                self.painter.drawPixmap(x, y, self.turnRightImage)
-                            elif direction in range(-1, -3, -1):
-                                #left
-                                self.painter.drawPixmap(x, y, self.turnLeftImage)
-                            elif direction==42:
-                                self.painter.drawPixmap(x, y, self.uturnImage)
-                                
+                            self.drawDirectionImage(direction, x, y)                    
+            
+            
+    def drawDirectionImage(self, direction, x, y):
+        if direction==1:
+            self.painter.drawPixmap(x, y, self.turnRightEasyImage)
+        elif direction==2:
+            self.painter.drawPixmap(x, y, self.turnRightImage)
+        elif direction==3:
+            self.painter.drawPixmap(x, y, self.turnRighHardImage)
+        elif direction==-1:
+            self.painter.drawPixmap(x, y, self.turnLeftEasyImage)
+        elif direction==-2:
+            self.painter.drawPixmap(x, y, self.turnLeftImage)
+        elif direction==-3:
+            self.painter.drawPixmap(x, y, self.turnLeftHardImage)
+        elif direction==0:
+            self.painter.drawPixmap(x, y, self.straightImage)
+        elif direction==42:
+            self.painter.drawPixmap(x, y, self.uturnImage)
+        elif direction==39:
+            self.painter.drawPixmap(x, y, self.turnRightEasyImage)
+        elif direction==40:
+            self.painter.drawPixmap(x, y, self.turnRightImage)
+        elif direction==41:
+            self.painter.drawPixmap(x, y, self.turnRightImage)
             
 #    def minimumSizeHint(self):
 #        return QSize(minWidth, minHeight)
@@ -949,23 +1005,27 @@ class QtOSMWidget(QWidget):
         self.center_coord_update()
         self.update()
 
-    def updateGPSLocation(self, lat, lon):
+    def updateGPSLocation(self, lat, lon, altitude, speed, track):
 #        print("%f-%f"%(lat,lon))
+        if speed==0:
+            self.stop=True
+        else:
+            self.stop=False
+        
+        self.track=track
         if lat!=0.0 and lon!=0.0:
             gps_rlat_new=self.osmutils.deg2rad(lat)
             gps_rlon_new=self.osmutils.deg2rad(lon)
             
-
             # TODO: only update if gps position changed at least a specific portion
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:     
-                self.stop=False
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
-                self.showTrackOnGPSPos(self.gps_rlat, self.gps_rlon)
+                self.showTrackOnGPSPos(self.gps_rlat, self.gps_rlon, False)
 
                 if self.wayInfo!=None:
-                    self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, lat, lon)
+                    self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, (lat, lon))
                 else:
                     self.gpsPoint=None  
 
@@ -974,13 +1034,11 @@ class QtOSMWidget(QWidget):
                 else:
                     self.update()   
             else:
-                self.stop=True
                 if self.autocenterGPS==True:
                     self.osm_autocenter_map()
                 else:
                     self.update()           
         else:
-            self.stop=True
             self.gps_rlat=0.0
             self.gps_rlon=0.0
             self.gpsPoint=None
@@ -1082,14 +1140,14 @@ class QtOSMWidget(QWidget):
             self.osm_map_scroll(dx, dy)
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
-        else:
-            self.updateMousePositionDisplay(event.x(), event.y())
+#        else:
+#            self.updateMousePositionDisplay(event.x(), event.y())
 #            self.showTrackOnMousePos(event.x(), event.y())
 
             
-    def updateMousePositionDisplay(self, x, y):
-        (lat, lon)=self.getMousePosition(x, y)
-        self.emit(SIGNAL("updateMousePositionDisplay(float, float)"), lat, lon)
+#    def updateMousePositionDisplay(self, x, y):
+#        (lat, lon)=self.getMousePosition(x, y)
+#        self.emit(SIGNAL("updateMousePositionDisplay(float, float)"), lat, lon)
         
     def getRoutingPointForPos(self, mousePos):
         p=QPoint(mousePos[0], mousePos[1])
@@ -1205,7 +1263,7 @@ class QtOSMWidget(QWidget):
             self.clearCurrentRoute()
         elif action==recalcRouteAction:
             (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-            currentPoint=OSMRoutingPoint("tmp", 5, lat, lon)                
+            currentPoint=OSMRoutingPoint("tmp", 5, (lat, lon))                
             self.recalcRouteFromPos(currentPoint)
         elif action==recalcRouteGPSAction:
             self.recalcRouteFromPos(self.gpsPoint)
@@ -1221,8 +1279,6 @@ class QtOSMWidget(QWidget):
     def zoomToCompleteRoute(self, routingPointList):
         if len(routingPointList)==0:
             return
-#        bbox=osmParserData.createBBox(routingPointList[0].getLat(), routingPointList[0].getLon(), routingPointList[-1].getLat(), routingPointList[-1].getLon())
-#        print(bbox)
 
         width = self.width()
         height = self.height()
@@ -1245,7 +1301,7 @@ class QtOSMWidget(QWidget):
                     break
         
     def saveCurrentRoute(self):
-        routeNameDialog=OSMInputDialog(self, "", "Save Route", "Name:")
+        routeNameDialog=OSMRouteSaveDialog(self, self.routeList)
         result=routeNameDialog.exec()
         if result==QDialog.Accepted:
             name=routeNameDialog.getResult()
@@ -1329,17 +1385,12 @@ class QtOSMWidget(QWidget):
         
         wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
         defaultPointTag=self.getDefaultPositionTag(lat, lon, name, nameRef, country)
-
-        if defaultPointTag!=None:
-            defaultName=defaultPointTag
-        else:
-            defaultName="unknown"
             
-        favNameDialog=OSMInputDialog(self, defaultName, "Add Favorite", "Name:")
+        favNameDialog=OSMSaveFavoritesDialog(self, self.osmWidget.favoriteList)
         result=favNameDialog.exec()
         if result==QDialog.Accepted:
             favoriteName=favNameDialog.getResult()
-            favoritePoint=OSMRoutingPoint(favoriteName, 4, lat, lon)
+            favoritePoint=OSMRoutingPoint(favoriteName, 4, (lat, lon))
             self.osmWidget.favoriteList.append(favoritePoint)
             
     def addRoutingPoint(self, pointType):
@@ -1357,7 +1408,7 @@ class QtOSMWidget(QWidget):
             else:
                 defaultName="start"
 
-            point=OSMRoutingPoint(defaultName, pointType, lat, lon)
+            point=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             point.resolveFromPos(osmParserData)
             if point.getSource()!=0:
                 self.startPoint=point
@@ -1369,7 +1420,7 @@ class QtOSMWidget(QWidget):
             else:
                 defaultName="end"
                 
-            point=OSMRoutingPoint(defaultName, pointType, lat, lon)
+            point=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             point.resolveFromPos(osmParserData)
             if point.getSource()!=0:
                 self.endPoint=point
@@ -1382,7 +1433,7 @@ class QtOSMWidget(QWidget):
             else:
                 defaultName="way"
 
-            wayPoint=OSMRoutingPoint(defaultName, pointType, lat, lon)
+            wayPoint=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             wayPoint.resolveFromPos(osmParserData)
             if wayPoint.getSource()!=0:
                 self.wayPoints.append(wayPoint)
@@ -1393,7 +1444,7 @@ class QtOSMWidget(QWidget):
         if self.map_zoom<15:
             self.osm_map_set_zoom(15)
 
-        self.osm_center_map_to_position(routingPoint.getLat(), routingPoint.getLon())
+        self.osm_center_map_to_position(routingPoint.getPos()[0], routingPoint.getPos()[1])
 
     def showPosPointOnMap(self, lat, lon):
         if self.map_zoom<15:
@@ -1412,46 +1463,60 @@ class QtOSMWidget(QWidget):
             return "No name - %s"%(osmParserData.getCountryNameForId(country))
         return None
 
-    def showTrackOnPos(self, lat, lon):
+    def showTrackOnPos(self, lat, lon, update):
+        start=time.time()
         if self.osmWidget.dbLoaded==True:
-            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.track, self.currentEdgeOnRoute, self.nextEdgeOnRoute)
+            stop=time.time()
+            print(stop-start)
+            start=stop
             if edgeId==None:
                 self.wayInfo=None
             else:   
-                print(edgeId)
-
+                isOnRoute=False
                 if self.currentRoute!=None:
                     if self.currentRoute.containsEdge(edgeId):
+                        isOnRoute=True
                         self.currentCoords=None
+                        self.currentEdgeOnRoute=edgeId
+                        # TODO should count up because we may have the same
+                        # edge multiple times in the list
                         self.currentEdgeIndex=self.currentRoute.getEdgeList().index(edgeId)
-                        distanceToEnd=self.getDistanceToEnd(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
-                        print("distance to end=%d"%(distanceToEnd))                        
-                        self.printRouteInformationForPos(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
-                    
+                        if self.currentEdgeIndex<len(self.currentRoute.getEdgeList()):
+                            self.nextEdgeOnRoute=self.currentRoute.getEdgeList()[self.currentEdgeIndex+1]
+                        else:
+                            self.nextEdgeOnRoute=None
+                            
+                        edgeList, trackList=self.getTrackListFromEdge(self.currentEdgeIndex, self.currentRoute.getEdgeList(), self.currentRoute.getTrackList())
+
+                        self.distanceToEnd=self.getDistanceToEnd(edgeList, trackList, lat, lon, self.currentRoute, usedRefId)
+                        (direction, crossingLength, crossingInfo, crossingType, crossingRef, crossingEdgeId)=self.getRouteInformationForPos(edgeList, trackList, lat, lon, self.currentRoute, usedRefId)
+                        if direction!=None:
+                            self.routeInfo=(direction, crossingLength, crossingInfo, crossingType, crossingRef, crossingEdgeId)
+                            crossingEdgeIdIndex=self.currentRoute.getEdgeList().index(crossingEdgeId)
+                        else:
+                            self.routeInfo=None
+                            crossingEdgeIdIndex=None
+                            
                 if edgeId!=self.lastEdgeId:
                     self.lastEdgeId=edgeId
                     
-                    
-                    if self.currentRoute!=None:
-                        if self.currentRoute.containsEdge(edgeId):
-#                            self.currentCoords=None
-                            
-#                            self.currentEdgeIndex=self.currentRoute.getEdgeList().index(edgeId)
-#                            self.printRouteInformationForPos(self.currentEdgeIndex, lat, lon, self.currentRoute, usedRefId)
-                            
-                            self.currentEdgeIndexList=list()
-#                            self.currentEdgeIndexList.append(self.currentEdgeIndex-1)
-                            self.currentEdgeIndexList.append(self.currentEdgeIndex)
-                            self.currentEdgeIndexList.append(self.currentEdgeIndex+1)
-                            self.currentEdgeIndexList.append(self.currentEdgeIndex+2)
+                    if isOnRoute==True:                            
+                        self.currentEdgeIndexList=list()
+                        self.currentEdgeIndexList.append(self.currentEdgeIndex)
+                        if crossingEdgeIdIndex!=None:
+                            for i in range(self.currentEdgeIndex+1, crossingEdgeIdIndex, 1):
+                                self.currentEdgeIndexList.append(i)
 
-                        else:
-                            coords=osmParserData.getCoordsOfEdge(edgeId, country)
-                            self.currentCoords=coords
                     else:
                         coords=osmParserData.getCoordsOfEdge(edgeId, country)
                         self.currentCoords=coords
-                                  
+                        self.distanceToEnd=0
+                        self.routeInfo=None
+                        self.currentEdgeIndexList=None
+                        self.nextEdgeOnRoute=None
+                        self.currentEdgeOnRoute=None
+                              
                     if wayId!=self.lastWayId:
                         self.lastWayId=wayId
                         wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
@@ -1460,8 +1525,10 @@ class QtOSMWidget(QWidget):
 #                        print("%d %d %d %d %d %d %d %d %d"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                         self.wayInfo=self.getDefaultPositionTag(lat, lon, name, nameRef, country)      
                
-
-            self.update()
+            stop=time.time()
+            print(stop-start)
+            if update==True:
+                self.update()
                     
     def showRouteForRoutingPoints(self, routingPointList):
         if self.osmWidget.dbLoaded==True:  
@@ -1545,23 +1612,22 @@ class QtOSMWidget(QWidget):
         self.update()
         print(trackItem)
 
-    def printRouteInformationForPos(self, edgeListIndex, lat, lon, route, usedRefId):
-        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
-        
-        if edgeList==None or trackList==None:
-            print("not on route")
-            return
-        
-        print("next:")
+    def getRouteInformationForPos(self, edgeList, trackList, lat, lon, route, usedRefId):
+#        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())     
+#        if edgeList==None or trackList==None:
+#            return
+#        
         edgeId=edgeList[0]
-        (direction, crossingLength, crossingInfo, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon, usedRefId)
+        (direction, crossingLength, crossingInfo, crossingType, crossingRef, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon, usedRefId)
         if direction!=None and crossingInfo!=None and crossingLength!=None:
-            print("distance to next crossing=%d direction=%s %s"%(crossingLength, self.osmutils.directionName(direction), crossingInfo))
-               
-    def getDistanceToEnd(self, edgeListIndex, lat, lon, route, usedRefId):
-        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
-        if edgeList==None or trackList==None:
-            return
+            return (direction, crossingLength, crossingInfo, crossingType, crossingRef, edgeId)
+             
+        return (None, None, None, None, None, None)
+      
+    def getDistanceToEnd(self, edgeList, trackList, lat, lon, route, usedRefId):
+#        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
+#        if edgeList==None or trackList==None:
+#            return
         
         edgeId=edgeList[0]
         distance=osmParserData.getDistanceToEnd(edgeId, trackList, lat, lon, route, usedRefId)
@@ -1610,13 +1676,13 @@ class QtOSMWidget(QWidget):
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
             (lat, lon)=self.getMousePosition(x, y)
-            self.showTrackOnPos(lat, lon)
+            self.showTrackOnPos(lat, lon, True)
 
-    def showTrackOnGPSPos(self, rLat, rLon):
+    def showTrackOnGPSPos(self, rLat, rLon, update):
         if self.osmWidget.dbLoaded==True:
             lat=self.osmutils.rad2deg(rLat)
             lon=self.osmutils.rad2deg(rLon)
-            self.showTrackOnPos(lat, lon)            
+            self.showTrackOnPos(lat, lon, update)            
     
     def convert_screen_to_geographic(self, pixel_x, pixel_y):
         rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y + pixel_y);
@@ -1805,6 +1871,11 @@ class OSMWidget(QWidget):
         self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
         coords.addWidget(self.gpsAltitudeValue)
 
+        self.gpsSpeedValue=QLabel("%d"%(0), self)
+        self.gpsSpeedValue.setFont(font)
+        self.gpsSpeedValue.setAlignment(Qt.AlignRight)
+        coords.addWidget(self.gpsSpeedValue)
+
 #        formLayoutGPS.addRow(self.gpsAltitudeLabel, self.gpsAltitudeValue)
 
 #        buttons.addLayout(formLayoutGPS)
@@ -1823,18 +1894,18 @@ class OSMWidget(QWidget):
 #        tab.addTab(mouseTab, "Map") 
 
 #        self.mousePosLabelLat=QLabel("", self)
-        self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
-        self.mousePosValueLat.setFont(font)
-        self.mousePosValueLat.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.mousePosValueLat)
+#        self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
+#        self.mousePosValueLat.setFont(font)
+#        self.mousePosValueLat.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.mousePosValueLat)
 
 #        formLayoutMouse.addRow(self.mousePosLabelLat, self.mousePosValueLat)
 
 #        self.mousePosLabelLon=QLabel("", self)
-        self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
-        self.mousePosValueLon.setFont(font)
-        self.mousePosValueLon.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.mousePosValueLon)
+#        self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
+#        self.mousePosValueLon.setFont(font)
+#        self.mousePosValueLon.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.mousePosValueLon)
 
 #        formLayoutMouse.addRow(self.mousePosLabelLon, self.mousePosValueLon)
         
@@ -1847,7 +1918,7 @@ class OSMWidget(QWidget):
         self.downloadThread=OSMDownloadTilesWorker(self)
         self.downloadThread.setWidget(self.mapWidgetQt)
         self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-        self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
+#        self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
 #        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
         self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
 #        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
@@ -1878,16 +1949,17 @@ class OSMWidget(QWidget):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()        
         
-    def updateMousePositionDisplay(self, lat, lon):
-        self.mousePosValueLat.setText("%.5f"%(lat))
-        self.mousePosValueLon.setText("%.5f"%(lon)) 
+#    def updateMousePositionDisplay(self, lat, lon):
+#        self.mousePosValueLat.setText("%.5f"%(lat))
+#        self.mousePosValueLon.setText("%.5f"%(lon)) 
  
-    def updateGPSDataDisplay(self, lat, lon, altitude):
-        self.mapWidgetQt.updateGPSLocation(lat, lon)
+    def updateGPSDataDisplay(self, lat, lon, altitude, speed, track):
+        self.mapWidgetQt.updateGPSLocation(lat, lon, altitude, speed, track)
 
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
         self.gpsAltitudeValue.setText("%.1f"%(altitude))
+        self.gpsSpeedValue.setText("%d"%(speed))
             
     def init(self, lat, lon, zoom):        
         self.mapWidgetQt.init()
@@ -2043,15 +2115,15 @@ class OSMWidget(QWidget):
             print(refId)
             name=streetName+" "+houseNumber+" - "+osmParserData.getCountryNameForId(country)
             if pointType==0:
-                routingPoint=OSMRoutingPoint(name, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setStartPoint(routingPoint) 
                 self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==1:
-                routingPoint=OSMRoutingPoint(name, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setEndPoint(routingPoint) 
                 self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==2:
-                routingPoint=OSMRoutingPoint(name, pointType, lat, lon)  
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
                 self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==-1:
@@ -2062,21 +2134,23 @@ class OSMWidget(QWidget):
         favoritesDialog=OSMFavoritesDialog(self, self.favoriteList)
         result=favoritesDialog.exec()
         if result==QDialog.Accepted:
-            point, pointType=favoritesDialog.getResult()
-            if pointType==0:
-                routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getLat(), point.getLon())  
-                self.mapWidgetQt.setStartPoint(routingPoint) 
-                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==1:
-                routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getLat(), point.getLon())  
-                self.mapWidgetQt.setEndPoint(routingPoint) 
-                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==2:
-                routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getLat(), point.getLon())  
-                self.mapWidgetQt.setWayPoint(routingPoint) 
-                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==-1:
-                self.mapWidgetQt.showRoutingPointOnMap(point)
+            point, pointType, favoriteList=favoritesDialog.getResult()
+            self.favoriteList=favoriteList
+            if point!=None:
+                if pointType==0:
+                    routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    self.mapWidgetQt.setStartPoint(routingPoint) 
+                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
+                elif pointType==1:
+                    routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    self.mapWidgetQt.setEndPoint(routingPoint) 
+                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
+                elif pointType==2:
+                    routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    self.mapWidgetQt.setWayPoint(routingPoint) 
+                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
+                elif pointType==-1:
+                    self.mapWidgetQt.showRoutingPointOnMap(point)
 
 
     @pyqtSlot()
@@ -2145,25 +2219,25 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.loadData()
         
-        buttons=QHBoxLayout()        
-
-        self.testGPSButton=QPushButton("Test GPS", self)
-        self.testGPSButton.clicked.connect(self._testGPS)
-        buttons.addWidget(self.testGPSButton)
-        
-        self.stepRouteButton=QPushButton("Step", self)
-        self.stepRouteButton.clicked.connect(self._stepRoute)
-        buttons.addWidget(self.stepRouteButton)
-        
-        self.resetStepRouteButton=QPushButton("Reset Step", self)
-        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
-        buttons.addWidget(self.resetStepRouteButton)
+#        buttons=QHBoxLayout()        
+#
+#        self.testGPSButton=QPushButton("Test GPS", self)
+#        self.testGPSButton.clicked.connect(self._testGPS)
+#        buttons.addWidget(self.testGPSButton)
+#        
+#        self.stepRouteButton=QPushButton("Step", self)
+#        self.stepRouteButton.clicked.connect(self._stepRoute)
+#        buttons.addWidget(self.stepRouteButton)
+#        
+#        self.resetStepRouteButton=QPushButton("Reset Step", self)
+#        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
+#        buttons.addWidget(self.resetStepRouteButton)
         
         self.connectPSButton=QCheckBox("Connect GPS", self)
         self.connectPSButton.clicked.connect(self._connectGPS)
 #        buttons.addWidget(self.connectPSButton)
                 
-        top.addLayout(buttons)
+#        top.addLayout(buttons)
         
         self.statusbar.addPermanentWidget(self.connectPSButton)
 
@@ -2209,14 +2283,27 @@ class OSMWindow(QMainWindow):
     def updateGPSDisplay(self, session):
 #        print("OSMWindow:updateGPSDisplay")
 
-        if session!=None:            
+        if session!=None:   
+            speed=0
+            altitude=0
+            track=0
+             
+            if not gps.isnan(session.fix.track):
+                track=int(session.fix.track)
+            
+            if not gps.isnan(session.fix.speed):
+                speed=int(session.fix.speed*3.6)
+            
+            if not gps.isnan(session.fix.altitude):
+                altitude=session.fix.altitude
+         
             if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
                 altitude=session.fix.altitude
-                self.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude, altitude)
+                self.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude, altitude, speed, track)
             else:
-                self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0)
+                self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0, 0, 0, 0)
         else:            
-            self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0)
+            self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0, 0, 0, 0)
 
     @pyqtSlot()
     def _testGPS(self):
@@ -2230,7 +2317,7 @@ class OSMWindow(QMainWindow):
         osmutils=OSMUtils()
         print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
 
-        self.osmWidget.updateGPSDataDisplay(self.incLat, self.incLon, 42.01) 
+        self.osmWidget.updateGPSDataDisplay(self.incLat, self.incLon, 42.1, 99, 0) 
         
         print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
 

@@ -484,7 +484,9 @@ class OSMFavoritesDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
-        self.favoriteList=sorted(favoriteList)
+        self.favoriteList=list()
+        self.favoriteList.extend(favoriteList)
+        self.favoriteList=sorted(self.favoriteList, key=self.nameSort)
         self.filteredFavoriteList=self.favoriteList
 
         self.selectedFavorite=None
@@ -495,12 +497,11 @@ class OSMFavoritesDialog(QDialog):
 
         self.initUI()
          
-#    def nameSort(self, item):
-#       (name, ref)=item
-#       return name
+    def nameSort(self, item):
+        return item.getName()
    
     def getResult(self):
-        return (self.selectedFavorite, self.pointType)
+        return (self.selectedFavorite, self.pointType, self.favoriteList)
     
     def initUI(self):
         top=QVBoxLayout()
@@ -524,44 +525,62 @@ class OSMFavoritesDialog(QDialog):
         self.favoriteView.setHorizontalHeader(header)
         self.favoriteView.setColumnWidth(0, 300)
 
+        style=QCommonStyle()
+
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.deleteFavoriteButton=QPushButton("Delete", self)
+        self.deleteFavoriteButton.clicked.connect(self._deleteFavorite)
+        self.deleteFavoriteButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
+        self.deleteFavoriteButton.setEnabled(False)
+        actionButtons.addWidget(self.deleteFavoriteButton)
+
+        top.addLayout(actionButtons)
+
+        actionButtons2=QHBoxLayout()
+        actionButtons2.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
         self.showPointButton.setEnabled(False)
-        actionButtons.addWidget(self.showPointButton)
+        actionButtons2.addWidget(self.showPointButton)
 
         self.setStartPointButton=QPushButton("Start", self)
         self.setStartPointButton.clicked.connect(self._setStartPoint)
         self.setStartPointButton.setIcon(self.startPointIcon)
         self.setStartPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setStartPointButton)
+        actionButtons2.addWidget(self.setStartPointButton)
         
         self.setEndPointButton=QPushButton("End", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setEndPointButton)
+        actionButtons2.addWidget(self.setEndPointButton)
         
         self.setWayPointButton=QPushButton("Way", self)
         self.setWayPointButton.clicked.connect(self._setWayPoint)
         self.setWayPointButton.setIcon(self.wayPointIcon)
         self.setWayPointButton.setEnabled(False)
-        actionButtons.addWidget(self.setWayPointButton)
+        actionButtons2.addWidget(self.setWayPointButton)
 
-        top.addLayout(actionButtons)
+        top.addLayout(actionButtons2)
         
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
-        style=QCommonStyle()
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        self.cancelButton.setDefault(True)
+        buttons.addWidget(self.cancelButton)
 
         self.closeButton=QPushButton("Close", self)
-        self.closeButton.clicked.connect(self._cancel)
+        self.closeButton.clicked.connect(self._close)
         self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
         self.closeButton.setDefault(True)
         buttons.addWidget(self.closeButton)
+        
         top.addLayout(buttons)
 
         self.connect(self.favoriteView.selectionModel(),
@@ -579,11 +598,18 @@ class OSMFavoritesDialog(QDialog):
         self.setStartPointButton.setEnabled(current.isValid())
         self.setWayPointButton.setEnabled(current.isValid())
         self.showPointButton.setEnabled(current.isValid())
+        self.deleteFavoriteButton.setEnabled(current.isValid())
         
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-        
+
+    @pyqtSlot()
+    def _close(self):
+        self.selectedFavorite=None
+        self.pointType=42
+        self.done(QDialog.Accepted)      
+          
     @pyqtSlot()
     def _showPoint(self):
         selmodel = self.favoriteView.selectionModel()
@@ -627,6 +653,7 @@ class OSMFavoritesDialog(QDialog):
         self.setStartPointButton.setEnabled(False)
         self.setEndPointButton.setEnabled(False)
         self.showPointButton.setEnabled(False)
+        self.deleteFavoriteButton.setEnabled(False)
         
     @pyqtSlot()
     def _applyFilter(self):
@@ -647,7 +674,117 @@ class OSMFavoritesDialog(QDialog):
             self.filteredFavoriteList=self.favoriteList
         
         self.favoriteViewModel.update(self.filteredFavoriteList)
+    
+    @pyqtSlot()
+    def _deleteFavorite(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            selectedFavorite=self.filteredFavoriteList[current.row()]
+            self.favoriteList.remove(selectedFavorite)
+            self._applyFilter()
+
+#----------------------------
+
+class OSMSaveFavoritesDialog(QDialog):
+    def __init__(self, parent, favoriteList):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+        self.favoriteList=sorted(favoriteList, key=self.nameSort)
+        self.text=None
+
+        self.initUI()
+   
+    def nameSort(self, item):
+        return item.getName()
+    
+    def getResult(self):
+        return self.text
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
+                
+        fields=QFormLayout()
+        fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
+
+        label=QLabel(self)
+        label.setText("Name:")
         
+        self.textField=QLineEdit(self)
+        self.textField.setText("")
+        self.textField.textChanged.connect(self._updateEnablement)
+        self.textField.setMinimumWidth(300)
+
+        fields.addRow(label, self.textField)
+        
+        top.addLayout(fields)
+        self.favoriteView=QTableView(self)
+        top.addWidget(self.favoriteView)
+        
+        self.favoriteViewModel=OSMFavoriteTableModel(self)
+        self.favoriteViewModel.update(self.favoriteList)
+        self.favoriteView.setModel(self.favoriteViewModel)
+        header=QHeaderView(Qt.Horizontal, self.favoriteView)
+        header.setStretchLastSection(True)
+        self.favoriteView.setHorizontalHeader(header)
+        self.favoriteView.setColumnWidth(0, 300)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        style=QCommonStyle()
+
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        self.cancelButton.setDefault(True)
+        buttons.addWidget(self.cancelButton)
+        
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setEnabled(False)
+
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+
+        top.addLayout(buttons)
+
+        self.connect(self.favoriteView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+
+        self.setLayout(top)
+        self.setWindowTitle('Save Favorite')
+        self.setGeometry(0, 0, 400, 400)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.favoriteView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.textField.setText(self.favoriteList[current.row()].getName())
+
+        self._updateEnablement()
+        
+    @pyqtSlot()
+    def _updateEnablement(self):
+        self.okButton.setDisabled(len(self.textField.text())==0)
+   
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.text=self.textField.text()
+        self.done(QDialog.Accepted)
+        
+ 
 #----------------------------
 
 class OSMRouteListTableModel(QAbstractTableModel):
@@ -733,6 +870,8 @@ class OSMRouteListDialog(QDialog):
         header.setStretchLastSection(True)
         self.routeView.setHorizontalHeader(header)
         self.routeView.setColumnWidth(0, 300)
+        
+        style=QCommonStyle()
 
         if self.withDelete==True:
             actionButtons=QHBoxLayout()
@@ -740,6 +879,7 @@ class OSMRouteListDialog(QDialog):
             
             self.deleteRouteButton=QPushButton("Delete", self)
             self.deleteRouteButton.clicked.connect(self._deleteRoute)
+            self.deleteRouteButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
             self.deleteRouteButton.setEnabled(False)
             actionButtons.addWidget(self.deleteRouteButton)
     
@@ -748,8 +888,6 @@ class OSMRouteListDialog(QDialog):
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
-        style=QCommonStyle()
-
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
         self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
@@ -840,6 +978,107 @@ class OSMRouteListDialog(QDialog):
             self.filteredRouteList=self.routeList
         
         self.routeViewModel.update(self.filteredRouteList)
+        
+#--------------------------------------------------        
+class OSMRouteSaveDialog(QDialog):
+    def __init__(self, parent, routeList):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+
+        self.routeList=sorted(routeList, key=self.nameSort)
+        self.text=None
+        
+        self.initUI()
+         
+    def nameSort(self, item):
+        return item.getName()
+   
+    def getResult(self):
+        return self.text
+        
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(0)
+        
+        fields=QFormLayout()
+        fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
+
+        label=QLabel(self)
+        label.setText("Name:")
+        
+        self.textField=QLineEdit(self)
+        self.textField.setText("")
+        self.textField.textChanged.connect(self._updateEnablement)
+        self.textField.setMinimumWidth(300)
+
+        fields.addRow(label, self.textField)
+        
+        top.addLayout(fields)
+                
+        self.routeView=QTableView(self)
+        top.addWidget(self.routeView)
+        
+        self.routeViewModel=OSMRouteListTableModel(self)
+        self.routeViewModel.update(self.routeList)
+        self.routeView.setModel(self.routeViewModel)
+        header=QHeaderView(Qt.Horizontal, self.routeView)
+        header.setStretchLastSection(True)
+        self.routeView.setHorizontalHeader(header)
+        self.routeView.setColumnWidth(0, 300)
+        
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        style=QCommonStyle()
+
+        self.cancelButton=QPushButton("Cancel", self)
+        self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+        self.cancelButton.setDefault(True)
+        buttons.addWidget(self.cancelButton)
+        
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setEnabled(False)
+
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+
+        top.addLayout(buttons)
+
+        self.connect(self.routeView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+
+        self.setLayout(top)
+        self.setWindowTitle('Save Route')
+        self.setGeometry(0, 0, 400, 400)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.routeView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.textField.setText(self.routeList[current.row()].getName())
+
+        self._updateEnablement()
+        
+    @pyqtSlot()
+    def _updateEnablement(self):
+        self.okButton.setDisabled(len(self.textField.text())==0)
+   
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.text=self.textField.text()
+        self.done(QDialog.Accepted)
+        
 #----------------------------
 class OSMRouteTableModel(QAbstractTableModel):
     def __init__(self, parent):
@@ -983,7 +1222,7 @@ class OSMRouteDialog(QDialog):
         
     @pyqtSlot()
     def _saveRoute(self):
-        routeNameDialog=OSMInputDialog(self, "", "Save Route", "Name:")
+        routeNameDialog=OSMRouteSaveDialog(self, self.routeList)
         result=routeNameDialog.exec()
         if result==QDialog.Accepted:
             name=routeNameDialog.getResult()

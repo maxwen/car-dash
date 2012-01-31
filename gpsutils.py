@@ -277,26 +277,34 @@ class GPSMonitor(QWidget):
                     timeString=""
             else:
                 timeString=str(session.utc)
-                
+            
+            speed=0
+            altitude=0
+            track=0
             self.valueLabelList[3].setText(timeString)
             self.valueLabelList[4].setText(str(session.fix.altitude))
             self.valueLabelList[5].setText(str(session.fix.speed))
             #self.valueLabelList[6].setText(str(session.fix.climb))
             self.valueLabelList[6].setText(str(session.fix.track))
+            
             if not gps.isnan(session.fix.track):
-                self.compassGauge.setValue(int(session.fix.track))
-            else:
-                self.compassGauge.setValue(0)
+                track=int(session.fix.track)
+            
+            self.compassGauge.setValue(track)
+                
             if not gps.isnan(session.fix.speed):
-                self.speedDisplay.display(int(session.fix.speed*3.6))
-            else:
-                self.speedDisplay.display(0)
+                speed=int(session.fix.speed*3.6)
+            
+            self.speedDisplay.display(speed)
+
+            if not gps.isnan(session.fix.altitude):
+                altitude=session.fix.altitude
                 
             if self.canMonitor.hasOSMWidget():
                 if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                    self.canMonitor.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude)
+                    self.canMonitor.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude, altitude, speed, track)
                 else:
-                    self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0)
+                    self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0, altitude, speed, track)
 
             if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
                 self.updateDistanceDisplay(session.fix.latitude, session.fix.longitude)
@@ -315,7 +323,7 @@ class GPSMonitor(QWidget):
             self.speedDisplay.display(0)
             
             if self.canMonitor.hasOSMWidget():
-                self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0)
+                self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0, 0, 0)
 
     def loadConfig(self, config):
         self.globalDistance=config.getDefaultSection().getint("globalDistance", 0)

@@ -5,6 +5,7 @@ Created on Dec 22, 2011
 '''
 
 import math
+import time
 
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
@@ -47,16 +48,16 @@ class OSMUtils():
         lat = math.asin(math.tanh(lat_m))
         return lat
     
-    def distance(self, oldLat, oldLon, newLat, newLon):
-        dLat = self.deg2rad(oldLat-newLat)
-        dLon = self.deg2rad(oldLon-newLon)
-        lat1 = self.deg2rad(oldLat)
-        lat2 = self.deg2rad(newLat)
-
-        a = math.pow(math.sin(dLat/2), 2) + math.pow(math.sin(dLon/2),2) * math.cos(lat1) * math.cos(lat2) 
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-        d = (RADIUS_EARTH * c)*1000
-        return d
+#    def distance(self, oldLat, oldLon, newLat, newLon):
+#        dLat = self.deg2rad(oldLat-newLat)
+#        dLon = self.deg2rad(oldLon-newLon)
+#        lat1 = self.deg2rad(oldLat)
+#        lat2 = self.deg2rad(newLat)
+#
+#        a = math.pow(math.sin(dLat/2), 2) + math.pow(math.sin(dLon/2),2) * math.cos(lat1) * math.cos(lat2) 
+#        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+#        d = (RADIUS_EARTH * c)*1000
+#        return d
    
     def crossproduct(self, x1, y1, z1, x2, y2, z2):
         xa = y1*z2-y2*z1
@@ -68,7 +69,7 @@ class OSMUtils():
         return (x1*x2+y1*y2+z1*z2);
     
     
-    def distance1(self,  lat1, lon1, lat2, lon2 ):
+    def distance(self,  lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
         lon1 = self.deg2rad(lon1)
         lat2 = self.deg2rad(lat2)
@@ -218,7 +219,7 @@ class OSMUtils():
             return -2
         if azimuth>=300 and azimuth<359:
             return -3
-        return 42
+        return 43
     
     def directionName(self, direction):
         if direction==0:
@@ -235,6 +236,12 @@ class OSMUtils():
             return "right"
         if direction==3:
             return "hard right"
+        if direction==39:
+            return "motorway exit"
+        if direction==40:
+            return "roundabout enter"
+        if direction==41:
+            return "roundabout exit"
         if direction==42:
             return "u-turn"
         
@@ -294,6 +301,16 @@ def main():
     lonTo=12.9885131
     
     print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo)))
+
+#    start=time.time()
+#    for i in range(0, 100000):
+#        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
+#    print("distance:%f"%(time.time()-start))
+#    
+#    start=time.time()
+#    for i in range(0, 100000):
+#        osmutils.distance1(latFrom, lonFrom, latTo, lonTo)
+#    print("distance1:%f"%(time.time()-start))
 
 if __name__ == "__main__":
     main()  
