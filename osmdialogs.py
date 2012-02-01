@@ -175,7 +175,7 @@ class OSMAdressDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         self.countryCombo=QComboBox(self)
         for country in self.countryList:
@@ -280,8 +280,8 @@ class OSMAdressDialog(QDialog):
                      SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
 
         self.setLayout(top)
-        self.setWindowTitle('Way Search')
-        self.setGeometry(0, 0, 700, 600)
+        self.setWindowTitle('Addresses')
+        self.setGeometry(0, 0, 700, 500)
                 
     @pyqtSlot()
     def _ignoreCity(self):
@@ -506,7 +506,7 @@ class OSMFavoritesDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
@@ -588,7 +588,7 @@ class OSMFavoritesDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Favorites')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 400, 500)
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -687,7 +687,7 @@ class OSMFavoritesDialog(QDialog):
 #----------------------------
 
 class OSMSaveFavoritesDialog(QDialog):
-    def __init__(self, parent, favoriteList):
+    def __init__(self, parent, favoriteList, defaultPointTag):
         QDialog.__init__(self, parent) 
         font = self.font()
         font.setPointSize(14)
@@ -695,6 +695,7 @@ class OSMSaveFavoritesDialog(QDialog):
 
         self.favoriteList=sorted(favoriteList, key=self.nameSort)
         self.text=None
+        self.defaultPointTag=defaultPointTag
 
         self.initUI()
    
@@ -707,7 +708,7 @@ class OSMSaveFavoritesDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
                 
         fields=QFormLayout()
         fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
@@ -716,7 +717,7 @@ class OSMSaveFavoritesDialog(QDialog):
         label.setText("Name:")
         
         self.textField=QLineEdit(self)
-        self.textField.setText("")
+        self.textField.setText(self.defaultPointTag)
         self.textField.textChanged.connect(self._updateEnablement)
         self.textField.setMinimumWidth(300)
 
@@ -760,7 +761,8 @@ class OSMSaveFavoritesDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Save Favorite')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 400, 500)
+        self._updateEnablement()
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -852,7 +854,7 @@ class OSMRouteListDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
@@ -915,7 +917,7 @@ class OSMRouteListDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Routes')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 400, 500)
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -1001,7 +1003,7 @@ class OSMRouteSaveDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         fields=QFormLayout()
         fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
@@ -1055,7 +1057,7 @@ class OSMRouteSaveDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Save Route')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 400, 500)
         
     @pyqtSlot()
     def _selectionChanged(self):
@@ -1141,7 +1143,7 @@ class OSMRouteDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
                 
         self.routeView=QTableView(self)
         top.addWidget(self.routeView)
@@ -1161,6 +1163,7 @@ class OSMRouteDialog(QDialog):
 
         self.removePointButton=QPushButton("Remove", self)
         self.removePointButton.clicked.connect(self._removePoint)
+        self.removePointButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
         self.removePointButton.setEnabled(False)
         editButtons.addWidget(self.removePointButton)
         
@@ -1218,7 +1221,7 @@ class OSMRouteDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Routing Point')
-        self.setGeometry(0, 0, 400, 400)
+        self.setGeometry(0, 0, 400, 500)
         
     @pyqtSlot()
     def _saveRoute(self):
@@ -1348,7 +1351,7 @@ class OSMPositionDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         style=QCommonStyle()
 
@@ -1427,7 +1430,7 @@ class OSMOptionsDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
             
         style=QCommonStyle()
         iconSize=QSize(48, 48)
@@ -1486,7 +1489,7 @@ class OSMGPSDataDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         style=QCommonStyle()
 
@@ -1505,7 +1508,7 @@ class OSMGPSDataDialog(QDialog):
         top.addLayout(buttons)
         self.setLayout(top)
         self.setWindowTitle('GPS Data')
-        self.setGeometry(0, 0, 400, 100)
+        self.setGeometry(0, 0, 400, 300)
         
         self.connect(self.parent().parent().updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         
@@ -1535,7 +1538,7 @@ class OSMInputDialog(QDialog):
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
-        top.setSpacing(0)
+        top.setSpacing(2)
         
         style=QCommonStyle()
 
