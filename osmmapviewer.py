@@ -299,14 +299,19 @@ class QtOSMWidget(QWidget):
         self.wayPointImage=QPixmap("images/waypoint.png")
         self.routeCalculationThread=None
         
-        self.turnRightImage=QPixmap("images/arrow-right.png")
-        self.turnLeftImage=QPixmap("images/arrow-left.png")
-        self.turnRighHardImage=QPixmap("images/arrow-hard-right.png")
-        self.turnLeftHardImage=QPixmap("images/arrow-hard-left.png")
-        self.turnRightEasyImage=QPixmap("images/arrow-easy-right.png")
-        self.turnLeftEasyImage=QPixmap("images/arrow-easy-left.png")
-        self.straightImage=QPixmap("images/arrow-straight.png")
+        self.turnRightImage=QPixmap("images/directions/right.png")
+        self.turnLeftImage=QPixmap("images/directions/left.png")
+        self.turnRighHardImage=QPixmap("images/directions/sharply_right.png")
+        self.turnLeftHardImage=QPixmap("images/directions/sharply_left.png")
+        self.turnRightEasyImage=QPixmap("images/directions/slightly_right.png")
+        self.turnLeftEasyImage=QPixmap("images/directions/slightly_left.png")
+        self.straightImage=QPixmap("images/directions/forward.png")
         self.uturnImage=QPixmap("images/u-turn-black.png")
+        self.roundaboutImage=QPixmap("images/directions/roundabout.png")
+        self.roundabout1Image=QPixmap("images/directions/roundabout_exit1.png")
+        self.roundabout2Image=QPixmap("images/directions/roundabout_exit2.png")
+        self.roundabout3Image=QPixmap("images/directions/roundabout_exit3.png")
+        self.roundabout4Image=QPixmap("images/directions/roundabout_exit4.png")
         
         self.currentRoute=None
         self.routeList=list()
@@ -648,14 +653,25 @@ class QtOSMWidget(QWidget):
             else:
                 crossingLengthStr="%d"%crossingLength
 
+            crossingInfoStr=crossingInfo
+            if "stay:" in crossingInfo:
+                crossingInfoStr=crossingInfoStr[len("stay:"):]
+            elif "change:" in crossingInfo:
+                crossingInfoStr=crossingInfoStr[len("change:"):]
+                
             self.painter.drawText(routeInfoPos, "DTA:%s"%crossingLengthStr)
             
-            routeInfoPos1=QPoint(self.width()-fm.width(crossingInfo)-fm.width(crossingLengthStr)-100, self.height()-15)
-            self.painter.drawText(routeInfoPos1, "%s"%(crossingInfo))
+            routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-fm.width(crossingLengthStr)-100, self.height()-15)
+            self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
         
+            exitNumber=0
+            if direction==40 or direction==41:
+                if "roundabout:exit:" in crossingInfo:
+                    exitNumber=int(crossingInfo[len("roundabout:exit:"):])
+                    
             x=self.width()-72
             y=self.height()-122
-            self.drawDirectionImage(direction, 64, 64, x, y) 
+            self.drawDirectionImage(direction, exitNumber, 64, 64, x, y) 
         
     def showRoutingPoints(self):
 #        showTrackDetails=self.map_zoom>13
@@ -949,19 +965,19 @@ class QtOSMWidget(QWidget):
                                     elif crossingType==9:
                                         self.painter.setPen(grayCrossingPen)
                                         self.painter.drawPoint(x, y)
-                        if direction!=None:
-                            if showTrackDetails==True:
-                                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-    #                            if crossingType==2 and crossingInfo!=None:
-    #                                if "exit:" in crossingInfo:
-    #                                    self.painter.drawPixmap(x, y, self.turnRightImage)
-    #                            else:
-                                self.drawDirectionImage(direction, 32, 32, x, y)                    
+#                        if direction!=None:
+#                            if showTrackDetails==True:
+#                                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+#    #                            if crossingType==2 and crossingInfo!=None:
+#    #                                if "exit:" in crossingInfo:
+#    #                                    self.painter.drawPixmap(x, y, self.turnRightImage)
+#    #                            else:
+#                                self.drawDirectionImage(direction, 32, 32, x, y)                    
                     lastX=x
                     lastY=y
             
             
-    def drawDirectionImage(self, direction, width, height, x, y):
+    def drawDirectionImage(self, direction, exitNumber, width, height, x, y):
         if direction==1:
             self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
         elif direction==2:
@@ -980,10 +996,17 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(x, y, width, height, self.uturnImage)
         elif direction==39:
             self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
-        elif direction==40:
-            self.painter.drawPixmap(x, y, width, height, self.turnRightImage)
-        elif direction==41:
-            self.painter.drawPixmap(x, y, width, height, self.turnRightImage)
+        elif direction==40 or direction==41:
+            if exitNumber==1:
+                self.painter.drawPixmap(x, y, width, height, self.roundabout1Image)
+            elif exitNumber==2:
+                self.painter.drawPixmap(x, y, width, height, self.roundabout2Image)
+            elif exitNumber==3:
+                self.painter.drawPixmap(x, y, width, height, self.roundabout3Image)
+            elif exitNumber==4:
+                self.painter.drawPixmap(x, y, width, height, self.roundabout4Image)
+            else:  
+                self.painter.drawPixmap(x, y, width, height, self.roundaboutImage)
             
 #    def minimumSizeHint(self):
 #        return QSize(minWidth, minHeight)
@@ -1042,12 +1065,12 @@ class QtOSMWidget(QWidget):
                 else:
                     self.gpsPoint=None  
 
-                if self.autocenterGPS==True:
+                if self.autocenterGPS==True and self.stop==False:
                     self.osm_autocenter_map()
                 else:
                     self.update()   
             else:
-                if self.autocenterGPS==True:
+                if self.autocenterGPS==True and self.stop==False:
                     self.osm_autocenter_map()
                 else:
                     self.update()           
@@ -1531,7 +1554,7 @@ class QtOSMWidget(QWidget):
                         wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
                         print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                         (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-                        print("%d %d %d %d %d %d %d %d %d"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+                        print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                         self.wayInfo=self.getDefaultPositionTag(name, nameRef, country)      
                
             stop=time.time()
@@ -1739,12 +1762,17 @@ class QtOSMWidget(QWidget):
         config.removeSection(section)
         config.addSection(section)
         
-        routingPointList=self.getCompleteRoutingPoints()
-        if routingPointList!=None:
-            i=0
-            for point in routingPointList:
-                point.saveToConfig(config, section, "point%d"%(i))
-                i=i+1
+        i=0
+        if self.startPoint!=None:
+            self.startPoint.saveToConfig(config, section, "point%d"%(i))
+            i=i+1
+        
+        for point in self.wayPoints:
+            point.saveToConfig(config, section, "point%d"%(i))
+            i=i+1
+        
+        if self.endPoint!=None:
+            self.endPoint.saveToConfig(config, section, "point%d"%(i))
         
         section="route"
         config.removeSection(section)
@@ -2235,25 +2263,25 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.loadData()
         
-#        buttons=QHBoxLayout()        
-#
-#        self.testGPSButton=QPushButton("Test GPS", self)
-#        self.testGPSButton.clicked.connect(self._testGPS)
-#        buttons.addWidget(self.testGPSButton)
-#        
-#        self.stepRouteButton=QPushButton("Step", self)
-#        self.stepRouteButton.clicked.connect(self._stepRoute)
-#        buttons.addWidget(self.stepRouteButton)
-#        
-#        self.resetStepRouteButton=QPushButton("Reset Step", self)
-#        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
-#        buttons.addWidget(self.resetStepRouteButton)
+        buttons=QHBoxLayout()        
+
+        self.testGPSButton=QPushButton("Test GPS", self)
+        self.testGPSButton.clicked.connect(self._testGPS)
+        buttons.addWidget(self.testGPSButton)
+        
+        self.stepRouteButton=QPushButton("Step", self)
+        self.stepRouteButton.clicked.connect(self._stepRoute)
+        buttons.addWidget(self.stepRouteButton)
+        
+        self.resetStepRouteButton=QPushButton("Reset Step", self)
+        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
+        buttons.addWidget(self.resetStepRouteButton)
         
         self.connectPSButton=QCheckBox("Connect GPS", self)
         self.connectPSButton.clicked.connect(self._connectGPS)
 #        buttons.addWidget(self.connectPSButton)
                 
-#        top.addLayout(buttons)
+        top.addLayout(buttons)
         
         self.statusbar.addPermanentWidget(self.connectPSButton)
 

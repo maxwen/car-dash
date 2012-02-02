@@ -1850,6 +1850,31 @@ class OSMParserData():
     def calcRoute(self, route):
         route.calcRoute(self)
         
+    def createBBoxForRoute(self, route):
+        bbox=[None, None, None, None]
+        routingPointList=route.getRoutingPointList()
+        for point in routingPointList:
+            (lat, lon)=point.getPos()
+            if bbox[0]==None:
+                bbox[0]=lon
+            if bbox[1]==None:
+                bbox[1]=lat
+            if bbox[2]==None:
+                bbox[2]=lon
+            if bbox[3]==None:
+                bbox[3]=lat
+            
+            if lon<bbox[0]:
+                bbox[0]=lon
+            if lon>bbox[2]:
+                bbox[2]=lon
+            if lat<bbox[1]:
+                bbox[1]=lat
+            if lat>bbox[3]:
+                bbox[3]=lat
+                                
+        return bbox
+            
     def createBBox(self, pos1, pos2):
         bbox=[0.0, 0.0, 0.0, 0.0]
         lat1=pos1[0]
@@ -1940,7 +1965,8 @@ class OSMParserData():
                 print("startPoint NOT resolved in calc route")
                 return None, None
             sourceEdge=startPoint.getEdgeId()
-            
+            bbox=self.createBBoxForRoute(route)
+
             # on a onway always start at the end
             if startPoint.getTargetOneway()==1:
 #                if sourceEdge!=routingPointList[1].getEdgeId():
@@ -1990,7 +2016,6 @@ class OSMParserData():
 #                        allEdgeList.extend(edgeList)
 #                        allPathCost=allPathCost+pathCost            
                 
-                    bbox=self.createBBox(startPoint.getPos(), targetPoint.getPos())
                     if self.dWrapperTrsp!=None:
                         edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox)
                         if edgeList==None:
@@ -2055,12 +2080,12 @@ class OSMParserData():
             startPoint=routingPointList[0]
             if startPoint.getSource()==0:
                 return
-
+            
+            bbox=self.createBBoxForRoute(route)
             for targetPoint in routingPointList[1:]:
                 if targetPoint.getTarget()==0:
                     return
                             
-                bbox=self.createBBox(startPoint.getPos(), targetPoint.getPos())
                 print("all edges len:%d"%self.getLenOfEdgeTable())
                 print("bbox edges len:%d"%self.getLenOfEdgeTableForRouting(bbox))
                         
@@ -2326,6 +2351,7 @@ class OSMParserData():
                             lastTrackItemRef["crossingInfo"]="roundabout:enter"
                             lastTrackItemRef["crossingRef"]=crossingRef
                             lastTrackItemRef["direction"]=40
+                            self.roundaboutEnterItem=lastTrackItemRef
                                 
                         elif crossingType==4:
                             # exit roundabout
@@ -2339,7 +2365,10 @@ class OSMParserData():
                                 if numExit!=0:
                                     lastTrackItemRef["crossingInfo"]="roundabout:exit:%d"%(numExit)
                                     lastTrackItemRef["direction"]=41
-
+                                    if self.roundaboutEnterItem!=None:
+                                        self.roundaboutEnterItem["crossingInfo"]="roundabout:exit:%d"%(numExit)
+                                        self.roundaboutEnterItem=None
+                                        
                         elif crossingType==42:
                             # no enter oneway
                             None
@@ -2478,14 +2507,14 @@ class OSMParserData():
         crossingRefList=list()
         exitRef=None
         wayListToEnter.reverse()
-        exitRefFound=False
+#        exitRefFound=False
         for fromWayId in wayListToEnter:
-            if exitRefFound==True:
-                break
+#            if exitRefFound==True:
+#                break
             resultList=self.getCrossingEntryFor(fromWayId, country)
             for result in resultList:
-                if exitRefFound==True:
-                    break
+#                if exitRefFound==True:
+#                    break
                 _, _, crossingRef, nextWayIdList=result
                 for crossingWay, crossingType, _ in nextWayIdList:
                     if crossingType==4 or crossingType==3:
@@ -2493,8 +2522,8 @@ class OSMParserData():
                             crossingRefList.append(crossingRef)
                     if crossingWay==toWayId:
                         exitRef=crossingRef
-                        exitRefFound=True
-                        break
+#                        exitRefFound=True
+#                        break
         
         numExit=0;
         if exitRef==None:
@@ -3171,8 +3200,12 @@ class OSMParserData():
                             # roundabout enter
                             minorCrossingType=3
                         elif roundabout==1 and roundabout2==0:
-                            # roundabout exit
-                            minorCrossingType=4
+                            if oneway2==1 and ref!=refs2[0]:
+                                # no exit roundabout
+                                minorCrossingType=42
+                            else:
+                                # roundabout exit
+                                minorCrossingType=4
                             
                         if minorCrossingType!=3 and minorCrossingType!=4:
                             if streetTypeId!=3 and streetTypeId2==3:
@@ -3182,15 +3215,15 @@ class OSMParserData():
                                 # motorway_link exit
                                 minorCrossingType=8  
                         
-                        if minorCrossingType!=8:
-                            if oneway2==1 and wayid2!=wayid:
-                                if ref==refs2[0] or ref in refs2[1:-1]:
+                        if minorCrossingType!=7 and minorCrossingType!=8 and minorCrossingType!=3 and minorCrossingType!=4 and minorCrossingType!=42:
+                            if oneway2==1 and roundabout2==0 and wayid2!=wayid:
+                                if ref in refs2[:-1]:
                                     # oneway start or in the middle
                                     minorCrossingType=9
                                 else:
                                     # oneway end - not allowed to enter
-                                    minorCrossingType=42
-                                         
+                                    minorCrossingType=42                        
+                                             
                         if majorCrossingType!=0:
                             crossingType=majorCrossingType
                             if streetTypeId2==2:
@@ -3198,7 +3231,11 @@ class OSMParserData():
                                 crossingType=-1
 
                         elif minorCrossingType!=0:
-                            crossingType=minorCrossingType
+                            if minorCrossingType==9:
+                                if oneway==1 and oneway2==1:
+                                    crossingType=-1
+                            else:
+                                crossingType=minorCrossingType
                         else:
                             if wayid2==wayid:     
                                 crossingType=-1                  
@@ -3223,7 +3260,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data2")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -3438,17 +3475,22 @@ class OSMParserData():
 #        for x in allentries:
 #            print(self.refFromDB(x))
           
-        self.cursor.execute('SELECT * FROM wayTable WHERE wayId==30526739')
+        self.cursor.execute('SELECT * FROM wayTable WHERE wayId==135928507 OR wayId==25337315 OR wayId==37517449')
         allentries=self.cursor.fetchall()
         for x in allentries:
             print(x)
             wayId, tags, refs, streetTypeId, name, nameRef=self.wayFromDB(x)
-            print(name)
+            print(refs)
         
 #        self.cursor.execute('SELECT * from crossingTable WHERE wayId==22604971 OR wayId==76102685 OR wayId==135996312')
 #        allentries=self.cursor.fetchall()
 #        for x in allentries:
 #            print(self.crossingFromDB(x))
+
+        self.cursorEdge.execute('SELECT * from edgeTable WHERE wayId==135928507 OR wayId==25337315 OR wayId==37517449')
+        allentries=self.cursorEdge.fetchall()
+        for x in allentries:
+            print(x)
 
     def testDBConistency(self):
         print("test refCountryTable")
@@ -3545,23 +3587,23 @@ class OSMParserData():
         for x in allentries:
             print(self.addressFromDB(x))
             
-#    def recreateCostsForEdges(self):
-#        print("recreate costs")
-#        self.cursorEdge.execute('SELECT * FROM edgeTable')
-#        allentries=self.cursorEdge.fetchall()
-#        for x in allentries:
-#            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.edgeFromDB(x)
-#            resultList=self.getCountrysOfWay(wayId)
-#            for result in resultList:
-#                _, _, country=result
-#                self.getWayEntryForIdAndCountry(wayId, country)
-#                (wayId, tags, refs, _)=self.getWayEntryForIdAndCountry(wayId, country)
-#                if wayId==None:
-#                    continue
-#                cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, length, 1)
-#                self.updateCostsOfEdge(edgeId, cost, reverseCost)
-#
-#        print("end recreate costs")
+    def recreateCostsForEdges(self):
+        print("recreate costs")
+        self.cursorEdge.execute('SELECT * FROM edgeTable')
+        allentries=self.cursorEdge.fetchall()
+        for x in allentries:
+            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.edgeFromDB(x)
+            resultList=self.getCountrysOfWay(wayId)
+            for result in resultList:
+                _, _, country=result
+                self.getWayEntryForIdAndCountry(wayId, country)
+                (wayId, tags, refs, _)=self.getWayEntryForIdAndCountry(wayId, country)
+                if wayId==None:
+                    continue
+                cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, length, 1)
+                self.updateCostsOfEdge(edgeId, cost, reverseCost)
+
+        print("end recreate costs")
               
 #    def createGeomColumns(self, countryList):
 #        for country in countryList:
@@ -3711,10 +3753,11 @@ def main(argv):
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()
 
-#    p.recreateCrossings()
+    p.recreateCrossings()
 #    p.testAdress()
 #    p.testRoutes()
 #    p.testWayTable(0)
+#    p.recreateCostsForEdges()
     p.closeAllDB()
 
 
