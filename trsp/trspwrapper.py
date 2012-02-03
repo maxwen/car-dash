@@ -58,6 +58,7 @@ class TrspWrapper():
         if self.lastBBox==None or newBBox==True:
             self.lastBBox=self.getQueryBBox(bbox)
             print("this is a new bbox")
+            lib_routing.clean_edge_table()
 #            print(self.lastBBox)
 #            print(bbox)
             
@@ -80,7 +81,7 @@ class TrspWrapper():
         pathPointer=pointer(path)
         
         ret=lib_routing.compute_shortest_path(file, sqlEdge, startNodeC, endNodeC, sqlRestriction, byref(pathPointer), byref(path_count))
-        lib_routing.clean_edge_table()
+        
         
         if ret>=0:
             num=path_count.value

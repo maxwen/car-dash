@@ -863,7 +863,12 @@ class QtOSMWidget(QWidget):
             yellowCrossingPen.setColor(Qt.yellow)
             yellowCrossingPen.setWidth(min(self.map_zoom, 10))
             yellowCrossingPen.setCapStyle(Qt.RoundCap);
-
+            
+            whiteCrossingPen=QPen()
+            whiteCrossingPen.setColor(Qt.white)
+            whiteCrossingPen.setWidth(min(self.map_zoom, 10))
+            whiteCrossingPen.setCapStyle(Qt.RoundCap);
+            
             motorwayPen=QPen()
             motorwayPen.setColor(Qt.blue)
             motorwayPen.setWidth(4)
@@ -935,7 +940,7 @@ class QtOSMWidget(QWidget):
                                 if len(crossingList)==1:
                                     _, crossingType, crossingInfo, crossingRef=crossingList[0]
                                     
-                                    if crossingType==0:
+                                    if crossingType==0  or crossingType==9:
                                         self.painter.setPen(greenCrossingPen)
                                         self.painter.drawPoint(x, y)
                                     elif crossingType==1 or crossingType==6:
@@ -962,8 +967,11 @@ class QtOSMWidget(QWidget):
                                         # no enter oneway
                                         self.painter.setPen(blackCrossingPen)
                                         self.painter.drawPoint(x, y)
-                                    elif crossingType==9:
+                                    elif crossingType==10:
                                         self.painter.setPen(grayCrossingPen)
+                                        self.painter.drawPoint(x, y)
+                                    elif crossingType==-1 or crossingType==98 or crossingType==99 or crossingType==100:
+                                        self.painter.setPen(whiteCrossingPen)
                                         self.painter.drawPoint(x, y)
 #                        if direction!=None:
 #                            if showTrackDetails==True:
@@ -992,8 +1000,6 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(x, y, width, height, self.turnLeftHardImage)
         elif direction==0:
             self.painter.drawPixmap(x, y, width, height, self.straightImage)
-        elif direction==42:
-            self.painter.drawPixmap(x, y, width, height, self.uturnImage)
         elif direction==39:
             self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
         elif direction==40 or direction==41:
@@ -1007,6 +1013,10 @@ class QtOSMWidget(QWidget):
                 self.painter.drawPixmap(x, y, width, height, self.roundabout4Image)
             else:  
                 self.painter.drawPixmap(x, y, width, height, self.roundaboutImage)
+        elif direction==98:
+            self.painter.drawPixmap(x, y, width, height, self.uturnImage)
+        elif direction==99:
+            self.painter.drawPixmap(x, y, width, height, self.endPointImage)
             
 #    def minimumSizeHint(self):
 #        return QSize(minWidth, minHeight)
@@ -1532,22 +1542,29 @@ class QtOSMWidget(QWidget):
                             self.routeInfo=None
                             # show till end
                             crossingEdgeIdIndex=len(self.currentRoute.getEdgeList())-1
-                            
+                    else:
+                        # TODO: automatic recalculation of route
+                        if self.gpsPoint!=None:
+                            self.recalcRouteFromPos(self.gpsPoint)
+                        
                 if edgeId!=self.lastEdgeId:
                     self.lastEdgeId=edgeId
-                    
+                     
                     if isOnRoute==True:                            
                         self.currentEdgeIndexList=list()
                         for i in range(self.currentEdgeIndex, crossingEdgeIdIndex+1, 1):
                             self.currentEdgeIndexList.append(i)
 
                     else:
-                        coords=osmParserData.getCoordsOfEdge(edgeId, country)
-                        self.currentCoords=coords
-                        self.distanceToEnd=0
-                        self.routeInfo=None
-                        self.currentEdgeIndexList=None
-                        self.nextEdgeOnRoute=None
+                        if self.currentRoute!=None and self.gpsPoint!=None:
+                            self.recalcRouteFromPos(self.gpsPoint)
+                        else:
+                            coords=osmParserData.getCoordsOfEdge(edgeId, country)
+                            self.currentCoords=coords
+                            self.distanceToEnd=0
+                            self.routeInfo=None
+                            self.currentEdgeIndexList=None
+                            self.nextEdgeOnRoute=None
                               
                     if wayId!=self.lastWayId:
                         self.lastWayId=wayId
@@ -1619,12 +1636,11 @@ class QtOSMWidget(QWidget):
         if self.currentRoute.getEdgeList()!=None:
             self.currentRoute.printRoute(osmParserData)
 #            print("edgeList=%s"%(self.currentRoute.getEdgeList()))
-            print("cost=%f"%(self.currentRoute.getPathCost()))
-            print("len=%d"%(self.currentRoute.getLength()))
-            self.printRouteDescription(self.currentRoute)
+#            print("cost=%f"%(self.currentRoute.getPathCost()))
+#            print("len=%d"%(self.currentRoute.getLength()))
+#            self.printRouteDescription(self.currentRoute)
             # show start pos at zoom level 15
 #            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
-            print(self.currentRoute.getEdgeList())
             
             self.distanceToEnd=0
             self.routeInfo=None

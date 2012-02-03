@@ -209,11 +209,11 @@ class OSMUtils():
             return 3
         if azimuth>=50 and azimuth<100:
             return 2
-        if azimuth>=100 and azimuth<160:
+        if azimuth>=100 and azimuth<170:
             return 1
-        if azimuth>=160 and azimuth<200:
+        if azimuth>=170 and azimuth<190:
             return 0
-        if azimuth>=200 and azimuth<250:
+        if azimuth>=190  and azimuth<250:
             return -1
         if azimuth>=250 and azimuth<300:
             return -2
@@ -242,9 +242,10 @@ class OSMUtils():
             return "roundabout enter"
         if direction==41:
             return "roundabout exit"
-        if direction==42:
+        if direction==98:
             return "u-turn"
-        
+        if direction==99:
+            return "end"
         return "unknown" 
 def main():    
     # 84194738 
