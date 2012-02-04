@@ -428,7 +428,7 @@ class OSMParserData():
         return None, None, None
     
     def createRefTable(self):
-        self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, wayId BLOB, tags BLOB)')
+        self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, wayId BLOB, tags BLOB, type INTEGER)')
         
 #    def createGeomForRefTable(self, country):
 #        print("create geom column for refTable")
@@ -487,11 +487,16 @@ class OSMParserData():
 
     def createAddressTable(self):
         self.cursorAdress.execute('CREATE TABLE addressTable (id INTEGER PRIMARY KEY, refId INTEGER, country INTEGER, city TEXT, postCode INTEGER, streetName TEXT, houseNumber TEXT, lat REAL, lon REAL)')
+        self.cursorAdress.execute("CREATE INDEX streetName_idx ON addressTable (streetName)")
+        self.cursorAdress.execute("CREATE INDEX country_idx ON addressTable (country)")
         
     def addToAddressTable(self, refId, country, city, postCode, streetName, houseNumber, lat, lon):
         self.cursorAdress.execute('INSERT INTO addressTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
         self.addressId=self.addressId+1
     
+    def replaceInAddressTable(self, addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon):
+        self.cursorAdress.execute('REPLACE INTO addressTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+
     def testAddressTable(self):
         self.cursorAdress.execute('SELECT * FROM addressTable')
         allentries=self.cursorAdress.fetchall()
@@ -631,11 +636,15 @@ class OSMParserData():
         allentries=self.cursorCountry.fetchall()
         return allentries[0][0]
 
-    def addToRefTable(self, refid, lat, lon, wayId, country, tags):
+    def addToRefTable(self, refid, lat, lon, wayId, country, tags, nodeType):
         self.setDBCursorForCountry(country)
-        resultList=self.getRefEntryForIdAndCountry(refid, country)
+        resultList=self.getRefEntryForIdAndCountry2(refid, country)
         if len(resultList)==1:
-            refid, lat, lon, wayIdList, storedTags=resultList[0]
+            refid, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
+            # dont override a "defined" node type
+            if storedNodeType!=0 and nodeType==0:
+                nodeType=storedNodeType
+                
             if wayId!=None:
                 if wayIdList==None:
                     wayIdList=list()
@@ -643,21 +652,31 @@ class OSMParserData():
                 tagStr=None
                 if storedTags!=None:
                     tagStr=pickle.dumps(storedTags)
-                self.cursor.execute('REPLACE INTO refTable VALUES( ?, ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList), tagStr))
+                self.cursor.execute('REPLACE INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList), tagStr, nodeType))
             elif tags!=None:
                 wayIdStr=None
                 if wayIdList!=None:
                     wayIdStr=pickle.dumps(wayIdList)
-                self.cursor.execute('REPLACE INTO refTable VALUES( ?, ?, ?, ?, ?)', (refid, lat, lon, wayIdStr, pickle.dumps(tags)))
+                self.cursor.execute('REPLACE INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, wayIdStr, pickle.dumps(tags), nodeType))
             return
             
         if wayId!=None:
             wayIdList=list()
             wayIdList.append(wayId)
-            self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList), None))
+            self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList), None, nodeType))
         elif tags!=None:
-            self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?, ?)', (refid, lat, lon, None, pickle.dumps(tags)))
+            self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, None, pickle.dumps(tags), nodeType))
         
+    def updateRefTableEntry(self, refId, tags, nodeType, country):
+        self.setDBCursorForCountry(country)
+        resultList=self.getRefEntryForIdAndCountry(refId, country)
+        if len(resultList)==1:
+            refid, lat, lon, wayIdList, storedTags=resultList[0]
+            if storedTags!=None:
+                print("updateRefTableEntry: ref %d already has stored tags %s"%(refId, storedTags))
+            
+            self.cursor.execute('REPLACE INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, pickle.dumps(wayIdList), pickle.dumps(tags), nodeType))
+
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, country):
         self.setDBCursorForCountry(country)
         streetInfo=self.encodeStreetInfo(streetTypeId, oneway, roundabout)
@@ -677,8 +696,8 @@ class OSMParserData():
         if len(resultList)==0:
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, lat1, lon1, lat2, lon2))
             self.edgeId=self.edgeId+1
-        else:
-            print("addToEdgeTable: edge for wayId %d with startRef %d and endRef %d already exists in DB"%(wayId, startRef, endRef))
+#        else:
+#            print("addToEdgeTable: edge for wayId %d with startRef %d and endRef %d already exists in DB"%(wayId, startRef, endRef))
             
     def clearEdgeTable(self):
         self.cursorEdge.execute('DROP TABLE edgeTable')
@@ -833,6 +852,16 @@ class OSMParserData():
         allentries=self.cursor.fetchall()
         for result in allentries:
             refEntry=self.refFromDB(result)
+            resultList.append(refEntry)
+        return resultList
+    
+    def getRefEntryForIdAndCountry2(self, refId, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM refTable where refId==%d'%(refId))
+        resultList=list()
+        allentries=self.cursor.fetchall()
+        for result in allentries:
+            refEntry=self.refFromDB2(result)
             resultList.append(refEntry)
         return resultList
     
@@ -1181,20 +1210,31 @@ class OSMParserData():
 #        print(len(nodes))
 #        return nodes
 
-    def getNearNodes(self, lat, lon, country, maxDistance):
+    def getNodesInBBox(self, bbox, country):
+        latMin=bbox[1]
+        lonMin=bbox[0]
+        latMax=bbox[3]
+        lonMax=bbox[2]
+        
+        start=time.time()
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f'%(latMin, latMax, lonMin, lonMax))
+        allentries=self.cursor.fetchall()
+        print(len(allentries))
+        stop=time.time()
+        print("getNodesInBBox:%f"%(stop-start))
+        return allentries
+
+    def getNearNodes(self, lat, lon, country, maxDistance):  
         latRangeMax=lat+0.003
         lonRangeMax=lon+0.003
         latRangeMin=lat-0.003
         lonRangeMin=lon-0.003
         
+        bbox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
         nodes=list()
-        self.setDBCursorForCountry(country)
         
-        start=time.time()
-
-        self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f'%(latRangeMin, latRangeMax, lonRangeMin, lonRangeMax))
-        allentries=self.cursor.fetchall()
-#        print(len(allentries))
+        allentries=self.getNodesInBBox(bbox, country)
         for x in allentries:
             refId, lat1, lon1, wayIdList, _=self.refFromDB(x)
             if wayIdList==None:
@@ -1206,8 +1246,6 @@ class OSMParserData():
                 continue
             nodes.append((refId, lat1, lon1, wayIdList))
 #        print(len(nodes))
-        stop=time.time()
-        print("getNearNodes:%f"%(stop-start))
 
         return nodes
     
@@ -1278,7 +1316,20 @@ class OSMParserData():
         if x[4]!=None:
             tags=pickle.loads(x[4])
         return (refId, lat, lon, wayIdList, tags)
-        
+    
+    def refFromDB2(self, x):
+        refId=x[0]
+        lat=x[1]
+        lon=x[2]
+        wayIdList=None
+        if x[3]!=None:
+            wayIdList=pickle.loads(x[3])
+        tags=None
+        if x[4]!=None:
+            tags=pickle.loads(x[4])
+        nodeType=x[5]
+        return (refId, lat, lon, wayIdList, tags, nodeType)
+    
     def crossingFromDB(self, x):
         crossingEntryId=x[0]
         wayid=x[1]
@@ -1319,15 +1370,32 @@ class OSMParserData():
             print(wayCountries)
 
         if len(wayCountries)==0:
-            print("addWayToDB: skipping way %d because all refs are not in global ref DB"%(wayId))
-            return
+#            print("addWayToDB: skipping way %d because all refs are not in global ref DB"%(wayId))
+            return False
         
         for country in wayCountries:
             self.addToWayTable(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, country)   
             self.addToCountryWayTable(wayId, country)
-               
+        
+        return True
+    
     def isUsableNode(self):
-        return ["motorway_junction", "traffic_signals", "mini_roundabout", "stop"]
+        return ["motorway_junction", "traffic_signals", "mini_roundabout", "stop", "speed_camera"]
+    
+    def getNodeTypeId(self, nodeTag):
+        # 0 is a way ref
+        if nodeTag=="speed_camera":
+            return 1
+        if nodeTag=="motorway_junction":
+            return 2
+        if nodeTag=="traffic_signals":
+            return 3
+        if nodeTag=="mini_roundabout":
+            return 4
+        if nodeTag=="stop":
+            return 5
+        # 6 is address
+        return -1
     
     def parse_nodes(self, node):
         for ref, tags, coords in node:
@@ -1338,24 +1406,28 @@ class OSMParserData():
             lon=float(coords[0])
             if "highway" in tags:
                 if tags["highway"] in self.isUsableNode():
-                    storedRef, refCountry=self.getCountryOfRef(ref)
-                    if storedRef==None:
+                    nodeType=self.getNodeTypeId(tags["highway"])
+                    if nodeType!=-1:
                         refCountry=self.getCountryOfPosDeep(lat, lon)
-
-                    if refCountry!=None:
-                        self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)
-                        self.addToRefTable(ref, lat, lon, None, refCountry, tags)
-                    
+                        if refCountry!=None:
+                            self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)        
+                            self.addToRefTable(ref, lat, lon, None, refCountry, tags, nodeType)
+                            
             if "addr:street" in tags:
-                self.parseAddress(tags, ref, lat, lon)
+                refCountry=self.getCountryOfPosDeep(lat, lon)
+                if refCountry!=None:
+                    self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)
+                    self.addToRefTable(ref, lat, lon, None, refCountry, tags, 6)
+                    self.parseFullAddress(tags, ref, lat, lon, refCountry)
 
     def parse_coords(self, coord):
         for osmid, lon, lat in coord:
             if osmid==1530718191 or osmid==1530718193:
                 print("parse_coords: %d"%osmid)
             self.addToCoordsTable(osmid, float(lat), float(lon))
-              
-    def parseAddress(self, tags, refId, lat, lon):  
+           
+    # only add full specified addresses   
+    def parseFullAddress(self, tags, refId, lat, lon, country):  
         #   <node id="652701965" version="2" timestamp="2011-10-03T18:04:48Z" uid="47756" user="tunnelbauer" changeset="9462694" lat="47.8182158" lon="13.0495882">
 #    <tag k="addr:city" v="Salzburg"/>
 #    <tag k="addr:country" v="AT"/>
@@ -1368,7 +1440,7 @@ class OSMParserData():
         postCode=None
         houseNumber=None
         streetName=None
-        countryCode=None
+#        countryCode=None
         if "addr:city" in tags:
             city=tags["addr:city"]
         if "addr:housenumber" in tags:
@@ -1377,8 +1449,8 @@ class OSMParserData():
             postCode=tags["addr:postcode"]
         if "addr:street" in tags:
             streetName=tags["addr:street"]
-        if "addr:country" in tags:
-            countryCode=tags["addr:country"]
+#        if "addr:country" in tags:
+#            countryCode=tags["addr:country"]
         
         if city==None and postCode==None:
             return
@@ -1387,9 +1459,45 @@ class OSMParserData():
             return
         if houseNumber==None:
             return
-        country=self.getCountryIdForAddrCountry(countryCode)
-        if country==None:
-            country=self.country
+#        country=self.getCountryIdForAddrCountry(countryCode)
+#        if country==None:
+#            country=self.country
+        
+        resultList=self.getAdressListForStreetInCountry(streetName, country)
+        if len(resultList)==1:
+            (addressId, _, _, _, _, _, storedHouseNumber, _, _)=resultList[0]
+            if storedHouseNumber==None:
+#                print("replace existing address ref %d with name %s"%(refId, streetName))
+                self.replaceInAddressTable(addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
+        else:            
+            self.addToAddressTable(refId, country, city, postCode, streetName, houseNumber, lat, lon)
+    
+    # add way names
+    def parsePartAddress(self, tags, streetName, refId, lat, lon, country):  
+        city=None
+        postCode=None
+        houseNumber=None
+#        countryCode=None
+        if "addr:city" in tags:
+            city=tags["addr:city"]
+        if "addr:housenumber" in tags:
+            houseNumber=tags["addr:housenumber"]
+        if "addr:postcode" in tags:
+            postCode=tags["addr:postcode"]
+        if "addr:street" in tags:
+            streetName=tags["addr:street"]
+#        if "addr:country" in tags:
+#            countryCode=tags["addr:country"]
+        
+        # TODO: parse postcode for city?
+        if streetName==None:
+            return
+
+#        print("add ref %d with name %s to addresses"%(refId, streetName))
+#        if countryCode!=None:
+#            country=self.getCountryIdForAddrCountry(countryCode)
+#            if country==None:
+#                country=self.country
         
         self.addToAddressTable(refId, country, city, postCode, streetName, houseNumber, lat, lon)
 
@@ -1455,6 +1563,9 @@ class OSMParserData():
             return 13
         return -1
     
+    def getStreetTypeIdForAddresses(self):
+        return [0, 1, 6, 7, 8, 9, 10, 11, 12, 13]
+
     def getRequiredWayTags(self):
         return ["motorcar", "motor_vehicle", "access", "vehicle"]
 
@@ -1491,14 +1602,17 @@ class OSMParserData():
             if len(refs)==1:
                 print("way with len(ref)==1 %d"%(wayid))
                 continue
-            
             if "building" in tags:
                 if "addr:street" in tags:
                     # TODO: use first ref as location for addr?
                     storedRef, lat, lon=self.getCoordsEntry(refs[0])
                     if storedRef!=None:
                         if lat!=None and lon!=None:
-                            self.parseAddress(tags, refs[0], lat, lon)
+                            refCountry=self.getCountryOfPosDeep(lat, lon)
+                            if refCountry!=None:
+                                self.addToCountryRefTableWithCountry(refs[0], lat, lon, refCountry)
+                                self.addToRefTable(refs[0], lat, lon, None, refCountry, tags, 6)
+                                self.parseFullAddress(tags, refs[0], lat, lon, refCountry)
                         
             if "landuse" in tags:
                 None
@@ -1574,33 +1688,41 @@ class OSMParserData():
 #                if wayid==5111290:
 #                    print(refs)
                 
+                firstRefCountry=None
+                firstRefLat=None
+                firstRefLon=None
                 
                 for ref in refs:  
                     storedRef, lat, lon=self.getCoordsEntry(ref)
                     if storedRef==None:
 #                        print("no ccords for ref==%d on wayid==%d"%(ref, wayid))
-                        if wayid==5210165 or wayid==5111290:
-                            print("no ccords for ref==%d on wayid==%d"%(ref, wayid))
                         continue
                         
                     storedRef, refCountry=self.getCountryOfRef(ref)
                     if storedRef==None:
                         refCountry=self.getCountryOfPosDeep(lat, lon)
-                        
-                    if wayid==5210165 or wayid==5111290:
-                        print("country of ref==%d on wayid==%d ==%s"%(ref, wayid, refCountry))
-                        
+                                                
                     if refCountry!=None:
-                        self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)
-                        self.addToRefTable(ref, lat, lon, wayid, refCountry, None)
+                        if firstRefCountry==None:
+                            firstRefCountry=refCountry
+                            firstRefLat=lat
+                            firstRefLon=lon
+                        
                         wayCountries.append(refCountry)
-
-                if wayid==30526739:
-                    None
+                        self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)
+                        self.addToRefTable(ref, lat, lon, wayid, refCountry, None, 0)
                     
                 requiredTags=self.stripUnneededTags(tags)
-                self.addWayToDB(wayid, requiredTags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, wayCountries)
+                wayAdded=self.addWayToDB(wayid, requiredTags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, wayCountries)
         
+                if wayAdded==True and firstRefCountry!=None and name!=None:
+                    if streetTypeId in self.getStreetTypeIdForAddresses():
+                        resultList=self.getAdressListForStreetInCountry(name, firstRefCountry)
+                        if len(resultList)==0:
+                            # add street to addresses if no other entry till now
+                            # TODO: use first ref as location for addr?
+                            self.parsePartAddress(tags, name, refs[0], firstRefLat, firstRefLon, firstRefCountry)
+
     def parse_relations(self, relation):
         for osmid, tags, ways in relation:
             if "type" in tags:     
@@ -1651,11 +1773,33 @@ class OSMParserData():
     
                             self.wayRestricitionList.append(restrictionEntry)
                         
-                if tags["type"]=="multipolygon":
+                elif tags["type"]=="multipolygon":
                     if "boundary" in tags:
                         if tags["boundary"]=="administrative":
 #                            print(tags)
                             None
+                
+                elif tags["type"]=="enforcement":
+                    if "enforcement" in tags:
+                        if tags["enforcement"]=="maxspeed":
+                            if "maxspeed" in tags:
+                                maxspeed=int(tags["maxspeed"])
+                                for part in ways:
+                                    roleId=int(part[0])
+                                    roleType=part[1]
+                                    roleTag=part[2]
+    
+                                    if roleType=="node":
+                                        if roleTag=="from":
+                                            fromRefId=roleId
+                                            storedRef, refCountry=self.getCountryOfRef(fromRefId)
+                                            if storedRef!=None:
+                                                resultList=self.getRefEntryForIdAndCountry(fromRefId, refCountry)
+                                                if len(resultList)==1:
+                                                    refid, lat, lon, wayIdList, storedTags=resultList[0]
+                                                    print("enforcement at ref %d maxspeed %d %s"%(refid, maxspeed, tags))
+                                                    self.updateRefTableEntry(refid, tags, 1, refCountry)
+
 #    <member type="way" ref="61014292" role="outer"/>
 #    <member type="way" ref="61014415" role="outer"/>
 #    <member type="way" ref="61014477" role="outer"/>
@@ -1816,27 +1960,35 @@ class OSMParserData():
         return postCodeList
 
     def getAdressListForCity(self, country, city):
-        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]))
+            streetList.append(self.addressFromDB(x))
         return streetList
                     
     def getAdressListForPostCode(self, country, postCode):
-        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7]))
+            streetList.append(self.addressFromDB(x))
         return streetList
     
     def getAdressListForCountry(self, country):
-        self.cursorAdress.execute('SELECT refId, country, city, postCode, streetName, houseNumber, lat, lon FROM addressTable WHERE country==%d'%(country))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d'%(country))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            streetList.append((x[0], x[1], x[2], x[3], x[4], x[5], x[6],x[7]))
+            streetList.append(self.addressFromDB(x))
+        return streetList
+    
+    def getAdressListForStreetInCountry(self, streetName, country):
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND streetName=="%s"'%(country, streetName))
+        allentries=self.cursorAdress.fetchall()
+        streetList=list()
+        for x in allentries:
+            streetList.append(self.addressFromDB(x))
         return streetList
     
     def createStartTrackItem(self):
@@ -2235,8 +2387,10 @@ class OSMParserData():
             if country==None:
                 continue
             
-            (lat, lon)=self.getCoordsWithRefAndCountry(ref, country)
-            if lat==None:
+            resultList=self.getRefEntryForIdAndCountry2(ref, country)
+            if len(resultList)==1:
+                ref, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
+            else:
                 print("printEdgeForRefList: no node in DB with %d"%(ref))
                 continue
       
@@ -2265,6 +2419,9 @@ class OSMParserData():
             trackItemRef=dict()
             trackItemRef["ref"]=ref
             trackItemRef["coords"]=(lat, lon)
+            if storedNodeType==1:
+                # enforcement
+                trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
 
             trackItemRefs.append(trackItemRef)
 
@@ -2423,11 +2580,11 @@ class OSMParserData():
             if routeEndRefId!=None and ref==routeEndRefId:
                 break
         
-        if routeEndRefId!=None and routeEndRefId in refListPart:
-            print("endedge=%d %d"%(length, self.sumLength))
-        
-        if routeStartRefId!=None and routeStartRefId in refListPart:
-            print("startedge=%d %d"%(length, self.sumLength))
+#        if routeEndRefId!=None and routeEndRefId in refListPart:
+#            print("endedge=%d %d"%(length, self.sumLength))
+#        
+#        if routeStartRefId!=None and routeStartRefId in refListPart:
+#            print("startedge=%d %d"%(length, self.sumLength))
             
         trackItem["length"]=length
         self.sumLength=self.sumLength+length
@@ -2489,10 +2646,13 @@ class OSMParserData():
                 if country==None:
                     continue
                 
-                (lat, lon)=self.getCoordsWithRefAndCountry(ref, country)
-                if lat==None:
-                    print("printEdgeForRefList: no node in DB with %d"%(ref))
+                resultList=self.getRefEntryForIdAndCountry2(ref, country)
+                if len(resultList)==1:
+                    ref, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
+                else:
+                    print("printSingleEdgeForRefList: no node in DB with %d"%(ref))
                     continue
+
           
                 if routeStartRefId!=None and routeStartRefPassed==False:
                     if ref==routeStartRefId:
@@ -2509,6 +2669,9 @@ class OSMParserData():
                 trackItemRef=dict()
                 trackItemRef["ref"]=ref
                 trackItemRef["coords"]=(lat, lon)
+                if storedNodeType==1:
+                    # enforcement
+                    trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
     
                 trackItemRefs.append(trackItemRef)
                 
@@ -2599,6 +2762,9 @@ class OSMParserData():
                 length=trackItem["length"]
                 crossingLength=crossingLength+length
                 edgeId=trackItem["edgeId"]
+#                if "enforcement" in trackItem:
+#                    enforcement=trackItem["enforcement"]
+                    
                 if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
                     crossingList=trackItemRef["crossing"]
                     direction=trackItemRef["direction"]
@@ -2927,25 +3093,28 @@ class OSMParserData():
     def getStreetTypeFactor(self, streetTypeId):
         # motorway
         if streetTypeId==2:
-            return 0.5
+            return 0.6
+        # motorway exit
+        if streetTypeId==3:
+            return 0.8
         # trunk
         if streetTypeId==4:
             return 0.8
-        # motorway or trunk exit
-        if streetTypeId==3 or streetTypeId==5:
+        # trunk exit
+        if streetTypeId==5:
             return 1.0
         # primary
         if streetTypeId==6 or streetTypeId==7:
-            return 1.0
+            return 1.2
         # secondary
         if streetTypeId==8 or streetTypeId==9:
-            return 1.2
+            return 1.4
         # tertiary
         if streetTypeId==10 or streetTypeId==11:
-            return 1.4
+            return 1.6
         # residential
         if streetTypeId==12:
-            return 1.6
+            return 1.8
         return 2.0
         
     def getMaxspeed(self, tags, streetTypeId):
@@ -3172,8 +3341,8 @@ class OSMParserData():
                     if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
                         cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetTypeId, oneway, roundabout, maxspeed)                                         
                         self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, lat1, lon1, lat2, lon2)
-                    else:
-                        print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
+#                    else:
+#                        print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
 
                     refNodeList=list()
                     distance=0
@@ -3201,8 +3370,8 @@ class OSMParserData():
                 if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
                     cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetTypeId, oneway, roundabout, maxspeed)                    
                     self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, lat1, lon1, lat2, lon2)
-                else:
-                    print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
+#                else:
+#                    print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
 
     def createCrossingEntries(self, country):
         self.setDBCursorForCountry(country)
@@ -3219,27 +3388,46 @@ class OSMParserData():
                 majorCrossingType=0
                 nextWays=self.findWayWithRefInAllWays(ref, wayid)  
                 if len(nextWays)!=0:
-                    resultList=self.getRefEntryForIdAndCountry(ref, country)
+                    resultList=self.getRefEntryForIdAndCountry2(ref, country)
                     if len(resultList)==1:
-                        _, _, _, _, nodeTags=resultList[0]
+                        _, _, _, _, nodeTags, nodeType=resultList[0]
                         if nodeTags!=None:
-                            if "highway" in nodeTags:
-                                if nodeTags["highway"]=="traffic_signals":
-                                    majorCrossingType=1
-                                elif nodeTags["highway"]=="motorway_junction":
-                                    majorCrossingType=2
-                                    highwayExitRef=None
-                                    highwayExitName=None
-                                    if "ref" in nodeTags:
-                                        highwayExitRef=nodeTags["ref"]
-                                    if "name" in nodeTags:
-                                        highwayExitName=nodeTags["name"]
-                                    crossingInfo="%s:%s"%(highwayExitName, highwayExitRef)
-#                                    print(crossingInfo)
-                                elif nodeTags["highway"]=="mini_roundabout":
-                                    majorCrossingType=5
-                                elif nodeTags["highway"]=="stop":
-                                    majorCrossingType=6
+                            if nodeType==2:
+                                # motorway_junction
+                                majorCrossingType=2
+                                highwayExitRef=None
+                                highwayExitName=None
+                                if "ref" in nodeTags:
+                                    highwayExitRef=nodeTags["ref"]
+                                if "name" in nodeTags:
+                                    highwayExitName=nodeTags["name"]
+                                crossingInfo="%s:%s"%(highwayExitName, highwayExitRef)
+                            elif nodeType==3:
+                                # traffic_signals
+                                majorCrossingType=1
+                            elif nodeType==4:
+                                # mini-roundabout
+                                majorCrossingType=5
+                            elif nodeType==5:
+                                # stop
+                                majorCrossingType=6
+#                            if "highway" in nodeTags:
+#                                if nodeTags["highway"]=="traffic_signals":
+#                                    majorCrossingType=1
+#                                elif nodeTags["highway"]=="motorway_junction":
+#                                    majorCrossingType=2
+#                                    highwayExitRef=None
+#                                    highwayExitName=None
+#                                    if "ref" in nodeTags:
+#                                        highwayExitRef=nodeTags["ref"]
+#                                    if "name" in nodeTags:
+#                                        highwayExitName=nodeTags["name"]
+#                                    crossingInfo="%s:%s"%(highwayExitName, highwayExitRef)
+##                                    print(crossingInfo)
+#                                elif nodeTags["highway"]=="mini_roundabout":
+#                                    majorCrossingType=5
+#                                elif nodeTags["highway"]=="stop":
+#                                    majorCrossingType=6
                                    
                                 
                     wayList=list()   
@@ -3329,7 +3517,7 @@ class OSMParserData():
         return self.osmList[country]["osmFile"]
     
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data1")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -3391,7 +3579,7 @@ class OSMParserData():
             self.createEdgeTables()
         else:
             self.openEdgeDB()
-#            self.edgeId=self.getLenOfEdgeTable()
+            print(self.getLenOfEdgeTable())
         
         createAdressDB=not self.adressDBExists()
         if createAdressDB:
@@ -3498,7 +3686,7 @@ class OSMParserData():
         osmData=dict()
         osmData["country"]="Austria"
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/salzburg.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg.osm'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -3514,7 +3702,7 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-#        osmData["osmFile"]='/home/maxl/Downloads/bayern-south.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-south.osm'
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
         osmData["poly"]="germany.poly"
@@ -3539,11 +3727,42 @@ class OSMParserData():
 #            print(x)
             
         self.setDBCursorForCountry(0)
-#        self.cursor.execute('SELECT * FROM refTable WHERE refId==455985572')
+        self.cursor.execute('SELECT * FROM refTable WHERE type==1')
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            print(self.refFromDB2(x))
+          
+        self.setDBCursorForCountry(0)
+        self.cursor.execute('SELECT * FROM refTable WHERE type==2')
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            print(self.refFromDB2(x))
+
+        self.setDBCursorForCountry(0)
+        self.cursor.execute('SELECT * FROM refTable WHERE type==3')
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            print(self.refFromDB2(x))
+
+        self.setDBCursorForCountry(0)
+        self.cursor.execute('SELECT * FROM refTable WHERE type==4')
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            print(self.refFromDB2(x))
+
+        self.setDBCursorForCountry(0)
+        self.cursor.execute('SELECT * FROM refTable WHERE type==5')
+        allentries=self.cursor.fetchall()
+        for x in allentries:
+            print(self.refFromDB2(x))
+
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==6')
 #        allentries=self.cursor.fetchall()
 #        for x in allentries:
-#            print(self.refFromDB(x))
-          
+#            print(self.refFromDB2(x))
+
+
 #        self.cursor.execute('SELECT * FROM wayTable WHERE wayId==135928507 OR wayId==25337315 OR wayId==37517449')
 #        allentries=self.cursor.fetchall()
 #        for x in allentries:
@@ -3551,10 +3770,10 @@ class OSMParserData():
 #            wayId, tags, refs, streetTypeId, name, nameRef=self.wayFromDB(x)
 #            print(refs)
         
-        self.cursor.execute('SELECT * from crossingTable WHERE wayId==27206920')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.crossingFromDB(x))
+#        self.cursor.execute('SELECT * from crossingTable WHERE wayId==27206920')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.crossingFromDB(x))
 
 #        self.cursorEdge.execute('SELECT * from edgeTable WHERE wayId==135928507 OR wayId==25337315 OR wayId==37517449')
 #        allentries=self.cursorEdge.fetchall()
@@ -3771,21 +3990,27 @@ class OSMParserData():
             else:
                 print("routing failed")
             
-    def getCoordsOfEdge(self, edgeId, country):
+    def getCoordsOfEdgeWithEnforcement(self, edgeId, country):
         (edgeId, startRef, endRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)
         wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=self.getWayEntryForIdAndCountry3(wayId, country)
                     
         refListPart=self.getRefListSubset(refs, startRef, endRef)
         coords=list()
+        enforcement=None
         for ref in refListPart:
             _, country=self.getCountryOfRef(ref)
             if country==None:
                 continue
 
-            (lat, lon)=self.getCoordsWithRefAndCountry(ref, country)
-            if lat!=None and lon!=None:
+            resultList=self.getRefEntryForIdAndCountry2(ref, country)
+            if len(resultList)==1:
+                ref, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
                 coords.append((lat, lon))
-        return coords
+                if storedNodeType==1:
+                    # enforcement
+                    enforcement="maxspeed:%s"%(storedTags["maxspeed"])
+
+        return coords, enforcement
 
 def main(argv):    
     p = OSMParserData()
