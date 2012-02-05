@@ -419,7 +419,7 @@ class OSMParserData():
         self.cursorCoords.execute('INSERT INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
     
     def getCoordsEntry(self, ref):
-        self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId==%d'%(ref))
+        self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))
         allentries=self.cursorCoords.fetchall()
         if ref==1530718191:
             print(allentries)
@@ -429,7 +429,8 @@ class OSMParserData():
     
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, wayId BLOB, tags BLOB, type INTEGER)')
-        
+        self.cursor.execute("CREATE INDEX type_idx ON refTable (type)")
+
 #    def createGeomForRefTable(self, country):
 #        print("create geom column for refTable")
 #        self.setDBCursorForCountry(country)
@@ -455,7 +456,7 @@ class OSMParserData():
 #        allentries=self.cursor.fetchall()
 #        for x in allentries:
 #            (refId, lat, lon, _, _)=self.refFromDB(x)
-#            self.cursor.execute("UPDATE refTable SET geom=MakePoint(%f, %f, 4326) WHERE refId==%d"%(lon, lat, refId))
+#            self.cursor.execute("UPDATE refTable SET geom=MakePoint(%f, %f, 4326) WHERE refId=%d"%(lon, lat, refId))
 #        
 #        self.cursor.execute('SELECT CreateSpatialIndex("refTable", "geom")')
 #        print("end create geom column date for refTable")
@@ -467,7 +468,7 @@ class OSMParserData():
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
             (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, lat1, lon1, lat2, lon2)=self.edgeFromDBWithCoords(x)
-            self.cursorEdge.execute("UPDATE edgeTable SET geom=MakeLine(MakePoint(%f, %f, 4326), MakePoint(%f, %f, 4326)) WHERE id==%d"%(lon1, lat1, lon2, lat2, edgeId))
+            self.cursorEdge.execute("UPDATE edgeTable SET geom=MakeLine(MakePoint(%f, %f, 4326), MakePoint(%f, %f, 4326)) WHERE id=%d"%(lon1, lat1, lon2, lat2, edgeId))
         
         self.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
         print("end create geom column date for edgeTable")
@@ -487,6 +488,9 @@ class OSMParserData():
 
     def createAddressTable(self):
         self.cursorAdress.execute('CREATE TABLE addressTable (id INTEGER PRIMARY KEY, refId INTEGER, country INTEGER, city TEXT, postCode INTEGER, streetName TEXT, houseNumber TEXT, lat REAL, lon REAL)')
+        self.createAddressTableIndex()
+        
+    def createAddressTableIndex(self):
         self.cursorAdress.execute("CREATE INDEX streetName_idx ON addressTable (streetName)")
         self.cursorAdress.execute("CREATE INDEX country_idx ON addressTable (country)")
         
@@ -574,7 +578,7 @@ class OSMParserData():
         self.cursorCountry.execute('INSERT OR IGNORE INTO refCountryTable VALUES( ?, ?)', (refId, refCountry))
  
     def getCountryOfRef(self, refId):
-        self.cursorCountry.execute('SELECT id, country FROM refCountryTable where id==%d'%(refId))
+        self.cursorCountry.execute('SELECT id, country FROM refCountryTable where id=%d'%(refId))
         allentries=self.cursorCountry.fetchall()
         if len(allentries)==1:
             return (allentries[0][0], allentries[0][1])
@@ -606,7 +610,7 @@ class OSMParserData():
         self.wayCount=self.wayCount+1
         
     def getCountrysOfWay(self, wayId):
-        self.cursorCountry.execute('SELECT id, wayId, country FROM wayCountryTable where wayId==%d'%(wayId))
+        self.cursorCountry.execute('SELECT id, wayId, country FROM wayCountryTable where wayId=%d'%(wayId))
         allentries=self.cursorCountry.fetchall()
         resultList=list()
         for x in allentries:
@@ -641,7 +645,7 @@ class OSMParserData():
         resultList=self.getRefEntryForIdAndCountry2(refid, country)
         if len(resultList)==1:
             refid, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
-            # dont override a "defined" node type
+            # dont override an already "defined" node type
             if storedNodeType!=0 and nodeType==0:
                 nodeType=storedNodeType
                 
@@ -730,21 +734,21 @@ class OSMParserData():
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('UPDATE edgeTable SET source=%d WHERE id==%d'%(sourceId, edgeId))
+        self.cursorEdge.execute('UPDATE edgeTable SET source=%d WHERE id=%d'%(sourceId, edgeId))
 
     def updateTargetOfEdge(self, edgeId, targetId):
         existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('UPDATE edgeTable SET target=%d WHERE id==%d'%(targetId, edgeId))
+        self.cursorEdge.execute('UPDATE edgeTable SET target=%d WHERE id=%d'%(targetId, edgeId))
         
     def updateCostsOfEdge(self, edgeId, cost, reverseCost):
         existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
         if existingEdgeId==None:
             print("no edge with id %d"%(edgeId))
             return
-        self.cursorEdge.execute('UPDATE edgeTable SET cost=%d, reverseCost=%d WHERE id==%d'%(cost, reverseCost, edgeId))
+        self.cursorEdge.execute('UPDATE edgeTable SET cost=%d, reverseCost=%d WHERE id=%d'%(cost, reverseCost, edgeId))
 
     def clearSourceAndTargetOfEdges(self):
         self.cursorEdge.execute('SELECT id FROM edgeTable')
@@ -755,7 +759,7 @@ class OSMParserData():
             self.updateTargetOfEdge(edgeId, 0)
 
     def getEdgeEntryForSource(self, sourceId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where source==%d'%(sourceId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where source=%d'%(sourceId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -764,7 +768,7 @@ class OSMParserData():
         return resultList      
     
     def getEdgeEntryForTarget(self, targetId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where target==%d'%(targetId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where target=%d'%(targetId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -773,7 +777,7 @@ class OSMParserData():
         return resultList      
     
     def getEdgeEntryForSourceAndTarget(self, sourceId, targetId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where source==%d AND target==%d'%(sourceId, targetId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where source=%d AND target=%d'%(sourceId, targetId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -782,7 +786,7 @@ class OSMParserData():
         return resultList   
     
     def getEdgeEntryForEdgeId(self, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where id==%d'%(edgeId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
         allentries=self.cursorEdge.fetchall()
         if len(allentries)==1:
             edge=self.edgeFromDB(allentries[0])
@@ -791,7 +795,7 @@ class OSMParserData():
         return (None, None, None, None, None, None, None, None, None)
 
     def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where id==%d'%(edgeId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
         allentries=self.cursorEdge.fetchall()
         if len(allentries)==1:
             edge=self.edgeFromDBWithCoords(allentries[0])
@@ -810,7 +814,7 @@ class OSMParserData():
         return resultList
  
     def getEdgeEntryForEndPoint(self, endRef, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where endRef==%d AND id!=%d'%(endRef, edgeId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where endRef=%d AND id!=%d'%(endRef, edgeId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -819,7 +823,7 @@ class OSMParserData():
         return resultList
     
     def getEdgeEntryForStartAndEndPointAndWayId(self, startRef, endRef, wayId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef==%d AND endRef==%d AND wayId==%d'%(startRef, endRef, wayId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d AND endRef=%d AND wayId=%d'%(startRef, endRef, wayId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -828,7 +832,7 @@ class OSMParserData():
         return resultList
     
     def getEdgeEntryForStartOrEndPoint(self, ref):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef==%d OR endRef==%d'%(ref, ref))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d OR endRef=%d'%(ref, ref))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -837,7 +841,7 @@ class OSMParserData():
         return resultList
         
     def getEdgeEntryForWayId(self, wayId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where wayId==%d'%(wayId))
+        self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=%d'%(wayId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -847,7 +851,7 @@ class OSMParserData():
     
     def getRefEntryForIdAndCountry(self, refId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM refTable where refId==%d'%(refId))
+        self.cursor.execute('SELECT * FROM refTable where refId=%d'%(refId))
         resultList=list()
         allentries=self.cursor.fetchall()
         for result in allentries:
@@ -857,7 +861,7 @@ class OSMParserData():
     
     def getRefEntryForIdAndCountry2(self, refId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM refTable where refId==%d'%(refId))
+        self.cursor.execute('SELECT * FROM refTable where refId=%d'%(refId))
         resultList=list()
         allentries=self.cursor.fetchall()
         for result in allentries:
@@ -867,7 +871,7 @@ class OSMParserData():
     
     def getWayEntryForIdAndCountry(self, wayId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM wayTable where wayId==%d'%(wayId))
+        self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
             return self.wayFromDB(allentries[0])
@@ -876,7 +880,7 @@ class OSMParserData():
 
     def getWayEntryForIdAndCountry2(self, wayId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM wayTable where wayId==%d'%(wayId))
+        self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
             return self.wayFromDB2(allentries[0])
@@ -885,7 +889,7 @@ class OSMParserData():
     
     def getWayEntryForIdAndCountry3(self, wayId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM wayTable where wayId==%d'%(wayId))
+        self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursor.fetchall()
         if len(allentries)==1:
             return self.wayFromDB3(allentries[0])
@@ -894,7 +898,7 @@ class OSMParserData():
 
     def getCrossingEntryFor(self, wayid, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM crossingTable where wayId==%d'%(wayid))      
+        self.cursor.execute('SELECT * FROM crossingTable where wayId=%d'%(wayid))      
         resultList=list()
         allentries=self.cursor.fetchall()
         for result in allentries:
@@ -905,7 +909,7 @@ class OSMParserData():
     
     def getCrossingEntryForRefId(self, wayid, refId, country):
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM crossingTable where wayId==%d AND refId==%d'%(wayid, refId))  
+        self.cursor.execute('SELECT * FROM crossingTable where wayId=%d AND refId=%d'%(wayid, refId))  
         resultList=list()
         allentries=self.cursor.fetchall()
         for result in allentries:
@@ -924,7 +928,7 @@ class OSMParserData():
         
     def createTemporaryPoint(self, lat, lon, lat1, lon1):
         distance=int(self.osmutils.distance(lat, lon, lat1, lon1))
-        frac=10
+        frac=5
         points=list()
         points.append((lat, lon))
         if distance>frac:
@@ -941,26 +945,40 @@ class OSMParserData():
         currentEdgeOnRoute, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.getEdgeEntryForEdgeId(edgeId)
         refList=self.getRefListOfEdge(currentEdgeOnRoute, wayId, startRef, endRef)
         if len(refList)!=0:
-            i=0;
-            for ref in refList[:-1]: 
+#            i=0;
+            lastRef=refList[0]
+            for ref in refList[1:]: 
                 _, refCountry=self.getCountryOfRef(ref)
-                startLat, startLon=self.getCoordsWithRefAndCountry(ref, refCountry)
-                endLat, endLon=self.getCoordsWithRefAndCountry(refList[i+1], refCountry)
+                onLine, (tmpLat, tmpLon)=self.isOnLineBetweenPoints(lat, lon, ref, lastRef, 10.0)
+                if onLine==True:
+                    usedEdgeId=edgeId
+                    usedRefId=ref
+                    usedWayId=wayId
+                    usedLat=tmpLat
+                    usedLon=tmpLon                            
+                    usedCountry=refCountry
+                    print("using edge %d"%(edgeId))
+                    return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
-                points=self.createTemporaryPoint(startLat, startLon, endLat, endLon)
-                for tmpLat, tmpLon in points:
-                    distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
-#                    print(distance)
-                    if distance<10:
-                        usedEdgeId=edgeId
-                        usedRefId=ref
-                        usedWayId=wayId
-                        usedLat=tmpLat
-                        usedLon=tmpLon                            
-                        usedCountry=refCountry
-                        print("using edge %d"%(edgeId))
-                        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
-                i=i+1     
+                lastRef=ref
+#                _, refCountry=self.getCountryOfRef(ref)
+#                startLat, startLon=self.getCoordsWithRefAndCountry(ref, refCountry)
+#                endLat, endLon=self.getCoordsWithRefAndCountry(refList[i+1], refCountry)
+#
+#                points=self.createTemporaryPoint(startLat, startLon, endLat, endLon)
+#                for tmpLat, tmpLon in points:
+#                    distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
+##                    print(distance)
+#                    if distance<10:
+#                        usedEdgeId=edgeId
+#                        usedRefId=ref
+#                        usedWayId=wayId
+#                        usedLat=tmpLat
+#                        usedLon=tmpLon                            
+#                        usedCountry=refCountry
+#                        print("using edge %d"%(edgeId))
+#                        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
+#                i=i+1     
         return (None, None, None, (None, None), None)
     
     # TODO: maybe use information in track to speed up searching the next possible edge
@@ -986,12 +1004,13 @@ class OSMParserData():
 
         # try edges starting or ending with this edge
         if currentEdgeOnRoute!=None:
-            currentEdgeOnRoute, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.getEdgeEntryForEdgeId(currentEdgeOnRoute)
+            currentEdgeOnRoute, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(currentEdgeOnRoute)
             resultList=self.getEdgeEntryForStartOrEndPoint(startRef)
             if len(resultList)!=0:
                 for result in resultList:
-                    nextEdgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=result
-                    
+                    nextEdgeId, _, _, _, _, _, _, _, _=result
+                    if nextEdgeId==currentEdgeOnRoute:
+                        continue
                     usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeId(lat, lon, nextEdgeId)
                     if usedEdgeId!=None:
                         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
@@ -999,8 +1018,9 @@ class OSMParserData():
             resultList=self.getEdgeEntryForStartOrEndPoint(endRef)
             if len(resultList)!=0:
                 for result in resultList:
-                    nextEdgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=result
-                    
+                    nextEdgeId, _, _, _, _, _, _, _, _=result
+                    if nextEdgeId==currentEdgeOnRoute:
+                        continue
                     usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeId(lat, lon, nextEdgeId)
                     if usedEdgeId!=None:
                         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
@@ -1018,16 +1038,22 @@ class OSMParserData():
         usedLon=None
         usedCountry=None
         usedRefs=None
+        usedCheckRefs=None
         maxDistance=1000.0
  
         refCountry=self.getCountryOfPos(lat, lon)
         if refCountry==None:
             return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
+        nearestFound=False
         nodes=self.getNearNodes(lat, lon, refCountry, maxDistance)
         for refId, lat1, lon1, wayIdList in nodes:
             # first search way which has the nearest ref
+            if nearestFound==True:
+                break
             for wayId in wayIdList:
+                if nearestFound==True:
+                    break
                 (wayEntryId, tags, refs, streetTypeId, name, nameRef)=self.getWayEntryForIdAndCountry(wayId, refCountry)
 
                 # use the refs before and after to check
@@ -1044,91 +1070,44 @@ class OSMParserData():
                     refList.append(refId)
                     refList.append(refs[index+1])
                                     
-                lastLat, lastLon=self.getCoordsWithRefAndCountry(refList[0], refCountry)
                 lastRef=refList[0]
                 for ref in refList[1:]:
-                    refLat, refLon=self.getCoordsWithRefAndCountry(ref, refCountry)
-                    if refLat==None or refLon==None:
-                        continue
-                    
-                    if lastLat==None or lastLon==None:
-                        lastLat=refLat
-                        lastLon=refLon
-                        continue
-                        
-                    points=self.createTemporaryPoint(lastLat, lastLon, refLat, refLon)
-                    for tmpLat, tmpLon in points:
-                        distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
-                        if distance < maxDistance:
-                            maxDistance=distance
-                            usedWayId=wayId
-                            distanceTmpLast=self.osmutils.distance(lastLat, lastLon, tmpLat, tmpLon)
-                            distanceTmpRef=self.osmutils.distance(refLat, refLon, tmpLat, tmpLon)
-                            if distanceTmpLast < distanceTmpRef:
-                                usedRefId=lastRef
-                                usedLat=tmpLat
-                                usedLon=tmpLon
-                            else:
-                                usedRefId=ref
-                                usedLat=tmpLat
-                                usedLon=tmpLon
-                                
-                            usedCountry=refCountry
-                            usedRefs=refs
-                    
-                    lastLat=refLat
-                    lastLon=refLon
+                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenPoints(lat, lon, ref, lastRef, 10.0)
+                    if onLine==True:
+                        usedRefId=ref
+                        usedLat=tmpLat
+                        usedLon=tmpLon
+                        usedCountry=refCountry
+                        usedRefs=refs
+                        usedCheckRefs=refList
+                        usedWayId=wayId
+                        nearestFound=True
+                        break
                     lastRef=ref
                         
         if usedWayId!=None:
             usedEdgeId=None
-            maxDistance=1000.0
             # search all edges of this way for the nearset ref
             resultList=self.getEdgeEntryForWayId(usedWayId)
             if len(resultList)==1:
                 edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=resultList[0]
                 usedEdgeId=edgeId
             else:
+                edgeFound=False
                 for edge in resultList:
+                    if edgeFound==True:
+                        break
                     edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=edge
                     edgeRefList=self.getRefListSubset(usedRefs, startRef, endRef)
 
                     if usedRefId in edgeRefList:
-                        # use the refs before and after to check
-                        index=edgeRefList.index(usedRefId)
-                        refList=list()
-                        if index==0:
-                            refList.append(usedRefId)
-                            refList.append(edgeRefList[index+1])
-                        elif index==len(edgeRefList)-1:
-                            refList.append(edgeRefList[-1])
-                            refList.append(usedRefId)
-                        else:
-                            refList.append(edgeRefList[index-1])
-                            refList.append(usedRefId)
-                            refList.append(edgeRefList[index+1])
-                            
-                        lastLat, lastLon=self.getCoordsWithRefAndCountry(refList[0], refCountry)
-                        lastRef=refList[0]
-                        for ref in refList[1:]:
-                            refLat, refLon=self.getCoordsWithRefAndCountry(ref, refCountry)
-                            if refLat==None or refLon==None:
-                                continue
-                            
-                            if lastLat==None or lastLon==None:
-                                lastLat=refLat
-                                lastLon=refLon
-                                continue
-                                
-                            points=self.createTemporaryPoint(lastLat, lastLon, refLat, refLon)
-                            for tmpLat, tmpLon in points:
-                                distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
-                                if distance < maxDistance:
-                                    maxDistance=distance
-                                    usedEdgeId=edgeId
-                            
-                            lastLat=refLat
-                            lastLon=refLon
+                        lastRef=usedCheckRefs[0]
+                        for ref in usedCheckRefs[1:]:
+                            onLine, (tmpLat, tmpLon)=self.isOnLineBetweenPoints(lat, lon, ref, lastRef, 10.0)
+                            if onLine==True:
+                                usedEdgeId=edgeId
+                                edgeFound=True
+                                break
                             lastRef=ref
                         
         stop=time.time()
@@ -1210,7 +1189,7 @@ class OSMParserData():
 #        print(len(nodes))
 #        return nodes
 
-    def getNodesInBBox(self, bbox, country):
+    def getNodesInBBox(self, bbox, country, nodeType=None):
         latMin=bbox[1]
         lonMin=bbox[0]
         latMax=bbox[3]
@@ -1218,14 +1197,17 @@ class OSMParserData():
         
         start=time.time()
         self.setDBCursorForCountry(country)
-        self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f'%(latMin, latMax, lonMin, lonMax))
+        if nodeType!=None:
+            self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f AND type=%d'%(latMin, latMax, lonMin, lonMax, nodeType))
+        else:
+            self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f'%(latMin, latMax, lonMin, lonMax))
         allentries=self.cursor.fetchall()
         print(len(allentries))
         stop=time.time()
         print("getNodesInBBox:%f"%(stop-start))
         return allentries
 
-    def getNearNodes(self, lat, lon, country, maxDistance):  
+    def getNearNodes(self, lat, lon, country, maxDistance, nodeType=None):  
         latRangeMax=lat+0.003
         lonRangeMax=lon+0.003
         latRangeMin=lat-0.003
@@ -1234,7 +1216,7 @@ class OSMParserData():
         bbox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
         nodes=list()
         
-        allentries=self.getNodesInBBox(bbox, country)
+        allentries=self.getNodesInBBox(bbox, country, nodeType)
         for x in allentries:
             refId, lat1, lon1, wayIdList, _=self.refFromDB(x)
             if wayIdList==None:
@@ -1327,7 +1309,10 @@ class OSMParserData():
         tags=None
         if x[4]!=None:
             tags=pickle.loads(x[4])
-        nodeType=x[5]
+        if len(x)==6:
+            nodeType=x[5]
+        else:
+            nodeType=0
         return (refId, lat, lon, wayIdList, tags, nodeType)
     
     def crossingFromDB(self, x):
@@ -1399,8 +1384,6 @@ class OSMParserData():
     
     def parse_nodes(self, node):
         for ref, tags, coords in node:
-            if ref==1530718191 or ref==1530718193:
-                print("parse_nodes: %d"%ref)
             # <tag k="highway" v="motorway_junction"/>
             lat=float(coords[1])
             lon=float(coords[0])
@@ -1410,6 +1393,7 @@ class OSMParserData():
                     if nodeType!=-1:
                         refCountry=self.getCountryOfPosDeep(lat, lon)
                         if refCountry!=None:
+                            # TODO: speed_camera can have a refId without a way refId
                             self.addToCountryRefTableWithCountry(ref, lat, lon, refCountry)        
                             self.addToRefTable(ref, lat, lon, None, refCountry, tags, nodeType)
                             
@@ -1422,8 +1406,6 @@ class OSMParserData():
 
     def parse_coords(self, coord):
         for osmid, lon, lat in coord:
-            if osmid==1530718191 or osmid==1530718193:
-                print("parse_coords: %d"%osmid)
             self.addToCoordsTable(osmid, float(lat), float(lon))
            
     # only add full specified addresses   
@@ -1459,18 +1441,14 @@ class OSMParserData():
             return
         if houseNumber==None:
             return
-#        country=self.getCountryIdForAddrCountry(countryCode)
-#        if country==None:
-#            country=self.country
         
-        resultList=self.getAdressListForStreetInCountry(streetName, country)
-        if len(resultList)==1:
-            (addressId, _, _, _, _, _, storedHouseNumber, _, _)=resultList[0]
-            if storedHouseNumber==None:
-#                print("replace existing address ref %d with name %s"%(refId, streetName))
-                self.replaceInAddressTable(addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
-        else:            
-            self.addToAddressTable(refId, country, city, postCode, streetName, houseNumber, lat, lon)
+#        resultList=self.getExistingAdressListForStreetInCountry(streetName, country)
+#        if len(resultList)==1:
+#            (addressId, _, _, _, _, _, _, _, _)=resultList[0]
+##           print("replace existing address ref %d with name %s"%(refId, streetName))
+#            self.replaceInAddressTable(addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
+#        else:            
+        self.addToAddressTable(refId, country, city, postCode, streetName, houseNumber, lat, lon)
     
     # add way names
     def parsePartAddress(self, tags, streetName, refId, lat, lon, country):  
@@ -1675,6 +1653,10 @@ class OSMParserData():
                 if "oneway" in tags:
                     if tags["oneway"]=="yes":
                         oneway=1
+                    elif tags["oneway"]=="true":
+                        oneway=1
+                    elif tags["oneway"]=="1":
+                        oneway=1
                 if "junction" in tags:
                     if tags["junction"]=="roundabout":
                         roundabout=1
@@ -1717,11 +1699,11 @@ class OSMParserData():
         
                 if wayAdded==True and firstRefCountry!=None and name!=None:
                     if streetTypeId in self.getStreetTypeIdForAddresses():
-                        resultList=self.getAdressListForStreetInCountry(name, firstRefCountry)
-                        if len(resultList)==0:
-                            # add street to addresses if no other entry till now
-                            # TODO: use first ref as location for addr?
-                            self.parsePartAddress(tags, name, refs[0], firstRefLat, firstRefLon, firstRefCountry)
+#                        resultList=self.getAdressListForStreetInCountry(name, firstRefCountry)
+#                        if len(resultList)==0:
+                        # add street to addresses if no other entry till now
+                        # TODO: use first ref as location for addr?
+                        self.parsePartAddress(tags, name, refs[0], firstRefLat, firstRefLon, firstRefCountry)
 
     def parse_relations(self, relation):
         for osmid, tags, ways in relation:
@@ -1783,7 +1765,6 @@ class OSMParserData():
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
                             if "maxspeed" in tags:
-                                maxspeed=int(tags["maxspeed"])
                                 for part in ways:
                                     roleId=int(part[0])
                                     roleType=part[1]
@@ -1797,7 +1778,7 @@ class OSMParserData():
                                                 resultList=self.getRefEntryForIdAndCountry(fromRefId, refCountry)
                                                 if len(resultList)==1:
                                                     refid, lat, lon, wayIdList, storedTags=resultList[0]
-                                                    print("enforcement at ref %d maxspeed %d %s"%(refid, maxspeed, tags))
+                                                    print("enforcement at ref %d %s"%(refid, tags))
                                                     self.updateRefTableEntry(refid, tags, 1, refCountry)
 
 #    <member type="way" ref="61014292" role="outer"/>
@@ -1942,7 +1923,7 @@ class OSMParserData():
         return self.osmList.keys()
     
     def getAdressCityList(self, country):
-        self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country==%d ORDER by city'%(country))
+        self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d ORDER by city'%(country))
         allentries=self.cursorAdress.fetchall()
         cityList=list()
         for x in allentries:
@@ -1951,7 +1932,7 @@ class OSMParserData():
         return cityList
 
     def getAdressPostCodeList(self, country):
-        self.cursorAdress.execute('SELECT postCode FROM addressTable WHERE country==%d'%(country))
+        self.cursorAdress.execute('SELECT postCode FROM addressTable WHERE country=%d'%(country))
         allentries=self.cursorAdress.fetchall()
         postCodeList=set()
         for x in allentries:
@@ -1960,7 +1941,7 @@ class OSMParserData():
         return postCodeList
 
     def getAdressListForCity(self, country, city):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND city=="%s"'%(country, str(city)))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city="%s"'%(country, city))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
@@ -1968,7 +1949,7 @@ class OSMParserData():
         return streetList
                     
     def getAdressListForPostCode(self, country, postCode):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND postCode=="%s"'%(country, str(postCode)))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND postCode=%d'%(country, postCode))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
@@ -1976,7 +1957,7 @@ class OSMParserData():
         return streetList
     
     def getAdressListForCountry(self, country):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d'%(country))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d'%(country))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
@@ -1984,11 +1965,29 @@ class OSMParserData():
         return streetList
     
     def getAdressListForStreetInCountry(self, streetName, country):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==%d AND streetName=="%s"'%(country, streetName))
-        allentries=self.cursorAdress.fetchall()
         streetList=list()
-        for x in allentries:
-            streetList.append(self.addressFromDB(x))
+        
+        try:
+            self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND streetName="%s"'%(country, streetName))
+            allentries=self.cursorAdress.fetchall()
+            for x in allentries:
+                streetList.append(self.addressFromDB(x))
+        except sqlite3.OperationalError:
+            print("getAdressListForStreetInCountry: failed for %s"%(streetName))
+            
+        return streetList
+
+    def getExistingAdressListForStreetInCountry(self, streetName, country):
+        streetList=list()
+        
+        try:
+            self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND houseNumber ISNULL AND streetName="%s"'%(country, streetName))
+            allentries=self.cursorAdress.fetchall()
+            for x in allentries:
+                streetList.append(self.addressFromDB(x))
+        except sqlite3.OperationalError:
+            print("getAdressListForStreetInCountry: failed for %s"%(streetName))
+            
         return streetList
     
     def createStartTrackItem(self):
@@ -2171,7 +2170,7 @@ class OSMParserData():
 #                        allPathCost=allPathCost+pathCost            
                 
                     if self.dWrapperTrsp!=None:
-                        edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox)
+                        edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox, False)
                         if edgeList==None:
                             return None, None
                                     
@@ -2247,16 +2246,16 @@ class OSMParserData():
                 i=i+1
                 
 
-    def calcRouteForNodes(self, source, target):        
-        if source==0 and target==0:
-            print("source and target==0!")
-            return None
-        
-        if self.dWrapper!=None:
-            edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
-            return edgeList, pathCost
-                                
-        return None
+#    def calcRouteForNodes(self, source, target):        
+#        if source==0 and target==0:
+#            print("source and target==0!")
+#            return None
+#        
+#        if self.dWrapper!=None:
+#            edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
+#            return edgeList, pathCost
+#                                
+#        return None
 
     def calcRouteForNodesTrsp(self, source, target):        
         if source==0 and target==0:
@@ -2264,7 +2263,7 @@ class OSMParserData():
             return None
         
         if self.dWrapperTrsp!=None:
-            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target)
+            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, False)
             return edgeList, pathCost
                                 
         return None
@@ -2307,6 +2306,31 @@ class OSMParserData():
             return "%s"%(nameRef)
         return "No name"
 
+    def isOnLineBetweenPoints(self, lat, lon, ref1, ref2, minDistance):
+        _, country=self.getCountryOfRef(ref1)
+        if country==None:
+            return False, (None, None)
+        resultList=self.getRefEntryForIdAndCountry(ref1, country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return False, (None, None)
+        _, country=self.getCountryOfRef(ref2)
+        if country==None:
+            return False, (None, None)
+        resultList=self.getRefEntryForIdAndCountry(ref2, country)
+        if len(resultList)==1:
+            _, lat2, lon2, _, _=resultList[0]
+        else:
+            return False, (None, None)
+        nodes=self.createTemporaryPoint(lat1, lon1, lat2, lon2)
+        for tmpLat, tmpLon in nodes:
+            distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
+            if distance<minDistance:
+                print("isOnLineBetweenPoints: %d"%distance)
+                return True, (tmpLat, tmpLon)
+        return False, (None, None)
+    
     def printEdgeForRefList(self, refListPart, edgeId, trackWayList, startPoint, endPoint):
         result=self.getEdgeEntryForEdgeId(edgeId)
         (edgeId, startRef, _, length, wayId, _, _, _, _)=result
@@ -2349,16 +2373,19 @@ class OSMParserData():
                 print("routeEndRef %d not in refListPart %s"%(routeEndRefId, refListPart))
                 routeEndRefId=refListPart[0]
             else:
-                index=refListPart.index(routeEndRefId)
-                lat, lon=endPoint.getPos()
-                startLat, startLon=endPoint.getStartRefPos()
-                endLat, endLon=endPoint.getEndRefPos()
-                distanceStart=self.osmutils.distance(lat, lon, startLat, startLon)
-                distanceEnd=self.osmutils.distance(lat, lon, endLat, endLon)
-                if distanceEnd<distanceStart:
-                    if index!=0:
-                        # use one ref before
-                        routeEndRefId=refListPart[index-1]
+                index=refListPart.index(routeEndRefId)                
+                if index!=0:
+                    # use one ref before
+                    prevRefId=refListPart[index-1]
+                else:
+                    prevRefId=routeEndRefId
+                     
+                if prevRefId!=routeEndRefId:
+                    lat, lon=endPoint.getPos()
+                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenPoints(lat, lon, routeEndRefId, prevRefId, 10.0)
+                    if onLine==True:
+                        routeEndRefId=prevRefId
+        
 
         routeStartRefId=None
         if startPoint!=None:
@@ -2368,15 +2395,16 @@ class OSMParserData():
                 routeStartRefId=refListPart[0]
             else:
                 index=refListPart.index(routeStartRefId)
-                lat, lon=startPoint.getPos()
-                startLat, startLon=startPoint.getStartRefPos()
-                endLat, endLon=startPoint.getEndRefPos()
-                distanceStart=self.osmutils.distance(lat, lon, startLat, startLon)
-                distanceEnd=self.osmutils.distance(lat, lon, endLat, endLon)
-                if distanceEnd<distanceStart:
-                    if index!=len(refListPart)-1:
-                        # use one ref after
-                        routeStartRefId=refListPart[index+1]
+                if index!=len(refListPart)-1:
+                    nextRefId=refListPart[index+1]
+                else:
+                    nextRefId=routeStartRefId
+                                    
+                if nextRefId!=routeStartRefId:
+                    lat, lon=startPoint.getPos()
+                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenPoints(lat, lon, routeStartRefId, nextRefId, 10.0)
+                    if onLine==True:
+                        routeStartRefId=nextRefId
         
         routeStartRefPassed=False
               
@@ -2389,7 +2417,7 @@ class OSMParserData():
             
             resultList=self.getRefEntryForIdAndCountry2(ref, country)
             if len(resultList)==1:
-                ref, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
+                ref, lat, lon, _, storedTags, storedNodeType=resultList[0]
             else:
                 print("printEdgeForRefList: no node in DB with %d"%(ref))
                 continue
@@ -2422,6 +2450,12 @@ class OSMParserData():
             if storedNodeType==1:
                 # enforcement
                 trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
+            
+            # TODO: speed_camera refs can also be "near" this ref
+#            speedCameraNodes=self.getNearNodes(lat, lon, country, 1, 50.0)
+#            for speedCameraRef, _, _, _ in speedCameraNodes:
+#                if speedCameraRef!=ref:
+#                    trackItemRef["enforcement"]="maxspeed"
 
             trackItemRefs.append(trackItemRef)
 
@@ -2672,7 +2706,13 @@ class OSMParserData():
                 if storedNodeType==1:
                     # enforcement
                     trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
-    
+               
+                # TODO: speed_camera refs can also be "near" this ref
+#                speedCameraNodes=self.getNearNodes(lat, lon, country, 1, 50.0)
+#                for speedCameraRef, _, _, _ in speedCameraNodes:
+#                    if speedCameraRef!=ref:
+#                    trackItemRef["enforcement"]="maxspeed"
+
                 trackItemRefs.append(trackItemRef)
                 
                 if routeEndRefId!=None and ref==routeEndRefId:
@@ -3579,7 +3619,7 @@ class OSMParserData():
             self.createEdgeTables()
         else:
             self.openEdgeDB()
-            print(self.getLenOfEdgeTable())
+#            print(self.getLenOfEdgeTable())
         
         createAdressDB=not self.adressDBExists()
         if createAdressDB:
@@ -3726,35 +3766,35 @@ class OSMParserData():
 #        for x in allentries:
 #            print(x)
             
-        self.setDBCursorForCountry(0)
-        self.cursor.execute('SELECT * FROM refTable WHERE type==1')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.refFromDB2(x))
-          
-        self.setDBCursorForCountry(0)
-        self.cursor.execute('SELECT * FROM refTable WHERE type==2')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.refFromDB2(x))
-
-        self.setDBCursorForCountry(0)
-        self.cursor.execute('SELECT * FROM refTable WHERE type==3')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.refFromDB2(x))
-
-        self.setDBCursorForCountry(0)
-        self.cursor.execute('SELECT * FROM refTable WHERE type==4')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.refFromDB2(x))
-
-        self.setDBCursorForCountry(0)
-        self.cursor.execute('SELECT * FROM refTable WHERE type==5')
-        allentries=self.cursor.fetchall()
-        for x in allentries:
-            print(self.refFromDB2(x))
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==1')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.refFromDB2(x))
+#          
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==2')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.refFromDB2(x))
+#
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==3')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.refFromDB2(x))
+#
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==4')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.refFromDB2(x))
+#
+#        self.setDBCursorForCountry(0)
+#        self.cursor.execute('SELECT * FROM refTable WHERE type==5')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            print(self.refFromDB2(x))
 
 #        self.setDBCursorForCountry(0)
 #        self.cursor.execute('SELECT * FROM refTable WHERE type==6')
@@ -3775,10 +3815,10 @@ class OSMParserData():
 #        for x in allentries:
 #            print(self.crossingFromDB(x))
 
-#        self.cursorEdge.execute('SELECT * from edgeTable WHERE wayId==135928507 OR wayId==25337315 OR wayId==37517449')
-#        allentries=self.cursorEdge.fetchall()
-#        for x in allentries:
-#            print(x)
+        self.cursorEdge.execute('SELECT id, source, target, length AS cost, CASE WHEN reverseCost IS cost THEN length ELSE reverseCost END FROM edgeTable')
+        allentries=self.cursorEdge.fetchall()
+        for x in allentries:
+            print(x)
 
     def testDBConistency(self):
         print("test refCountryTable")
@@ -3869,11 +3909,22 @@ class OSMParserData():
 
         self.commitEdgeDB()  
              
-    def testAdress(self):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==0 AND city=="Salzburg" AND streetName=="Münchner Bundesstraße"')
-        allentries=self.cursorAdress.fetchall()
-        for x in allentries:
-            print(self.addressFromDB(x))
+    def testAddress(self):
+#        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country==0 AND city=="Salzburg" AND streetName=="Münchner Bundesstraße"')
+#        allentries=self.cursorAdress.fetchall()
+#        for x in allentries:
+#            print(self.addressFromDB(x))
+          
+        start=time.time()
+        resultList=self.getAdressListForStreetInCountry("Münchner Bundesstraße", 0)
+#        for result in resultList:
+#            print(result)
+        print("%f"%(time.time()-start))
+        start=time.time()
+        resultList=self.getExistingAdressListForStreetInCountry("Münchner Bundesstraße", 0)
+#        for result in resultList:
+#            print(result)
+        print("%f"%(time.time()-start))
             
     def recreateCostsForEdges(self):
         print("recreate costs")
@@ -4004,12 +4055,17 @@ class OSMParserData():
 
             resultList=self.getRefEntryForIdAndCountry2(ref, country)
             if len(resultList)==1:
-                ref, lat, lon, wayIdList, storedTags, storedNodeType=resultList[0]
+                ref, lat, lon, _, storedTags, storedNodeType=resultList[0]
                 coords.append((lat, lon))
                 if storedNodeType==1:
                     # enforcement
                     enforcement="maxspeed:%s"%(storedTags["maxspeed"])
-
+                # TODO: speed_camera refs can also be "near" this ref           
+#                speedCameraNodes=self.getNearNodes(lat, lon, country, 1, 50.0)
+#                for speedCameraRef, _, _, _ in speedCameraNodes:
+#                    if speedCameraRef!=ref:
+#                        enforcement="maxspeed"
+                        
         return coords, enforcement
 
 def main(argv):    
@@ -4048,7 +4104,7 @@ def main(argv):
 #    p.createAllRefTableIndexesPost()
 
 #    p.recreateCrossings()
-#    p.testAdress()
+#    p.testAddress()
 #    p.testRoutes()
 #    p.testWayTable(0)
 #    p.recreateCostsForEdges()

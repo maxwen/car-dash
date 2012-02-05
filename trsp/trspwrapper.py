@@ -25,12 +25,13 @@ class TrspWrapper():
         xmax=bbox[2]+0.1
         return [xmin, ymin, xmax, ymax]
     
+    def getSQLQueryEdgeShortest(self):
+        xmin, ymin, xmax, ymax=self.lastBBox        
+        return 'SELECT id, source, target, length AS cost, CASE WHEN reverseCost IS cost THEN length ELSE reverseCost END FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
+    
     def getSQLQueryEdge(self):
-        xmin, ymin, xmax, ymax=self.lastBBox
-        
+        xmin, ymin, xmax, ymax=self.lastBBox        
         return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
-
-#        return "SELECT id, source, target, cost, reverseCost FROM edgeTable ORDER BY id"
 
     def getSQLQueryRestriction(self):
         return "SELECT target, toCost, viaPath FROM restrictionTable"
@@ -40,7 +41,7 @@ class TrspWrapper():
             return True
         return False
     
-    def computeShortestPath(self, startNode, endNode, bbox):
+    def computeShortestPath(self, startNode, endNode, bbox, shortest):
         lib_routing = cdll.LoadLibrary("_compute_path_trsp.so")
         
         edgeList=list()
@@ -68,7 +69,10 @@ class TrspWrapper():
         endNodeC=c_int(endNode)
         path_count=c_int(0)
         file=c_char_p(self.getDB().encode(encoding='utf_8', errors='strict'))
-        sqlEdge=c_char_p(self.getSQLQueryEdge().encode(encoding='utf_8', errors='strict'))
+        if shortest==True:
+            sqlEdge=c_char_p(self.getSQLQueryEdgeShortest().encode(encoding='utf_8', errors='strict'))
+        else:
+            sqlEdge=c_char_p(self.getSQLQueryEdge().encode(encoding='utf_8', errors='strict'))
         sqlRestriction=c_char_p(self.getSQLQueryRestriction().encode(encoding='utf_8', errors='strict'))
         
         

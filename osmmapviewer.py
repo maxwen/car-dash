@@ -565,10 +565,10 @@ class QtOSMWidget(QWidget):
     
     def getVisibleBBox(self):
         rlon = self.osmutils.pixel2lon(self.map_zoom, self.map_x)
-        rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y)
+        rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y+self.height())
 
         rlon2 = self.osmutils.pixel2lon(self.map_zoom, self.map_x+self.width())
-        rlat2 = self.osmutils.pixel2lat(self.map_zoom, self.map_y+self.height())
+        rlat2 = self.osmutils.pixel2lat(self.map_zoom, self.map_y)
 
         return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
     
@@ -619,6 +619,8 @@ class QtOSMWidget(QWidget):
         self.showTextInfo()
         self.showEnforcementInfo()
         self.painter.end()
+        
+        print(self.getVisibleBBox())
           
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
@@ -1034,7 +1036,9 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(x, y, width, height, self.straightImage)
         elif direction==39:
             self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
-        elif direction==40 or direction==41:
+        elif direction==40:
+            self.painter.drawPixmap(x, y, width, height, self.roundaboutImage)
+        elif direction==41:
             if exitNumber==1:
                 self.painter.drawPixmap(x, y, width, height, self.roundabout1Image)
             elif exitNumber==2:
