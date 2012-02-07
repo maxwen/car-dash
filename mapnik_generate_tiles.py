@@ -5,17 +5,13 @@ import sys, os
 from Queue import Queue
 
 import threading
-
-try:
-    import mapnik2 as mapnik
-except:
-    import mapnik
+import mapnik2 as mapnik
 
 DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
 
 # Default number of rendering threads to spawn, should be roughly equal to number of CPU cores available
-NUM_THREADS = 4
+NUM_THREADS = 2
 
 
 def minmax (a,b,c):
@@ -197,19 +193,19 @@ def main(argv):
         x1=float(argv[3])
         y1=float(argv[4])
         zoom=int(argv[5])
+        tile_dir=argv[6]
     except IndexError:
         print("not enough arguments")
         return
     
     home = os.environ['HOME']
-    mapfile = home + "/mapnik/osm.xml"
-    tile_dir = home + "/Maps/osm/tiles/"
+    mapfile = home + "/mapnik-sqlite/osm.xml"
 
     if not tile_dir.endswith('/'):
         tile_dir = tile_dir + '/'
     print tile_dir
 
-    bbox = (x0,y0,x1, y1)
+    bbox = (x0, y0, x1, y1)
     render_tiles(bbox, mapfile, tile_dir, zoom, zoom , "foo")
 
 if __name__ == "__main__":

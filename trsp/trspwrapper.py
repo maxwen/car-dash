@@ -58,7 +58,7 @@ class TrspWrapper():
         
         if self.lastBBox==None or newBBox==True:
             self.lastBBox=self.getQueryBBox(bbox)
-            print("this is a new bbox")
+#            print("this is a new bbox")
             lib_routing.clean_edge_table()
 #            print(self.lastBBox)
 #            print(bbox)
