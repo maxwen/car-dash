@@ -2769,14 +2769,20 @@ class OSMParserData():
                                 if otherEdgeId==lastEdgeId:
                                     continue
                                 
-                                (edgeWayId, _, _, _, _, _, oneway, roundabout)=self.getWayEntryForIdAndCountry2(edgeWayId, country)
+                                (edgeWayId, _, _, edgeStreetTypeId, _, _, oneway, roundabout)=self.getWayEntryForIdAndCountry2(edgeWayId, country)
 
                                 if wayId==edgeWayId:
                                     crossingCount=crossingCount+1
-                                    # TODO: needed because of roundabout enter
+                                    # crossings we always show
                                     if roundabout==1:
                                         otherPossibleCrossingCount=otherPossibleCrossingCount+1
+                                    if edgeStreetTypeId==2:
+                                        otherPossibleCrossingCount=otherPossibleCrossingCount+1                                        
                                 else:
+                                    # show no crossings with street of type service
+                                    if edgeStreetTypeId==13:
+                                        continue
+                                    # show no crossings with onways that make no sense
                                     if oneway==1:
                                         if ref==edgeStartRef:
                                             otherPossibleCrossingCount=otherPossibleCrossingCount+1
@@ -2794,19 +2800,12 @@ class OSMParserData():
                                 (_, _, _, nextWayIdList)=result
 #                                print(nextWayIdList)
                                 for nextWayId, crossingType, crossingInfo in nextWayIdList:
-                                    (nextWayId, _, _, _, _, _, oneway, _)=self.getWayEntryForIdAndCountry2(nextWayId, country)
+                                    (nextWayId, _, _, nextWayStreetTypeId, _, _, oneway, _)=self.getWayEntryForIdAndCountry2(nextWayId, country)
 
                                     if wayId==nextWayId:
                                         crossingList.append((nextWayId, crossingType, crossingInfo, ref))                                        
                                     else:
-                                        if oneway==1:
-                                            edgeStartList=self.getEdgeEntryForStartPointAndWayId(ref, nextWayId)
-                                            if len(edgeStartList)==1:
-                                                # not possible to go this way so no need for a crossing
-                                                # if it is the only other way
-                                                otherPossibleCrossingList.append((nextWayId, crossingType, crossingInfo, ref))   
-                                        else:
-                                            otherPossibleCrossingList.append((nextWayId, crossingType, crossingInfo, ref))   
+                                        otherPossibleCrossingList.append((nextWayId, crossingType, crossingInfo, ref))   
                             
                                 
                                 # only add crossing if there is no other possible way or 
@@ -2851,8 +2850,9 @@ class OSMParserData():
                             if len(otherCrossingList)!=0:
                                 for otherCrossing in otherCrossingList:
                                     _, otherCrossingType, _, _=otherCrossing
-                                    if otherCrossingType==0:
-                                        crossingType=0
+                                    # the crossings to show with other roads
+                                    if otherCrossingType==0 or otherCrossingType==7:
+                                        crossingType=otherCrossingType
                                         break
                                 
                     if crossingType!=None:   
@@ -4445,7 +4445,7 @@ def main(argv):
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()
 
-    p.recreateCrossings()
+#    p.recreateCrossings()
 #    p.testAddress()
 #    p.testRoutes()
 #    p.testWayTable(0)
