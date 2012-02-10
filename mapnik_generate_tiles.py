@@ -13,7 +13,6 @@ RAD_TO_DEG = 180/pi
 # Default number of rendering threads to spawn, should be roughly equal to number of CPU cores available
 NUM_THREADS = 2
 
-
 def minmax (a,b,c):
     a = max(a,b)
     a = min(a,c)
@@ -199,7 +198,7 @@ def main(argv):
         return
     
     home = os.environ['HOME']
-    mapfile = home + "/mapnik-sqlite/osm.xml"
+    mapfile = home + "/mapnik-shape/osm.xml"
 
     if not tile_dir.endswith('/'):
         tile_dir = tile_dir + '/'

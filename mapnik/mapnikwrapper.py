@@ -1,5 +1,5 @@
 from math import pi,cos,sin,log,exp,atan
-import sys, os
+import sys, os, time
 import mapnik2 as mapnik
 
 DEG_TO_RAD = pi/180
@@ -58,6 +58,7 @@ class RenderThread:
             os.makedirs(tile_dir)
 
     def render_tile(self, tile_uri, x, y, z):
+        start=time.time()
         # Calculate pixel positions of bottom-left & top-right
         p0 = (x * 256, (y + 1) * 256)
         p1 = ((x + 1) * 256, y * 256)
@@ -79,11 +80,16 @@ class RenderThread:
         self.m.resize(render_size, render_size)
         self.m.zoom_to_box(bbox)
         self.m.buffer_size = 128
+        print("%f"%(time.time()-start))
 
         # Render image with default Agg renderer
         im = mapnik.Image(render_size, render_size)
+        start=time.time()
         mapnik.render(self.m, im)
+        print("%f"%(time.time()-start))
+        start=time.time()
         im.save(tile_uri, 'png256')
+        print("%f"%(time.time()-start))
 
     def render_tiles(self, bbox, zoom):
         ll0 = (bbox[0],bbox[3])

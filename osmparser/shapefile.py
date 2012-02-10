@@ -990,21 +990,21 @@ class Editor(Writer):
 #    doctest.testfile("README.txt", verbose=1)
 
 def test1():
-    sf = Reader("/home/maxl/Downloads/poly/dach/shape/admin_level2")
+    sf = Reader("/home/maxl/Downloads/geofabrik/austria.shp/landuse")
 #    print(sf.shapes())
-#    for field in sf.fields:
-#        print(field)
+    for field in sf.fields:
+        print(field)
 #    for shape in sf.shapes():
 #        print(shape)
 #        print(shape.points)
     i=0
     for record in sf.records():
-#        print(record)
-        if record[1]=="Schweiz":
-            print(record)
-            for point in sf.shapes()[i].points:
-                print("%f %f"%(point[0], point[1]))
-        i=i+1
+        print(record[2])
+#        if record[1]=="Schweiz":
+#            print(record)
+#            for point in sf.shapes()[i].points:
+#                print("%f %f"%(point[0], point[1]))
+#        i=i+1
 #            print(sf.shapes()[record[0]].bbox)
 #    print(sf.shapeRecord(13).shape.points)
 #    print(sf.shapeRecord(13).shape.bbox)
