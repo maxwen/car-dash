@@ -695,21 +695,27 @@ class QtOSMWidget(QWidget):
                 crossingLengthStr="%d"%crossingLength
 
             crossingInfoStr=crossingInfo
-            if "stay:" in crossingInfo:
-                crossingInfoStr=crossingInfoStr[len("stay:"):]
-            elif "change:" in crossingInfo:
-                crossingInfoStr=crossingInfoStr[len("change:"):]
-                
-            self.painter.drawText(routeInfoPos, "%s"%crossingLengthStr)
-            
-            routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-10, self.height()-15)
-            self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
-        
+
             exitNumber=0
             if direction==40 or direction==41:
                 if "roundabout:exit:" in crossingInfo:
                     exitNumber=int(crossingInfo[len("roundabout:exit:"):])
-                    
+                if "roundabout:enter:" in crossingInfo:
+                    exitNumber=int(crossingInfo[len("roundabout:enter:"):])
+
+            if "stay:" in crossingInfo:
+                crossingInfoStr="Continue on "+crossingInfoStr[len("stay:"):]
+            elif "change:" in crossingInfo:
+                crossingInfoStr="Change to "+crossingInfoStr[len("change:"):]
+            elif "roundabout:enter" in crossingInfo:
+                crossingInfoStr="Enter roundabout. Take exit %d"%(exitNumber)
+            elif "roundabout:exit" in crossingInfo:
+                crossingInfoStr="Exit roundabout at %d"%(exitNumber)
+            self.painter.drawText(routeInfoPos, "%s"%crossingLengthStr)
+            
+            routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-10, self.height()-15)
+            self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
+                            
             x=self.width()-72
             y=self.height()-122
             self.drawDirectionImage(direction, exitNumber, IMAGE_WIDTH, IMAGE_HEIGHT, x, y) 
@@ -731,14 +737,15 @@ class QtOSMWidget(QWidget):
                 self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
 
     def showSpeedInfo(self):   
-        if self.speedInfo!=None:
+        if self.speedInfo!=None and self.speedInfo!=0:
             x=8
-            y=self.height()-80
-            self.painter.drawText(x, y, "%d"%(self.speedInfo))
+            y=self.height()-122
+#            self.painter.drawText(x, y, "%d"%(self.speedInfo))
+            # TODO: check if file exists
+            imagePath="images/speedsigns/%d.png"%(self.speedInfo)
+            speedPixmap=QPixmap(imagePath)
+            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, speedPixmap)
 
-#            y=self.height()-122
-#            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.speedCameraImage)
-            
     def showRoutingPoints(self):
 #        showTrackDetails=self.map_zoom>13
         
@@ -1042,7 +1049,7 @@ class QtOSMWidget(QWidget):
                                 self.painter.setPen(redCrossingPen)
                                 self.painter.drawPoint(x, y)
                             elif crossingType==2 or crossingType==7 or crossingType==8:
-                                # motorway junction or motorway_link
+                                # motorway junction or _link
                                 self.painter.setPen(blueCrossingPen)
                                 self.painter.drawPoint(x, y)
                             elif crossingType==3:
@@ -1086,7 +1093,12 @@ class QtOSMWidget(QWidget):
         elif direction==0:
             self.painter.drawPixmap(x, y, width, height, self.straightImage)
         elif direction==39:
+            # TODO: should be a motorway exit image
             self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
+        elif direction==42:
+            # TODO: is a link enter always right?
+            self.painter.drawPixmap(x, y, width, height, self.turnRightEasyImage)
+
 #        elif direction==40:
 #            self.painter.drawPixmap(x, y, width, height, self.roundaboutImage)
         elif direction==41 or direction==40:
@@ -1719,7 +1731,7 @@ class QtOSMWidget(QWidget):
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
                     print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-#                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
                     osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTag(name, nameRef, country)  
