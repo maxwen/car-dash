@@ -1,11 +1,13 @@
 from math import pi,cos,sin,log,exp,atan
 import sys, os, time
-import mapnik2 as mapnik
+import mapnik2
+from queue import Queue
+import threading
+from PyQt4.QtCore import SIGNAL, QObject
 
 DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
-
-renderer=None
+MAX_ZOOM=18
 
 def minmax (a,b,c):
     a = max(a,b)
@@ -13,7 +15,7 @@ def minmax (a,b,c):
     return a
 
 class GoogleProjection:
-    def __init__(self,levels=19):
+    def __init__(self,levels=18):
         self.Bc = []
         self.Cc = []
         self.zc = []
@@ -41,24 +43,13 @@ class GoogleProjection:
         h = RAD_TO_DEG * ( 2 * atan(exp(g)) - 0.5 * pi)
         return (f,h)
 
-
 class RenderThread:
-    def __init__(self, tile_dir, mapfile):
-        if not tile_dir.endswith('/'):
-            tile_dir = tile_dir + '/'
-        self.tile_dir = tile_dir
-        self.m = mapnik.Map(256, 256)
-        # Load style XML
-        mapnik.load_map(self.m, mapfile, True)
-        # Obtain <Map> projection
-        self.prj = mapnik.Projection(self.m.srs)
-        # Projects between tile pixel co-ordinates and LatLong (EPSG:4326)
-        self.tileproj = GoogleProjection()
-        if not os.path.isdir(tile_dir):
-            os.makedirs(tile_dir)
+    def __init__(self, m, prj, tileproj):
+        self.m=m
+        self.prj=prj
+        self.tileproj = tileproj
 
     def render_tile(self, tile_uri, x, y, z):
-        start=time.time()
         # Calculate pixel positions of bottom-left & top-right
         p0 = (x * 256, (y + 1) * 256)
         p1 = ((x + 1) * 256, y * 256)
@@ -68,37 +59,51 @@ class RenderThread:
         l1 = self.tileproj.fromPixelToLL(p1, z);
 
         # Convert to map projection (e.g. mercator co-ords EPSG:900913)
-        c0 = self.prj.forward(mapnik.Coord(l0[0],l0[1]))
-        c1 = self.prj.forward(mapnik.Coord(l1[0],l1[1]))
+        c0 = self.prj.forward(mapnik2.Coord(l0[0],l0[1]))
+        c1 = self.prj.forward(mapnik2.Coord(l1[0],l1[1]))
 
         # Bounding box for the tile
-        if hasattr(mapnik,'mapnik_version') and mapnik.mapnik_version() >= 800:
-            bbox = mapnik.Box2d(c0.x,c0.y, c1.x,c1.y)
+        if hasattr(mapnik2,'mapnik_version') and mapnik2.mapnik_version() >= 800:
+            bbox = mapnik2.Box2d(c0.x,c0.y, c1.x,c1.y)
         else:
-            bbox = mapnik.Envelope(c0.x,c0.y, c1.x,c1.y)
+            bbox = mapnik2.Envelope(c0.x,c0.y, c1.x,c1.y)
         render_size = 256
         self.m.resize(render_size, render_size)
         self.m.zoom_to_box(bbox)
         self.m.buffer_size = 128
-        print("%f"%(time.time()-start))
 
         # Render image with default Agg renderer
-        im = mapnik.Image(render_size, render_size)
-        start=time.time()
-        mapnik.render(self.m, im)
-        print("%f"%(time.time()-start))
-        start=time.time()
+        im = mapnik2.Image(render_size, render_size)
+        mapnik2.render(self.m, im)
         im.save(tile_uri, 'png256')
-        print("%f"%(time.time()-start))
 
-    def render_tiles(self, bbox, zoom):
+class MapnikWrapper(QObject):
+    def __init__(self, d, m):
+        QObject.__init__(self)
+        self.map_file=m
+        self.tile_dir=d
+        if not self.tile_dir.endswith('/'):
+            self.tile_dir = self.tile_dir + '/'
+        
+        if not os.path.isdir(self.tile_dir):
+            os.makedirs(self.tile_dir)
+
+        self.m = mapnik2.Map(256, 256)
+        mapnik2.load_map(self.m, self.map_file, True)
+        self.prj = mapnik2.Projection(self.m.srs)
+        self.tileproj = GoogleProjection(MAX_ZOOM+1)
+        self.render_thread = RenderThread(self.m, self.prj, self.tileproj)
+
+    def render_tiles(self, bbox, zoom, name="unknown", tms_scheme=False):
+        print(self.tile_dir)
+    
         ll0 = (bbox[0],bbox[3])
         ll1 = (bbox[2],bbox[1])
-    
         z=zoom
+        
         px0 = self.tileproj.fromLLtoPixel(ll0,z)
         px1 = self.tileproj.fromLLtoPixel(ll1,z)
-    
+
         # check if we have directories in place
         zoom = "%s" % z
         if not os.path.isdir(self.tile_dir + zoom):
@@ -115,9 +120,16 @@ class RenderThread:
                 # Validate x co-ordinate
                 if (y < 0) or (y >= 2**z):
                     continue
-                str_y = "%s" % y
+                # flip y to match OSGEO TMS spec
+                if tms_scheme:
+                    str_y = "%s" % ((2**z-1) - y)
+                else:
+                    str_y = "%s" % y
                 tile_uri = self.tile_dir + zoom + '/' + str_x + '/' + str_y + '.png'
-                # Submit tile to be rendered into the queue
-                if not os.path.exists(tile_uri):
-                    print("render %s, %d %d %d"%(tile_uri, x, y, z))
-                    self.render_tile(tile_uri, x, y, z)
+                exists= ""
+                if os.path.isfile(tile_uri):
+                    exists= "exists"
+                else:
+                    self.render_thread.render_tile(tile_uri, x, y, z)  
+                    self.emit(SIGNAL("updateMap()"))             
+                print(name, ":", z, x, y, exists)

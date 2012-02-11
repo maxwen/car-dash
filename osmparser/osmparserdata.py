@@ -729,6 +729,8 @@ class OSMParserData():
                 for key, value in tags.items():
                     storedTags[key]=value
                 print("updateRefTableEntry: ref %d merged tags %s"%(refId, storedTags))
+            else:
+                storedTags=tags
                 
             # add to list if !=0
             if storedNodeTypeList!=None:
