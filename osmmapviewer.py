@@ -15,7 +15,7 @@ from collections import deque
 import fnmatch
 import time
 
-from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from config import Config
@@ -158,6 +158,8 @@ class OSMMapnikTilesWorker(QThread):
         self.exiting = False
         self.currentBBox=None
         self.currentZoom=None
+        self.lastBBox=None
+        self.lastZoom=None
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
         self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
 
@@ -188,6 +190,12 @@ class OSMMapnikTilesWorker(QThread):
 
     def addBboxAndZoom(self, bbox, zoom):
         if self.currentZoom==None and self.currentBBox==None:
+#            if self.lastZoom==None and self.lastBBox==None:
+#                self.lastZoom=zoom
+#                self.lastBBox=bbox
+#            else:
+#                if self.currentBBox[0]>self.lastBBox[0]:
+                    
             self.currentBBox=bbox
             self.currentZoom=zoom
             self.setup()
@@ -196,7 +204,7 @@ class OSMMapnikTilesWorker(QThread):
         self.updateMapnikThreadState(runState)
         while not self.exiting and True:
             if self.currentZoom!=None and self.currentBBox!=None:
-                self.mapnikWrapper.render_tiles(self.currentBBox, self.currentZoom)
+                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
                 self.currentBBox=None
                 self.currentZoom=None
 #                self.updateMap()
@@ -204,7 +212,7 @@ class OSMMapnikTilesWorker(QThread):
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
 
-            self.msleep(1000) 
+#            self.msleep(1000) 
             
             if self.currentZoom==None and self.currentBBox==None:
                 self.exiting=True
@@ -397,7 +405,8 @@ class QtOSMWidget(QWidget):
         self.remainingTrackList=None
         
         self.mapnikWrapper=None
-        self.lastBBox=None
+        self.lastCenterX=None
+        self.lastCenterY=None
         
     def getRouteList(self):
         return self.routeList
@@ -652,26 +661,23 @@ class QtOSMWidget(QWidget):
         self.update()
     
     def getVisibleBBox(self):
-        rlon = self.osmutils.pixel2lon(self.map_zoom, self.map_x)
-        rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y+self.height())
+#        return QRectF(self.map_x, self.map_y, self.width(), self.height())
+        return [self.map_x, self.map_y+self.height(), self.map_x+self.width(), self.map_y]
 
-        rlon2 = self.osmutils.pixel2lon(self.map_zoom, self.map_x+self.width())
-        rlat2 = self.osmutils.pixel2lat(self.map_zoom, self.map_y)
+    def getVisibleBBoxDeg(self):
+        bbox=self.getVisibleBBox()
+        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
+        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
+
+        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
+        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
 
         return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
 
     # TODO: use track info to create a margin at the right side
-    # TODO: we need to find out earlier if we are approching the end
-    # of the already calculated bbox
-    # on drawing it is too late
     def getVisibleBBoxWithMargin(self):
-        rlon = self.osmutils.pixel2lon(self.map_zoom, self.map_x-256)
-        rlat = self.osmutils.pixel2lat(self.map_zoom, self.map_y+self.height()+256)
-
-        rlon2 = self.osmutils.pixel2lon(self.map_zoom, self.map_x+self.width()+256)
-        rlat2 = self.osmutils.pixel2lat(self.map_zoom, self.map_y-256)
-
-        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
+        bbox=self.getVisibleBBox()
+        return [bbox[0]-TILESIZE, bbox[1]+TILESIZE, bbox[2]+TILESIZE, bbox[3]-TILESIZE]
     
     def show(self, zoom, lat, lon):
         self.osm_center_map_to_position(lat, lon)
@@ -1206,9 +1212,21 @@ class QtOSMWidget(QWidget):
         self.center_rlon = self.osmutils.pixel2lon(self.map_zoom, pixel_x)
         self.center_rlat = self.osmutils.pixel2lat(self.map_zoom, pixel_y)
         
-        # TODO: here we could check if we are near the end of the "tiles area"
+        # could check if we are near the end of the "tiles area"
         # and call for new tiles e.g. download or mapnik
 
+        if self.lastCenterX!=None and self.lastCenterY!=None:
+#            print("%f %f"%(abs(self.lastCenterX-pixel_x), abs(self.lastCenterY-pixel_y)))
+            if abs(self.lastCenterX-pixel_x)>64 or abs(self.lastCenterY-pixel_y)>64:
+                if self.withMapnik==True:
+                    self.callMapnikForTile()
+
+                self.lastCenterX=pixel_x
+                self.lastCenterY=pixel_y
+        else:
+            self.lastCenterX=pixel_x
+            self.lastCenterY=pixel_y
+            
     def stepUp(self, step):
         self.map_y -= step
         self.center_coord_update()
@@ -1270,17 +1288,13 @@ class QtOSMWidget(QWidget):
             
     def cleanImageCache(self):
         self.tileCache.clear()
-            
-#    def getBBoxDiffWithLast(self, bbox1, bbox2):
-#        return bbox1
-    
+                
+    def getBBoxDifference(self, bbox1, bbox2):
+        None
+        
     def callMapnikForTile(self):
-        bbox=self.getVisibleBBoxWithMargin()
-#        if self.lastBBox!=None:
-#            bbox=self.getBBoxDiffWithLast(bbox, self.lastBBox)
-            
+        bbox=self.getVisibleBBoxWithMargin()            
         self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
-#        self.lastBBox=bbox
         
     def setDownloadTiles(self, value):
         self.withDownload=value
@@ -1811,11 +1825,11 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+#                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
-                    osmParserData.printCrossingsForWayId(wayId, country)
+#                    osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTag(name, nameRef, country)  
                     self.speedInfo=maxspeed
                     # TODO: play sound?

@@ -51,6 +51,7 @@ class RenderThread:
 
     def render_tile(self, tile_uri, x, y, z):
         # Calculate pixel positions of bottom-left & top-right
+#        start=time.time()
         p0 = (x * 256, (y + 1) * 256)
         p1 = ((x + 1) * 256, y * 256)
 
@@ -74,8 +75,13 @@ class RenderThread:
 
         # Render image with default Agg renderer
         im = mapnik2.Image(render_size, render_size)
+#        print("%f"%(time.time()-start))
+#        start=time.time()
         mapnik2.render(self.m, im)
+#        print("%f"%(time.time()-start))
+#        start=time.time()
         im.save(tile_uri, 'png256')
+#        print("%f"%(time.time()-start))
 
 class MapnikWrapper(QObject):
     def __init__(self, d, m):
@@ -95,7 +101,7 @@ class MapnikWrapper(QObject):
         self.render_thread = RenderThread(self.m, self.prj, self.tileproj)
 
     def render_tiles(self, bbox, zoom, name="unknown", tms_scheme=False):
-        print(self.tile_dir)
+#        print(self.tile_dir)
     
         ll0 = (bbox[0],bbox[3])
         ll1 = (bbox[2],bbox[1])
@@ -132,4 +138,44 @@ class MapnikWrapper(QObject):
                 else:
                     self.render_thread.render_tile(tile_uri, x, y, z)  
                     self.emit(SIGNAL("updateMap()"))             
-                print(name, ":", z, x, y, exists)
+#                print(name, ":", z, x, y, exists)
+
+    def render_tiles2(self, bbox, zoom, name="unknown", tms_scheme=False):
+#        print(self.tile_dir)
+    
+        px0 = (bbox[0],bbox[3])
+        px1 = (bbox[2],bbox[1])
+        z=zoom
+        
+#        px0 = self.tileproj.fromLLtoPixel(ll0,z)
+#        px1 = self.tileproj.fromLLtoPixel(ll1,z)
+
+        # check if we have directories in place
+        zoom = "%s" % z
+        if not os.path.isdir(self.tile_dir + zoom):
+            os.mkdir(self.tile_dir + zoom)
+        for x in range(int(px0[0]/256.0),int(px1[0]/256.0)+1):
+            # Validate x co-ordinate
+            if (x < 0) or (x >= 2**z):
+                continue
+            # check if we have directories in place
+            str_x = "%s" % x
+            if not os.path.isdir(self.tile_dir + zoom + '/' + str_x):
+                os.mkdir(self.tile_dir + zoom + '/' + str_x)
+            for y in range(int(px0[1]/256.0),int(px1[1]/256.0)+1):
+                # Validate x co-ordinate
+                if (y < 0) or (y >= 2**z):
+                    continue
+                # flip y to match OSGEO TMS spec
+                if tms_scheme:
+                    str_y = "%s" % ((2**z-1) - y)
+                else:
+                    str_y = "%s" % y
+                tile_uri = self.tile_dir + zoom + '/' + str_x + '/' + str_y + '.png'
+                exists= ""
+                if os.path.isfile(tile_uri):
+                    exists= "exists"
+                else:
+                    self.render_thread.render_tile(tile_uri, x, y, z)  
+                    self.emit(SIGNAL("updateMap()"))             
+#                print(name, ":", z, x, y, exists)

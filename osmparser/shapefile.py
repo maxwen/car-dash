@@ -998,8 +998,11 @@ def test1():
 #        print(shape)
 #        print(shape.points)
     i=0
+    types=list()
     for record in sf.records():
-        print(record[2])
+        if not record[2] in types:
+            types.append(record[2])
+    print(types)
 #        if record[1]=="Schweiz":
 #            print(record)
 #            for point in sf.shapes()[i].points:
