@@ -188,15 +188,11 @@ class OSMMapnikTilesWorker(QThread):
         self.wait()
 
     def addBboxAndZoom(self, bbox, zoom):
-        if self.currentZoom==None and self.currentBBox==None:
-#            if self.lastZoom==None and self.lastBBox==None:
-#                self.lastZoom=zoom
-#                self.lastBBox=bbox
-#            else:
-#                if self.currentBBox[0]>self.lastBBox[0]:
-                    
+        if self.currentZoom==None and self.currentBBox==None:                    
             self.currentBBox=bbox
             self.currentZoom=zoom
+        
+        if not self.isRunning():
             self.setup()
                         
     def run(self):
@@ -206,15 +202,15 @@ class OSMMapnikTilesWorker(QThread):
                 self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
                 self.currentBBox=None
                 self.currentZoom=None
-#                self.updateMap()
             
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
 
-#            self.msleep(1000) 
-            
             if self.currentZoom==None and self.currentBBox==None:
+                self.msleep(100) 
                 self.exiting=True
+            else:
+                continue
         
         self.updateStatusLabel("OSM mapnik thread stopped")
         self.updateMapnikThreadState(stoppedState)
@@ -450,7 +446,6 @@ class QtOSMWidget(QWidget):
     def osm_map_set_zoom (self, zoom):
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
         self.osm_map_handle_resize()
-#        self.emit(SIGNAL("updateZoom(int)"), self.map_zoom)
         
     def osm_map_handle_resize (self):
         (self.center_y, self.center_x)=self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon, False)
@@ -477,15 +472,13 @@ class QtOSMWidget(QWidget):
         
         if sizeX>sizeY:
             maxSize=sizeX
-            sizeDiff=sizeX-sizeY
         else:
             maxSize=sizeY
-            sizeDiff=sizeY-sizeX
             
         map_x, map_y=self.getMapZeroPos()
         
-        offset_x = - map_x % TILESIZE - sizeDiff;
-        offset_y = - map_y % TILESIZE - sizeDiff;
+        offset_x = - map_x % TILESIZE;
+        offset_y = - map_y % TILESIZE;
         
         if offset_x > 0:
             offset_x -= TILESIZE
@@ -741,7 +734,7 @@ class QtOSMWidget(QWidget):
         self.showSpeedInfo()
         self.painter.end()
                         
-        self.printTilesGeometry()
+#        self.printTilesGeometry()
   
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
@@ -889,9 +882,8 @@ class QtOSMWidget(QWidget):
     def getPixelPosForLocationRad(self, lat, lon, relativeToEdge):
 
         if relativeToEdge:
-            map_x, map_y=self.getMapZeroPos()
-            x=self.osmutils.lon2pixel(self.map_zoom, lon) - map_x
-            y=self.osmutils.lat2pixel(self.map_zoom, lat) - map_y
+            x=self.osmutils.lon2pixel(self.map_zoom, lon) - (self.center_x-self.width()/2)
+            y=self.osmutils.lat2pixel(self.map_zoom, lat) - (self.center_y-self.height()/2)
         else:
             x=self.osmutils.lon2pixel(self.map_zoom, lon)
             y=self.osmutils.lat2pixel(self.map_zoom, lat)
