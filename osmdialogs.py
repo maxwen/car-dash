@@ -1434,6 +1434,8 @@ class OSMOptionsDialog(QDialog):
         self.gpsIcon=QIcon("images/gps.png")
         self.followGPS=parent.getAutocenterGPSValue()
         self.withDownload=parent.getWithDownloadValue()
+        self.withMapnik=parent.getWithMapnikValue()
+        self.withMapRotation=parent.getWithMapRotationValue()
         self.initUI()
 
     def initUI(self):
@@ -1457,6 +1459,18 @@ class OSMOptionsDialog(QDialog):
         self.downloadTilesButton.setChecked(self.withDownload)
         self.downloadTilesButton.setIconSize(iconSize)        
         top.addWidget(self.downloadTilesButton)
+
+        self.withMapnikButton=QCheckBox("Use Mapnik", self)
+#        self.downloadTilesButton.setToolTip("Download")
+        self.withMapnikButton.setChecked(self.withMapnik)
+        self.withMapnikButton.setIconSize(iconSize)        
+        top.addWidget(self.withMapnikButton)
+
+        self.withMapRotationButton=QCheckBox("Map rotation", self)
+#        self.downloadTilesButton.setToolTip("Download")
+        self.withMapRotationButton.setChecked(self.withMapRotation)
+        self.withMapRotationButton.setIconSize(iconSize)        
+        top.addWidget(self.withMapRotationButton)
         
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
@@ -1485,6 +1499,8 @@ class OSMOptionsDialog(QDialog):
     def _ok(self):
         self.withDownload=self.downloadTilesButton.isChecked()
         self.followGPS=self.followGPSButton.isChecked()
+        self.withMapnik=self.withMapnikButton.isChecked()
+        self.withMapRotation=self.withMapRotationButton.isChecked()
         self.done(QDialog.Accepted)
 
 class OSMGPSDataDialog(QDialog):

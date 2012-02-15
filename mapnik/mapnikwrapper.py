@@ -8,6 +8,7 @@ from PyQt4.QtCore import SIGNAL, QObject
 DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
 MAX_ZOOM=18
+TILESIZE=256
 
 def minmax (a,b,c):
     a = max(a,b)
@@ -20,7 +21,7 @@ class GoogleProjection:
         self.Cc = []
         self.zc = []
         self.Ac = []
-        c = 256
+        c = TILESIZE
         for d in range(0,levels):
             e = c/2;
             self.Bc.append(c/360.0)
@@ -52,8 +53,8 @@ class RenderThread:
     def render_tile(self, tile_uri, x, y, z):
         # Calculate pixel positions of bottom-left & top-right
 #        start=time.time()
-        p0 = (x * 256, (y + 1) * 256)
-        p1 = ((x + 1) * 256, y * 256)
+        p0 = (x * TILESIZE, (y + 1) * TILESIZE)
+        p1 = ((x + 1) * TILESIZE, y * TILESIZE)
 
         # Convert to LatLong (EPSG:4326)
         l0 = self.tileproj.fromPixelToLL(p0, z);
@@ -68,7 +69,7 @@ class RenderThread:
             bbox = mapnik2.Box2d(c0.x,c0.y, c1.x,c1.y)
         else:
             bbox = mapnik2.Envelope(c0.x,c0.y, c1.x,c1.y)
-        render_size = 256
+        render_size = TILESIZE
         self.m.resize(render_size, render_size)
         self.m.zoom_to_box(bbox)
         self.m.buffer_size = 128
@@ -80,7 +81,7 @@ class RenderThread:
         mapnik2.render(self.m, im)
 #        print("%f"%(time.time()-start))
 #        start=time.time()
-        im.save(tile_uri, 'png256')
+        im.save(tile_uri, 'pngTILESIZE')
 #        print("%f"%(time.time()-start))
 
 class MapnikWrapper(QObject):
@@ -94,7 +95,7 @@ class MapnikWrapper(QObject):
         if not os.path.isdir(self.tile_dir):
             os.makedirs(self.tile_dir)
 
-        self.m = mapnik2.Map(256, 256)
+        self.m = mapnik2.Map(TILESIZE, TILESIZE)
         mapnik2.load_map(self.m, self.map_file, True)
         self.prj = mapnik2.Projection(self.m.srs)
         self.tileproj = GoogleProjection(MAX_ZOOM+1)
@@ -114,7 +115,7 @@ class MapnikWrapper(QObject):
         zoom = "%s" % z
         if not os.path.isdir(self.tile_dir + zoom):
             os.mkdir(self.tile_dir + zoom)
-        for x in range(int(px0[0]/256.0),int(px1[0]/256.0)+1):
+        for x in range(int(px0[0]/TILESIZE),int(px1[0]/TILESIZE)+1):
             # Validate x co-ordinate
             if (x < 0) or (x >= 2**z):
                 continue
@@ -122,7 +123,7 @@ class MapnikWrapper(QObject):
             str_x = "%s" % x
             if not os.path.isdir(self.tile_dir + zoom + '/' + str_x):
                 os.mkdir(self.tile_dir + zoom + '/' + str_x)
-            for y in range(int(px0[1]/256.0),int(px1[1]/256.0)+1):
+            for y in range(int(px0[1]/TILESIZE),int(px1[1]/TILESIZE)+1):
                 # Validate x co-ordinate
                 if (y < 0) or (y >= 2**z):
                     continue
@@ -154,7 +155,7 @@ class MapnikWrapper(QObject):
         zoom = "%s" % z
         if not os.path.isdir(self.tile_dir + zoom):
             os.mkdir(self.tile_dir + zoom)
-        for x in range(int(px0[0]/256.0),int(px1[0]/256.0)+1):
+        for x in range(int(px0[0]/TILESIZE),int(px1[0]/TILESIZE)+1):
             # Validate x co-ordinate
             if (x < 0) or (x >= 2**z):
                 continue
@@ -162,7 +163,7 @@ class MapnikWrapper(QObject):
             str_x = "%s" % x
             if not os.path.isdir(self.tile_dir + zoom + '/' + str_x):
                 os.mkdir(self.tile_dir + zoom + '/' + str_x)
-            for y in range(int(px0[1]/256.0),int(px1[1]/256.0)+1):
+            for y in range(int(px0[1]/TILESIZE),int(px1[1]/TILESIZE)+1):
                 # Validate x co-ordinate
                 if (y < 0) or (y >= 2**z):
                     continue

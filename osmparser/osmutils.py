@@ -209,11 +209,11 @@ class OSMUtils():
             return 3
         if azimuth>=50 and azimuth<100:
             return 2
-        if azimuth>=100 and azimuth<170:
+        if azimuth>=100 and azimuth<175:
             return 1
-        if azimuth>=170 and azimuth<190:
+        if azimuth>=175 and azimuth<185:
             return 0
-        if azimuth>=190  and azimuth<250:
+        if azimuth>=185  and azimuth<250:
             return -1
         if azimuth>=250 and azimuth<300:
             return -2
