@@ -74,7 +74,9 @@ class OSMUtils():
         lon1 = self.deg2rad(lon1)
         lat2 = self.deg2rad(lat2)
         lon2 = self.deg2rad(lon2)
+        return self.distanceRad(lat1, lon1, lat2, lon2)
 
+    def distanceRad(self, lat1, lon1, lat2, lon2):
         sdlat = math.sin((lat1 - lat2) / 2.0)
         sdlon = math.sin((lon1 - lon2) / 2.0)
 
@@ -184,6 +186,9 @@ class OSMUtils():
         lat2 = self.deg2rad(lat2)
         lon2 = self.deg2rad(lon2)
         
+        return self.headingRad(lat1, lon1, lat2, lon2)
+
+    def headingRad(self, lat1, lon1, lat2, lon2 ):        
         v1 = math.sin(lon1 - lon2) * math.cos(lat2)
         v2 = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon1 - lon2)
         if abs(v1) < 1e-15:
@@ -191,9 +196,15 @@ class OSMUtils():
         if abs(v2) < 1e-15:
             v2 = 0.0
         return math.atan2(v1, v2)
-
+    
     def headingDegrees(self,  lat1,  lon1,  lat2,  lon2):
         h = 360.0 - self.rad2deg(self.heading(lat1, lon1, lat2, lon2))
+        if h >= 360.0:
+            h -= 360.0
+        return h;
+    
+    def headingDegreesRad(self,  lat1,  lon1,  lat2,  lon2):
+        h = 360.0 - self.rad2deg(self.headingRad(lat1, lon1, lat2, lon2))
         if h >= 360.0:
             h -= 360.0
         return h;

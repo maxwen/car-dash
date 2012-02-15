@@ -161,6 +161,7 @@ class OSMMapnikTilesWorker(QThread):
         self.lastZoom=None
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
         self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
+        self.workQueue=deque()
 
     def setWidget(self, osmWidget):
         self.osmWidget=osmWidget
@@ -188,30 +189,34 @@ class OSMMapnikTilesWorker(QThread):
         self.wait()
 
     def addBboxAndZoom(self, bbox, zoom):
-        if self.currentZoom==None and self.currentBBox==None:                    
-            self.currentBBox=bbox
-            self.currentZoom=zoom
-        
-        if not self.isRunning():
-            self.setup()
+        if not (bbox, zoom) in self.workQueue:
+#            print("call mapnik for: %s %d"%(bbox, zoom))
+            self.workQueue.append((bbox, zoom))
+            
+            if not self.isRunning():
+                self.setup()
                         
     def run(self):
         self.updateMapnikThreadState(runState)
         while not self.exiting and True:
-            if self.currentZoom!=None and self.currentBBox!=None:
-                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
+            if len(self.workQueue)!=0:
+                self.currentBBox, self.currentZoom=self.workQueue[0]
+#                print("mapnik renders: %s %d"%(self.currentBBox, self.currentZoom))
+                self.mapnikWrapper.render_tiles(self.currentBBox, self.currentZoom)
                 self.currentBBox=None
                 self.currentZoom=None
+                self.workQueue.popleft()
             
+                if len(self.workQueue)!=0:
+                    continue
+                
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
 
-            if self.currentZoom==None and self.currentBBox==None:
-                self.msleep(100) 
+            self.msleep(1000) 
+            if len(self.workQueue)==0:
                 self.exiting=True
-            else:
-                continue
-        
+                
         self.updateStatusLabel("OSM mapnik thread stopped")
         self.updateMapnikThreadState(stoppedState)
 
@@ -323,6 +328,10 @@ class QtOSMWidget(QWidget):
         self.center_rlon=0.0
         self.gps_rlat=0.0
         self.gps_rlon=0.0
+        
+        self.lastHeadingLat=0.0
+        self.lastHeadingLon=0.0
+        
         self.osmutils=OSMUtils()
         self.tileCache=dict()
         self.withMapnik=False
@@ -393,6 +402,7 @@ class QtOSMWidget(QWidget):
         self.distanceToEnd=0
         self.routeInfo=None
         self.track=None
+        self.heading=None
         self.nextEdgeOnRoute=None
         self.enforcementInfoList=None
         self.speedInfo=None
@@ -467,13 +477,13 @@ class QtOSMWidget(QWidget):
     
     def showTiles (self):
         
-        sizeX=self.width()
-        sizeY=self.height()
-        
-        if sizeX>sizeY:
-            maxSize=sizeX
-        else:
-            maxSize=sizeY
+#        sizeX=self.width()
+#        sizeY=self.height()
+#        
+#        if sizeX>sizeY:
+#            maxSize=sizeX
+#        else:
+#            maxSize=sizeY
             
         map_x, map_y=self.getMapZeroPos()
         
@@ -486,8 +496,8 @@ class QtOSMWidget(QWidget):
             offset_y -= TILESIZE
 
                 
-        tiles_nx = int((maxSize  - offset_x) / TILESIZE + 1)
-        tiles_ny = int((maxSize - offset_y) / TILESIZE + 1)
+        tiles_nx = int((self.width()  - offset_x) / TILESIZE + 1)
+        tiles_ny = int((self.height() - offset_y) / TILESIZE + 1)
 
         tile_x0 =  int(math.floor(map_x / TILESIZE))
         tile_y0 =  int(math.floor(map_y / TILESIZE))
@@ -585,6 +595,7 @@ class QtOSMWidget(QWidget):
                 return self.getTilePlaceholder(zoom, x, y)
                    
             elif self.withMapnik==True:
+#                print("call mapnik for:%d %d"%(x, y))
                 self.callMapnikForTile()
                 return self.getTilePlaceholder(zoom, x, y)
                     
@@ -598,22 +609,65 @@ class QtOSMWidget(QWidget):
         else:
             return self.getEmptyTile()
 
-    def drawRotateGPSImageForTrack(self, x, y):
-        xPos=int(x-IMAGE_WIDTH/2)
-        yPos=int(y-IMAGE_HEIGHT/2)
-        self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
+#    def drawRotateGPSImageForTrack(self, x, y):
+#        xPos=int(x-IMAGE_WIDTH/2)
+#        yPos=int(y-IMAGE_HEIGHT/2)
+#        
+#        if self.heading!=None and self.withMapRotation==True:
+#            None
+###            self.painter.setTransform(self.transformHeading)
+##            map_x, map_y=self.getMapZeroPos()
+##            point=QPointF(xPos, yPos)   
+##            invertedTransform=self.transformHeading.inverted()
+##            point0=invertedTransform[0].map(point)
+##            yPos=point0.y()
+##            xPos=point0.x()
+##
+#        else:
+#            self.painter.setTransform(self.transformTrack)
+#       
+#        self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
+#        
+#        self.painter.resetTransform()
         
     def osm_gps_show_location(self):
         if self.gps_rlon==0.0 and self.gps_rlat==0.0:
             return
          
-        (y, x)=self.getPixelPosForLocationRad(self.gps_rlat, self.gps_rlon, True)
-
-        if self.track==None:
-            self.painter.drawPixmap(int(x-self.gpsPointImageStop.width()/2), int(y-self.gpsPointImageStop.height()/2), self.gpsPointImageStop)
+        if self.heading!=None and self.withMapRotation==True:
+            y,x=self.getTransformedPixelPosForLocationRad(self.gps_rlat, self.gps_rlon)
+ 
+            xPos=int(x-IMAGE_WIDTH/2)
+            yPos=int(y-IMAGE_HEIGHT/2)
+            self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
+        
         else:
-#            print("%f %f"%(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon)))
-            self.drawRotateGPSImageForTrack(x, y)
+            transform=QTransform()
+            transform.translate( self.width() / 2, self.height() / 2 )
+            if self.track!=None:
+                transform.rotate(self.track)
+            transform.translate( -self.width() / 2, -self.height() / 2 )
+
+            self.painter.setTransform(transform)
+       
+            x=self.osmutils.lon2pixel(self.map_zoom, self.gps_rlon)
+            y=self.osmutils.lat2pixel(self.map_zoom, self.gps_rlat)
+            map_x, map_y=self.getMapZeroPos()
+            point=QPointF(x-map_x, y-map_y)
+
+            invertedTransform=transform.inverted()
+            point0=invertedTransform[0].map(point)      
+            x=point0.x()
+            y=point0.y()
+            
+            xPos=int(x-IMAGE_WIDTH/2)
+            yPos=int(y-IMAGE_HEIGHT/2)
+            
+            if self.track!=None:
+                self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
+            else:
+                self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImageStop)
+            self.painter.resetTransform()
         
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
@@ -645,7 +699,7 @@ class QtOSMWidget(QWidget):
     def osm_map_scroll(self, dx, dy):
         map_x, map_y=self.getMapZeroPos()
         point=QPointF(self.width()/2+dx, self.height()/2+dy)   
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
         self.center_x=map_x+point0.x()
@@ -695,17 +749,15 @@ class QtOSMWidget(QWidget):
         font=self.font()
         font.setPointSize(16) 
         self.painter.setFont(font)
-        self.painter.setRenderHint(QPainter.Antialiasing)
+        self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        
-        transform = self.painter.worldTransform()
-        
-        self.transform0=QTransform()
-        if self.track!=None and self.withMapRotation==True:
-            self.transform0.translate( self.width() / 2, self.height() / 2 )
-            self.transform0.rotate(self.track)
-            self.transform0.translate( -self.width() / 2, -self.height() / 2 )
-            self.painter.setTransform(self.transform0)
+                
+        self.transformHeading=QTransform()
+        if self.heading!=None and self.withMapRotation==True:
+            self.transformHeading.translate( self.width() / 2, self.height() / 2 )
+            self.transformHeading.rotate(360-self.heading)
+            self.transformHeading.translate( -self.width() / 2, -self.height() / 2 )
+            self.painter.setTransform(self.transformHeading)
             
         self.showTiles()
 
@@ -718,9 +770,11 @@ class QtOSMWidget(QWidget):
             self.displayEdge(self.currentCoords)
             
         self.showRoutingPoints()            
-        self.osm_gps_show_location()
         
-        self.painter.setTransform( transform )
+        self.painter.resetTransform()
+        
+        self.showEnforcementInfo()
+        self.osm_gps_show_location()
 
         self.showControlOverlay()
         
@@ -730,7 +784,6 @@ class QtOSMWidget(QWidget):
             self.showRouteInfo()
             
         self.showTextInfo()
-        self.showEnforcementInfo()
         self.showSpeedInfo()
         self.painter.end()
                         
@@ -814,19 +867,20 @@ class QtOSMWidget(QWidget):
      
      
     def showEnforcementInfo(self):   
-        if self.enforcementInfoList!=None:
+        if self.enforcementInfoList!=None:  
+            showTrackDetails=self.map_zoom>13
+            if showTrackDetails==True:
+                for enforcement in self.enforcementInfoList:
+                    lat, lon=enforcement["coords"]
+                    (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
+                    self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
+
             backgroundColor=QColor(120, 120, 120, 200)
             enforcementBackground=QRect(0, self.height()-210, 80, 80)
             self.painter.fillRect(enforcementBackground, backgroundColor)
-
             x=8
             y=self.height()-202
             self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.speedCameraImage)
-            
-            for enforcement in self.enforcementInfoList:
-                lat, lon=enforcement["coords"]
-                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
 
     def showSpeedInfo(self):   
         if self.speedInfo!=None and self.speedInfo!=0:
@@ -839,10 +893,9 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, speedPixmap)
 
     def showRoutingPoints(self):
-#        showTrackDetails=self.map_zoom>13
-        
-#        if showTrackDetails==False:
-#            return 
+        showTrackDetails=self.map_zoom>13
+        if showTrackDetails==False:
+            return 
         
         startPointPen=QPen()
         startPointPen.setColor(Qt.darkBlue)
@@ -855,21 +908,12 @@ class QtOSMWidget(QWidget):
         endPointPen.setCapStyle(Qt.RoundCap);
 
         if self.startPoint!=None:
-#            print("%f %f"%(self.startPoint.lat, self.startPoint.lon))
             (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
-#            print("%d %d"%(int(x-self.startPointImage.width()/2), int(y-self.startPointImage.height()/2)))
-
             self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.startPointImage)
-
-#            self.painter.setPen(startPointPen)
-#            self.painter.drawPoint(x, y)
 
         if self.endPoint!=None:
             (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
             self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.endPointImage)
-
-#            self.painter.setPen(endPointPen)
-#            self.painter.drawPoint(x, y)
             
         for point in self.wayPoints:
             (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
@@ -879,22 +923,39 @@ class QtOSMWidget(QWidget):
     def getPixelPosForLocationDeg(self, lat, lon, relativeToEdge):
         return self.getPixelPosForLocationRad(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon), relativeToEdge)
      
+    # call this with relativeToEdge==True ONLY inside of a transformed painter
+    # e.g. in paintEvent
     def getPixelPosForLocationRad(self, lat, lon, relativeToEdge):
+        x=self.osmutils.lon2pixel(self.map_zoom, lon)
+        y=self.osmutils.lat2pixel(self.map_zoom, lat)
 
         if relativeToEdge:
-            x=self.osmutils.lon2pixel(self.map_zoom, lon) - (self.center_x-self.width()/2)
-            y=self.osmutils.lat2pixel(self.map_zoom, lat) - (self.center_y-self.height()/2)
-        else:
-            x=self.osmutils.lon2pixel(self.map_zoom, lon)
-            y=self.osmutils.lat2pixel(self.map_zoom, lat)
-            
+            map_x, map_y=self.getMapZeroPos()
+            x=x-map_x
+            y=y-map_y
+                    
         return (y, x)
+    
+    # call this outside of a transformed painter
+    # if a specific point on the transformed map is needed
+    def getTransformedPixelPosForLocationRad(self, lat, lon):
+        x=self.osmutils.lon2pixel(self.map_zoom, lon)
+        y=self.osmutils.lat2pixel(self.map_zoom, lat)
+        map_x, map_y=self.getMapZeroPos()
+        point=QPointF(x-map_x, y-map_y)
+
+        point0=self.transformHeading.map(point)
+        x=point0.x()
+        y=point0.y()
+        return (y, x)
+
+    def getTransformedPixelPosForLocationDeg(self, lat, lon):
+        return self.getTransformedPixelPosForLocationRad(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon))
     
     def getPixelPosForLocationDegForZoom(self, lat, lon, relativeToEdge, zoom, centerLat, centerLon):
         return self.getPixelPosForLocationRadForZoom(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon), relativeToEdge, zoom, self.osmutils.deg2rad(centerLat), self.osmutils.deg2rad(centerLon))
      
     def getPixelPosForLocationRadForZoom(self, lat, lon, relativeToEdge, zoom, centerLat, centerLon):
-
         width_center  = self.width() / 2
         height_center = self.height() / 2
 
@@ -1213,7 +1274,7 @@ class QtOSMWidget(QWidget):
         # and call for new tiles e.g. download or mapnik
 
         if self.lastCenterX!=None and self.lastCenterY!=None:
-            if abs(self.lastCenterX-self.center_x)>64 or abs(self.lastCenterY-self.center_y)>64:
+            if abs(self.lastCenterX-self.center_x)>TILESIZE/2 or abs(self.lastCenterY-self.center_y)>TILESIZE/2:
                 if self.withMapnik==True:
                     self.callMapnikForTile()
 
@@ -1226,7 +1287,7 @@ class QtOSMWidget(QWidget):
     def stepUp(self, step):
         map_x, map_y=self.getMapZeroPos()
         point=QPointF(self.width()/2, self.height()/2-step)   
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
         self.center_x=map_x+point0.x()
@@ -1237,7 +1298,7 @@ class QtOSMWidget(QWidget):
     def stepDown(self, step):
         map_x, map_y=self.getMapZeroPos()
         point=QPointF(self.width()/2, self.height()/2+step)   
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
         self.center_x=map_x+point0.x()
@@ -1247,7 +1308,7 @@ class QtOSMWidget(QWidget):
     def stepLeft(self, step):
         map_x, map_y=self.getMapZeroPos()
         point=QPointF(self.width()/2-step, self.height()/2)   
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
         self.center_x=map_x+point0.x()
@@ -1257,27 +1318,41 @@ class QtOSMWidget(QWidget):
     def stepRight(self, step):
         map_x, map_y=self.getMapZeroPos()
         point=QPointF(self.width()/2+step, self.height()/2)   
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
         self.center_x=map_x+point0.x()
         self.center_coord_update()
         self.update()
 
+    def calcCurrentHeading(self, lat, lon):
+        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
+            self.lastHeadingLat=lat
+            self.lastHeadingLon=lon
+        else:    
+            # only calculate heading if difference to last calculation is > 5m
+            if self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon)>5.0:
+                self.heading=self.osmutils.headingDegrees(self.lastHeadingLat, self.lastHeadingLon, lat, lon)
+                self.lastHeadingLat=lat
+                self.lastHeadingLon=lon
+                
     def updateGPSLocation(self, lat, lon, altitude, speed, track):
 #        print("%f-%f"%(lat,lon))
         if speed==0:
             self.stop=True
         else:
             self.stop=False
+            # only set track when moving
             self.track=track
         
         if lat!=0.0 and lon!=0.0:
             gps_rlat_new=self.osmutils.deg2rad(lat)
             gps_rlon_new=self.osmutils.deg2rad(lon)
             
-            # TODO: only update if gps position changed at least a specific portion
-            if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:     
+            if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
+                if self.stop==False:  
+                    self.calcCurrentHeading(lat, lon) 
+                        
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
@@ -1301,8 +1376,10 @@ class QtOSMWidget(QWidget):
             self.gps_rlat=0.0
             self.gps_rlon=0.0
             self.gpsPoint=None
+            self.heading=None
+            self.track=None
             self.update()
-            
+        
     def cleanImageCache(self):
         self.tileCache.clear()
                 
@@ -1310,7 +1387,7 @@ class QtOSMWidget(QWidget):
         None
         
     def callMapnikForTile(self):
-        bbox=self.getVisibleBBoxWithMargin()     
+        bbox=self.getVisibleBBoxDeg()     
 #        print(bbox)       
         self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
         
@@ -1412,19 +1489,19 @@ class QtOSMWidget(QWidget):
         p=QPoint(mousePos[0], mousePos[1])
 
         if self.startPoint!=None:
-            (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
             rect=QRect(x-int(self.startPointImage.width()/2), y-int(self.startPointImage.height()/2), self.startPointImage.width(), self.startPointImage.height())
             if rect.contains(p, proper=False):
                 return self.startPoint
 
         if self.endPoint!=None:
-            (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon)
             rect=QRect(x-int(self.endPointImage.width()/2), y-int(self.endPointImage.height()/2), self.endPointImage.width(), self.endPointImage.height())
             if rect.contains(p, proper=False):
                 return self.endPoint
 
         for point in self.wayPoints:
-            (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(point.lat, point.lon)
             rect=QRect(x-int(self.wayPointImage.width()/2), y-int(self.wayPointImage.height()/2), self.wayPointImage.width(), self.wayPointImage.height())
             if rect.contains(p, proper=False):
                 return point
@@ -1853,9 +1930,9 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+#                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
 #                    osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
@@ -2062,7 +2139,7 @@ class QtOSMWidget(QWidget):
     
     def convert_screen_to_geographic(self, pixel_x, pixel_y):
         point=QPointF(pixel_x, pixel_y)        
-        invertedTransform=self.transform0.inverted()
+        invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)        
         map_x, map_y=self.getMapZeroPos()
         rlat = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y());
@@ -2739,19 +2816,21 @@ class OSMWindow(QMainWindow):
             self.incLat=self.osmWidget.startLat
             self.incLon=self.osmWidget.startLon
             self.incTrack=0
+#            self.osmWidget.mapWidgetQt.heading=0
         else:
-#            self.incLat=self.incLat+0.0001
-#            self.incLon=self.incLon+0.0001
+            self.incLat=self.incLat+0.0001
+            self.incLon=self.incLon+0.0001
             self.incTrack+=5
             if self.incTrack>360:
                 self.incTrack=0
+#            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
-        osmutils=OSMUtils()
-        print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
+#        osmutils=OSMUtils()
+#        print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
 
+        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
         self.osmWidget.updateGPSDataDisplay(self.incLat, self.incLon, 42, 1, self.incTrack) 
         
-        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
