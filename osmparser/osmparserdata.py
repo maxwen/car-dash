@@ -691,7 +691,8 @@ class OSMParserData():
             if wayId!=None:
                 if wayIdList==None:
                     wayIdList=list()
-                wayIdList.append(wayId)
+                if not wayId in wayIdList:
+                    wayIdList.append(wayId)
                 tagStr=None
                 if storedTags!=None:
                     tagStr=pickle.dumps(storedTags)
@@ -4194,10 +4195,10 @@ class OSMParserData():
         return osmDataList
 
     def test(self):
-#        self.cursorCountry.execute('SELECT * FROM refCountryTable WHERE id==1444662052')
-#        allentries=self.cursorCountry.fetchall()
-#        for x in allentries:
-#            print(x)
+        self.cursorCountry.execute('SELECT * FROM refCountryTable WHERE id==892024881')
+        allentries=self.cursorCountry.fetchall()
+        for x in allentries:
+            print(x)
             
 #        self.setDBCursorForCountry(0)
 #        self.cursor.execute('SELECT * FROM refTable WHERE type==1')
@@ -4230,39 +4231,39 @@ class OSMParserData():
 #            print(self.refFromDB2(x))
 
         self.setDBCursorForCountry(0)
-#        self.cursor.execute('SELECT * FROM refTable WHERE type==6')
-#        allentries=self.cursor.fetchall()
-#        for x in allentries:
-#            print(self.refFromDB2(x))
-
-
-        self.cursor.execute('SELECT * FROM wayTable')
+        self.cursor.execute('SELECT * FROM refTable WHERE refId==892024881')
         allentries=self.cursor.fetchall()
         for x in allentries:
-            wayId, tags, refs, streetTypeId, name, nameRef=self.wayFromDB(x)
-            for ref in refs:
-                _, country=self.getCountryOfRef(ref)
-                if country==None:
-                    continue
-                crossingEntries=self.getCrossingEntryForRefId(wayId, ref, country)
-                onlyInlineCrossings=True
-                wayList=list()
-                for crossing in crossingEntries:   
-                    if onlyInlineCrossings==False:
-                        break  
-                    (_, _, _, nextWayIdList)=crossing
-                    for nextWayId, crossingType, crossingInfo in nextWayIdList:
-                        if nextWayIdList==wayId:
-                            continue
-                        if crossingType!=-1:
-                            onlyInlineCrossings=False
-                            break
-                        (_, _, _, streetTypeId2, _, _)=self.getWayEntryForIdAndCountry(nextWayId, country)
-                        if streetTypeId==streetTypeId2:
-                            wayList.append(nextWayId)
-                        
-                if onlyInlineCrossings==True and len(wayList)!=0:
-                    print("Metaway: %d %s"%(wayId, wayList))
+            print(self.refFromDB2(x))
+
+
+#        self.cursor.execute('SELECT * FROM wayTable')
+#        allentries=self.cursor.fetchall()
+#        for x in allentries:
+#            wayId, tags, refs, streetTypeId, name, nameRef=self.wayFromDB(x)
+#            for ref in refs:
+#                _, country=self.getCountryOfRef(ref)
+#                if country==None:
+#                    continue
+#                crossingEntries=self.getCrossingEntryForRefId(wayId, ref, country)
+#                onlyInlineCrossings=True
+#                wayList=list()
+#                for crossing in crossingEntries:   
+#                    if onlyInlineCrossings==False:
+#                        break  
+#                    (_, _, _, nextWayIdList)=crossing
+#                    for nextWayId, crossingType, crossingInfo in nextWayIdList:
+#                        if nextWayIdList==wayId:
+#                            continue
+#                        if crossingType!=-1:
+#                            onlyInlineCrossings=False
+#                            break
+#                        (_, _, _, streetTypeId2, _, _)=self.getWayEntryForIdAndCountry(nextWayId, country)
+#                        if streetTypeId==streetTypeId2:
+#                            wayList.append(nextWayId)
+#                        
+#                if onlyInlineCrossings==True and len(wayList)!=0:
+#                    print("Metaway: %d %s"%(wayId, wayList))
                           
 #        self.cursor.execute('SELECT * from crossingTable WHERE wayId==5819346')
 #        allentries=self.cursor.fetchall()
@@ -4568,7 +4569,7 @@ def main(argv):
 #    print(p.getEdgeEntryForEdgeId(6719))
 #    print(p.getEdgeEntryForEdgeId(2024))
 
-#    p.test()
+    p.test()
 
 #    p.testDBConistency()
 #    p.testRestrictionTable()
