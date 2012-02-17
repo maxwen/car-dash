@@ -138,7 +138,7 @@ class MapnikWrapper(QObject):
                     exists= "exists"
                 else:
                     self.render_thread.render_tile(tile_uri, x, y, z)  
-#                    self.emit(SIGNAL("updateMap()"))             
+                    self.emit(SIGNAL("updateMap()"))             
 #                print(name, ":", z, x, y, exists)
 
     def render_tiles2(self, bbox, zoom, name="unknown", tms_scheme=False):
