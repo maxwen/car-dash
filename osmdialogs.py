@@ -1344,7 +1344,7 @@ class OSMPositionValidator(QValidator):
         return (QValidator.Acceptable, input, pos)
     
 class OSMPositionDialog(QDialog):
-    def __init__(self, parent):
+    def __init__(self, parent, lat=None, lon=None):
         QDialog.__init__(self, parent) 
         self.lat=0.0
         self.lon=0.0
@@ -1352,6 +1352,9 @@ class OSMPositionDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
+        self.initLat=lat
+        self.initLon=lon
+        
         self.initUI()
 
     def getResult(self):
@@ -1375,6 +1378,8 @@ class OSMPositionDialog(QDialog):
         self.latField.setToolTip('Latitude')
         self.latField.textChanged.connect(self._updateEnablement)
         self.latField.setValidator(self.validator)
+        if self.initLat!=None:
+            self.latField.setText("%.6f"%self.initLat)
 
         fields.addRow(label, self.latField)
 
@@ -1385,6 +1390,8 @@ class OSMPositionDialog(QDialog):
         self.lonField.setToolTip('Latitude')
         self.lonField.textChanged.connect(self._updateEnablement)
         self.lonField.setValidator(self.validator)
+        if self.initLon!=None:
+            self.lonField.setText("%.6f"%self.initLon)
 
         fields.addRow(label, self.lonField)
         
@@ -1393,17 +1400,24 @@ class OSMPositionDialog(QDialog):
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
-        buttons.addWidget(self.cancelButton)
-
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDisabled(True)
-        self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        buttons.addWidget(self.okButton)
+        if self.initLat==None and self.initLon==None:
+            self.cancelButton=QPushButton("Cancel", self)
+            self.cancelButton.clicked.connect(self._cancel)
+            self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+            buttons.addWidget(self.cancelButton)
+    
+            self.okButton=QPushButton("Ok", self)
+            self.okButton.clicked.connect(self._ok)
+            self.okButton.setDisabled(True)
+            self.okButton.setDefault(True)
+            self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+            buttons.addWidget(self.okButton)
+        else:
+            self.closeButton=QPushButton("Close", self)
+            self.closeButton.clicked.connect(self._close)
+            self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+            buttons.addWidget(self.closeButton)            
+        
         top.addLayout(buttons)
                 
         self.setLayout(top)
@@ -1412,10 +1426,15 @@ class OSMPositionDialog(QDialog):
 
     @pyqtSlot()
     def _updateEnablement(self):
-        self.okButton.setDisabled(len(self.latField.text())==0 or len(self.lonField.text())==0)
+        if self.initLat==None and self.initLon==None:
+            self.okButton.setDisabled(len(self.latField.text())==0 or len(self.lonField.text())==0)
    
     @pyqtSlot()
     def _cancel(self):
+        self.done(QDialog.Rejected)
+
+    @pyqtSlot()
+    def _close(self):
         self.done(QDialog.Rejected)
         
     @pyqtSlot()

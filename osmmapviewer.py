@@ -564,7 +564,10 @@ class QtOSMWidget(QWidget):
 
     def getMapZeroPos(self):
         map_x=int(self.center_x-self.width()/2)
-        map_y=int(self.center_y-self.height()/2)
+        if self.withMapRotation==True and self.autocenterGPS==True:
+            map_y=int(self.center_y-self.height()/2)-self.height()/4
+        else:
+            map_y=int(self.center_y-self.height()/2)
         return (map_x, map_y)
     
     def printTilesGeometry(self):
@@ -610,20 +613,29 @@ class QtOSMWidget(QWidget):
             j=tile_y0
         
     def getTileFromFile(self, fileName):
-        pixbuf=self.getCachedTile(fileName)
+#        print(fileName)
+        pixbuf = QPixmap(fileName)
         return pixbuf
-       
-    def drawPixmap(self, x, y, width, height, pixbuf):
-        self.painter.drawPixmap(x, y, width, height, pixbuf)
+    
+    def getTileFroZoomFromFile(self, zoom, x, y):
+        fileName=self.getTileFullPath(zoom, x, y)
+        if os.path.exists(fileName):
+            pixbuf = QPixmap(fileName)
+            return pixbuf
+
+        return None
 
     def getCachedTile(self, fileName):
-        if not fileName in self.tileCache:
-            pixbuf = QPixmap(fileName)
-            self.tileCache[fileName]=pixbuf
-        else:
-            pixbuf=self.tileCache[fileName]
-            
-        return pixbuf
+        if fileName in self.tileCache:
+            return self.tileCache[fileName]
+        return None
+    
+    def addTileToCache(self, pixbuf, fileName):
+        # TODO: limit size of tile cache
+        self.tileCache[fileName]=pixbuf
+        
+    def drawPixmap(self, x, y, width, height, pixbuf):
+        self.painter.drawPixmap(x, y, width, height, pixbuf)
     
     def getEmptyTile(self):
         palette=QPalette()
@@ -638,7 +650,7 @@ class QtOSMWidget(QWidget):
             next_y = int(y / 2)
 #            print("search for bigger map for zoom "+str(zoom))
 
-            pixbuf=self.getExisingTile(zoom, next_x, next_y)
+            pixbuf=self.getTileFroZoomFromFile(zoom, next_x, next_y)
             if pixbuf!=None:
                 return (pixbuf, zoom)
             else:
@@ -664,27 +676,24 @@ class QtOSMWidget(QWidget):
             pixmapNew.scaled(TILESIZE, TILESIZE)
             return pixmapNew
         return None
-        
-    def getExisingTile(self, zoom, x, y):
-        fileName=self.getTileFullPath(zoom, x, y)
-        if os.path.exists(fileName):
-            return self.getCachedTile(fileName)
-
-        return None
-    
+            
     def getTile(self, zoom, x, y):
         fileName=self.getTileFullPath(zoom, x, y)
+        pixbuf=self.getCachedTile(fileName)
+        if pixbuf!=None:
+            return pixbuf
+        
         if os.path.exists(fileName) and self.forceDownload==False:
-            return self.getTileFromFile(fileName)
+            pixbuf=self.getTileFromFile(fileName)
+            self.addTileToCache(pixbuf, fileName)
+            return pixbuf
         else:
-            if self.withDownload==True:
-                self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.getTileServer())
-                return self.getTilePlaceholder(zoom, x, y)
-                   
-            elif self.withMapnik==True:
-#                print("call mapnik for:%d %d"%(x, y))
+            if self.withMapnik==True:
                 self.callMapnikForTile()
                 return self.getTilePlaceholder(zoom, x, y)
+            elif self.withDownload==True:
+                self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.getTileServer())
+                return self.getTilePlaceholder(zoom, x, y)     
                     
             return self.getTilePlaceholder(zoom, x, y)
     
@@ -734,12 +743,14 @@ class QtOSMWidget(QWidget):
         
         else:
             transform=QTransform()
-            transform.translate( self.width() / 2, self.height() / 2 )
+            map_x, map_y=self.getMapZeroPos()
+
+            transform.translate( self.center_x-map_x, self.center_y-map_y )
 #            if self.track!=None:
 #                transform.rotate(self.track)
             if self.heading!=None:
                 transform.rotate(self.heading)
-            transform.translate( -self.width() / 2, -self.height() / 2 )
+            transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
 
             self.painter.setTransform(transform)
        
@@ -793,42 +804,55 @@ class QtOSMWidget(QWidget):
             self.update()
             
     def osm_map_scroll(self, dx, dy):
-        map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2+dx, self.height()/2+dy)   
-        invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)
-        self.center_y=map_y+point0.y()
-        self.center_x=map_x+point0.x()
-        self.center_coord_update()
-        self.update()
+        self.stepInDirection(dx, dy)
     
+    # use only inside transformed coordinates!
     def isPointVisible(self, x, y):
-#        print("%d %d"%(x, y))
-        if y >= 0 and y <= self.height() and x >= 0 and x <= self.width():
-            return True
-        return False
+        point=QPoint(x, y)
+        rect=QRect(0, 0, self.width(), self.height())
+        point=self.transformHeading.map(point)
+        rect=self.transformHeading.mapRect(rect)
+        return rect.contains(point)
     
-    def getVisibleBBox(self):
-        return [int(self.center_x-self.width()/2), 
-                int(self.center_y+self.height()/2), 
-                int(self.center_x+self.width()/2), 
-                int(self.center_y-self.height()/2)]
+    def getVisibleBBoxDeg(self, margin=0):
+        invertedTransform=self.transformHeading.inverted()
+        map_x, map_y=self.getMapZeroPos()
 
-    def getVisibleBBoxWithMargin(self):
-        return [int(self.center_x-self.width()/2-TILESIZE), 
-                int(self.center_y+self.height()/2+TILESIZE), 
-                int(self.center_x+self.width()/2+TILESIZE), 
-                int(self.center_y-self.height()/2-TILESIZE)]
+        point=QPointF(0, 0+self.height())        
+        point0=invertedTransform[0].map(point)        
+        rlat1 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()+margin);
+        rlon1 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()-margin);
 
-    def getVisibleBBoxDeg(self):
-        bbox=self.getVisibleBBoxWithMargin()
-        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
-        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
+        point=QPointF(self.width(), 0)        
+        point0=invertedTransform[0].map(point)        
+        rlat2 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()-margin);
+        rlon2 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()+margin);
+        
+        return [self.osmutils.rad2deg(rlon1), self.osmutils.rad2deg(rlat1), 
+                self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
 
-        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
-        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
+    def getVisibleBBoxDegWithMargin(self):
+        return self.getVisibleBBoxDeg(TILESIZE)
 
-        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
+#    def getVisibleBBoxDegWithMargin(self):
+#        bbox=self.getVisibleBBoxWithMargin()
+#        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
+#        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
+#
+#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
+#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
+#
+#        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
+
+#    def getVisibleBBoxDeg(self):
+#        bbox=self.getVisibleBBox()
+#        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
+#        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
+#
+#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
+#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
+#
+#        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
     
     def show(self, zoom, lat, lon):
         self.osm_center_map_to_position(lat, lon)
@@ -901,12 +925,14 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
                 
         self.transformHeading=QTransform()
-        self.transformHeading.translate( self.width() / 2, self.height() / 2 )
+        map_x, map_y=self.getMapZeroPos()
+
+        self.transformHeading.translate( self.center_x-map_x, self.center_y-map_y )
         
         if self.heading!=None and self.withMapRotation==True:
             self.transformHeading.rotate(360-self.heading)
         
-        self.transformHeading.translate( -self.width() / 2, -self.height() / 2 )
+        self.transformHeading.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
         self.painter.setTransform(self.transformHeading)
             
         self.showTiles()
@@ -938,6 +964,8 @@ class QtOSMWidget(QWidget):
         self.showSpeedInfo()
         self.painter.end()
                         
+#        print(self.getVisibleBBoxDeg())
+#        print(self.getVisibleBBoxDegWithMargin())
 #        self.printTilesGeometry()
   
     def showTextInfoBackground(self):
@@ -1289,9 +1317,9 @@ class QtOSMWidget(QWidget):
             self.lastCenterX=self.center_x
             self.lastCenterY=self.center_y
             
-    def stepUp(self, step):
+    def stepInDirection(self, step_x, step_y):
         map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2, self.height()/2-step)   
+        point=QPointF(self.center_x-map_x+step_x, self.center_y-map_y+step_y)   
         invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.center_y=map_y+point0.y()
@@ -1299,36 +1327,17 @@ class QtOSMWidget(QWidget):
         self.center_coord_update()
         self.update()
 
+    def stepUp(self, step):
+        self.stepInDirection(0, -step)
 
     def stepDown(self, step):
-        map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2, self.height()/2+step)   
-        invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)
-        self.center_y=map_y+point0.y()
-        self.center_x=map_x+point0.x()
-        self.center_coord_update()
-        self.update()
+        self.stepInDirection(0, step)
         
     def stepLeft(self, step):
-        map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2-step, self.height()/2)   
-        invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)
-        self.center_y=map_y+point0.y()
-        self.center_x=map_x+point0.x()
-        self.center_coord_update()
-        self.update()
+        self.stepInDirection(-step, 0)
 
     def stepRight(self, step):
-        map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2+step, self.height()/2)   
-        invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)
-        self.center_y=map_y+point0.y()
-        self.center_x=map_x+point0.x()
-        self.center_coord_update()
-        self.update()
+        self.stepInDirection(step, 0)
 
     def calcCurrentHeading(self, lat, lon):
         if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
@@ -1398,7 +1407,7 @@ class QtOSMWidget(QWidget):
         None
         
     def callMapnikForTile(self):
-        bbox=self.getVisibleBBoxDeg()     
+        bbox=self.getVisibleBBoxDegWithMargin()     
 #        print(bbox)       
         self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
         
@@ -1527,7 +1536,7 @@ class QtOSMWidget(QWidget):
 #        print("%d-%d"%(self.mousePos[0], self.mousePos[1]))
         menu = QMenu(self)
         forceDownloadAction = QAction("Force Download", self)
-        forceDownloadAction.setEnabled(self.withDownload==True)
+        forceDownloadAction.setEnabled(self.withDownload==True and self.withMapnik==False)
         setStartPointAction = QAction("Set Start Point", self)
         setEndPointAction = QAction("Set End Point", self)
         setWayPointAction = QAction("Set Way Point", self)
@@ -1538,6 +1547,7 @@ class QtOSMWidget(QWidget):
         saveRouteAction=QAction("Save Current Route", self)
         showRouteAction=QAction("Show Route", self)
         clearRouteAction=QAction("Clear Current Route", self)
+        gotoPosAction=QAction("Goto Position", self)
         showPosAction=QAction("Show Position", self)
         zoomToCompleteRoute=QAction("Zoom to Route", self)
         recalcRouteAction=QAction("Recalc Route from here", self)
@@ -1560,6 +1570,7 @@ class QtOSMWidget(QWidget):
         menu.addAction(setEndPointAction)
         menu.addAction(setWayPointAction)
         menu.addAction(addFavoriteAction)
+        menu.addAction(gotoPosAction)
         menu.addAction(showPosAction)
         menu.addSeparator()
         menu.addAction(clearAllRoutingPointsAction)
@@ -1582,6 +1593,7 @@ class QtOSMWidget(QWidget):
         setWayPointAction.setDisabled(addPointDisabled)
         addFavoriteAction.setDisabled(addPointDisabled)
         showPosAction.setDisabled(addPointDisabled)
+        gotoPosAction.setDisabled(addPointDisabled)
         saveRouteAction.setDisabled(routeIncomplete)
         clearRoutingPointAction.setDisabled(self.getSelectedRoutingPoint(self.mousePos)==None)
         clearAllRoutingPointsAction.setDisabled(addPointDisabled)
@@ -1617,8 +1629,11 @@ class QtOSMWidget(QWidget):
             self.removeRoutingPoint(self.mousePos)
         elif action==editRoutingPointAction:
             self.editRoutingPoints()
-        elif action==showPosAction:
+        elif action==gotoPosAction:
             self.showPosOnMap()
+        elif action==showPosAction:
+            (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
+            self.showPos(lat, lon)
         elif action==saveRouteAction:
             self.saveCurrentRoute()
         elif action==zoomToCompleteRoute:
@@ -1687,6 +1702,10 @@ class QtOSMWidget(QWidget):
                 self.osm_map_set_zoom(15)
     
             self.osm_center_map_to_position(lat, lon)
+
+    def showPos(self, lat, lon):
+        posDialog=OSMPositionDialog(self, lat, lon)
+        posDialog.exec()
 
     def getCompleteRoutingPoints(self):
         if self.startPoint==None and self.gpsPoint==None:
@@ -1961,7 +1980,7 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
@@ -2166,20 +2185,16 @@ class QtOSMWidget(QWidget):
         if self.osmWidget.dbLoaded==True:
             self.showTrackOnPos(lat, lon, update)            
     
-    def convert_screen_to_geographic(self, pixel_x, pixel_y):
-        point=QPointF(pixel_x, pixel_y)        
+    def getMousePosition(self, x, y):
+        point=QPointF(x, y)        
         invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)        
         map_x, map_y=self.getMapZeroPos()
         rlat = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y());
         rlon = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x());
-#        print("convert_screen_to_geographic: %d %d %f %f"%(pixel_x, pixel_y, self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon)))
-        return (rlat, rlon)
-    
-    def getMousePosition(self, x, y):
-        p=self.convert_screen_to_geographic(x, y)
-        mouseLat = self.osmutils.rad2deg(p[0])
-        mouseLon = self.osmutils.rad2deg(p[1])
+        mouseLat = self.osmutils.rad2deg(rlat)
+        mouseLon = self.osmutils.rad2deg(rlon)
+#        print("getMousePosition %f %f"%(mouseLat, mouseLon))
         return (mouseLat, mouseLon)
          
     def loadConfig(self, config):
@@ -2445,10 +2460,14 @@ class OSMWidget(QWidget):
         optionsDialog=OSMOptionsDialog(self)
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
+            oldMapnikValue=self.getWithMapnikValue()
             self.setWithDownloadValue(optionsDialog.withDownload)
             self.setAutocenterGPSValue(optionsDialog.followGPS)
             self.setWithMapnikValue(optionsDialog.withMapnik)
             self.setWithMapRotationValue(optionsDialog.withMapRotation)
+            if optionsDialog.withMapnik!=oldMapnikValue:
+                self.mapWidgetQt.cleanImageCache()
+                self.mapWidgetQt.update()
             
     @pyqtSlot()
     def _cleanup(self):
@@ -2755,25 +2774,25 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.loadData()
         
-        buttons=QHBoxLayout()        
+#        buttons=QHBoxLayout()        
 #
-        self.testGPSButton=QPushButton("Test GPS", self)
-        self.testGPSButton.clicked.connect(self._testGPS)
-        buttons.addWidget(self.testGPSButton)
-        
-        self.stepRouteButton=QPushButton("Step", self)
-        self.stepRouteButton.clicked.connect(self._stepRoute)
-        buttons.addWidget(self.stepRouteButton)
-        
-        self.resetStepRouteButton=QPushButton("Reset Step", self)
-        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
-        buttons.addWidget(self.resetStepRouteButton)
+#        self.testGPSButton=QPushButton("Test GPS", self)
+#        self.testGPSButton.clicked.connect(self._testGPS)
+#        buttons.addWidget(self.testGPSButton)
+#        
+#        self.stepRouteButton=QPushButton("Step", self)
+#        self.stepRouteButton.clicked.connect(self._stepRoute)
+#        buttons.addWidget(self.stepRouteButton)
+#        
+#        self.resetStepRouteButton=QPushButton("Reset Step", self)
+#        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
+#        buttons.addWidget(self.resetStepRouteButton)
         
         self.connectPSButton=QCheckBox("Connect GPS", self)
         self.connectPSButton.clicked.connect(self._connectGPS)
 #        buttons.addWidget(self.connectPSButton)
                 
-        top.addLayout(buttons)
+#        top.addLayout(buttons)
         
         self.statusbar.addPermanentWidget(self.connectPSButton)
 
