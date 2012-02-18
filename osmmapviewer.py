@@ -210,7 +210,9 @@ class OSMMapnikTilesWorker(QThread):
             if len(self.workQueue)!=0:
                 self.currentBBox, self.currentZoom=self.workQueue[0]
 #                print("mapnik renders: %s %d"%(self.currentBBox, self.currentZoom))
+                start=time.time()
                 self.mapnikWrapper.render_tiles(self.currentBBox, self.currentZoom)
+                print("%f"%(time.time()-start))
                 self.currentBBox=None
                 self.currentZoom=None
                 self.workQueue.popleft()
@@ -806,13 +808,18 @@ class QtOSMWidget(QWidget):
     def osm_map_scroll(self, dx, dy):
         self.stepInDirection(dx, dy)
     
-    # use only inside transformed coordinates!
+    # for untransformed coords
     def isPointVisible(self, x, y):
         point=QPoint(x, y)
+        point0=self.transformHeading.map(point)        
         rect=QRect(0, 0, self.width(), self.height())
-        point=self.transformHeading.map(point)
-        rect=self.transformHeading.mapRect(rect)
-        return rect.contains(point)
+        return rect.contains(point0)
+
+    # for already transformed coords
+    def isPointVisibleTransformed(self, x, y):
+        point=QPoint(x, y)
+        rect=QRect(0, 0, self.width(), self.height())
+        return rect.contains(point)    
     
     def getVisibleBBoxDeg(self, margin=0):
         invertedTransform=self.transformHeading.inverted()
@@ -918,6 +925,7 @@ class QtOSMWidget(QWidget):
 #        print(self.pos())
 #        self.updateGeometry()
         self.painter=QPainter(self)
+        self.painter.setClipRect(QRectF(0, 0, self.width(), self.height()))
         font=self.font()
         font.setPointSize(16) 
         self.painter.setFont(font)
@@ -967,6 +975,8 @@ class QtOSMWidget(QWidget):
 #        print(self.getVisibleBBoxDeg())
 #        print(self.getVisibleBBoxDegWithMargin())
 #        self.printTilesGeometry()
+#        print("QtOSMWidget:paintEvent")
+
   
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
@@ -1052,7 +1062,7 @@ class QtOSMWidget(QWidget):
                 for enforcement in self.enforcementInfoList:
                     lat, lon=enforcement["coords"]
                     (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
-                    if self.isPointVisible(x, y):
+                    if self.isPointVisibleTransformed(x, y):
                         self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
 
             backgroundColor=QColor(120, 120, 120, 200)
@@ -1170,14 +1180,14 @@ class QtOSMWidget(QWidget):
     
     def displayEdge(self, coords):        
         polygon=QPolygon()
-
+        
         for point in coords:
             lat, lon=point 
             (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-            if self.isPointVisible(x, y):
-                point=QPoint(x, y);
-                polygon.append( point )
-
+            # TODO: always display complete edge and ignore visibility
+            point=QPoint(x, y);
+            polygon.append( point )
+                
         pen=self.edgePen
         pen.setWidth(self.getPenWidthForZoom())
         self.painter.setPen(pen)
@@ -1194,9 +1204,9 @@ class QtOSMWidget(QWidget):
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]   
                         (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                        if self.isPointVisible(x, y):
-                            point=QPoint(x, y);
-                            polygon.append( point )
+                        # TODO: always display complete edge and ignore visibility
+                        point=QPoint(x, y);
+                        polygon.append( point )
 
             pen=self.edgePen
             pen.setWidth(self.getPenWidthForZoom())
@@ -1221,9 +1231,9 @@ class QtOSMWidget(QWidget):
                     lat, lon=itemRef["coords"]
                         
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                    if self.isPointVisible(x, y):
-                        point=QPoint(x, y);
-                        polygon.append( point )
+                    # TODO: always display complete route and ignore visibility
+                    point=QPoint(x, y);
+                    polygon.append( point )
                     
                 pen=self.getPenForStreetType(streetType)  
                 pen.setWidth(self.getPenWidthForZoom())
@@ -1908,7 +1918,7 @@ class QtOSMWidget(QWidget):
                 self.speedInfo=None
                 self.enforcementInfoList=None
             else:   
-                if self.currentRoute!=None:                                               
+                if self.currentRoute!=None and self.remainingEdgeList!=None:                                               
                     if edgeId!=self.lastEdgeId:
                         if len(self.remainingEdgeList)>1:
                             if edgeId==self.remainingEdgeList[1]: 
@@ -2265,7 +2275,7 @@ class QtOSMWidget(QWidget):
 #---------------------
 
 class OSMWidget(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.startLat=47.8
         self.startLon=13.0
@@ -2280,9 +2290,11 @@ class OSMWidget(QWidget):
         self.centerGPSIcon=QIcon("images/map-gps.png")
         self.settingsIcon=QIcon("images/settings.png")
         self.gpsIcon=QIcon("images/gps.png")
-        
-    def addToWidget(self, vbox):   
-            
+        self.incLat=0.0
+        self.incLon=0.0
+        self.step=0
+
+    def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
         hbox1.addWidget(self.mapWidgetQt)
         
@@ -2335,10 +2347,6 @@ class OSMWidget(QWidget):
         self.optionsButton.setIconSize(iconSize)        
         self.optionsButton.clicked.connect(self._showSettings)
         buttons.addWidget(self.optionsButton)  
-              
-#        tab=QTabWidget(self)
-#        tab.setMaximumSize(QSize(100, 100))
-#        buttons.addWidget(tab)
         
         font = QFont("Mono")
         font.setPointSize(14)
@@ -2347,33 +2355,19 @@ class OSMWidget(QWidget):
         coords=QVBoxLayout()        
         coords.setAlignment(Qt.AlignLeft|Qt.AlignTop)
         coords.setSpacing(0)
-#        coords.setContentsMargins(0, 0, 0, 0)
 
         buttons.addLayout(coords)
 
-#        gpsTab=QWidget(self)
-#        formLayoutGPS=QFormLayout()
-#        formLayoutGPS.setAlignment(Qt.AlignRight|Qt.AlignTop)
-#        formLayoutGPS.setContentsMargins(0, 0, 0, 0)
-#        formLayoutGPS.setSpacing(1)
-
-#        tab.addTab(gpsTab, "GPS") 
-
-#        self.gpsPosLabelLat=QLabel("", self)
         self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLat.setFont(font)
         self.gpsPosValueLat.setAlignment(Qt.AlignRight)
         coords.addWidget(self.gpsPosValueLat)
-#        formLayoutGPS.addRow(self.gpsPosLabelLat, self.gpsPosValueLat)
 
-#        self.gpsPosLabelLon=QLabel("", self)
         self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
         self.gpsPosValueLon.setFont(font)
         self.gpsPosValueLon.setAlignment(Qt.AlignRight)
         coords.addWidget(self.gpsPosValueLon)
-#        formLayoutGPS.addRow(self.gpsPosLabelLon, self.gpsPosValueLon)
         
-#        self.gpsAltitudeLabel=QLabel("", self)
         self.gpsAltitudeValue=QLabel("%.1f"%(0.0), self)
         self.gpsAltitudeValue.setFont(font)
         self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
@@ -2383,46 +2377,29 @@ class OSMWidget(QWidget):
         self.gpsSpeedValue.setFont(font)
         self.gpsSpeedValue.setAlignment(Qt.AlignRight)
         coords.addWidget(self.gpsSpeedValue)
-
-#        formLayoutGPS.addRow(self.gpsAltitudeLabel, self.gpsAltitudeValue)
-
-#        buttons.addLayout(formLayoutGPS)
-
-#        line = QFrame()
-#        line.setFrameShape(QFrame.HLine)
-#        line.setFrameShadow(QFrame.Sunken)
-#        formLayout.addWidget(line)
-    
-#        mouseTab=QWidget(self)
-#        formLayoutMouse=QFormLayout()
-#        formLayoutMouse.setAlignment(Qt.AlignRight|Qt.AlignTop)
-#        formLayoutMouse.setContentsMargins(0, 0, 0, 0)
-#        formLayoutMouse.setSpacing(1)
-
-#        tab.addTab(mouseTab, "Map") 
-
-#        self.mousePosLabelLat=QLabel("", self)
-#        self.mousePosValueLat=QLabel("%.5f"%(0.0), self)
-#        self.mousePosValueLat.setFont(font)
-#        self.mousePosValueLat.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.mousePosValueLat)
-
-#        formLayoutMouse.addRow(self.mousePosLabelLat, self.mousePosValueLat)
-
-#        self.mousePosLabelLon=QLabel("", self)
-#        self.mousePosValueLon=QLabel("%.5f"%(0.0), self)
-#        self.mousePosValueLon.setFont(font)
-#        self.mousePosValueLon.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.mousePosValueLon)
-
-#        formLayoutMouse.addRow(self.mousePosLabelLon, self.mousePosValueLon)
-        
-#        buttons.addLayout(formLayoutMouse)
         
         hbox1.addLayout(buttons)
 
         vbox.addLayout(hbox1)
+        
+        self.addTestButtons(vbox)
 
+    def addTestButtons(self, vbox):
+        buttons=QHBoxLayout()        
+
+        self.testGPSButton=QPushButton("Test GPS", self)
+        self.testGPSButton.clicked.connect(self._testGPS)
+        buttons.addWidget(self.testGPSButton)
+        
+        self.stepRouteButton=QPushButton("Step", self)
+        self.stepRouteButton.clicked.connect(self._stepRoute)
+        buttons.addWidget(self.stepRouteButton)
+        
+        self.resetStepRouteButton=QPushButton("Reset Step", self)
+        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
+        buttons.addWidget(self.resetStepRouteButton)
+        vbox.addLayout(buttons)
+        
     def initWorkers(self):
         self.downloadThread=OSMDownloadTilesWorker(self)
         self.downloadThread.setWidget(self.mapWidgetQt)
@@ -2453,7 +2430,7 @@ class OSMWidget(QWidget):
     @pyqtSlot()
     def _showGPSData(self):
         gpsDataDialog=OSMGPSDataDialog(self)
-        result=gpsDataDialog.exec()
+        gpsDataDialog.exec()
         
     @pyqtSlot()
     def _showSettings(self):
@@ -2501,18 +2478,6 @@ class OSMWidget(QWidget):
         
     def initHome(self):                
         self.init(self.startLat, self.startLon, self.getZoomValue())
-        
-    def initUI(self):
-        hbox = QVBoxLayout()
-
-        self.addToWidget(hbox)
-        self.setLayout(hbox)
-        
-        self.initHome()
-
-#        self.setGeometry(0, 0, 860, 500)
-        self.setWindowTitle('OSM Test')
-        self.show()
     
     @pyqtSlot()
     def _centerGPS(self):
@@ -2718,19 +2683,50 @@ class OSMWidget(QWidget):
                 self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
 #                self.mapWidgetQt.showRoutingPointOnMap(self.mapWidgetQt.startPoint)
                 
-
+#    def paintEvent(self, event):
+#        print("OSMWidget:paintEvent")
+#        super(OSMWidget, self).paintEvent(event)
+        
+    @pyqtSlot()
+    def _testGPS(self):
+        if self.incLat==0.0:
+            self.incLat=self.startLat
+            self.incLon=self.startLon
+            self.incTrack=0
+#            self.osmWidget.mapWidgetQt.heading=0
+        else:
+            self.incLat=self.incLat+0.0001
+            self.incLon=self.incLon+0.0001
+            self.incTrack+=5
+            if self.incTrack>360:
+                self.incTrack=0
+#            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
+        
+        print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
+        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 1, None) 
+    
+    @pyqtSlot()
+    def _stepRoute(self):
+        self.mapWidgetQt.printRouteInformationForStep(self.step, self.mapWidgetQt.currentRoute)
+        self.step=self.step+1
+        
+    @pyqtSlot()
+    def _resetStepRoute(self):
+        self.step=0
+        
 class OSMWindow(QMainWindow):
     def __init__(self, parent):
         QMainWindow.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
-        self.incLat=0.0
-        self.incLon=0.0
         self.config=Config("osmmapviewer.cfg")
         self.updateGPSThread=None
-        self.step=0
         self.initUI()
+
+#    def paintEvent(self, event):
+#        print("OSMWindow:paintEvent")
+#        super(OSMWindow, self).paintEvent(event)
 
     def stopProgress(self):
         self.progress.setMinimum(0)
@@ -2746,18 +2742,16 @@ class OSMWindow(QMainWindow):
         self.progress=QProgressBar()
         self.statusbar.addPermanentWidget(self.progress)
 
-        mainWidget=QWidget()
-#        mainWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        mainWidget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)        
-
-        self.setCentralWidget(mainWidget)
-        top=QVBoxLayout(mainWidget)        
         
         self.osmWidget=OSMWidget(self)
+        self.osmWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.setCentralWidget(self.osmWidget)
+
         # 47.820630:13.016850
         self.osmWidget.setStartLatitude(47.8249662)
         self.osmWidget.setStartLongitude(13.0471808)
 
+        top=QVBoxLayout(self.osmWidget)        
         self.osmWidget.addToWidget(top)
         self.osmWidget.loadConfig(self.config)
         
@@ -2774,26 +2768,8 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.loadData()
         
-#        buttons=QHBoxLayout()        
-#
-#        self.testGPSButton=QPushButton("Test GPS", self)
-#        self.testGPSButton.clicked.connect(self._testGPS)
-#        buttons.addWidget(self.testGPSButton)
-#        
-#        self.stepRouteButton=QPushButton("Step", self)
-#        self.stepRouteButton.clicked.connect(self._stepRoute)
-#        buttons.addWidget(self.stepRouteButton)
-#        
-#        self.resetStepRouteButton=QPushButton("Reset Step", self)
-#        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
-#        buttons.addWidget(self.resetStepRouteButton)
-        
         self.connectPSButton=QCheckBox("Connect GPS", self)
-        self.connectPSButton.clicked.connect(self._connectGPS)
-#        buttons.addWidget(self.connectPSButton)
-                
-#        top.addLayout(buttons)
-        
+        self.connectPSButton.clicked.connect(self._connectGPS)        
         self.statusbar.addPermanentWidget(self.connectPSButton)
 
         self.setGeometry(0, 0, 900, 500)
@@ -2806,15 +2782,6 @@ class OSMWindow(QMainWindow):
         self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
 
         self.show()
-        
-    @pyqtSlot()
-    def _stepRoute(self):
-        self.osmWidget.mapWidgetQt.printRouteInformationForStep(self.step, self.osmWidget.mapWidgetQt.currentRoute)
-        self.step=self.step+1
-        
-    @pyqtSlot()
-    def _resetStepRoute(self):
-        self.step=0
         
     @pyqtSlot()
     def _connectGPS(self):
@@ -2857,29 +2824,7 @@ class OSMWindow(QMainWindow):
             else:
                 self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0, 0, None)
         else:            
-            self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0, 0, None)
-
-    @pyqtSlot()
-    def _testGPS(self):
-        if self.incLat==0.0:
-            self.incLat=self.osmWidget.startLat
-            self.incLon=self.osmWidget.startLon
-            self.incTrack=0
-#            self.osmWidget.mapWidgetQt.heading=0
-        else:
-            self.incLat=self.incLat+0.0001
-            self.incLon=self.incLon+0.0001
-            self.incTrack+=5
-            if self.incTrack>360:
-                self.incTrack=0
-#            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
-        
-#        osmutils=OSMUtils()
-#        print(osmutils.headingDegrees(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon))
-
-        print("%.0f meter"%(self.osmWidget.mapWidgetQt.osmutils.distance(self.osmWidget.startLat, self.osmWidget.startLon, self.incLat, self.incLon)))
-        self.osmWidget.updateGPSDataDisplay(self.incLat, self.incLon, 42, 1, None) 
-        
+            self.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0.0, 0, None)        
 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
