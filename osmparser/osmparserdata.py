@@ -12,8 +12,8 @@ from osmparser.osmutils import OSMUtils
 import pickle
 import time
 import zlib
-#from osmparser.dijkstrapygraph import DijkstraWrapperPygraph
-#from osmparser.dijkstraigraph import DijkstraWrapperIgraph
+#from pygraph-routing.dijkstrapygraph import DijkstraWrapperPygraph
+#from igraph.dijkstraigraph import DijkstraWrapperIgraph
 
 from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
@@ -164,7 +164,7 @@ class OSMRoutingPoint():
         if self.source!=0:
             return
         
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.001)
         if edgeId==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
@@ -283,6 +283,8 @@ class OSMParserData():
         self.relations = dict()
         self.roundaboutExitNumber=None
         self.roundaboutEnterItem=None
+        self.currentSearchBBox=None
+        self.currentPossibleEdgeList=list()
         
     def initCountryData(self):
         self.crossingId=0
@@ -1205,18 +1207,21 @@ class OSMParserData():
             return ref1
         return ref2
 
-    def getEdgeIdOnPosForRouting(self, lat, lon, track, currentEdgeOnRoute, nextEdgeOnRoute):        
+    def getEdgeIdOnPosForRouting(self, lat, lon, track, currentEdgeOnRoute, nextEdgeOnRoute, margin):        
         usedEdgeId=None
         usedWayId=None
         usedRefId=None
         usedLat=None
         usedLon=None
         usedCountry=None
+        self.currentPossibleEdgeList.clear()
+        self.currentSearchBBox=None
         
         # first check current edge
         if currentEdgeOnRoute!=None:
-            usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeId(lat, lon, currentEdgeOnRoute, maxDistance=5.0, offset=10.0)
+            usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeId(lat, lon, currentEdgeOnRoute, maxDistance=10.0, offset=10.0)
             if usedEdgeId!=None:
+                self.currentPossibleEdgeList.append(usedEdgeId)
 #                print("use same edge")
                 return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
                      
@@ -1249,6 +1254,7 @@ class OSMParserData():
                             heading=self.getHeadingOnEdgeId(nextEdgeId, nearerRef)
                         usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeIdStart(lat, lon, nextEdgeId, nearerRef)
                         if usedEdgeId!=None:
+                            self.currentPossibleEdgeList.append(usedEdgeId)
     #                        print("check way %d"%(usedWayId))
                             if track!=None:
                                 edgeHeadings.append(heading)
@@ -1318,12 +1324,12 @@ class OSMParserData():
         # TODO: maybe also try edges of the same wayid
 
         # fallback
-        return self.getEdgeIdOnPos(lat, lon)
+        return self.getEdgeIdOnPos(lat, lon, margin)
 
     def isMatchingHeading(self, track, heading):
         return heading+360 > track+360-20 and heading+360 < track+360+20
      
-    def getEdgeIdOnPos(self, lat, lon):
+    def getEdgeIdOnPos(self, lat, lon, margin=0.005):
 #        start=time.time()
         usedEdgeId=None
         usedWayId=None
@@ -1340,7 +1346,7 @@ class OSMParserData():
             return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
         nearestFound=False
-        nodes=self.getNearNodes(lat, lon, refCountry, maxDistance)
+        nodes=self.getNearNodes(lat, lon, refCountry, maxDistance, margin)
         for refId, lat1, lon1, wayIdList in nodes:
             # first search way which has the nearest ref
             if nearestFound==True:
@@ -1392,7 +1398,7 @@ class OSMParserData():
                         break
                     edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=edge
                     edgeRefList=self.getRefListSubset(usedRefs, startRef, endRef)
-
+                                        
                     if usedRefId in edgeRefList:
                         lastRef=usedCheckRefs[0]
                         for ref in usedCheckRefs[1:]:
@@ -1508,16 +1514,18 @@ class OSMParserData():
 #        print("getNodesInBBox:%f"%(stop-start))
         return resultList
 
-    def getNearNodes(self, lat, lon, country, maxDistance, nodeType=None):  
-        latRangeMax=lat+0.005
-        lonRangeMax=lon+0.005
-        latRangeMin=lat-0.005
-        lonRangeMin=lon-0.005
+    def getNearNodes(self, lat, lon, country, maxDistance, margin, nodeType=None):  
+        latRangeMax=lat+margin
+        lonRangeMax=lon+margin*1.4
+        latRangeMin=lat-margin
+        lonRangeMin=lon-margin*1.4
         
-        bbox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
+        self.currentSearchBBox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
         nodes=list()
+#        print("%f %f"%(self.osmutils.distance(latRangeMin, lonRangeMin, latRangeMax, lonRangeMin),
+#                       self.osmutils.distance(latRangeMin, lonRangeMin, latRangeMin, lonRangeMax)))
         
-        allentries=self.getNodesInBBox(bbox, country, nodeType)
+        allentries=self.getNodesInBBox(self.currentSearchBBox, country, nodeType)
         for x in allentries:
             refId, lat1, lon1, wayIdList, _=x
             if wayIdList==None:
@@ -1531,6 +1539,12 @@ class OSMParserData():
 #        print(len(nodes))
 
         return nodes
+    
+    def getCurrentSearchBBox(self):
+        return self.currentSearchBBox
+    
+    def getCurrentSearchEdgeList(self):
+        return self.currentPossibleEdgeList
     
     def testWayTable(self, country):
         self.setDBCursorForCountry(country)
@@ -2314,6 +2328,7 @@ class OSMParserData():
     def calcRoute(self, route):
         route.calcRoute(self)
         
+    # bbox for spatial DB (left, top, right, bottom)
     def createBBoxForRoute(self, route):
         bbox=[None, None, None, None]
         routingPointList=route.getRoutingPointList()
@@ -2339,27 +2354,27 @@ class OSMParserData():
                                 
         return bbox
             
-    def createBBox(self, pos1, pos2):
-        bbox=[0.0, 0.0, 0.0, 0.0]
-        lat1=pos1[0]
-        lon1=pos1[1]
-        lat2=pos2[0]
-        lon2=pos2[1]
-        if lat2>lat1:
-            bbox[3]=lat2
-            bbox[1]=lat1
-        else:
-            bbox[3]=lat1
-            bbox[1]=lat2
-        
-        if lon2>lon1:
-            bbox[2]=lon2
-            bbox[0]=lon1
-        else:
-            bbox[2]=lon1
-            bbox[0]=lon2
-            
-        return bbox
+#    def createBBox(self, pos1, pos2):
+#        bbox=[0.0, 0.0, 0.0, 0.0]
+#        lat1=pos1[0]
+#        lon1=pos1[1]
+#        lat2=pos2[0]
+#        lon2=pos2[1]
+#        if lat2>lat1:
+#            bbox[3]=lat2
+#            bbox[1]=lat1
+#        else:
+#            bbox[3]=lat1
+#            bbox[1]=lat2
+#        
+#        if lon2>lon1:
+#            bbox[2]=lon2
+#            bbox[0]=lon1
+#        else:
+#            bbox[2]=lon1
+#            bbox[0]=lon2
+#            
+#        return bbox
 
     def getRoutingForPoint(self, point):
         lat1, lon1=point.getRefPos()
@@ -2693,13 +2708,13 @@ class OSMParserData():
                     enforcement["info"]="maxspeed:%s"%(storedTags["maxspeed"])
                     enforcementList.append(enforcement)
                 # speed_camera refs can also be "near" this ref           
-                speedCameraNodes=self.getNearNodes(lat, lon, country, 1, 10.0)
-                for speedCameraRef, _, _, _ in speedCameraNodes:
-                    if speedCameraRef!=ref:
-                        enforcement=dict()
-                        enforcement["coords"]=(lat, lon)
-                        enforcement["info"]="maxspeed"
-                        enforcementList.append(enforcement)
+#                speedCameraNodes=self.getNearNodes(lat, lon, country, 10.0, 1, 0.0001)
+#                for speedCameraRef, _, _, _ in speedCameraNodes:
+#                    if speedCameraRef!=ref:
+#                        enforcement=dict()
+#                        enforcement["coords"]=(lat, lon)
+#                        enforcement["info"]="maxspeed"
+#                        enforcementList.append(enforcement)
         
         if len(enforcementList)==0:
             return None
@@ -3147,7 +3162,7 @@ class OSMParserData():
                     trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
                
                 # TODO: speed_camera refs can also be "near" this ref
-#                speedCameraNodes=self.getNearNodes(lat, lon, country, 1, 50.0)
+#                speedCameraNodes=self.getNearNodes(lat, lon, country, 10, 1)
 #                for speedCameraRef, _, _, _ in speedCameraNodes:
 #                    if speedCameraRef!=ref:
 #                    trackItemRef["enforcement"]="maxspeed"
@@ -4630,7 +4645,7 @@ def main(argv):
 #    print(p.getEdgeEntryForEdgeId(6719))
 #    print(p.getEdgeEntryForEdgeId(2024))
 
-    p.test()
+#    p.test()
 
 #    p.testDBConistency()
 #    p.testRestrictionTable()

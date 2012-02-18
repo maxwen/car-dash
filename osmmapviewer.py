@@ -691,6 +691,7 @@ class QtOSMWidget(QWidget):
             return pixbuf
         else:
             if self.withMapnik==True:
+#                print("callMapnikForTile from getTile")
                 self.callMapnikForTile()
                 return self.getTilePlaceholder(zoom, x, y)
             elif self.withDownload==True:
@@ -821,6 +822,34 @@ class QtOSMWidget(QWidget):
         rect=QRect(0, 0, self.width(), self.height())
         return rect.contains(point)    
     
+    # bbox in deg (left, top, right, bottom)
+    # only use if transform active
+    def displayBBox(self, bbox):
+        y,x=self.getPixelPosForLocationDeg(bbox[1], bbox[0], True)
+        y1,x1=self.getPixelPosForLocationDeg(bbox[3], bbox[2], True)
+        
+        point0=QPointF(x, y)        
+        point1=QPointF(x1, y1)        
+
+        rect=QRectF(point0, point1)
+        
+        self.painter.setPen(QPen(QColor(255, 0, 0)))
+        self.painter.drawRect(rect)
+        
+    # only use if transform is active
+    def displayEdges(self, edgeList):
+#        print(edgeList)
+        edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(edgeList[0])
+        _, country=osmParserData.getCountryOfRef(startRef)
+        
+        pen=QPen()
+        pen.setColor(QColor(255, 0, 0))
+        pen.setWidth(3)
+        for edgeId in edgeList:
+            coords=osmParserData.getCoordsOfEdge(edgeId, country)
+            self.displayEdge(coords, pen)
+            
+    # get bbox in deg mapnik style (left, bottom, right, top)
     def getVisibleBBoxDeg(self, margin=0):
         invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
@@ -838,6 +867,7 @@ class QtOSMWidget(QWidget):
         return [self.osmutils.rad2deg(rlon1), self.osmutils.rad2deg(rlat1), 
                 self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
 
+    # get bbox in deg with margin mapnik style (left, bottom, right, top)
     def getVisibleBBoxDegWithMargin(self):
         return self.getVisibleBBoxDeg(TILESIZE)
 
@@ -955,7 +985,13 @@ class QtOSMWidget(QWidget):
             self.displayEdge(self.currentCoords)
             
         self.showRoutingPoints()            
-        
+                    
+        if len(osmParserData.getCurrentSearchEdgeList())!=0:
+            self.displayEdges(osmParserData.getCurrentSearchEdgeList())
+
+        if osmParserData.getCurrentSearchBBox()!=None:
+            self.displayBBox(osmParserData.getCurrentSearchBBox())
+
         self.painter.resetTransform()
         
         self.showEnforcementInfo()
@@ -970,6 +1006,7 @@ class QtOSMWidget(QWidget):
             
         self.showTextInfo()
         self.showSpeedInfo()
+                
         self.painter.end()
                         
 #        print(self.getVisibleBBoxDeg())
@@ -1062,6 +1099,7 @@ class QtOSMWidget(QWidget):
                 for enforcement in self.enforcementInfoList:
                     lat, lon=enforcement["coords"]
                     (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
+#                    print("%f %f %f %f"%(lat, lon, x, y))
                     if self.isPointVisibleTransformed(x, y):
                         self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
 
@@ -1178,7 +1216,7 @@ class QtOSMWidget(QWidget):
     def getPenWithForPoints(self):
         return self.getPenWidthForZoom()+4
     
-    def displayEdge(self, coords):        
+    def displayEdge(self, coords, pen=None):        
         polygon=QPolygon()
         
         for point in coords:
@@ -1187,10 +1225,14 @@ class QtOSMWidget(QWidget):
             # TODO: always display complete edge and ignore visibility
             point=QPoint(x, y);
             polygon.append( point )
-                
-        pen=self.edgePen
-        pen.setWidth(self.getPenWidthForZoom())
-        self.painter.setPen(pen)
+               
+        if pen!=None: 
+            self.painter.setPen(pen)
+        else:
+            pen=self.edgePen
+            pen.setWidth(self.getPenWidthForZoom())
+            self.painter.setPen(self.edgePen)
+
         self.painter.drawPolyline(polygon)
         
     def displayEdgeOfRoute(self, remainingTrackList, edgeIndexList):
@@ -1316,16 +1358,17 @@ class QtOSMWidget(QWidget):
         # check if we are near the end of the "tiles area"
         # and call for new tiles e.g. download or mapnik
 
-        if self.lastCenterX!=None and self.lastCenterY!=None:
-            if abs(self.lastCenterX-self.center_x)>TILESIZE or abs(self.lastCenterY-self.center_y)>TILESIZE:
-                if self.withMapnik==True:
-                    self.callMapnikForTile()
-
-                self.lastCenterX=self.center_x
-                self.lastCenterY=self.center_y
-        else:
-            self.lastCenterX=self.center_x
-            self.lastCenterY=self.center_y
+#        if self.lastCenterX!=None and self.lastCenterY!=None:
+#            if abs(self.lastCenterX-self.center_x)>TILESIZE or abs(self.lastCenterY-self.center_y)>TILESIZE:
+#                if self.withMapnik==True:
+#                    print("callMapnikForTile from center_coord_update")
+#                    self.callMapnikForTile()
+#
+#                self.lastCenterX=self.center_x
+#                self.lastCenterY=self.center_y
+#        else:
+#            self.lastCenterX=self.center_x
+#            self.lastCenterY=self.center_y
             
     def stepInDirection(self, step_x, step_y):
         map_x, map_y=self.getMapZeroPos()
@@ -1776,7 +1819,7 @@ class QtOSMWidget(QWidget):
     
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, 0.001)
         if edgeId==None:
             return 
         
@@ -1794,7 +1837,7 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, 0.001)
         if edgeId==None:
             return
         
@@ -1909,7 +1952,7 @@ class QtOSMWidget(QWidget):
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
 #            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.track, self.lastEdgeId, self.nextEdgeOnRoute)
-            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute)
+            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005)
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2382,7 +2425,7 @@ class OSMWidget(QWidget):
 
         vbox.addLayout(hbox1)
         
-        self.addTestButtons(vbox)
+#        self.addTestButtons(vbox)
 
     def addTestButtons(self, vbox):
         buttons=QHBoxLayout()        

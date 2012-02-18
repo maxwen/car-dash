@@ -18,11 +18,11 @@ class TrspWrapper():
     def getDB(self):
         return os.path.join(self.dataDir, "edge.db")
     
-    def getQueryBBox(self, bbox):
-        ymin=bbox[1]-0.1
-        xmin=bbox[0]-0.1
-        ymax=bbox[3]+0.1
-        xmax=bbox[2]+0.1
+    def getQueryBBox(self, bbox, margin=0.1):
+        ymin=bbox[1]-margin
+        xmin=bbox[0]-margin
+        ymax=bbox[3]+margin
+        xmax=bbox[2]+margin
         return [xmin, ymin, xmax, ymax]
     
     def getSQLQueryEdgeShortest(self):
