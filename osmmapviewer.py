@@ -11,7 +11,7 @@ import signal
 import http.client
 import io
 import socket
-from collections import deque
+from collections import deque, OrderedDict
 import fnmatch
 import time
 
@@ -36,6 +36,8 @@ IMAGE_WIDTH=64
 IMAGE_HEIGHT=64
 IMAGE_WIDTH_SMALL=32
 IMAGE_HEIGHT_SMALL=32
+MAX_TILE_CACHE=1000
+TILE_CLEANUP_SIZE=50
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
@@ -210,9 +212,9 @@ class OSMMapnikTilesWorker(QThread):
             if len(self.workQueue)!=0:
                 self.currentBBox, self.currentZoom=self.workQueue[0]
 #                print("mapnik renders: %s %d"%(self.currentBBox, self.currentZoom))
-                start=time.time()
-                self.mapnikWrapper.render_tiles(self.currentBBox, self.currentZoom)
-                print("%f"%(time.time()-start))
+#                start=time.time()
+                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
+#                print("%f"%(time.time()-start))
                 self.currentBBox=None
                 self.currentZoom=None
                 self.workQueue.popleft()
@@ -343,7 +345,7 @@ class QtOSMWidget(QWidget):
         self.lastHeadingLon=0.0
         
         self.osmutils=OSMUtils()
-        self.tileCache=dict()
+        self.tileCache=OrderedDict()
         self.withMapnik=False
         self.withDownload=False
         self.autocenterGPS=False
@@ -425,7 +427,7 @@ class QtOSMWidget(QWidget):
         self.withMapRotation=True
         self.virtualZoom=1.2
         self.useVirtualZoom=False
-        
+                
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
         
@@ -619,7 +621,7 @@ class QtOSMWidget(QWidget):
         pixbuf = QPixmap(fileName)
         return pixbuf
     
-    def getTileFroZoomFromFile(self, zoom, x, y):
+    def getTileForZoomFromFile(self, zoom, x, y):
         fileName=self.getTileFullPath(zoom, x, y)
         if os.path.exists(fileName):
             pixbuf = QPixmap(fileName)
@@ -633,7 +635,17 @@ class QtOSMWidget(QWidget):
         return None
     
     def addTileToCache(self, pixbuf, fileName):
-        # TODO: limit size of tile cache
+        # limit size of tile cache
+        if len(self.tileCache.keys())>MAX_TILE_CACHE:
+            print("cleanup image cache %d"%(len(self.tileCache.keys())))
+            i=0
+            for key in self.tileCache.keys():
+                del self.tileCache[key]
+                i=i+1
+                if i==TILE_CLEANUP_SIZE:
+                    break
+            print("cleanup image cache done %d"%(len(self.tileCache.keys())))
+
         self.tileCache[fileName]=pixbuf
         
     def drawPixmap(self, x, y, width, height, pixbuf):
@@ -652,7 +664,7 @@ class QtOSMWidget(QWidget):
             next_y = int(y / 2)
 #            print("search for bigger map for zoom "+str(zoom))
 
-            pixbuf=self.getTileFroZoomFromFile(zoom, next_x, next_y)
+            pixbuf=self.getTileForZoomFromFile(zoom, next_x, next_y)
             if pixbuf!=None:
                 return (pixbuf, zoom)
             else:
@@ -691,6 +703,7 @@ class QtOSMWidget(QWidget):
             return pixbuf
         else:
             if self.withMapnik==True:
+#                print(fileName)
 #                print("callMapnikForTile from getTile")
                 self.callMapnikForTile()
                 return self.getTilePlaceholder(zoom, x, y)
@@ -837,19 +850,31 @@ class QtOSMWidget(QWidget):
         self.painter.drawRect(rect)
         
     # only use if transform is active
-    def displayEdges(self, edgeList):
+    def displayEdges(self, edgeList, expectedNextEdge):
 #        print(edgeList)
-        edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(edgeList[0])
-        _, country=osmParserData.getCountryOfRef(startRef)
-        
         pen=QPen()
-        pen.setColor(QColor(255, 0, 0))
         pen.setWidth(3)
-        for edgeId in edgeList:
+        if len(edgeList)!=0:
+            edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(edgeList[0])
+            _, country=osmParserData.getCountryOfRef(startRef)
+
+            for edgeId in edgeList:
+                if expectedNextEdge!=None and edgeId==expectedNextEdge:
+                    pen.setColor(QColor(0, 255, 0))
+                else:
+                    pen.setColor(QColor(255, 0, 0))
+    
+                coords=osmParserData.getCoordsOfEdge(edgeId, country)
+                self.displayEdge(coords, pen)
+        elif expectedNextEdge!=None:
+            edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(expectedNextEdge)
+            _, country=osmParserData.getCountryOfRef(startRef)
+            pen.setColor(QColor(0, 255, 0))
             coords=osmParserData.getCoordsOfEdge(edgeId, country)
             self.displayEdge(coords, pen)
-            
+
     # get bbox in deg mapnik style (left, bottom, right, top)
+    # untransformed
     def getVisibleBBoxDeg(self, margin=0):
         invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
@@ -870,27 +895,14 @@ class QtOSMWidget(QWidget):
     # get bbox in deg with margin mapnik style (left, bottom, right, top)
     def getVisibleBBoxDegWithMargin(self):
         return self.getVisibleBBoxDeg(TILESIZE)
-
-#    def getVisibleBBoxDegWithMargin(self):
-#        bbox=self.getVisibleBBoxWithMargin()
-#        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
-#        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
-#
-#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
-#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
-#
-#        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
-
-#    def getVisibleBBoxDeg(self):
-#        bbox=self.getVisibleBBox()
-#        rlon = self.osmutils.pixel2lon(self.map_zoom, bbox[0])
-#        rlat = self.osmutils.pixel2lat(self.map_zoom, bbox[1])
-#
-#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, bbox[2])
-#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, bbox[3])
-#
-#        return [self.osmutils.rad2deg(rlon), self.osmutils.rad2deg(rlat), self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
     
+    # with transformation
+    def getVisibleBBoxForMapnik(self, margin=TILESIZE):
+        map_x, map_y=self.getMapZeroPos()
+
+        return [map_x + 0-margin, map_y + self.height()+margin, 
+                map_x + self.width()+margin, map_y + 0-margin]
+
     def show(self, zoom, lat, lon):
         self.osm_center_map_to_position(lat, lon)
         self.osm_map_set_zoom(zoom)
@@ -986,8 +998,8 @@ class QtOSMWidget(QWidget):
             
         self.showRoutingPoints()            
                     
-        if len(osmParserData.getCurrentSearchEdgeList())!=0:
-            self.displayEdges(osmParserData.getCurrentSearchEdgeList())
+        if len(osmParserData.getCurrentSearchEdgeList())!=0 or osmParserData.getExpectedNextEdge()!=None:
+            self.displayEdges(osmParserData.getCurrentSearchEdgeList(), osmParserData.getExpectedNextEdge())
 
         if osmParserData.getCurrentSearchBBox()!=None:
             self.displayBBox(osmParserData.getCurrentSearchBBox())
@@ -1009,8 +1021,8 @@ class QtOSMWidget(QWidget):
                 
         self.painter.end()
                         
-#        print(self.getVisibleBBoxDeg())
-#        print(self.getVisibleBBoxDegWithMargin())
+#        print(self.getVisibleBBoxDeg(TILESIZE))
+#        print(self.getVisibleBBoxDegForMapnik())
 #        self.printTilesGeometry()
 #        print("QtOSMWidget:paintEvent")
 
@@ -1400,7 +1412,16 @@ class QtOSMWidget(QWidget):
             # only calculate heading if difference to last calculation is > 5m
             # to prevent unnecessary rotating
             if self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon)>5.0:
-                self.heading=self.osmutils.headingDegrees(self.lastHeadingLat, self.lastHeadingLon, lat, lon)
+                heading=self.osmutils.headingDegrees(self.lastHeadingLat, self.lastHeadingLon, lat, lon)
+                if self.heading==None:
+                    self.heading=heading
+                else:
+                    headingDiff=self.osmutils.headingDiffAbsolute(heading, self.heading)
+                    # TODO: filter noise if headingDiff is to large
+                    # make change "gradually"
+                    print(headingDiff)
+                    self.heading=heading
+                
                 self.lastHeadingLat=lat
                 self.lastHeadingLon=lon
                 
@@ -1422,6 +1443,7 @@ class QtOSMWidget(QWidget):
             gps_rlon_new=self.osmutils.deg2rad(lon)
             
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
+#                print("gps update")
                 if self.stop==False:  
                     # only calculate when moving
                     self.calcCurrentHeading(lat, lon) 
@@ -1429,7 +1451,8 @@ class QtOSMWidget(QWidget):
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
-                self.showTrackOnGPSPos(lat, lon, False)
+                if self.stop==False:  
+                    self.showTrackOnGPSPos(lat, lon, False)
 
                 if self.wayInfo!=None:
                     self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, (lat, lon))
@@ -1460,7 +1483,8 @@ class QtOSMWidget(QWidget):
         None
         
     def callMapnikForTile(self):
-        bbox=self.getVisibleBBoxDegWithMargin()     
+        bbox=self.getVisibleBBoxForMapnik()  
+#        print("call mapnik with %s"%bbox)   
 #        print(bbox)       
         self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
         
@@ -1944,15 +1968,14 @@ class QtOSMWidget(QWidget):
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
 #                self.recalcRouteFromPointList(routingPointList)
                 self.recalcRouteFromPoint(recalcPoint)
-                
-    def showTrackOnPos(self, lat, lon, update):
+            
+    def showTrackOnPos(self, lat, lon, update, fromMouse):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
-#            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.track, self.lastEdgeId, self.nextEdgeOnRoute)
-            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005)
+            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse)
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2002,7 +2025,11 @@ class QtOSMWidget(QWidget):
                                 return
                             
                         self.recalcTrigger=0
-                         
+                        if len(self.remainingEdgeList)>1:
+                            self.nextEdgeOnRoute=self.remainingEdgeList[1]
+                        else:
+                            self.nextEdgeOnRoute=None
+                        
                         self.distanceToEnd=self.getDistanceToEnd(self.remainingEdgeList, self.remainingTrackList, lat, lon, self.currentRoute, usedRefId)
                         (direction, crossingLength, crossingInfo, crossingType, crossingRef, crossingEdgeId)=self.getRouteInformationForPos(self.remainingEdgeList, self.remainingTrackList, lat, lon, self.currentRoute, usedRefId)
                         
@@ -2232,11 +2259,11 @@ class QtOSMWidget(QWidget):
     def showTrackOnMousePos(self, x, y):
         if self.osmWidget.dbLoaded==True:
             (lat, lon)=self.getMousePosition(x, y)
-            self.showTrackOnPos(lat, lon, True)
+            self.showTrackOnPos(lat, lon, True, True)
 
     def showTrackOnGPSPos(self, lat, lon, update):
         if self.osmWidget.dbLoaded==True:
-            self.showTrackOnPos(lat, lon, update)            
+            self.showTrackOnPos(lat, lon, update, False)            
     
     def getMousePosition(self, x, y):
         point=QPointF(x, y)        
@@ -2425,7 +2452,7 @@ class OSMWidget(QWidget):
 
         vbox.addLayout(hbox1)
         
-#        self.addTestButtons(vbox)
+        self.addTestButtons(vbox)
 
     def addTestButtons(self, vbox):
         buttons=QHBoxLayout()        
@@ -2736,10 +2763,12 @@ class OSMWidget(QWidget):
             self.incLat=self.startLat
             self.incLon=self.startLon
             self.incTrack=0
+            self.i=0
 #            self.osmWidget.mapWidgetQt.heading=0
         else:
             self.incLat=self.incLat+0.0001
-            self.incLon=self.incLon+0.0001
+            self.incLon=self.incLon+0.0001*self.i
+            self.i=self.i+1
             self.incTrack+=5
             if self.incTrack>360:
                 self.incTrack=0
@@ -2791,8 +2820,8 @@ class OSMWindow(QMainWindow):
         self.setCentralWidget(self.osmWidget)
 
         # 47.820630:13.016850
-        self.osmWidget.setStartLatitude(47.8249662)
-        self.osmWidget.setStartLongitude(13.0471808)
+        self.osmWidget.setStartLatitude(47.820154)
+        self.osmWidget.setStartLongitude(13.020982)
 
         top=QVBoxLayout(self.osmWidget)        
         self.osmWidget.addToWidget(top)

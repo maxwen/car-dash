@@ -209,11 +209,17 @@ class OSMUtils():
             h -= 360.0
         return h;
     
+    def headingDiffAbsolute(self, heading1, heading2):
+        return abs((heading1 + 180 -  heading2) % 360 - 180);
+       
+    def headingDiff(self, heading1, heading2):
+        diff=heading1 - heading2+180
+        return diff%360
+    
     def azimuth(self, crossPoint, fromPoint, toPoint):
         fromDegree=int(self.headingDegrees(fromPoint[0], fromPoint[1], crossPoint[0], crossPoint[1]))
         toDegree=int(self.headingDegrees(crossPoint[0], crossPoint[1], toPoint[0], toPoint[1]))
-        diff=fromDegree - toDegree+180
-        return diff%360
+        return self.headingDiff(fromDegree, toDegree)
 
     def direction(self, azimuth):
         if azimuth>=1 and azimuth<50:
@@ -259,60 +265,69 @@ class OSMUtils():
             return "end"
         return "unknown" 
 def main():    
-    # 84194738 
-    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
-
-    latCross=47.8027471
-    lonCross=13.0290138
-    
-    # 455994015
-    latFrom=47.8029724
-    lonFrom=13.0299361
-    
-    # rechts 11840580
-    latRight=47.8033938
-    lonRight=13.028636
-    
-    #links 336748981
-    latLeft=47.8020688
-    lonLeft=13.0294019
-    
-    # gerade 84194737
-    latStraight=47.8026081
-    lonStraight=13.0284631
-    
+#    # 84194738 
+#    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
+#
+#    latCross=47.8027471
+#    lonCross=13.0290138
+#    
+#    # 455994015
+#    latFrom=47.8029724
+#    lonFrom=13.0299361
+#    
+#    # rechts 11840580
+#    latRight=47.8033938
+#    lonRight=13.028636
+#    
+#    #links 336748981
+#    latLeft=47.8020688
+#    lonLeft=13.0294019
+#    
+#    # gerade 84194737
+#    latStraight=47.8026081
+#    lonStraight=13.0284631
+#    
     osmutils=OSMUtils()
+#
+#    # coming from right
+#    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latRight, lonRight)))
+#    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latStraight, lonStraight)))
+#    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latLeft, lonLeft)))
+# 
+#    # comming from top
+#    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latStraight, lonStraight)))
+#    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latLeft, lonLeft)))
+#    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latFrom, lonFrom)))
+#
+#    # comming from left
+#    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latLeft, lonLeft)))
+#    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latFrom, lonFrom)))
+#    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latRight, lonRight)))
+#
+#    # comming from down
+#    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latFrom, lonFrom)))
+#    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latRight, lonRight)))
+#    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latStraight, lonStraight)))
+#
+#    latCross=47.8380837
+#    lonCross=12.9875343
+#    
+#    latFrom=47.8387129
+#    lonFrom=12.9882358
+#    
+#    latTo=47.8383155
+#    lonTo=12.9885131
+#    
+#    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo)))
 
-    # coming from right
-    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latRight, lonRight)))
-    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latStraight, lonStraight)))
-    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latLeft, lonLeft)))
- 
-    # comming from top
-    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latStraight, lonStraight)))
-    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latLeft, lonLeft)))
-    print(osmutils.azimuth((latCross, lonCross), (latRight, lonRight), (latFrom, lonFrom)))
-
-    # comming from left
-    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latLeft, lonLeft)))
-    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latFrom, lonFrom)))
-    print(osmutils.azimuth((latCross, lonCross), (latStraight, lonStraight), (latRight, lonRight)))
-
-    # comming from down
-    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latFrom, lonFrom)))
-    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latRight, lonRight)))
-    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latStraight, lonStraight)))
-
-    latCross=47.8380837
-    lonCross=12.9875343
-    
-    latFrom=47.8387129
-    lonFrom=12.9882358
-    
-    latTo=47.8383155
-    lonTo=12.9885131
-    
-    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo)))
+    print(osmutils.headingDiffAbsolute(90, 90))
+    print(osmutils.headingDiffAbsolute(180, 181))
+    print(osmutils.headingDiffAbsolute(181, 180))
+    print(osmutils.headingDiffAbsolute(360, 360))
+    print(osmutils.headingDiffAbsolute(320, 20))
+    print(osmutils.headingDiffAbsolute(20, 320))
+    print(osmutils.headingDiffAbsolute(45, 270))
+    print(osmutils.headingDiffAbsolute(270, 45))
 
 #    start=time.time()
 #    for i in range(0, 100000):

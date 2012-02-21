@@ -139,7 +139,7 @@ class MapnikWrapper(QObject):
                 else:
                     self.render_thread.render_tile(tile_uri, x, y, z)  
                     self.emit(SIGNAL("updateMap()"))             
-#                print(name, ":", z, x, y, exists)
+                    print(name, ":", z, x, y, exists)
 
     def render_tiles2(self, bbox, zoom, name="unknown", tms_scheme=False):
 #        print(self.tile_dir)
@@ -179,4 +179,4 @@ class MapnikWrapper(QObject):
                 else:
                     self.render_thread.render_tile(tile_uri, x, y, z)  
                     self.emit(SIGNAL("updateMap()"))             
-#                print(name, ":", z, x, y, exists)
+#                    print(name, ":", z, x, y, exists)
