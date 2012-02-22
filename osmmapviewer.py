@@ -18,6 +18,8 @@ import time
 from PyQt4.QtCore import QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
+from osmparser.osmrouting import OSMRouting
+
 from config import Config
 from osmparser.osmutils import OSMUtils
 from gpsutils import GPSMonitorUpateWorker
@@ -47,6 +49,7 @@ runState="run"
 stoppedState="stopped"
 
 osmParserData = OSMParserData()
+osmRouting=OSMRouting(osmParserData)
 
 class OSMRoutingPointAction(QAction):
     def __init__(self, text, routingPoint, parent):
@@ -166,13 +169,17 @@ class OSMMapnikTilesWorker(QThread):
         QThread.__init__(self, parent)
         self.exiting = False
         self.currentBBox=None
+        self.lastBBox=None
         self.currentZoom=None
+        self.lastZoom=None
         self.lastBBox=None
         self.lastZoom=None
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
         self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
         self.workQueue=deque()
-
+        self.tileQueue=deque()
+        self.updateMapTrigger=0;
+        
     def setWidget(self, osmWidget):
         self.osmWidget=osmWidget
         
@@ -198,37 +205,70 @@ class OSMMapnikTilesWorker(QThread):
         self.exiting = True
         self.wait()
 
-    def addBboxAndZoom(self, bbox, zoom):
-        if not (bbox, zoom) in self.workQueue:
-#            print("call mapnik for: %s %d"%(bbox, zoom))
-            self.workQueue.append((bbox, zoom))
+    def addTile(self, zoom, x, y):
+        if not (zoom, x, y) in self.tileQueue:
+#            print("call mapnik for %d %d %d"%(zoom, x, y))
+            self.tileQueue.append((zoom, x, y))
             
             if not self.isRunning():
+                self.updateMapTrigger=0
                 self.setup()
-                        
+            
+#    def addBboxAndZoom(self, bbox, zoom):
+#        if not (bbox, zoom) in self.workQueue:
+#            self.workQueue.append((bbox, zoom))
+#            
+#            if not self.isRunning():
+#                self.setup()
+        
     def run(self):
         self.updateMapnikThreadState(runState)
         while not self.exiting and True:
-            if len(self.workQueue)!=0:
-                self.currentBBox, self.currentZoom=self.workQueue[0]
-#                print("mapnik renders: %s %d"%(self.currentBBox, self.currentZoom))
+            while len(self.tileQueue)!=0:
+                (zoom, x, y)=self.tileQueue[0]
 #                start=time.time()
-                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
+                self.mapnikWrapper.render_tiles3(x, y, zoom)
 #                print("%f"%(time.time()-start))
-                self.currentBBox=None
-                self.currentZoom=None
-                self.workQueue.popleft()
-#                self.updateMap()
-                if len(self.workQueue)!=0:
-                    continue
+                self.tileQueue.popleft()
                 
+                if self.updateMapTrigger==5:
+                    self.updateMap();
+                    self.updateMapTrigger=0
+                else:
+                    self.updateMapTrigger=self.updateMapTrigger+1
+                                                     
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
 
-            self.msleep(1000) 
-            if len(self.workQueue)==0:
+#            print("longsleep")
+            self.msleep(500) 
+            if len(self.tileQueue)==0:
                 self.exiting=True
+                continue
+
+#            if len(self.workQueue)!=0:
+#                self.currentBBox, self.currentZoom=self.workQueue[0]
+#                
+##                print("mapnik renders: %s %d"%(self.currentBBox, self.currentZoom))
+##                start=time.time()
+#                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
+##                print("%f"%(time.time()-start))
+#                self.lastZoom=self.currentZoom
+#                self.lastBBox=self.currentBBox
+#                self.currentBBox=None
+#                self.currentZoom=None
+#                self.workQueue.popleft()
+#                if len(self.workQueue)!=0:
+#                    continue
+#                
+#            self.updateStatusLabel("OSM mapnik thread idle")
+#            self.updateMapnikThreadState(idleState)
+#
+#            self.msleep(1000) 
+#            if len(self.workQueue)==0:
+#                self.exiting=True
                 
+        self.updateMap();
         self.updateStatusLabel("OSM mapnik thread stopped")
         self.updateMapnikThreadState(stoppedState)
 
@@ -425,8 +465,8 @@ class QtOSMWidget(QWidget):
         self.lastCenterX=None
         self.lastCenterY=None
         self.withMapRotation=True
-        self.virtualZoom=1.2
-        self.useVirtualZoom=False
+#        self.virtualZoom=1.2
+#        self.useVirtualZoom=False
                 
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -551,9 +591,15 @@ class QtOSMWidget(QWidget):
     def osm_center_map_to_position(self, lat, lon):
         self.osm_center_map_to(self.osmutils.deg2rad(lat), self.osmutils.deg2rad(lon))
         
+    def checkTileDirForZoom(self):
+        tileDirForZoom=os.path.join(self.getTileHomeFullPath(), "%s"%self.map_zoom)
+        if not os.path.isdir(tileDirForZoom):
+            os.mkdir(tileDirForZoom)
+        
     def osm_map_set_zoom (self, zoom):
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
-#        print(self.map_zoom)
+        self.checkTileDirForZoom()
+        
         self.osm_map_handle_resize()
         
     def osm_map_handle_resize (self):
@@ -705,7 +751,9 @@ class QtOSMWidget(QWidget):
             if self.withMapnik==True:
 #                print(fileName)
 #                print("callMapnikForTile from getTile")
-                self.callMapnikForTile()
+#                self.callMapnikForTile()
+                self.callMapnikForTile2(zoom, x, y)
+
                 return self.getTilePlaceholder(zoom, x, y)
             elif self.withDownload==True:
                 self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.getTileServer())
@@ -963,7 +1011,7 @@ class QtOSMWidget(QWidget):
 #            posX += TILESIZE
     
     def paintEvent(self, event):
-#        print("paintEvent %d-%d"%(self.width(), self.height()))
+#        print("paintEvent %s"%(QRectF(0, 0, self.width(), self.height())))
 #        print(self.pos())
 #        self.updateGeometry()
         self.painter=QPainter(self)
@@ -998,8 +1046,8 @@ class QtOSMWidget(QWidget):
             
         self.showRoutingPoints()            
                     
-        if len(osmParserData.getCurrentSearchEdgeList())!=0 or osmParserData.getExpectedNextEdge()!=None:
-            self.displayEdges(osmParserData.getCurrentSearchEdgeList(), osmParserData.getExpectedNextEdge())
+        if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None:
+            self.displayEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
 
         if osmParserData.getCurrentSearchBBox()!=None:
             self.displayBBox(osmParserData.getCurrentSearchBBox())
@@ -1404,22 +1452,33 @@ class QtOSMWidget(QWidget):
     def stepRight(self, step):
         self.stepInDirection(step, 0)
 
-    def calcCurrentHeading(self, lat, lon):
+    def calcCurrentHeading(self, lat, lon, speed):
         if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
             self.lastHeadingLat=lat
             self.lastHeadingLon=lon
         else:    
-            # only calculate heading if difference to last calculation is > 5m
+            if speed<30:
+                minDistance=2.0
+            elif speed<50:
+                minDistance=5.0
+            elif speed<80:
+                minDistance=8.0
+            elif speed<100:
+                minDistance=10.0
+            else:
+                minDistance=15.0
+                
+            # only calculate heading if difference to last calculation is 
+            # large then a specific length based on the current speed
             # to prevent unnecessary rotating
-            if self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon)>5.0:
+            if self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon)>minDistance:
                 heading=self.osmutils.headingDegrees(self.lastHeadingLat, self.lastHeadingLon, lat, lon)
                 if self.heading==None:
                     self.heading=heading
                 else:
-                    headingDiff=self.osmutils.headingDiffAbsolute(heading, self.heading)
+#                    headingDiff=self.osmutils.headingDiffAbsolute(heading, self.heading)
                     # TODO: filter noise if headingDiff is to large
                     # make change "gradually"
-                    print(headingDiff)
                     self.heading=heading
                 
                 self.lastHeadingLat=lat
@@ -1446,7 +1505,7 @@ class QtOSMWidget(QWidget):
 #                print("gps update")
                 if self.stop==False:  
                     # only calculate when moving
-                    self.calcCurrentHeading(lat, lon) 
+                    self.calcCurrentHeading(lat, lon, speed) 
                         
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
@@ -1473,6 +1532,7 @@ class QtOSMWidget(QWidget):
             self.gps_rlon=0.0
             self.gpsPoint=None
             self.heading=None
+            self.stop=True
 #            self.track=None
             self.update()
         
@@ -1487,6 +1547,9 @@ class QtOSMWidget(QWidget):
 #        print("call mapnik with %s"%bbox)   
 #        print(bbox)       
         self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
+
+    def callMapnikForTile2(self, zoom, x, y):      
+        self.osmWidget.mapnikThread.addTile(zoom, x, y)
         
     def setDownloadTiles(self, value):
         self.withDownload=value
@@ -1975,7 +2038,7 @@ class QtOSMWidget(QWidget):
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
-            edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse)
+            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse)
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2011,7 +2074,7 @@ class QtOSMWidget(QWidget):
                            
                     if edgeId==self.remainingEdgeList[0]:    
                         # look if we are on the tracklist start                   
-                        onRoute=osmParserData.checkForPosOnTracklist(lat, lon, self.remainingTrackList)                            
+                        onRoute=osmRouting.checkForPosOnTracklist(lat, lon, self.remainingTrackList)                            
 #                        print(onRoute)
                         if onRoute==False:
                             if self.recalcTrigger==3:

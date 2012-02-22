@@ -264,6 +264,39 @@ class OSMUtils():
         if direction==99:
             return "end"
         return "unknown" 
+
+    def createTemporaryPoint(self, lat, lon, lat1, lon1, offset=0.0):
+        distance=int(self.distance(lat, lon, lat1, lon1))
+        # create nodes with distance 5m
+        frac=5
+        if offset!=0.0:
+            pointsToIgnore=int(offset/frac)
+        else:
+            pointsToIgnore=None
+        pointsToCreate=int(distance/frac)
+
+        points=list()
+        if offset==0.0:
+            points.append((lat, lon))
+        if distance>frac:
+            doneDistance=0
+            i=0
+            while doneDistance<distance:
+                newLat, newLon=self.linepart(lat, lon, lat1, lon1, doneDistance/distance)
+                if pointsToIgnore!=None:
+                    if i>pointsToIgnore and i<pointsToCreate-pointsToIgnore:
+                        points.append((newLat, newLon))
+                else:
+                    points.append((newLat, newLon))
+                    
+                doneDistance=doneDistance+frac
+                i=i+1
+        if offset==0.0:
+            points.append((lat1, lon1))
+
+#        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
+        return points
+    
 def main():    
 #    # 84194738 
 #    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
