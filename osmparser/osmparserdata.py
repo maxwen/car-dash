@@ -149,7 +149,8 @@ class OSMRoutingPoint():
         self.name=name
         self.usedRefId=0
         self.country=None
-        self.targetOneway=0
+        self.targetOneway=False
+        self.oneway=0
         
         self.refLat=0.0
         self.refLon=0.0
@@ -177,8 +178,12 @@ class OSMRoutingPoint():
         self.edgeId=edgeId
         self.target=target
         self.source=source
-        if oneway==1 or roundabout==1:
-            self.targetOneway=oneway
+        self.oneway=oneway
+        if oneway!=0:
+            self.targetOneway=True
+        else:
+            self.targetOneway=False
+        
         self.usedRefId=usedRefId
         
         self.refLat, self.refLon=osmParserData.getCoordsWithRefAndCountry(self.usedRefId, country)
@@ -192,6 +197,9 @@ class OSMRoutingPoint():
     
     def getTargetOneway(self):
         return self.targetOneway
+    
+    def getOneway(self):
+        return self.oneway
     
     def __repr__(self):
         return "%s:%d:%f:%f"%(self.name, self.type, self.lat, self.lon)
@@ -1472,15 +1480,30 @@ class OSMParserData():
         return False
     
     def decodeStreetInfo(self, streetInfo):
-        oneway=(streetInfo&31)>>4
-        roundabout=(streetInfo&63)>>5
+        oneway=(streetInfo&63)>>4
+        roundabout=(streetInfo&127)>>6
         streetTypeId=(streetInfo&15)
         return streetTypeId, oneway, roundabout
     
     def encodeStreetInfo(self, streetTypeId, oneway, roundabout):
-        streetInfo=streetTypeId+(oneway<<4)+(roundabout<<5)
+        streetInfo=streetTypeId+(oneway<<4)+(roundabout<<6)
         return streetInfo
     
+    def isValidOnewayEnter(self, oneway, ref, startRef, endRef):
+        if oneway==1:
+            if ref==startRef:
+                return True
+        elif oneway==2:
+            if ref==endRef:
+                return True
+        return False
+    
+    def isValidWay2WayCrossing(self, refs, refs2):
+        return (refs[-1]==refs2[0] 
+                or refs[0]==refs2[-1] 
+                or refs[0]==refs2[0] 
+                or refs[-1]==refs2[-1])
+
     def getStreetTypeId(self, streetType):
         if streetType=="road":
             return 0
@@ -1635,8 +1658,7 @@ class OSMParserData():
                         oneway=1
                     elif tags["oneway"]=="-1":
                         print("way %d has oneway==-1"%(wayid))
-                        oneway=1
-                        refs.reverse()
+                        oneway=2
                 if "junction" in tags:
                     if tags["junction"]=="roundabout":
                         roundabout=1
@@ -1732,7 +1754,6 @@ class OSMParserData():
                                 restrictionEntry["viaNode"]=viaNode
                             elif len(viaWay)!=0:
                                 restrictionEntry["viaWay"]=viaWay
-                                print(restrictionEntry)
     
                             self.wayRestricitionList.append(restrictionEntry)
                         
@@ -2048,9 +2069,12 @@ class OSMParserData():
         else:
             return point.getTarget()
            
-    def getRoutingSourceForPointOneway(self, startPoint, targetPoint):
-        source=startPoint.getTarget()
-        
+    def getRoutingSourceForPointOneway(self, oneway, startPoint, targetPoint):
+        if oneway==1:
+            source=startPoint.getTarget()
+        elif oneway==2:
+            source=startPoint.getSource()
+
         if startPoint.getEdgeId()==targetPoint.getEdgeId():
             latStart, lonStart=startPoint.getPos()
             latTarget, lonTarget=targetPoint.getPos()
@@ -2061,13 +2085,18 @@ class OSMParserData():
             distanceTargetToStartRef=self.osmutils.distance(latTarget, lonTarget, latStartRef, lonStartRef)
             
             if distanceStartToStartRef<distanceTargetToStartRef:
-                source=startPoint.getSource()
-                print("source=startPoint.getSource()")
-              
+                if oneway==1:
+                    source=startPoint.getSource()
+                elif oneway==2:
+                    source=startPoint.getTarget()
+
         return source
     
-    def getRoutingTargetForPointOneway(self, startPoint, targetPoint):
-        target=targetPoint.getSource()
+    def getRoutingTargetForPointOneway(self, oneway, startPoint, targetPoint):
+        if oneway==1:
+            target=targetPoint.getSource()
+        elif oneway==2:
+            target=targetPoint.getTarget()
         
         if startPoint.getEdgeId()==targetPoint.getEdgeId():
             latStart, lonStart=startPoint.getPos()
@@ -2079,8 +2108,10 @@ class OSMParserData():
             distanceTargetToEndRef=self.osmutils.distance(latTarget, lonTarget, latEndRef, lonEndRef)
             
             if distanceTargetToEndRef<distanceStartToEndRef:
-                target=targetPoint.getTarget()
-                print("target=targetPoint.getTarget()")
+                if oneway==1:
+                    target=targetPoint.getTarget()
+                elif oneway==2:
+                    target=targetPoint.getSource()
             
         return target
         
@@ -2105,10 +2136,10 @@ class OSMParserData():
             bbox=self.createBBoxForRoute(route)
 
             # on a onway always start at the end
-            if startPoint.getTargetOneway()==1:
+            if startPoint.getTargetOneway()==True:
 #                if sourceEdge!=routingPointList[1].getEdgeId():
 #                    source=startPoint.getTarget()
-                    source=self.getRoutingSourceForPointOneway(startPoint, routingPointList[1])
+                    source=self.getRoutingSourceForPointOneway(startPoint.getOneway(), startPoint, routingPointList[1])
 #                else:
 #                    source=self.getRoutingForPoint(startPoint)
             else:
@@ -2126,10 +2157,10 @@ class OSMParserData():
 
                 # make sure we are going through the target if it is
                 # on a oneway by routing first to the source
-                if targetPoint.getTargetOneway()==1:
+                if targetPoint.getTargetOneway()==True:
 #                    if sourceEdge!=targetEdge:
 #                        target=targetPoint.getSource()
-                        target=self.getRoutingTargetForPointOneway(startPoint, targetPoint)
+                        target=self.getRoutingTargetForPointOneway(targetPoint.getOneway(), startPoint, targetPoint)
 #                    else:
 #                        target=self.getRoutingForPoint(targetPoint)  
                 else:
@@ -2162,7 +2193,7 @@ class OSMParserData():
                     
                     # if the point is on a oneway we always
                     # continue at target and add the edge between
-                    if startPoint.getTargetOneway()==1:
+                    if startPoint.getTargetOneway()==True:
 #                        if sourceEdge!=targetEdge:
                             source=startPoint.getTarget()
 #                            source=self.getRoutingSourceForPointOneway(startPoint, )
@@ -2299,7 +2330,7 @@ class OSMParserData():
             _, lat2, lon2, _, _=resultList[0]
         else:
             return False, (None, None)
-        nodes=self.osmutils.createTemporaryPoint(lat1, lon1, lat2, lon2, offset)
+        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, offset)
 #        print(nodes)
         minDistance=maxDistance
         usedLat=None
@@ -2313,16 +2344,6 @@ class OSMParserData():
         if usedLat!=None and usedLon!=None:
             return True, (usedLat, usedLon)
         return False, (None, None)
-
-#    def isOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance, offset=0.0):
-#        nodes=self.osmutils.createTemporaryPoint(lat1, lon1, lat2, lon2, offset)
-#        minDistance=maxDistance
-#        for tmpLat, tmpLon in nodes:
-#            distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
-#            if distance<minDistance:
-#                return True
-#        
-#        return False
     
     def getEnforcmentsOnWay(self, wayId, refs):
         enforcementList=list()
@@ -2521,7 +2542,7 @@ class OSMParserData():
 #                                    allEdgeIdList.append(edgeStartId)
                                     
                                 for edgeStart in edgeStartList:
-                                    edgeStartId, edgeStartRef, _, _, edgeWayId, _, _, _, _=edgeStart
+                                    edgeStartId, edgeStartRef, edgeEndRef, _, edgeWayId, _, _, _, _=edgeStart
                                     if edgeStartId==lastEdgeId:
                                         continue
                                     
@@ -2554,8 +2575,8 @@ class OSMParserData():
                                         if edgeStreetTypeId==13:
                                             continue
                                         # show no crossings with onways that make no sense
-                                        if oneway==1:
-                                            if ref==edgeStartRef:
+                                        if oneway!=0:
+                                            if self.isValidOnewayEnter(oneway, ref, edgeStartRef, edgeEndRef):
                                                 otherPossibleCrossingCount=otherPossibleCrossingCount+1
                                         else:
                                             otherPossibleCrossingCount=otherPossibleCrossingCount+1
@@ -2972,7 +2993,7 @@ class OSMParserData():
             (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, lat1, lon1, lat2, lon2)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
             refList=self.getRefListOfEdge(edgeId, wayId, currentStartRef, currentEndRef)
 
-            if startPoint.getTargetOneway()!=1:
+            if startPoint.getTargetOneway()!=True:
                 # only one edge so we use distances on the same edge
                 distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
                 distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
@@ -3010,7 +3031,7 @@ class OSMParserData():
 #                                print("reverse refs of startEdge:%s"%refList)
     
                         else:
-                            if startPoint.getTargetOneway()!=1:
+                            if startPoint.getTargetOneway()!=True:
                                 # if we have a u-turn we use distances on the same edge
                                 distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
                                 distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
@@ -3018,7 +3039,7 @@ class OSMParserData():
                                     refList.reverse()
 #                                    print("reverse refs of startEdge:%s"%refList)
                     else:
-                        if startPoint.getTargetOneway()!=1:
+                        if startPoint.getTargetOneway()!=True:
                             # only one edge so we use distances on the same edge
                             distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
                             distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
@@ -3354,8 +3375,6 @@ class OSMParserData():
             
         if roundabout==1:
             oneway=1
-#        elif refs[0]==refs[-1]:
-#            oneway=1
         
         accessFactor=self.getAccessFactor(tags, streetTypeId)  
         streetTypeFactor=self.getStreetTypeFactor(streetTypeId)
@@ -3371,8 +3390,11 @@ class OSMParserData():
             cost=distance
             print(tags)
             
-        if oneway:
+        if oneway==1:
             reverseCost=100000
+        elif oneway==2:
+            reverseCost=cost
+            cost=100000
         else:
             reverseCost=cost
         
@@ -3554,9 +3576,10 @@ class OSMParserData():
                                     # roundabout enter
                                     minorCrossingType=3
                                 elif roundabout==1 and roundabout2==0:
-                                    if oneway2==1 and ref!=refs2[0]:
-                                        # no exit roundabout
-                                        minorCrossingType=42
+                                    if oneway2!=0:
+                                        if not self.isValidOnewayEnter(oneway2, ref, refs2[0], refs2[-1]):
+                                            # no exit roundabout
+                                            minorCrossingType=42
                                     else:
                                         # roundabout exit
                                         minorCrossingType=4
@@ -3571,10 +3594,16 @@ class OSMParserData():
                                         minorCrossingType=-1
                                     else:
                                         minorCrossingType=9
-                                        if oneway==1 and oneway2==1 and refs[-1]==refs2[0] and len(nextWays)==1:
-                                            minorCrossingType=-1
-                                        elif (refs[-1]==refs2[0] or refs[0]==refs2[-1] or refs[0]==refs2[0] or refs[-1]==refs2[-1]) and len(nextWays)==1:
-                                            minorCrossingType=-1
+                                        if len(nextWays)==1:
+                                            if oneway!=0 and oneway2!=0:
+                                                onewayValid=self.isValidOnewayEnter(oneway, ref, refs[0], refs[-1])
+                                                oneway2Valid=self.isValidOnewayEnter(oneway2, ref, refs2[0], refs2[-1])
+                                                if (oneway2Valid and not onewayValid) or (not oneway2Valid and onewayValid):
+                                                    minorCrossingType=-1
+                                            else:
+                                                # way 2 way with no other possibilty
+                                                if self.isValidWay2WayCrossing(refs, refs2):
+                                                    minorCrossingType=-1
                                 
                                 elif self.isLinkEnter(streetTypeId, streetTypeId2):
                                     # _link enter
@@ -3584,12 +3613,8 @@ class OSMParserData():
                                     minorCrossingType=8  
                                 
                                 if minorCrossingType==0:
-                                    if oneway2==1 and roundabout2==0 and wayid2!=wayid:
-#                                        if ref in refs2[:-1]:
-#                                            # oneway start or in the middle
-#                                            minorCrossingType=10
-#                                        else:
-                                        if ref!=refs2[0]:
+                                    if oneway2!=0 and roundabout2==0 and wayid2!=wayid:
+                                        if not self.isValidOnewayEnter(oneway2, ref, refs2[0], refs2[-1]):
                                             # oneway end - not allowed to enter
                                             minorCrossingType=42                        
                               
@@ -3614,31 +3639,33 @@ class OSMParserData():
 
                         elif minorCrossingType!=0:
                             crossingType=minorCrossingType
-#                            if minorCrossingType==10:
-#                                if oneway==1 and oneway2==1:
-#                                    crossingType=-1
                         else:
                             if wayid2==wayid:     
                                 crossingType=-1   
                             # those streets dont have normal crossings
                             elif (streetTypeId==2 and streetTypeId2==2) or (streetTypeId==4 and streetTypeId2==4):
-                                if oneway==1 and oneway2==1 and refs[-1]==refs2[0] and len(nextWays)==1:
-                                    crossingType=-1
-                                elif (refs[-1]==refs2[0] or refs[0]==refs2[-1] or refs[0]==refs2[0] or refs[-1]==refs2[-1]) and len(nextWays)==1:
-                                    crossingType=-1
-#                                elif nameRef==nameRef2:
-#                                    crossingType=-1
+                                if len(nextWays)==1:
+                                    if oneway!=0 and oneway2!=0:
+                                        onewayValid=self.isValidOnewayEnter(oneway, ref, refs[0], refs[-1])
+                                        oneway2Valid=self.isValidOnewayEnter(oneway2, ref, refs2[0], refs2[-1])
+                                        if (oneway2Valid and not onewayValid) or (not oneway2Valid and onewayValid):
+                                            crossingType=-1
+                                    else:
+                                        # way 2 way with no other possibilty
+                                        if self.isValidWay2WayCrossing(refs, refs2):
+                                            crossingType=-1
+
                             # ways can end not only on crossings
                             # e.g. 62074040 to 62074088 vs 62074609 to 30525406
                             else:
                                 if name!=None and name2!=None:  
                                     # TODO: any name change will create a crossing 
                                     if name==name2:
-                                        if refs[-1]==refs2[0] or refs[0]==refs2[-1] or refs[0]==refs2[0] or refs[-1]==refs2[-1]:
+                                        if self.isValidWay2WayCrossing(refs, refs2):
                                             crossingType=-1
                                     elif nameRef!=None and nameRef2!=None:
                                         if nameRef==nameRef2:
-                                            if refs[-1]==refs2[0] or refs[0]==refs2[-1] or refs[0]==refs2[0] or refs[-1]==refs2[-1]:
+                                            if self.isValidWay2WayCrossing(refs, refs2):
                                                 crossingType=-1
                                                 
                         if not (wayid2, crossingType, crossingInfo) in wayList:
@@ -4218,6 +4245,19 @@ def main(argv):
     
     p.openAllDB()
     
+#    si=p.encodeStreetInfo(0, 1, 1)
+#    print(p.decodeStreetInfo(si))
+#    si=p.encodeStreetInfo(0, 1, 0)
+#    print(p.decodeStreetInfo(si))
+#    si=p.encodeStreetInfo(0, 0, 0)
+#    print(p.decodeStreetInfo(si))
+#    si=p.encodeStreetInfo(0, 0, 1)
+#    print(p.decodeStreetInfo(si))
+#    si=p.encodeStreetInfo(0, 2, 0)
+#    print(p.decodeStreetInfo(si))
+#    si=p.encodeStreetInfo(0, 2, 1)
+#    print(p.decodeStreetInfo(si))
+   
 #    lat=47.820928
 #    lon=13.016525
 #    p.testEdgeTableGeom()

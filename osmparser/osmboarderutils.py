@@ -205,15 +205,6 @@ class OSMBoarderUtils():
         ret=self.lib_pip.InsidePolygon(byref(cData), N, p)
         return ret
         
-    def decode(self, streetInfo):
-        oneway=(streetInfo&31)>>4
-        roundabout=(streetInfo&63)>>5
-        streetTypeId=(streetInfo&15)
-        return streetTypeId, oneway, roundabout
-    
-    def encode(self, streetTypeId, oneway, roundabout):
-        streetInfo=streetTypeId+(oneway<<4)+(roundabout<<5)
-        return streetInfo
 def main(argv):    
     bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data")
     bu.initData()
@@ -369,15 +360,6 @@ def main(argv):
     start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
-    
-#    x=bu.encode(11,1,0)
-#    print(bu.decode(x))
-#    x=bu.encode(9,0,1)
-#    print(bu.decode(x))
-#    x=bu.encode(8,0,0)
-#    print(bu.decode(x))
-#    x=bu.encode(7,1,1)
-#    print(bu.decode(x))
     
 if __name__ == "__main__":
     main(sys.argv)  

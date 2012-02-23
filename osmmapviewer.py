@@ -468,6 +468,9 @@ class QtOSMWidget(QWidget):
 #        self.virtualZoom=1.2
 #        self.useVirtualZoom=False
                 
+        self.speed=0
+        self.stop=True
+
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
         
@@ -1457,10 +1460,12 @@ class QtOSMWidget(QWidget):
             self.lastHeadingLat=lat
             self.lastHeadingLon=lon
         else:    
-            if speed<30:
+            if speed<15:
                 minDistance=2.0
+            elif speed<30:
+                minDistance=3.0
             elif speed<50:
-                minDistance=5.0
+                minDistance=4.0
             elif speed<80:
                 minDistance=8.0
             elif speed<100:
@@ -1486,6 +1491,7 @@ class QtOSMWidget(QWidget):
                 
     def updateGPSLocation(self, lat, lon, altitude, speed, track):
 #        print("%f-%f"%(lat,lon))
+        self.speed=speed
         if lat!=0.0 and lon!=0.0:
             if speed==0:
                 self.stop=True
@@ -2038,7 +2044,7 @@ class QtOSMWidget(QWidget):
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
-            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse)
+            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse, self.speed)
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None

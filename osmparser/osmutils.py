@@ -265,7 +265,7 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoint(self, lat, lon, lat1, lon1, offset=0.0):
+    def createTemporaryPoints(self, lat, lon, lat1, lon1, offset=0.0):
         distance=int(self.distance(lat, lon, lat1, lon1))
         # create nodes with distance 5m
         frac=5
