@@ -2313,7 +2313,7 @@ class OSMParserData():
             return "%s"%(nameRef)
         return "No name"
 
-    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance, offset=0.0):
+    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
         _, country=self.getCountryOfRef(ref1)
         if country==None:
             return False, (None, None)
@@ -2330,7 +2330,7 @@ class OSMParserData():
             _, lat2, lon2, _, _=resultList[0]
         else:
             return False, (None, None)
-        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, offset)
+        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
 #        print(nodes)
         minDistance=maxDistance
         usedLat=None

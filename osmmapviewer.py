@@ -2844,7 +2844,7 @@ class OSMWidget(QWidget):
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 1, None) 
+        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 42, None) 
     
     @pyqtSlot()
     def _stepRoute(self):
