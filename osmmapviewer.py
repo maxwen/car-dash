@@ -1492,13 +1492,18 @@ class QtOSMWidget(QWidget):
     def updateGPSLocation(self, lat, lon, altitude, speed, track):
 #        print("%f-%f"%(lat,lon))
         self.speed=speed
+#        self.track=track
+#        self.heading=self.track
+#        self.showTrackOnGPSPos(lat, lon, True)
+
         if lat!=0.0 and lon!=0.0:
             if speed==0:
                 self.stop=True
             else:
                 self.stop=False
                 # only set track when moving
-#                self.track=track
+                self.track=track
+                self.heading=self.track
 
             firstGPSData=False
             if self.gps_rlat==0.0 and self.gps_rlon==0.0:
@@ -1509,9 +1514,9 @@ class QtOSMWidget(QWidget):
             
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
 #                print("gps update")
-                if self.stop==False:  
-                    # only calculate when moving
-                    self.calcCurrentHeading(lat, lon, speed) 
+#                if self.stop==False:  
+#                    # only calculate when moving
+#                    self.calcCurrentHeading(lat, lon, speed) 
                         
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
@@ -1539,7 +1544,7 @@ class QtOSMWidget(QWidget):
             self.gpsPoint=None
             self.heading=None
             self.stop=True
-#            self.track=None
+            self.track=None
             self.update()
         
     def cleanImageCache(self):
@@ -2835,16 +2840,16 @@ class OSMWidget(QWidget):
             self.i=0
 #            self.osmWidget.mapWidgetQt.heading=0
         else:
-            self.incLat=self.incLat+0.0001
-            self.incLon=self.incLon+0.0001*self.i
-            self.i=self.i+1
-            self.incTrack+=5
+            self.incLat=self.incLat+0.00001
+            self.incLon=self.incLon+0.00001
+#            self.i=self.i+1
+            self.incTrack+=15
             if self.incTrack>360:
                 self.incTrack=0
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 42, None) 
+        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 42, self.incTrack) 
     
     @pyqtSlot()
     def _stepRoute(self):

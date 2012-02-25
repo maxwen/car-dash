@@ -299,7 +299,6 @@ class OSMParserData():
         self.checkExpectedEdge=False
         self.approachingRef=None
         self.getPosTrigger=0
-        self.currentEdge=None
         
     def initCountryData(self):
         self.crossingId=0
@@ -1146,8 +1145,6 @@ class OSMParserData():
 #        stop=time.time()
 #        print(usedEdgeId)
 #        print("getEdgeIdOnPos:%f"%(stop-start))
-        if usedEdgeId!=None:
-            self.currentEdge=usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
         
         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
