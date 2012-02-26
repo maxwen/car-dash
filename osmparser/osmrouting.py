@@ -7,11 +7,11 @@ Created on Feb 22, 2012
 from osmparser.osmutils import OSMUtils
 
 SHORT_EDGE_LENGTH=20.0
-CROSSING_RANGE=10.0
 MAXIMUM_DECISION_LENGTH=100.0
 NORMAL_EDGE_RANGE=20.0
 CLOSE_EDGE_RANGE=10.0
 DECISION_EDGE_RANGE=5.0
+WITH_CROSSING_DEBUG=True
 
 class OSMRouting():
     def __init__(self, osmParserData):
@@ -63,10 +63,13 @@ class OSMRouting():
             headingDiff1=self.osmutils.headingDiffAbsolute(track, heading1)
             headingDiff2=self.osmutils.headingDiffAbsolute(track, heading2)
             
-            if headingDiff1<headingDiff2:
-                ref=startRef
+            if headingDiff1<45 or headingDiff2<45:
+                if headingDiff1<headingDiff2:
+                    ref=startRef
+                else:
+                    ref=endRef
             else:
-                ref=endRef
+                return None
         else:
             if self.lastApproachingRef==startRef:
                 ref=endRef
@@ -82,15 +85,13 @@ class OSMRouting():
         usedLat=None
         usedLon=None
         usedCountry=None
-        
-        self.currentSearchBBox=None
-        
+                
         # in routing mode us the next on the route as expected
         if nextEdgeOnRoute!=None:
             nextEdgeOnRoute, startRef, endRef, _, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(nextEdgeOnRoute)
             usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry=self.checkForPosOnEdgeId(lat, lon, nextEdgeOnRoute, startRef, endRef, wayId, maxDistance=10.0)
             if usedEdgeId!=None:
-                print("use nextEdgeId on route")
+                self.debugPrint("use nextEdgeId on route")
                 self.currentEdge=usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
                 self.getPosTrigger=0
                 return self.currentEdge
@@ -157,7 +158,7 @@ class OSMRouting():
         
         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
       
-    # check all refs and find the nearest ref to pos
+    # check id any refs of the edge is near < maxDistance to pos
     def checkForPosOnEdgeId(self, lat, lon, edgeId, startRef, endRef, wayId, maxDistance=10.0):
         refList=self.osmParserData.getRefListOfEdge(edgeId, wayId, startRef, endRef)
 #        print(refList)
@@ -170,24 +171,22 @@ class OSMRouting():
 
         if len(refList)!=0:
             i=0
-            mindistance=maxDistance
             lastRef=refList[0]
             for ref in refList[1:]:   
                 _, refCountry=self.osmParserData.getCountryOfRef(ref)
                 onLine, (tmpLat, tmpLon)=self.osmParserData.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
                 if onLine==True:
-                    distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
-                    if distance<mindistance:
-                        mindistance=distance
-                        usedEdgeId=edgeId
-                        usedRefId=ref
-                        usedWayId=wayId
-                        usedLat=tmpLat
-                        usedLon=tmpLon                            
-                        usedCountry=refCountry
+                    usedEdgeId=edgeId
+                    usedRefId=ref
+                    usedWayId=wayId
+                    usedLat=tmpLat
+                    usedLon=tmpLon                            
+                    usedCountry=refCountry
+                    return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
                 lastRef=ref  
                 i=i+1
+                
         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
     # check first two refs - used on crossings
@@ -371,13 +370,14 @@ class OSMRouting():
     
     def getBestMatchingNextEdgeForHeading(self, track, possibleEdges, edgeHeadings):
         otherNearHeading=False
+        nearPossibleEdges=list()
         if len(possibleEdges)==0:
-            return None, None, otherNearHeading
+            return None, None, otherNearHeading, nearPossibleEdges
 
         if len(possibleEdges)==1:
             expectedNextEdgeId=possibleEdges[0][0]
             nextEdgeLength=possibleEdges[0][1]
-            return expectedNextEdgeId, nextEdgeLength, otherNearHeading
+            return expectedNextEdgeId, nextEdgeLength, otherNearHeading, nearPossibleEdges
             
         minHeadingDiff=360
         minHeadingEntry=None
@@ -399,55 +399,61 @@ class OSMRouting():
                     headingDiff=self.osmutils.headingDiffAbsolute(edgeHeadings[minHeadingEntry], heading)
                     if headingDiff<45:
                         # next best heading is near to best matching
-                        print("heading diff < 45 %f"%(headingDiff))
-                        if self.nearPossibleEdges==None:
-                            self.nearPossibleEdges=list()
-                        self.nearPossibleEdges.append(possibleEdges[i][0])
+                        self.debugPrint("heading diff < 45 %f"%(headingDiff))
+                        nearPossibleEdges.append(possibleEdges[i][0])
                         otherNearHeading=True
                 i=i+1
             expectedNextEdgeId=possibleEdges[minHeadingEntry][0]
             nextEdgeLength=possibleEdges[minHeadingEntry][1]
-            return expectedNextEdgeId, nextEdgeLength, otherNearHeading
+            return expectedNextEdgeId, nextEdgeLength, otherNearHeading, nearPossibleEdges
 
-        return None, None, None
+        return None, None, None, None
     
-    def getBestMatchingOtherEdgeForHeading(self, lat, lon, possibleEdges, missedEdgeId, speed):
+    def getBestMatchingOtherEdgeForHeading(self, lat, lon, possibleEdges, edgeHeadings, missedEdgeId, speed, track):            
+        i=0
         for edgeId, _ in possibleEdges:
             if edgeId==missedEdgeId:
+                i=i+1
                 continue
-                        
-            if self.checkEdgeDataForPos(lat, lon, edgeId, speed, NORMAL_EDGE_RANGE):
-                return edgeId
-
-        return None
+            
+            maxDistance=CLOSE_EDGE_RANGE
+            if self.otherNearHeading==True:
+                maxDistance=DECISION_EDGE_RANGE
+ 
+            if self.checkEdgeDataForPos(lat, lon, edgeId, speed, maxDistance):
+                heading=edgeHeadings[i]
+                # even if we match distance check track
+                # else return still the missed edge
+                headingDiff=self.osmutils.headingDiffAbsolute(heading, track)
+                if headingDiff<45:
+                    return edgeId
+            
+            i=i+1
+        return missedEdgeId
     
     def checkEdgeDataForPos(self, lat, lon, edgeId, speed, maxDistance):
         edgeId, startRef, endRef, length, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(edgeId)
-        if length<self.getCrossingCheckDistance(speed):
+        if length<self.getToCrossingCheckDistance(speed):
             return True
                     
         edgeId, wayId, _, _, _=self.checkForPosOnEdgeId(lat, lon, edgeId, startRef, endRef, wayId, maxDistance)
         return edgeId!=None
     
     def getEdgeIdOnPosForRoutingFallback(self, lat, lon, fromMouse, margin, track, speed):
-        if fromMouse==True:
-            edge=self.osmParserData.getEdgeIdOnPos(lat, lon, margin)
-            if edge[0]!=None:
-                self.currentEdge=self.useNextEdge(lat, lon, track, speed, edge[0])
-            else:
-                self.currentEdge=edge
-            return self.currentEdge
-        
-        # use smaller search aerea
-        edge=self.osmParserData.getEdgeIdOnPos(lat, lon, 0.001)
-        if edge[0]!=None:
-            self.currentEdge=self.useNextEdge(lat, lon, track, speed, edge[0])
+        if fromMouse==False:
+            # use smaller search aerea
+            margin=0.001
+            
+        self.currentEdge=self.osmParserData.getEdgeIdOnPos(lat, lon, margin)
+        if self.currentEdge[0]!=None:
+            self.currentEdge=self.useNextEdge(lat, lon, track, speed, self.currentEdge[0], True)
         else:
-            self.currentEdge=edge
+            self.cleanEdgeCalculations()
+            self.lastApproachingRef=None
         return self.currentEdge
           
     def cleanEdgeCalculations(self):
-        print("cleanEdgeCalculations")
+        self.debugPrint("cleanEdgeCalculations")
         self.lastApproachingRef=self.approachingRef
         self.approachingRef=None
         self.currentPossibleEdgeList.clear()
@@ -464,7 +470,7 @@ class OSMRouting():
         self.nearPossibleEdges=None
         self.stoppedOnEdge=False
 
-    def getCrossingCheckDistance(self, speed):
+    def getToCrossingCheckDistance(self, speed):
         if speed < 30:
             return 30.0
         if speed < 50:
@@ -477,74 +483,110 @@ class OSMRouting():
             return 150.0
         return 30.0
     
+    def getFromCrossingCheckDistance(self, speed):
+        if speed < 30:
+            return 5.0
+        if speed < 50:
+            return 8.0
+        return 30.0
+    
     def isShortEdgeForSpeed(self, length, speed):
         if length < SHORT_EDGE_LENGTH and speed > 30:
             return True
         return False
     
-    def updateCrossingDistances(self, lat, lon, distance):
+    def isSpeedHighEnoughForNoCrossing(self, speed):
+        if speed > 50:
+            return True
+        return False
+    
+    def updateCrossingDistances(self, lat, lon, distance, speed):
         if self.distanceToCrossing==None:
             return
             
         if distance <= self.distanceToCrossing:
             self.distanceToCrossing=distance
-            if self.distanceToCrossing < CROSSING_RANGE:
+            crossingRange=self.getToCrossingCheckDistance(speed)
+            # near crossing
+            if self.distanceToCrossing < crossingRange:
                 self.nearCrossing=True
-                print("near crossing < 10.0m %d"%self.distanceToCrossing)
+                self.debugPrint("near crossing %d"%self.distanceToCrossing)
 
             return
 
         self.distanceFromCrossing=distance        
         
-        # past crossing means > 10.0m past
-        if self.distanceFromCrossing > CROSSING_RANGE:
+        # past crossing
+        crossingRange=self.getFromCrossingCheckDistance(speed)
+        if self.distanceFromCrossing > crossingRange:
             self.crossingPassed=True
-            print("past crossing > 10.0m %d"%self.distanceFromCrossing)
+            self.debugPrint("past crossing %d"%self.distanceFromCrossing)
             return
         
-        print("past crossing < 10.0m %d"%self.distanceFromCrossing)
         return
     
     def isQuickNextEdgeChoices(self, lat, lon, track, speed, edgeId):
         if len(self.possibleEdges)==1:
             # only one possible edge
-            print("next edge only one possible")
+            self.debugPrint("next edge only one possible")
             return True
         
-        if self.isShortEdgeForSpeed(self.nextEdgeLength, speed):
-            # short edge passed with speed - just use it
-            print("next edge is short edge and speed large - assume pass through")
-            return True
+        if self.otherNearHeading==False:
+            if self.isSpeedHighEnoughForNoCrossing(speed):
+                self.debugPrint("speed large - assume pass through")
+                return True
+            
+            if self.isShortEdgeForSpeed(self.nextEdgeLength, speed):
+                # short edge passed with speed - just use it
+                self.debugPrint("next edge is short edge and speed large - assume pass through")
+                return True
 
         return False
     
+    def checkForPosOnEdgeIdWithSpeed(self, lat, lon, edgeId, startRef, endRef, wayId, maxDistance, speed):
+        if speed > 30:
+            # dont assume we have left the edge
+            return self.currentEdge
+        return self.checkForPosOnEdgeId(lat, lon, edgeId, startRef, endRef, wayId, maxDistance)
+    
     def calcNextCrossingEdges(self, edgeId):
-        print("calc next crossing edges at %d"%self.approachingRef)
-        self.currentPossibleEdgeList.clear()
-        self.possibleEdges, self.edgeHeadings=self.calcNextPossibleEdgesOnCrossing(self.approachingRef, edgeId)
+        # check if approaching ref is valid
+        if self.approachingRef!=None:
+            self.debugPrint("calc next crossing edges at %d"%self.approachingRef)
+            self.currentPossibleEdgeList.clear()
+            self.possibleEdges, self.edgeHeadings=self.calcNextPossibleEdgesOnCrossing(self.approachingRef, edgeId)
         
     def calcNextEdgeValues(self, lat, lon, edgeId, track, speed):
         edgeId, startRef, endRef, length, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(edgeId)
 
         self.approachingRef=self.calcApproachingRef(lat, lon, startRef, endRef, track, True)
-        print("calc approachingRef %d"%self.approachingRef)
         
-        _, country=self.osmParserData.getCountryOfRef(self.approachingRef)
-        usedLat, usedLon=self.osmParserData.getCoordsWithRefAndCountry(self.approachingRef, country)
-        self.currentEdge=edgeId, wayId, self.approachingRef, (usedLat, usedLon), country
+        # check if approaching ref is valid
+        # else current edge stays the same
+        if self.approachingRef!=None:
+            self.debugPrint("approachingRef %d"%self.approachingRef)
+            
+            _, country=self.osmParserData.getCountryOfRef(self.approachingRef)
+            usedLat, usedLon=self.osmParserData.getCoordsWithRefAndCountry(self.approachingRef, country)
+            self.currentEdge=edgeId, wayId, self.approachingRef, (usedLat, usedLon), country
+            
+            distance=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
+            self.distanceToCrossing=distance
+            self.crossingPassed=False
+            self.nearCrossing=False
+            
+            if length<SHORT_EDGE_LENGTH:
+                self.shortEdge=True
+            else:
+                self.shortEdge=False
         
-        distance=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
-        self.distanceToCrossing=distance
-        self.crossingPassed=False
-        
-        if length<SHORT_EDGE_LENGTH:
-            self.shortEdge=True
-        else:
-            self.shortEdge=False
-                    
-    def useNextEdge(self, lat, lon, track, speed, nextEdgeId):
+    def useNextEdge(self, lat, lon, track, speed, nextEdgeId, cleanLastApproachingRef):
         self.cleanEdgeCalculations()
         
+        if cleanLastApproachingRef==True:
+            self.debugPrint("clear self.lastApproachingRef")
+            self.lastApproachingRef=None
+            
         # immediately calc next crossing
         self.calcNextEdgeValues(lat, lon, nextEdgeId, track, speed)
         self.calcNextCrossingEdges(nextEdgeId)
@@ -556,7 +598,9 @@ class OSMRouting():
         
         for otherPossible in self.nearPossibleEdges:
             matchOther=self.checkEdgeDataForPos(lat, lon, otherPossible, speed, DECISION_EDGE_RANGE)
-            if matchExpected==True and matchOther==True:
+            print(matchExpected)
+            print(matchOther)
+            if matchOther==True and matchExpected==True:
                 return False
                 
         return True
@@ -564,10 +608,47 @@ class OSMRouting():
     def isChangedApproachRef(self, lat, lon, startRef, endRef, track):
         if self.approachingRef!=None:
             approachingRef=self.calcApproachingRef(lat, lon, startRef, endRef, track, False)
-            if approachingRef!=self.approachingRef:
+            if approachingRef!=None and approachingRef!=self.approachingRef:
                 return True
         
         return False
+    
+    def calcCurrentBestMatchingEdge(self, lat, lon, track, speed, distance):
+        if self.shortEdge==True or distance < self.getToCrossingCheckDistance(speed) or self.expectedNextEdgeId!=None or self.nearCrossing==True: 
+            self.debugPrint("check possible crossings - distance %d"%(distance))   
+            expectedNextEdgeId, nextEdgeLength, otherNearHeading, nearPossibleEdges=self.getBestMatchingNextEdgeForHeading(track, self.possibleEdges, self.edgeHeadings)
+            if expectedNextEdgeId!=None:
+                self.expectedNextEdgeId=expectedNextEdgeId
+                self.nextEdgeLength=nextEdgeLength
+                self.otherNearHeading=otherNearHeading
+                self.nearPossibleEdges=nearPossibleEdges
+
+    def checkEdge(self, lat, lon, track, speed):
+        maxDistance=CLOSE_EDGE_RANGE
+        if self.otherNearHeading==True:
+            maxDistance=DECISION_EDGE_RANGE
+            
+        if not self.checkEdgeDataForPos(lat, lon, self.expectedNextEdgeId, speed, maxDistance):
+            # something went wrong
+            # or we havnt reached the edge in the time
+            if self.distanceFromCrossing>self.nextEdgeLength or self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
+                self.debugPrint("too far from crossing  - use expected")
+                return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId, False)
+
+            otherEdgeId=self.getBestMatchingOtherEdgeForHeading(lat, lon, self.possibleEdges, self.edgeHeadings, self.expectedNextEdgeId, speed, track)
+            if otherEdgeId!=self.expectedNextEdgeId:
+                self.debugPrint("next edge not confirmed - fallback to other possible")
+            else:
+                self.debugPrint("next edge not confirmed - no better fallback found still use expected")
+                
+            return self.useNextEdge(lat, lon, track, speed, otherEdgeId, False)
+
+        else:
+            self.debugPrint("pos on edge confirmed")
+            return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId, False)
+
+        # no decision possible
+        return None, None, None, None, None
     
     def getEdgeIdOnPosForRouting2(self, lat, lon, track, currentEdgeOnRoute, nextEdgeOnRoute, margin, fromMouse, speed):        
         if track==None:
@@ -575,73 +656,54 @@ class OSMRouting():
 
         if speed==0:
             self.stoppedOnEdge=True
-
+            
         if currentEdgeOnRoute!=None:
-            currentEdgeOnRoute, startRef, endRef, length, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(currentEdgeOnRoute)
+            currentEdgeOnRoute, startRef, endRef, _, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(currentEdgeOnRoute)
                                                     
             # check if we are still on the expected edge
             if self.expectedNextEdgeId==None and self.checkCurrentEdge==True:
-                edge=self.checkForPosOnEdgeId(lat, lon, currentEdgeOnRoute, startRef, endRef, wayId, maxDistance=NORMAL_EDGE_RANGE)
+                edge=self.checkForPosOnEdgeIdWithSpeed(lat, lon, currentEdgeOnRoute, startRef, endRef, wayId, NORMAL_EDGE_RANGE, speed)
                 if edge[0]==None:
-                    print("lost current edge")
-                    self.cleanEdgeCalculations()
-                    self.lastApproachingRef=None         
+                    self.debugPrint("lost current edge")
                     return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
 
-            if self.stoppedOnEdge==True:
-                self.stoppedOnEdge=False
-                if length>SHORT_EDGE_LENGTH:
-                    if self.isChangedApproachRef(lat, lon, startRef, endRef, track):
-                        print("approaching ref changed after stop")
-                        self.cleanEdgeCalculations()
-                        self.lastApproachingRef=None
-                        self.calcNextEdgeValues(lat, lon, currentEdgeOnRoute, track, speed)
-                        return self.currentEdge
+            # TODO: must wait until crossingPassed else check for changed
+            # approching can fail
+#            if self.stoppedOnEdge==True:
+#                self.stoppedOnEdge=False
+#                if length>SHORT_EDGE_LENGTH:
+#                    if self.isChangedApproachRef(lat, lon, startRef, endRef, track):
+#                        self.debugPrint("approaching ref changed after stop")
+#                        return self.useNextEdge(lat, lon, track, speed, currentEdgeOnRoute, True)
 
             if self.expectedNextEdgeId!=None:
                 distance=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
-                self.updateCrossingDistances(lat, lon, distance)
+                self.updateCrossingDistances(lat, lon, distance, speed)
                 if self.crossingPassed==True or self.nearCrossing==True:
                     self.checkCurrentEdge=False
-                    if self.nearCrossing==True:
-                        if self.isQuickNextEdgeChoices(lat, lon, track, speed, self.expectedNextEdgeId):
-                            return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId)
+                    
+                    if self.isQuickNextEdgeChoices(lat, lon, track, speed, self.expectedNextEdgeId):
+                        return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId, False)
                                             
                     if self.crossingPassed==True:
-                        print("crossing passed")
+                        self.debugPrint("crossing passed")
 
                         if self.otherNearHeading==True and self.nearPossibleEdges!=None:
                             if not self.isOnlyMatchingOnEdge(lat, lon, speed):
                                 # delay until we can make sure which edge we are
-                                print("current point match more then on possible edge")
+                                self.debugPrint("current point match more then on possible edge")
                                 if self.distanceFromCrossing>self.nextEdgeLength or self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
-                                    print("too far from crossing  - use expected")
-                                    return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId)
-                                
-                                return self.currentEdge
-                        
-                        maxDistance=CLOSE_EDGE_RANGE
-                        if self.otherNearHeading==True:
-                            maxDistance=DECISION_EDGE_RANGE
-                            
-                        if not self.checkEdgeDataForPos(lat, lon, self.expectedNextEdgeId, speed, maxDistance):
-                            # something went wrong
-                            # or we havnt reached the edge in the time
-                            if self.distanceFromCrossing>self.nextEdgeLength or self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
-                                print("too far from crossing  - use expected")
-                                return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId)
-
-                            otherEdgeId=self.getBestMatchingOtherEdgeForHeading(lat, lon, self.possibleEdges, self.expectedNextEdgeId, speed)
-                            if otherEdgeId==None:
-                                self.cleanEdgeCalculations()
-                                return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
+                                    self.debugPrint("too far from crossing  - use expected")
+                                    return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId, False)
                             else:
-                                print("next edge not confirmed - fallback to other possible")
-                                return self.useNextEdge(lat, lon, track, speed, otherEdgeId)
-
+                                edge=self.checkEdge(lat, lon, track, speed)
+                                if edge[0]!=None:
+                                    return self.currentEdge
+                                
                         else:
-                            print("pos on edge confirmed")
-                            return self.useNextEdge(lat, lon, track, speed, self.expectedNextEdgeId)
+                            edge=self.checkEdge(lat, lon, track, speed)
+                            if edge[0]!=None:
+                                return self.currentEdge
                                 
             if self.approachingRef==None:
                 self.calcNextEdgeValues(lat, lon, currentEdgeOnRoute, track, speed)
@@ -649,31 +711,27 @@ class OSMRouting():
             if self.possibleEdges==None:
                 self.calcNextCrossingEdges(currentEdgeOnRoute)
 
-            if len(self.possibleEdges)==0:
-                print("no next crossing possible")
+            if self.possibleEdges==None or len(self.possibleEdges)==0:
+                self.debugPrint("no next crossing possible")
                 return self.currentEdge
             
             distance=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
-            self.updateCrossingDistances(lat, lon, distance)
+            self.updateCrossingDistances(lat, lon, distance, speed)
             
-            if self.shortEdge==True or distance < self.getCrossingCheckDistance(speed) or self.expectedNextEdgeId!=None or self.nearCrossing==True: 
-                print("check possible crossings - distance %d"%(distance))   
-                expectedNextEdgeId, nextEdgeLength, otherNearHeading=self.getBestMatchingNextEdgeForHeading(track, self.possibleEdges, self.edgeHeadings)
-                if expectedNextEdgeId!=None:
-                    self.expectedNextEdgeId=expectedNextEdgeId
-                    self.nextEdgeLength=nextEdgeLength
-                    self.otherNearHeading=otherNearHeading
+            self.calcCurrentBestMatchingEdge(lat, lon, track, speed, distance)
 
-            if self.expectedNextEdgeId!=None:         
+            if self.expectedNextEdgeId!=None: 
                 if self.crossingPassed==True or self.nearCrossing==True:
                     if self.isQuickNextEdgeChoices(lat, lon, track, speed, self.possibleEdges[0][0]):
-                        return self.useNextEdge(lat, lon, track, speed, self.possibleEdges[0][0])
+                        return self.useNextEdge(lat, lon, track, speed, self.possibleEdges[0][0], False)
 
-                return self.currentEdge
-            else:
-                print("next expected id not calculated till now")
-                return self.currentEdge
+            return self.currentEdge
                 
-        self.cleanEdgeCalculations()      
-        self.lastApproachingRef=None         
         return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
+
+    def getApproachingRef(self):
+        return self.approachingRef
+    
+    def debugPrint(self, text):
+        if WITH_CROSSING_DEBUG==True:
+            print(text)

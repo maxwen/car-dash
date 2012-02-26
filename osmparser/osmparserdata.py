@@ -1062,7 +1062,7 @@ class OSMParserData():
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " wayIdList:"+str(wayIdList) + " tags:"+str(tags))
                 
     def getEdgeIdOnPos(self, lat, lon, margin=0.005, maxWayDistance=10.0):
-        print("getEdgeIdOnPos")
+#        print("getEdgeIdOnPos")
 #        start=time.time()
         usedEdgeId=None
         usedWayId=None

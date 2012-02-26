@@ -44,6 +44,8 @@ class TrspWrapper():
     def computeShortestPath(self, startNode, endNode, bbox, shortest):
         lib_routing = cdll.LoadLibrary("_compute_path_trsp.so")
         
+        print("start=%d target=%d"%(startNode, endNode))
+        
         edgeList=list()
         cost=0
         
@@ -95,6 +97,9 @@ class TrspWrapper():
             for i in range(num):
                 edgeList.append(pathPointer[i].edge_id)
                 cost=cost+pathPointer[i].cost
+                
+            print(edgeList)
+            print(cost)
             return edgeList, cost
         else:
             print("error during routing")

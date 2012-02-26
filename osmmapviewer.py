@@ -40,6 +40,7 @@ IMAGE_WIDTH_SMALL=32
 IMAGE_HEIGHT_SMALL=32
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
+WITH_CROSSING_DEBUG=True
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
@@ -901,7 +902,7 @@ class QtOSMWidget(QWidget):
         self.painter.drawRect(rect)
         
     # only use if transform is active
-    def displayEdges(self, edgeList, expectedNextEdge):
+    def displayEdges(self, edgeList, expectedNextEdge, approachingRef):
 #        print(edgeList)
         pen=QPen()
         pen.setWidth(3)
@@ -923,6 +924,18 @@ class QtOSMWidget(QWidget):
             pen.setColor(QColor(0, 255, 0))
             coords=osmParserData.getCoordsOfEdge(edgeId, country)
             self.displayEdge(coords, pen)
+
+        
+        if approachingRef!=None:
+            _, country=osmParserData.getCountryOfRef(approachingRef)
+            lat, lon=osmParserData.getCoordsWithRefAndCountry(approachingRef, country)
+            y,x=self.getPixelPosForLocationDeg(lat, lon, True)
+            if self.isPointVisible(x, y):
+                pen.setColor(QColor(255, 0, 0))
+                pen.setWidth(self.getPenWithForPoints())  
+                pen.setCapStyle(Qt.RoundCap)
+                self.painter.setPen(pen)
+                self.painter.drawPoint(x, y)
 
     # get bbox in deg mapnik style (left, bottom, right, top)
     # untransformed
@@ -1049,11 +1062,12 @@ class QtOSMWidget(QWidget):
             
         self.showRoutingPoints()            
                     
-        if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None:
-            self.displayEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
-
-        if osmParserData.getCurrentSearchBBox()!=None:
-            self.displayBBox(osmParserData.getCurrentSearchBBox())
+        if WITH_CROSSING_DEBUG==True:
+            if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None:
+                self.displayEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
+    
+            if osmParserData.getCurrentSearchBBox()!=None:
+                self.displayBBox(osmParserData.getCurrentSearchBBox())
 
         self.painter.resetTransform()
         
@@ -1489,12 +1503,13 @@ class QtOSMWidget(QWidget):
                 self.lastHeadingLat=lat
                 self.lastHeadingLon=lon
                 
-    def updateGPSLocation(self, lat, lon, altitude, speed, track):
+    def updateGPSLocation(self, lat, lon, altitude, speed, track, debug=False):
 #        print("%f-%f"%(lat,lon))
         self.speed=speed
-#        self.track=track
-#        self.heading=self.track
-#        self.showTrackOnGPSPos(lat, lon, True)
+        
+        if debug==True:
+            self.track=track
+            self.heading=self.track
 
         if lat!=0.0 and lon!=0.0:
             if speed==0:
@@ -2602,8 +2617,8 @@ class OSMWidget(QWidget):
 #        self.mousePosValueLat.setText("%.5f"%(lat))
 #        self.mousePosValueLon.setText("%.5f"%(lon)) 
  
-    def updateGPSDataDisplay(self, lat, lon, altitude, speed, track):
-        self.mapWidgetQt.updateGPSLocation(lat, lon, altitude, speed, track)
+    def updateGPSDataDisplay(self, lat, lon, altitude, speed, track, debug=False):
+        self.mapWidgetQt.updateGPSLocation(lat, lon, altitude, speed, track, debug)
 
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
@@ -2849,7 +2864,7 @@ class OSMWidget(QWidget):
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 42, self.incTrack) 
+        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 0, self.incTrack, True) 
     
     @pyqtSlot()
     def _stepRoute(self):
