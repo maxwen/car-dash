@@ -6,6 +6,7 @@ Created on Dec 7, 2011
 import time
 import sys
 import signal
+import os
 from datetime import datetime
 from collections import deque
 
@@ -35,6 +36,10 @@ class Log():
     def clear(self):
         self.logLines.clear()
         
+    def clearLogFile(self):
+        if os.path.exists(self.fileName):
+            os.remove(self.fileName)
+            
     def writeLogtoFile(self):
         if len(self.logLines)!=0:
             self.logFile=open(self.fileName, 'w')

@@ -26,6 +26,7 @@ from gpsutils import GPSMonitorUpateWorker
 from gps import gps, misc
 from osmdialogs import *
 from mapnik.mapnikwrapper import MapnikWrapper
+from log import Log
 
 TILESIZE=256
 minWidth=640
@@ -49,8 +50,9 @@ idleState="idle"
 runState="run"
 stoppedState="stopped"
 
+log=Log(False)
 osmParserData = OSMParserData()
-osmRouting=OSMRouting(osmParserData)
+osmRouting=OSMRouting(osmParserData, log)
 
 class OSMRoutingPointAction(QAction):
     def __init__(self, text, routingPoint, parent):
@@ -1536,8 +1538,9 @@ class QtOSMWidget(QWidget):
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
-                if self.stop==False:  
-                    self.showTrackOnGPSPos(lat, lon, False)
+                if debug==False:
+                    if self.stop==False:  
+                        self.showTrackOnGPSPos(lat, lon, False)
 
                 if self.wayInfo!=None:
                     self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, (lat, lon))
@@ -2064,7 +2067,9 @@ class QtOSMWidget(QWidget):
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
+#            start=time.time()
             edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse, self.speed)
+#            print("%f"%(time.time()-start))
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2157,7 +2162,7 @@ class QtOSMWidget(QWidget):
                     self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
                     self.speedInfo=maxspeed
                     # TODO: play sound?
-                    self.enforcementInfoList=osmParserData.getEnforcmentsOnWay(wayId, refs)
+                    self.enforcementInfoList=osmParserData.getEnforcmentsOnWay(wayId, refs, country)
 
 #            stop=time.time()
 #            print("showTrackOnPos:%f"%(stop-start))
@@ -2607,6 +2612,8 @@ class OSMWidget(QWidget):
             
     @pyqtSlot()
     def _cleanup(self):
+        log.writeLogtoFile()
+
         if self.downloadThread.isRunning():
             self.downloadThread.stop()        
         
@@ -2864,7 +2871,7 @@ class OSMWidget(QWidget):
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 0, self.incTrack, True) 
+        self.updateGPSDataDisplay(self.incLat, self.incLon, 42, 30, self.incTrack, True) 
     
     @pyqtSlot()
     def _stepRoute(self):

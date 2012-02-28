@@ -519,7 +519,7 @@ class OSMParserData():
         print("end create refTable index for lat and lon")
 
     def createWayTable(self):
-        self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER)')
+        self.cursor.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB)')
 
 #    def createAreaTable(self):
 #        self.cursor.execute('CREATE TABLE areaTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB')
@@ -739,6 +739,14 @@ class OSMParserData():
         elif tags!=None:
             self.cursor.execute('INSERT INTO refTable VALUES( ?, ?, ?, ?, ?, ?)', (refid, lat, lon, None, pickle.dumps(tags), nodeTypeListStr))
         
+    def updateWayTableEntry(self, wayId, poiList, country):
+        self.setDBCursorForCountry(country)
+        resultList=self.getWayEntryForIdAndCountry4(wayId, country)
+        if len(resultList)==1:
+            wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, _=resultList[0]            
+            streetInfo=self.encodeStreetInfo(streetTypeId, oneway, roundabout)
+            self.cursor.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?)', (wayId, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList)))
+        
     def updateRefTableEntry(self, refId, tags, nodeType, country):
         self.setDBCursorForCountry(country)
         resultList=self.getRefEntryForIdAndCountry2(refId, country)
@@ -772,7 +780,7 @@ class OSMParserData():
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, country):
         self.setDBCursorForCountry(country)
         streetInfo=self.encodeStreetInfo(streetTypeId, oneway, roundabout)
-        self.cursor.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?)', (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed))
+        self.cursor.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?)', (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None))
      
     def addToAreaTable(self, wayId, tags, refs, country):
         self.setDBCursorForCountry(country)
@@ -1002,6 +1010,15 @@ class OSMParserData():
         
         return (None, None, None, None, None, None, None, None, None)
 
+    def getWayEntryForIdAndCountry4(self, wayId, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursor.fetchall()
+        if len(allentries)==1:
+            return self.wayFromDB4(allentries[0])
+        
+        return (None, None, None, None, None, None, None, None, None, None)
+
     def getWayEntryForStreetNameAndCountry(self, streetName, country):
         self.setDBCursorForCountry(country)
         self.cursor.execute('SELECT * FROM wayTable where name=="%s"'%(streetName))
@@ -1148,7 +1165,7 @@ class OSMParserData():
         
         return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
-    def getNodesInBBox(self, bbox, country, nodeType=None):
+    def getNodesInBBox(self, bbox, country, nodeTypeList=None):
         latMin=bbox[1]
         lonMin=bbox[0]
         latMax=bbox[3]
@@ -1160,21 +1177,23 @@ class OSMParserData():
         self.cursor.execute('SELECT * FROM refTable where lat BETWEEN %f AND %f AND lon BETWEEN %f AND %f'%(latMin, latMax, lonMin, lonMax))
         allentries=self.cursor.fetchall() 
 
-        if nodeType!=None:
+        if nodeTypeList!=None:
             for x in allentries:
-                ref, lat, lon, wayIdList, tags, nodeTypeList=self.refFromDB2(x)
-                if nodeTypeList!=None:
-                    if nodeType in nodeTypeList:
-                        resultList.append((ref, lat, lon, wayIdList, tags))
+                ref, lat, lon, wayIdList, tags, storedNodeTypeList=self.refFromDB2(x)
+                if nodeTypeList!=None and storedNodeTypeList!=None:
+                    for nodeType in nodeTypeList:
+                        if nodeType in storedNodeTypeList:
+                            resultList.append((ref, lat, lon, wayIdList, tags, storedNodeTypeList))
+                            break
         else:
             for x in allentries:
-                resultList.append(self.refFromDB(x))
+                resultList.append(self.refFromDB2(x))
 #        print(len(allentries))
 #        stop=time.time()
 #        print("getNodesInBBox:%f"%(stop-start))
         return resultList
 
-    def getNearNodes(self, lat, lon, country, maxDistance, margin, nodeType=None):  
+    def getNearNodes(self, lat, lon, country, maxDistance, margin, nodeTypeList=None):  
         latRangeMax=lat+margin
         lonRangeMax=lon+margin*1.4
         latRangeMin=lat-margin
@@ -1185,9 +1204,9 @@ class OSMParserData():
 #        print("%f %f"%(self.osmutils.distance(latRangeMin, lonRangeMin, latRangeMax, lonRangeMin),
 #                       self.osmutils.distance(latRangeMin, lonRangeMin, latRangeMin, lonRangeMax)))
         
-        allentries=self.getNodesInBBox(self.currentSearchBBox, country, nodeType)
+        allentries=self.getNodesInBBox(self.currentSearchBBox, country, nodeTypeList)
         for x in allentries:
-            refId, lat1, lon1, wayIdList, _=x
+            refId, lat1, lon1, wayIdList, _, _=x
             if wayIdList==None:
                 # node ref not way ref
                 continue
@@ -1264,6 +1283,20 @@ class OSMParserData():
         nameRef=x[5]
         maxspeed=x[6]
         return (wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed)
+
+    def wayFromDB4(self, x):
+        wayId=x[0]
+        refs=pickle.loads(x[2])
+        tags=self.decodeWayTags(x[1])
+        streetInfo=x[3]
+        streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
+        name=x[4]
+        nameRef=x[5]
+        maxspeed=x[6]
+        poiList=None
+        if len(x)==8 and x[7]!=None:
+            poiList=pickle.loads(x[7])
+        return (wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList)
 
     def refFromDB(self, x):
         refId=x[0]
@@ -2030,27 +2063,34 @@ class OSMParserData():
                                 
         return bbox
             
-#    def createBBox(self, pos1, pos2):
-#        bbox=[0.0, 0.0, 0.0, 0.0]
-#        lat1=pos1[0]
-#        lon1=pos1[1]
-#        lat2=pos2[0]
-#        lon2=pos2[1]
-#        if lat2>lat1:
-#            bbox[3]=lat2
-#            bbox[1]=lat1
-#        else:
-#            bbox[3]=lat1
-#            bbox[1]=lat2
-#        
-#        if lon2>lon1:
-#            bbox[2]=lon2
-#            bbox[0]=lon1
-#        else:
-#            bbox[2]=lon1
-#            bbox[0]=lon2
-#            
-#        return bbox
+    def createBBox(self, pos1, pos2, margin=None):
+        bbox=[0.0, 0.0, 0.0, 0.0]
+        lat1=pos1[0]
+        lon1=pos1[1]
+        lat2=pos2[0]
+        lon2=pos2[1]
+        if lat2>lat1:
+            bbox[3]=lat2
+            bbox[1]=lat1
+        else:
+            bbox[3]=lat1
+            bbox[1]=lat2
+        
+        if lon2>lon1:
+            bbox[2]=lon2
+            bbox[0]=lon1
+        else:
+            bbox[2]=lon1
+            bbox[0]=lon2
+            
+        if margin!=None:
+            latRangeMax=bbox[3]+margin
+            lonRangeMax=bbox[2]+margin*1.4
+            latRangeMin=bbox[1]-margin
+            lonRangeMin=bbox[0]-margin*1.4            
+            bbox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
+
+        return bbox
 
     def getRoutingForPoint(self, point):
         lat1, lon1=point.getRefPos()
@@ -2342,21 +2382,41 @@ class OSMParserData():
             return True, (usedLat, usedLon)
         return False, (None, None)
     
-    def getEnforcmentsOnWay(self, wayId, refs):
+    def getEnforcmentsOnWay(self, wayId, refs, country):
         enforcementList=list()
-        for ref in refs:
-            _, country=self.getCountryOfRef(ref)
-            if country==None:
-                continue
-            resultList=self.getRefEntryForIdAndCountry2(ref, country)
-            if len(resultList)==1:
-                ref, lat, lon, _, storedTags, storedNodeTypeList=resultList[0]
-                if storedNodeTypeList!=None and 1 in storedNodeTypeList:
+        
+        resultList=self.getWayEntryForIdAndCountry4(wayId, country)
+        if len(resultList)==1:
+            wayId, _, _, _, _, _, _, _, _, poiList=resultList[0]
+            if poiList!=None:
+                for ref, nodeType in poiList:
                     # enforcement
-                    enforcement=dict()
-                    enforcement["coords"]=(lat, lon)
-                    enforcement["info"]="maxspeed:%s"%(storedTags["maxspeed"])
-                    enforcementList.append(enforcement)
+                    # TODO: create constant for nodetypes
+                    if nodeType==1:
+                        resultList=self.getRefEntryForIdAndCountry2(ref, country)
+                        if len(resultList)==1:
+                            ref, lat, lon, _, storedTags, _=resultList[0]
+
+                            enforcement=dict()
+                            enforcement["coords"]=(lat, lon)
+                            if "maxspeed" in storedTags:
+                                enforcement["info"]="maxspeed:%s"%(storedTags["maxspeed"])
+                            enforcementList.append(enforcement)
+
+                    
+#        for ref in refs:
+#            _, country=self.getCountryOfRef(ref)
+#            if country==None:
+#                continue
+#            resultList=self.getRefEntryForIdAndCountry2(ref, country)
+#            if len(resultList)==1:
+#                ref, lat, lon, _, storedTags, storedNodeTypeList=resultList[0]
+#                if storedNodeTypeList!=None and 1 in storedNodeTypeList:
+#                    # enforcement
+#                    enforcement=dict()
+#                    enforcement["coords"]=(lat, lon)
+#                    enforcement["info"]="maxspeed:%s"%(storedTags["maxspeed"])
+#                    enforcementList.append(enforcement)
                 # speed_camera refs can also be "near" this ref           
 #                speedCameraNodes=self.getNearNodes(lat, lon, country, 10.0, 1, 0.0001)
 #                for speedCameraRef, _, _, _ in speedCameraNodes:
@@ -3670,7 +3730,69 @@ class OSMParserData():
                     
                     if len(wayList)!=0:
                         self.addToCrossingsTable(wayid, ref, wayList)
+             
+    def createPOIEntriesForWays(self, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM wayTable')
+        allWays=self.cursor.fetchall()
+        for way in allWays:
+            wayId, _, refs, _, _, _, _, _, _, poiList=self.wayFromDB4(way)    
+            
+            if poiList==None:
+                poiList=list()
+            
+            # create bbox with start and end ref + margin
+            # and fetch all nodes inside - faster then doing for every ref
+            lat1=None
+            lon1=None
+            lat2=None
+            lon2=None
+            
+            _, country=self.getCountryOfRef(refs[0])
+            resultList=self.getRefEntryForIdAndCountry2(refs[0], country)
+            if len(resultList)==1:
+                _, lat1, lon1, _, _, storedNodeTypeList=resultList[0]
+
+            _, country=self.getCountryOfRef(refs[-1])
+            resultList=self.getRefEntryForIdAndCountry2(refs[-1], country)
+            if len(resultList)==1:
+                _, lat2, lon2, _, _, storedNodeTypeList=resultList[0]
+            
+            allentries=None
+            
+            if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
+                bbox=self.createBBox((lat1, lon1), (lat2, lon2), 0.005)
+                allentries=self.getNodesInBBox(bbox, country, [1])
+
+            for ref in refs:
+                _, country=self.getCountryOfRef(ref)
+                resultList=self.getRefEntryForIdAndCountry2(ref, country)
+                if len(resultList)==1:
+                    ref, lat, lon, _, _, storedNodeTypeList=resultList[0]
+                    if storedNodeTypeList!=None:
+                        if 1 in storedNodeTypeList:
+                            # enforcement
+                            if not (ref, 1) in poiList:
+                                poiList.append((ref, 1))
+            
+                    # speed_camera refs can also be "near" this ref           
+                    if allentries!=None:     
+                        maxDistance=20.0        
+                        for x in allentries:
+                            _, lat1, lon1, _, _, storedNodeTypeList=x
+                            if storedNodeTypeList!=None:
+                                if 1 in storedNodeTypeList:
+                                    distance=self.osmutils.distance(lat, lon, lat1, lon1)
+                                    if distance>maxDistance:
+                                        continue
+                                    if not (ref, 1) in poiList:
+                                        poiList.append((ref, 1))
+
+            if len(poiList)!=0:
+                print(poiList)
+                self.updateWayTableEntry(wayId, poiList, country)
                 
+            
     def parse(self, country):
         p = XMLParser(nodes_callback=self.parse_nodes, 
                   ways_callback=self.parse_ways, 
@@ -3790,6 +3912,10 @@ class OSMParserData():
                           
             self.createRefTableIndexesPost(country)       
    
+            print("create POI entries")
+            self.createPOIEntriesForWays(country)
+            print("end create POI entries")
+            
             self.commitAdressDB()
             self.commitCountryDB(country)
             self.commitGlobalCountryDB()
@@ -3810,7 +3936,7 @@ class OSMParserData():
             print("create edges")
             self.createEdgeTableEntries(country)
             print("end create edges")   
-                                    
+                
             self.commitCountryDB(country)
             self.commitEdgeDB()
 
