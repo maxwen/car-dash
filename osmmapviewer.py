@@ -50,7 +50,7 @@ idleState="idle"
 runState="run"
 stoppedState="stopped"
 
-log=Log(False)
+log=Log(False, size=1000)
 osmParserData = OSMParserData()
 osmRouting=OSMRouting(osmParserData, log)
 
@@ -546,8 +546,8 @@ class QtOSMWidget(QWidget):
         elif crossingType==42:
             # no enter oneway
             return self.blackCrossingPen
-        elif crossingType==10:
-            return self.grayCrossingPen
+#        elif crossingType==10:
+#            return self.grayCrossingPen
         elif crossingType==-1 or crossingType==98 or crossingType==99 or crossingType==100:
             return self.whiteCrossingPen
            
@@ -2067,9 +2067,9 @@ class QtOSMWidget(QWidget):
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
-#            start=time.time()
+            start=time.time()
             edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse, self.speed)
-#            print("%f"%(time.time()-start))
+            print("%f"%(time.time()-start))
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2158,7 +2158,7 @@ class QtOSMWidget(QWidget):
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
-#                    osmParserData.printCrossingsForWayId(wayId, country)
+                    osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
                     self.speedInfo=maxspeed
                     # TODO: play sound?

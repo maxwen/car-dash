@@ -14,12 +14,9 @@ from PyQt4.QtCore import Qt, pyqtSlot
 from PyQt4.QtGui import QPlainTextEdit, QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 
 class Log():
-    def __init__(self, withPrint, logFile=None):
-        if logFile!=None:
-            self.fileName=logFile
-        else:
-            self.fileName="debug.log"
-        self.logLines=deque("", 100)
+    def __init__(self, withPrint, logFile="debug.log", size=100):
+        self.fileName=logFile
+        self.logLines=deque("", size)
         self.withPrint=withPrint
         
     def createTimeStamp(self):
