@@ -751,9 +751,8 @@ class OSMParserData():
         
     def updateWayTableEntry(self, wayId, poiList, country):
         self.setDBCursorForCountry(country)
-        resultList=self.getWayEntryForIdAndCountry4(wayId, country)
-        if len(resultList)==1:
-            wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, _=resultList[0]            
+        wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, _=self.getWayEntryForIdAndCountry4(wayId, country)
+        if wayId!=None:
             streetInfo=self.encodeStreetInfo(streetTypeId, oneway, roundabout)
             self.cursor.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?)', (wayId, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList)))
         
@@ -1089,7 +1088,7 @@ class OSMParserData():
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " wayIdList:"+str(wayIdList) + " tags:"+str(tags))
                 
     def getEdgeIdOnPos(self, lat, lon, margin=0.005, maxWayDistance=10.0):
-#        print("getEdgeIdOnPos")
+        print("getEdgeIdOnPos")
 #        start=time.time()
         usedEdgeId=None
         usedWayId=None
@@ -2222,10 +2221,10 @@ class OSMParserData():
     def getEnforcmentsOnWay(self, wayId, refs, country):
         enforcementList=list()
         
-        resultList=self.getWayEntryForIdAndCountry4(wayId, country)
-        if len(resultList)==1:
-            wayId, _, _, _, _, _, _, _, _, poiList=resultList[0]
+        wayId, _, _, _, _, _, _, _, _, poiList=self.getWayEntryForIdAndCountry4(wayId, country)
+        if wayId!=None:
             if poiList!=None:
+                print(poiList)
                 for ref, nodeType in poiList:
                     # enforcement
                     # TODO: create constant for nodetypes
@@ -2452,19 +2451,9 @@ class OSMParserData():
                                     else:
                                         # also use turn restriction info to
                                         # filter imppossible ways
-                                        restrictionList=self.getRestrictionEntryForTargetEdge(edgeStartId)
-                                        if len(restrictionList)!=0:
-                                            # TODO: only if the restriction is valid for ref
-                                            restrictedEdge=False
-                                            for restriction in restrictionList:
-                                                _, _, viaPath, _=restriction
-                                                # TODO: viaPath can be more the one way if supported
-                                                # TODO: better use the viaNode if available - add to DB
-                                                if int(viaPath) == lastEdgeId:
-                                                    restrictedEdge=True
-                                                    break
-                                            if restrictedEdge==True:
-                                                continue
+                                        if self.isActiveTurnRestriction(lastEdgeId, edgeStartId, ref):
+                                            continue
+                                        
                                         # show no crossings with street of type service
                                         if edgeStreetTypeId==13:
                                             continue
@@ -4218,6 +4207,23 @@ class OSMParserData():
             coords.append(trackItemRef["coords"])  
         return coords
     
+    def isActiveTurnRestriction(self, fromEdgeId, toEdgeId, crossingRef):
+        restrictionList=self.getRestrictionEntryForTargetEdge(toEdgeId)
+        if len(restrictionList)!=0:
+            # TODO: only if the restriction is valid for ref
+            restrictedEdge=False
+            for restriction in restrictionList:
+                _, _, viaPath, _=restriction
+                # TODO: viaPath can be more the one way if supported
+                # TODO: better use the viaNode if available - add to DB
+                if int(viaPath) == fromEdgeId:
+                    restrictedEdge=True
+                    break
+                
+            return restrictedEdge
+        
+        return False
+            
 def main(argv):    
     p = OSMParserData()
     

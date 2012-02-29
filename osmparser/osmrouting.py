@@ -26,7 +26,7 @@ class OSMRouting():
         self.crosingWithoutExpected=False
         self.checkExpectedEdge=False
         self.approachingRef=None
-        self.getPosTrigger=0
+#        self.getPosTrigger=0
         self.currentEdge=None, None, None, None, None
         self.possibleEdges=None
         self.nearPossibleEdges=None
@@ -238,7 +238,7 @@ class OSMRouting():
 #        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
 
     # check pos in on the first track positions (first edge)
-    def checkForPosOnTracklist(self, lat, lon, trackList, maxDistance=20.0):
+    def checkForPosOnTracklist(self, lat, lon, trackList, maxDistance=NORMAL_EDGE_RANGE):
         coords=self.osmParserData.getCoordsOfTrackItem(trackList[0])
         lat1, lon1=coords[0]
         for lat2, lon2 in coords[1:]:
@@ -256,12 +256,12 @@ class OSMRouting():
         if len(refList)>1:
             if ref==endRef:
                 refList.reverse()
-            heading=self.getHeadingBetweenPoints(refList)
+            heading=self.getHeadingForReflist(refList)
             return heading
         
         return None
     
-    def getHeadingBetweenPoints(self, refs):
+    def getHeadingForReflist(self, refs):
         _, country=self.osmParserData.getCountryOfRef(refs[0])
         if country==None:
             return None
@@ -280,10 +280,32 @@ class OSMRouting():
                 _, lat2, lon2, _, _=resultList[0]
             else:
                 return None
-            # use refs with distance more the 10m to calculate heading
-            if self.osmutils.distance(lat1, lon1, lat2, lon2)>10.0:
+            # use refs with distance more the 15m to calculate heading
+            if self.osmutils.distance(lat1, lon1, lat2, lon2)>15.0:
                 break
 
+        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+        return heading
+    
+    def getHeadingForPoints(self, ref1, ref2):
+        _, country=self.osmParserData.getCountryOfRef(ref1)
+        if country==None:
+            return None
+        resultList=self.osmParserData.getRefEntryForIdAndCountry(ref1, country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return None
+        
+        _, country=self.osmParserData.getCountryOfRef(ref2)
+        if country==None:
+            return None
+        resultList=self.osmParserData.getRefEntryForIdAndCountry(ref2, country)
+        if len(resultList)==1:
+            _, lat2, lon2, _, _=resultList[0]
+        else:
+            return None
+        
         heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
         return heading
     
@@ -372,26 +394,17 @@ class OSMRouting():
                         continue
                     
                 # TODO: check turn restrictions but that takes time
-                restrictionList=self.osmParserData.getRestrictionEntryForTargetEdge(nextEdgeId)
-                if len(restrictionList)!=0:
-                    # TODO: only if the restriction is valid for ref
-                    restrictedEdge=False
-                    for restriction in restrictionList:
-                        _, _, viaPath, _=restriction
-                        # TODO: viaPath can be more the one way if supported
-                        # TODO: better use the viaNode if available - add to DB
-                        if int(viaPath) == currentEdgeOnRoute:
-                            restrictedEdge=True
-                            break
-                        
-                    if restrictedEdge==True:
-                        continue
+                if self.osmParserData.isActiveTurnRestriction(currentEdgeOnRoute, nextEdgeId, self.approachingRef):
+                    continue
                         
                 # filter out access limited streets
                 if "access" in tags:
                     continue
                 
                 self.currentPossibleEdgeList.append(nextEdgeId)
+                # TODO heading is calculated only from crossinfRef
+                # but e.g. in a curve the heading can change depending
+                # on the position
                 heading=self.getHeadingOnEdgeId(nextEdgeId, crossingRef)
                 edgeHeadings.append(heading)
                 possibleEdges.append((nextEdgeId, length))
@@ -422,7 +435,7 @@ class OSMRouting():
                     minHeadingEntry=i
                 
             i=i+1
-        
+        self.debugPrint(lat, lon, "minHeadingDiff=%f"%minHeadingDiff)
         if minHeadingEntry!=None:
             i=0
             for heading in edgeHeadings:
@@ -467,13 +480,14 @@ class OSMRouting():
 #        return missedEdgeId
     
     def checkEdgeDataForPos(self, lat, lon, edgeId, speed, maxDistance):
-        edgeId, startRef, endRef, length, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(edgeId)
+        edgeId, startRef, endRef, _, wayId, _, _, _, _=self.osmParserData.getEdgeEntryForEdgeId(edgeId)
 #        if length<self.getToCrossingCheckDistance(speed):
 #            return True
                     
         edgeId, wayId, _, _, _=self.checkForPosOnEdgeId(lat, lon, edgeId, startRef, endRef, wayId, maxDistance)
         return edgeId!=None
     
+    # TODO: still use track info if available to select a "good" edge
     def getEdgeIdOnPosForRoutingFallback(self, lat, lon, fromMouse, margin, track, speed):
         if fromMouse==False:
             # use smaller search aerea
@@ -660,25 +674,42 @@ class OSMRouting():
 
         return self.currentEdge
 
-    def isOnlyMatchingOnEdge(self, lat, lon, speed):
-        matchExpected=self.checkEdgeDataForPos(lat, lon, self.expectedNextEdgeId, speed, DECISION_EDGE_RANGE)
+    def isOnlyMatchingOnEdgeForDistance(self, lat, lon, speed, maxDistance):
+        matchExpected=self.checkEdgeDataForPos(lat, lon, self.expectedNextEdgeId, speed, maxDistance)
         
         matchingCount=0
         for otherPossible in self.nearPossibleEdges:
-            matchOther=self.checkEdgeDataForPos(lat, lon, otherPossible, speed, DECISION_EDGE_RANGE)
+            matchOther=self.checkEdgeDataForPos(lat, lon, otherPossible, speed, maxDistance)
             if matchOther==True:
                 matchingCount=matchingCount+1
 
-        if matchingCount==0:   
-            # even if the pos check of expected failed here - set to true
-            # the next pos check should confirm it             
-            return True
         if matchingCount>1:
             # can not be the only matching
             return False
         if matchingCount==1 and matchExpected:
             return False
         
+        if matchExpected==False:
+            return None
+        return matchExpected
+
+    def isOnlyMatchingOnEdge(self, lat, lon, speed):
+        # first try with a close range to check as soon as possible
+        maxDistance=DECISION_EDGE_RANGE
+        onlyOneMatching=self.isOnlyMatchingOnEdgeForDistance(lat, lon, speed, maxDistance)
+        if onlyOneMatching==None or onlyOneMatching==False:
+            # try again with a larger distance
+            maxDistance=CLOSE_EDGE_RANGE
+            onlyOneMatching=self.isOnlyMatchingOnEdgeForDistance(lat, lon, speed, maxDistance)
+            if onlyOneMatching!=None:
+                self.debugPrint(lat, lon, "isOnlyMatchingEdge for CLOSE_EDGE_RANGE")
+                return onlyOneMatching
+        else:
+            if onlyOneMatching==True:
+                self.debugPrint(lat, lon, "isOnlyMatchingEdge for DECISION_EDGE_RANGE")
+        # returns true also if none of the edges is matching inside maxDistance
+        # after the two checks - assume expected is set right and the final
+        # check with NORMAL_EDGE_RANGE should select the edge
         return True
     
     def isChangedApproachRef(self, lat, lon, startRef, endRef, track):
@@ -691,9 +722,10 @@ class OSMRouting():
     
     def calcCurrentBestMatchingEdge(self, lat, lon, track, speed, distance):
         if self.shortEdge==True or distance < self.getToCrossingCheckDistance(speed) or self.expectedNextEdgeId!=None or self.nearCrossing==True: 
-            self.debugPrint(lat, lon, "check possible crossings - distance %d"%(distance))   
+            self.debugPrint(lat, lon, "check possible edges - distance %d"%(distance))   
             expectedNextEdgeId, nextEdgeLength, otherNearHeading, nearPossibleEdges=self.getBestMatchingNextEdgeForHeading(track, self.possibleEdges, self.edgeHeadings, lat, lon)
             if expectedNextEdgeId!=None:
+                self.debugPrint(lat, lon, "expected next edge %d"%(expectedNextEdgeId))   
                 self.expectedNextEdgeId=expectedNextEdgeId
                 self.nextEdgeLength=nextEdgeLength
                 self.otherNearHeading=otherNearHeading
@@ -703,9 +735,11 @@ class OSMRouting():
         # use a large maxDistance to make sure we match the
         # epected edge in most cases
         maxDistance=NORMAL_EDGE_RANGE
-        if self.otherNearHeading==True:
-            # except other near edges
-            maxDistance=DECISION_EDGE_RANGE
+        # we come here only after all of the near edges decisions have been made
+        # so no need for a closed range check
+#        if self.otherNearHeading==True:
+#            # except other near edges
+#            maxDistance=CLOSE_EDGE_RANGE
             
         # check the current expected
         if not self.checkEdgeDataForPos(lat, lon, self.expectedNextEdgeId, speed, maxDistance):
@@ -834,3 +868,15 @@ class OSMRouting():
                 stamp=datetime.fromtimestamp(time.time())
                 timestamp="".join(["%02d:%02d:%02d"%(stamp.hour, stamp.minute, stamp.second)])
                 print("%s %f %f %s"%(timestamp, lat, lon, text))
+
+    def getNearestRefRangeOnEdgeForPos(self, lat, lon, edgeId, wayId, startRef, endRef):
+        refList=self.osmParserData.getRefListOfEdge(edgeId, wayId, startRef, endRef)
+
+        if len(refList)!=0:
+            i=0
+            for ref in refList[:-1]: 
+                onLine, (tmpLat, tmpLon)=self.osmParserData.isOnLineBetweenRefs(lat, lon, ref, refList[i+1], 5.0)
+                if onLine==True:
+                    return (ref, refList[i+1])
+                i=i+1
+        return (None, None)
