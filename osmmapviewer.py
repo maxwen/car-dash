@@ -358,7 +358,7 @@ class OSMRouteCalcWorker(QThread):
         self.updateRouteCalcThreadState(runState)
         self.startProgress()
         while not self.exiting and True:
-            osmParserData.calcRoute(self.route)
+            self.route.calcRoute(osmParserData)
             self.exiting=True
 
         self.updateRouteCalcThreadState(stoppedState)
@@ -2067,9 +2067,9 @@ class QtOSMWidget(QWidget):
         
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
-            start=time.time()
+#            start=time.time()
             edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, self.heading, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse, self.speed)
-            print("%f"%(time.time()-start))
+#            print("%f"%(time.time()-start))
             if edgeId==None:
                 self.wayInfo=None
                 self.currentCoords=None
@@ -2154,7 +2154,7 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     

@@ -36,11 +36,8 @@ class OSMRoute():
     
     def calcRoute(self, osmParserData):
         if self.edgeList==None:
-            self.edgeList, self.pathCost=osmParserData.calcRouteForPointsEdges(self)
-    
-    def calcRouteTest(self, osmParserData):
-        osmParserData.calcRouteForPointsTest(self)
-        
+            self.edgeList, self.pathCost=osmParserData.calcRoute(self)
+            
     def changeRouteFromPoint(self, currentPoint, osmParserData):        
         self.routingPointList[0]=currentPoint
         self.edgeList=None
@@ -2050,9 +2047,6 @@ class OSMParserData():
         streetTrackItem=dict()
         streetTrackItem["end"]="end"
         return streetTrackItem
-
-    def calcRoute(self, route):
-        route.calcRoute(self)
         
     # bbox for spatial DB (left, top, right, bottom)
     def createBBoxForRoute(self, route):
@@ -2108,194 +2102,8 @@ class OSMParserData():
             bbox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
 
         return bbox
-
-    def getRoutingForPoint(self, point):
-        lat1, lon1=point.getRefPos()
-                    
-        lat2, lon2=point.getStartRefPos()
-        distanceStartRef=self.osmutils.distance(lat1, lon1, lat2, lon2)
-        
-        lat2, lon2=point.getEndRefPos()
-        distanceEndRef=self.osmutils.distance(lat1, lon1, lat2, lon2)
-
-        if distanceStartRef<distanceEndRef:
-            return point.getSource()
-        else:
-            return point.getTarget()
-           
-    def getRoutingSourceForPointOneway(self, oneway, startPoint, targetPoint):
-        if oneway==1:
-            source=startPoint.getTarget()
-        elif oneway==2:
-            source=startPoint.getSource()
-
-        if startPoint.getEdgeId()==targetPoint.getEdgeId():
-            latStart, lonStart=startPoint.getPos()
-            latTarget, lonTarget=targetPoint.getPos()
-                      
-            latStartRef, lonStartRef=startPoint.getStartRefPos()            
-            
-            distanceStartToStartRef=self.osmutils.distance(latStart, lonStart, latStartRef, lonStartRef)
-            distanceTargetToStartRef=self.osmutils.distance(latTarget, lonTarget, latStartRef, lonStartRef)
-            
-            if distanceStartToStartRef<distanceTargetToStartRef:
-                if oneway==1:
-                    source=startPoint.getSource()
-                elif oneway==2:
-                    source=startPoint.getTarget()
-
-        return source
     
-    def getRoutingTargetForPointOneway(self, oneway, startPoint, targetPoint):
-        if oneway==1:
-            target=targetPoint.getSource()
-        elif oneway==2:
-            target=targetPoint.getTarget()
-        
-        if startPoint.getEdgeId()==targetPoint.getEdgeId():
-            latStart, lonStart=startPoint.getPos()
-            latTarget, lonTarget=targetPoint.getPos()
-                      
-            latEndRef, lonEndRef=targetPoint.getEndRefPos()            
-            
-            distanceStartToEndRef=self.osmutils.distance(latStart, lonStart, latEndRef, lonEndRef)
-            distanceTargetToEndRef=self.osmutils.distance(latTarget, lonTarget, latEndRef, lonEndRef)
-            
-            if distanceTargetToEndRef<distanceStartToEndRef:
-                if oneway==1:
-                    target=targetPoint.getTarget()
-                elif oneway==2:
-                    target=targetPoint.getSource()
-            
-        return target
-        
-   
-#    def calcRouteForPoints(self, route):  
-#        routingPointList=route.getRoutingPointList()                
-#      
-#        allPathCost=0.0
-#        allEdgeList=list()
-#        
-#        if len(routingPointList)!=0:  
-#            startEdge=routingPointList[0].getEdgeId()
-#            endEdge=routingPointList[-1].getEdgeId()
-#
-#            i=0   
-#            startPoint=routingPointList[0]
-#            if startPoint.getSource()==0:
-#                # should not happen
-#                print("startPoint NOT resolved in calc route")
-#                return None, None
-#            sourceEdge=startPoint.getEdgeId()
-#            bbox=self.createBBoxForRoute(route)
-#
-#            # on a onway always start at the end
-#            if startPoint.getTargetOneway()==True:
-##                if sourceEdge!=routingPointList[1].getEdgeId():
-##                    source=startPoint.getTarget()
-#                    source=self.getRoutingSourceForPointOneway(startPoint.getOneway(), startPoint, routingPointList[1])
-##                else:
-##                    source=self.getRoutingForPoint(startPoint)
-#            else:
-#                # look if target or source is nearer and start from there
-#                source=self.getRoutingForPoint(startPoint)
-#                    
-#            i=1
-#            for targetPoint in routingPointList[1:]:
-#                if targetPoint.getTarget()==0:
-#                    # should not happen
-#                    print("targetPoint NOT resolved in calc route")
-#                    return None, None
-#                
-#                targetEdge=targetPoint.getEdgeId()
-#
-#                # make sure we are going through the target if it is
-#                # on a oneway by routing first to the source
-#                if targetPoint.getTargetOneway()==True:
-##                    if sourceEdge!=targetEdge:
-##                        target=targetPoint.getSource()
-#                        target=self.getRoutingTargetForPointOneway(targetPoint.getOneway(), startPoint, targetPoint)
-##                    else:
-##                        target=self.getRoutingForPoint(targetPoint)  
-#                else:
-#                    # look if source or target is nearer and stop there
-#                    target=self.getRoutingForPoint(targetPoint)                  
-#                            
-##                print("calcRouteForPoints: source %d %d %d %d"%(source, sourceEdge, startPoint.getWayId(), startPoint.getRefId()))
-##                print("calcRouteForPoints: target %d %d %d %d"%(target, targetEdge, targetPoint.getWayId(), targetPoint.getRefId()))
-#                
-#                if source==0 and target==0:
-#                    print("source and target==0!")
-#                    return None, None
-#
-#                if source==target:
-#                    print("source and target equal!")
-#                    startPoint=targetPoint
-#                    sourceEdge=startPoint.getEdgeId()
-#                else:                  
-##                    if self.dWrapper!=None:
-##                        edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
-##                        allEdgeList.extend(edgeList)
-##                        allPathCost=allPathCost+pathCost            
-#                
-#                    if self.dWrapperTrsp!=None:
-#                        edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, bbox, False)
-#                        if edgeList==None:
-#                            return None, None
-#                                    
-#                    startPoint=targetPoint
-#                    
-#                    # if the point is on a oneway we always
-#                    # continue at target and add the edge between
-#                    if startPoint.getTargetOneway()==True:
-##                        if sourceEdge!=targetEdge:
-#                            source=startPoint.getTarget()
-##                            source=self.getRoutingSourceForPointOneway(startPoint, )
-#                            if edgeList[-1]!=targetEdge:
-#                                edgeList.append(targetEdge) 
-##                        else:
-##                            source=target
-#                    else:
-#                        if startPoint.getType()==2:
-#                            if sourceEdge!=targetEdge:
-#                                # look how to continue after a waypoint                                    
-#                                if edgeList[-1]!=targetEdge:
-#                                    # make sure we go through waypoint edge
-#                                    edgeList.append(targetEdge)
-#                                    # set next source point - continue from the opposite
-#                                    if target==startPoint.getSource():
-#                                        source=startPoint.getTarget()
-#                                    else:
-#                                        source=startPoint.getSource() 
-#                                else:
-#                                    # already passed - go on
-#                                    source=target
-#                            else:
-#                                # special case if both on the same edge
-#                                # just continue from here
-#                                source=target        
-#                        else:
-#                            # just continue from here
-#                            source=target
-#                            
-#                    allEdgeList.extend(edgeList)
-#                    allPathCost=allPathCost+pathCost 
-#                        
-#                    sourceEdge=startPoint.getEdgeId()
-#                i=i+1
-#                
-#            # always add start and ende edge if needed
-#            if len(allEdgeList)==0 or not allEdgeList[0]==startEdge:
-#                allEdgeList.insert(0, startEdge)
-#
-#            if not allEdgeList[-1]==endEdge:
-#                allEdgeList.append(endEdge)
-#                
-#            return allEdgeList, allPathCost
-#
-#        return None, None
-    
-    def calcRouteForPointsEdges(self, route):  
+    def calcRoute(self, route):  
         routingPointList=route.getRoutingPointList()                
       
         allPathCost=0.0
@@ -2323,66 +2131,31 @@ class OSMParserData():
                 targetPos=targetPoint.getPosOnEdge()
                                                                            
                 if self.dWrapperTrsp!=None:
-                    edgeList, pathCost=self.dWrapperTrsp.computeShortestPathForEdges(sourceEdge, targetEdge, sourcePos, targetPos, bbox, False)
+                    edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(sourceEdge, targetEdge, sourcePos, targetPos, bbox, False)
                     if edgeList==None:
                         return None, None
                                     
                 startPoint=targetPoint
-                    
-                            
+                                                
                 allEdgeList.extend(edgeList)
                 allPathCost=allPathCost+pathCost 
                     
                 sourceEdge=startPoint.getEdgeId()
                 sourcePos=startPoint.getPosOnEdge()
 
-                
             return allEdgeList, allPathCost
 
         return None, None
 
-    def calcRouteForPointsTest(self, route):
-        routingPointList=route.getRoutingPointList()                
-        if len(routingPointList)!=0:  
-            i=0   
-            startPoint=routingPointList[0]
-            if startPoint.getSource()==0:
-                return
-            
-            bbox=self.createBBoxForRoute(route)
-            for targetPoint in routingPointList[1:]:
-                if targetPoint.getTarget()==0:
-                    return
-                            
-                print("all edges len:%d"%self.getLenOfEdgeTable())
-                print("bbox edges len:%d"%self.getLenOfEdgeTableForRouting(bbox))
-                        
-                startPoint=targetPoint
-                i=i+1
-                
-
-#    def calcRouteForNodes(self, source, target):        
-#        if source==0 and target==0:
-#            print("source and target==0!")
-#            return None
-#        
-#        if self.dWrapper!=None:
-#            edgeList, pathCost=self.dWrapper.computeShortestPath(source, target)
-#            return edgeList, pathCost
-#                                
-#        return None
-
-    def calcRouteForNodesTrsp(self, source, target):        
-        if source==0 and target==0:
-            print("source and target==0!")
-            return None
-        
+    def calcRouteForEdges(self, startEdge, endEdge, startPos, endPos):                                                                                         
         if self.dWrapperTrsp!=None:
-            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(source, target, False)
+            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(startEdge, endEdge, startPos, endPos, None, False)
+            if edgeList==None:
+                return None, None
             return edgeList, pathCost
-                                
-        return None
-            
+
+        return None, None
+        
     def getLastWayOnTrack(self, trackWayList):
         if len(trackWayList)>0:
             return trackWayList[-1]
@@ -4233,18 +4006,21 @@ class OSMParserData():
                                     
     def recreateCrossings(self):
         for country in self.osmList.keys():
-            self.country=country
-            self.debugCountry=country
-            print(self.osmList[country])
+            self.recreateCrossingsForCountry(country)
 
-            self.clearCrosssingsTable(country)
+    def recreateCrossingsForCountry(self, country):
+        self.country=country
+        self.debugCountry=country
+        print(self.osmList[country])
+
+        self.clearCrosssingsTable(country)
+        
+        print("recreate crossings")
+        self.createCrossingEntries(country)
+        print("end recreate crossings")
+                    
+        self.commitCountryDB(country)
             
-            print("recreate crossings")
-            self.createCrossingEntries(country)
-            print("end recreate crossings")
-                        
-            self.commitCountryDB(country)
-
     def recreateEdges(self):
         self.clearEdgeTable()
         for country in self.osmList.keys():
@@ -4490,7 +4266,7 @@ def main(argv):
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()
 
-#    p.recreateCrossings()
+#    p.recreateCrossingsForCountry(0)
 #    p.testAddress()
 #    p.testRoutes()
 #    p.testWayTable(0)
