@@ -6,6 +6,8 @@ Created on Jan 17, 2012
 
 import fnmatch
 import re
+import env
+import os
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
@@ -126,9 +128,9 @@ class OSMAdressDialog(QDialog):
         self.currentCity=None
         
         self.pointType=0
-        self.startPointIcon=QIcon("images/source.png")
-        self.endPointIcon=QIcon("images/target.png")
-        self.wayPointIcon=QIcon("images/waypoint.png")
+        self.startPointIcon=QIcon(os.path.join(env.getImageRoot(), "source.png"))
+        self.endPointIcon=QIcon(os.path.join(env.getImageRoot(), "target.png"))
+        self.wayPointIcon=QIcon(os.path.join(env.getImageRoot(), "waypoint.png"))
         self.selectedAddress=None
         self.initUI()
          
@@ -500,9 +502,9 @@ class OSMFavoritesDialog(QDialog):
 
         self.selectedFavorite=None
         self.pointType=0
-        self.startPointIcon=QIcon("images/source.png")
-        self.endPointIcon=QIcon("images/target.png")
-        self.wayPointIcon=QIcon("images/waypoint.png")
+        self.startPointIcon=QIcon(os.path.join(env.getImageRoot(), "source.png"))
+        self.endPointIcon=QIcon(os.path.join(env.getImageRoot(), "target.png"))
+        self.wayPointIcon=QIcon(os.path.join(env.getImageRoot(), "waypoint.png"))
 
         self.initUI()
          
@@ -1449,8 +1451,8 @@ class OSMOptionsDialog(QDialog):
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
-        self.downloadIcon=QIcon("images/download.png")
-        self.gpsIcon=QIcon("images/gps.png")
+        self.downloadIcon=QIcon(os.path.join(env.getImageRoot(), "download.png"))
+        self.gpsIcon=QIcon(os.path.join(env.getImageRoot(), "gps.png"))
         self.followGPS=parent.getAutocenterGPSValue()
         self.withDownload=parent.getWithDownloadValue()
         self.withMapnik=parent.getWithMapnikValue()

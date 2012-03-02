@@ -11,7 +11,7 @@ import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
 import time
-import zlib
+import env
 #from pygraph-routing.dijkstrapygraph import DijkstraWrapperPygraph
 #from igraph.dijkstraigraph import DijkstraWrapperIgraph
 
@@ -1823,6 +1823,8 @@ class OSMParserData():
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
                             if "maxspeed" in tags:
+                                deviceRef=None
+                                fromRefId=None
                                 for part in ways:
                                     roleId=int(part[0])
                                     roleType=part[1]
@@ -1831,13 +1833,19 @@ class OSMParserData():
                                     if roleType=="node":
                                         if roleTag=="from":
                                             fromRefId=roleId
-                                            storedRef, refCountry=self.getCountryOfRef(fromRefId)
-                                            if storedRef!=None:
-                                                resultList=self.getRefEntryForIdAndCountry(fromRefId, refCountry)
-                                                if len(resultList)==1:
-                                                    refid, _, _, _, _=resultList[0]
-#                                                    print("enforcement at ref %d %s"%(refid, tags))
-                                                    self.updateRefTableEntry(refid, tags, 1, refCountry)
+                                            
+                                        elif roleTag=="device":
+                                            deviceRef=roleId
+                                            
+                                if deviceRef!=None and fromRefId!=None:
+                                    storedRef, refCountry=self.getCountryOfRef(fromRefId)
+                                    if storedRef!=None:
+                                        resultList=self.getRefEntryForIdAndCountry(fromRefId, refCountry)
+                                        if len(resultList)==1:
+                                            refid, _, _, _, _=resultList[0]
+#                                           print("enforcement at ref %d %s"%(refid, tags))
+                                            tags["deviceRef"]=deviceRef
+                                            self.updateRefTableEntry(refid, tags, 1, refCountry)
            
     def getStreetNameInfo(self, tags, streetTypeId):
 
@@ -2225,17 +2233,17 @@ class OSMParserData():
         if wayId!=None:
             if poiList!=None:
                 print(poiList)
-                for ref, nodeType in poiList:
+                for ref, deviceRef, nodeType in poiList:
                     # enforcement
                     # TODO: create constant for nodetypes
                     if nodeType==1:
-                        resultList=self.getRefEntryForIdAndCountry2(ref, country)
+                        resultList=self.getRefEntryForIdAndCountry2(deviceRef, country)
                         if len(resultList)==1:
-                            ref, lat, lon, _, storedTags, _=resultList[0]
+                            deviceRef, lat, lon, _, storedTags, _=resultList[0]
 
                             enforcement=dict()
                             enforcement["coords"]=(lat, lon)
-                            if "maxspeed" in storedTags:
+                            if storedTags!=None and "maxspeed" in storedTags:
                                 enforcement["info"]="maxspeed:%s"%(storedTags["maxspeed"])
                             enforcementList.append(enforcement)
 
@@ -3575,34 +3583,34 @@ class OSMParserData():
             
             # create bbox with start and end ref + margin
             # and fetch all nodes inside - faster then doing for every ref
-            lat1=None
-            lon1=None
-            lat2=None
-            lon2=None
+#            lat1=None
+#            lon1=None
+#            lat2=None
+#            lon2=None
             
             # TODO: is start or end is outside of the know countries
             # we should find the last known one
-            _, country=self.getCountryOfRef(refs[0])
-            if country==None:
-                continue
+#            _, country=self.getCountryOfRef(refs[0])
+#            if country==None:
+#                continue
+#            
+#            resultList=self.getRefEntryForIdAndCountry2(refs[0], country)
+#            if len(resultList)==1:
+#                _, lat1, lon1, _, _, storedNodeTypeList=resultList[0]
+#
+#            _, country=self.getCountryOfRef(refs[-1])
+#            if country==None:
+#                continue
+#
+#            resultList=self.getRefEntryForIdAndCountry2(refs[-1], country)
+#            if len(resultList)==1:
+#                _, lat2, lon2, _, _, storedNodeTypeList=resultList[0]
             
-            resultList=self.getRefEntryForIdAndCountry2(refs[0], country)
-            if len(resultList)==1:
-                _, lat1, lon1, _, _, storedNodeTypeList=resultList[0]
-
-            _, country=self.getCountryOfRef(refs[-1])
-            if country==None:
-                continue
-
-            resultList=self.getRefEntryForIdAndCountry2(refs[-1], country)
-            if len(resultList)==1:
-                _, lat2, lon2, _, _, storedNodeTypeList=resultList[0]
-            
-            allentries=None
-            
-            if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
-                bbox=self.createBBox((lat1, lon1), (lat2, lon2), 0.005)
-                allentries=self.getNodesInBBox(bbox, country, [1])
+#            allentries=None
+#            
+#            if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
+#                bbox=self.createBBox((lat1, lon1), (lat2, lon2), 0.001)
+#                allentries=self.getNodesInBBox(bbox, country, [1])
 
             for ref in refs:
                 _, country=self.getCountryOfRef(ref)
@@ -3611,25 +3619,35 @@ class OSMParserData():
 
                 resultList=self.getRefEntryForIdAndCountry2(ref, country)
                 if len(resultList)==1:
-                    ref, lat, lon, _, _, storedNodeTypeList=resultList[0]
+                    _, _, _, _, storedTags, storedNodeTypeList=resultList[0]
                     if storedNodeTypeList!=None:
                         if 1 in storedNodeTypeList:
                             # enforcement
-                            if not (ref, 1) in poiList:
-                                poiList.append((ref, 1))
-            
-                    # speed_camera refs can also be "near" this ref           
-                    if allentries!=None:     
-                        maxDistance=20.0        
-                        for x in allentries:
-                            _, lat1, lon1, _, _, storedNodeTypeList=x
-                            if storedNodeTypeList!=None:
-                                if 1 in storedNodeTypeList:
-                                    distance=self.osmutils.distance(lat, lon, lat1, lon1)
-                                    if distance>maxDistance:
-                                        continue
-                                    if not (ref, 1) in poiList:
-                                        poiList.append((ref, 1))
+                            if "deviceRef" in storedTags:
+                                deviceRef=storedTags["deviceRef"]
+                                if not (ref, deviceRef, 1) in poiList:
+                                    poiList.append((ref, deviceRef, 1))
+                            else:
+                                deviceRef=ref
+                                if not (ref, deviceRef, 1) in poiList:
+                                    poiList.append((ref, deviceRef, 1))
+                                
+#                    # speed_camera refs can also be "near" this ref           
+#                    if allentries!=None:     
+#                        maxDistance=20.0        
+#                        for x in allentries:
+#                            nodeRef, lat1, lon1, _, _, storedNodeTypeList=x
+#                            if nodeRef in nodeRefs:
+#                                # already resolved
+#                                continue
+#                            
+#                            if storedNodeTypeList!=None:
+#                                if 1 in storedNodeTypeList:
+#                                    distance=self.osmutils.distance(lat, lon, lat1, lon1)
+#                                    if distance>maxDistance:
+#                                        continue
+#                                    if not (ref, 1) in poiList:
+#                                        poiList.append((ref, 1))
 
             if len(poiList)!=0:
                 print(poiList)
@@ -3648,7 +3666,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash", "data")
+        return os.path.join(env.getRoot(), "data")
     
     def getDBFile(self, country):
         basename=os.path.basename(self.getOSMFile(country))
@@ -4158,30 +4176,6 @@ class OSMParserData():
         print(len(allentries))
         for x in allentries:
             print(self.edgeFromDB(x))
-               
-    def loadTestRoutes(self):    
-        config=Config("osmtestroutes.cfg")
-                
-        section="route"
-        routeList=list()
-        if config.hasSection(section):
-            for name, value in config.items(section):
-                if name[:5]=="route":
-                    route=OSMRoute()
-                    route.readFromConfig(value)
-                    routeList.append(route)   
-        return routeList
-    
-    def testRoutes(self):
-        routeList=self.loadTestRoutes()
-        for route in routeList:
-            print(route)
-            route.resolveRoutingPoints(self)
-            route.calcRoute(self)
-            if route.getEdgeList()!=None:
-                print(route.getEdgeList())
-            else:
-                print("routing failed")
             
     def getCoordsOfEdge(self, edgeId, country):
         (edgeId, startRef, endRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)

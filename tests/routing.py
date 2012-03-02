@@ -5,7 +5,8 @@ Created on Feb 29, 2012
 '''
 
 import unittest
-from osmparser.osmparserdata import OSMParserData
+from osmparser.osmparserdata import OSMParserData, OSMRoute
+from config import Config
 
 class RoutingTest(unittest.TestCase):          
     def setUp(self):
@@ -25,9 +26,34 @@ class RoutingTest(unittest.TestCase):
         self.assertTrue(edgeList!=None and cost!=None, "routing failed")
         self.assertTrue(len(edgeList)==67, "path length does not match expected")
 
+    def loadTestRoutes(self):    
+        config=Config("osmtestroutes.cfg")
+                
+        section="route"
+        routeList=list()
+        if config.hasSection(section):
+            for name, value in config.items(section):
+                if name[:5]=="route":
+                    route=OSMRoute()
+                    route.readFromConfig(value)
+                    routeList.append(route)   
+        return routeList
+    
+    def testRoutes(self):
+        routeList=self.loadTestRoutes()
+        for route in routeList:
+            print(route)
+            route.resolveRoutingPoints(self.p)
+            route.calcRoute(self.p)
+            self.assertTrue(route.getEdgeList()!=None, "routing %s failed"%route)
+            if route.getEdgeList()!=None:
+                print(route.getEdgeList())
+                
 def routingSuite():
     suite = unittest.TestSuite()
     suite.addTest(RoutingTest('testBasicRouting'))
+    suite.addTest(RoutingTest('testRoutes'))
     return suite
+
 if __name__ == '__main__':
     unittest.main()
