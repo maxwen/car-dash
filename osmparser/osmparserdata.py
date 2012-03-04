@@ -164,8 +164,7 @@ class OSMRoutingPoint():
         if self.source!=0:
             return
         
-        # TODO; if we are on a crossing - how to find the best matching edge?
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.001)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.005, 30.0)
         if edgeId==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
@@ -910,7 +909,11 @@ class OSMParserData():
         
     
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d AND id!=%d'%(startRef, edgeId))
+        if edgeId!=None:
+            self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d AND id!=%d'%(startRef, edgeId))
+        else:
+            self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d'%(startRef))
+            
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
@@ -1086,34 +1089,24 @@ class OSMParserData():
         for x in allentries:
             refId, lat, lon, wayIdList, tags=self.refFromDB(x)
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " wayIdList:"+str(wayIdList) + " tags:"+str(tags))
-                
-    def getEdgeIdOnPos(self, lat, lon, margin=0.005, maxWayDistance=10.0):
-        print("getEdgeIdOnPos")
-#        start=time.time()
+
+    def getEdgeIdOnPos(self, lat, lon, margin, maxDistance):
+        maxNodeDistance=500.0
         usedEdgeId=None
         usedWayId=None
         usedRefId=None
         usedLat=None
         usedLon=None
-        usedCountry=None
-        usedRefs=None
-        usedCheckRefs=None
-        maxNodeDistance=1000.0
- 
+        
         refCountry=self.getCountryOfPos(lat, lon)
         if refCountry==None:
-            return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
+            return None, None, None, (None, None), None
 
-        nearestFound=False
+        possibleWayList=list()
         nodes=self.getNearNodes(lat, lon, refCountry, maxNodeDistance, margin)
-        for refId, lat1, lon1, wayIdList in nodes:
-            # first search way which has the nearest ref
-            if nearestFound==True:
-                break
+        for refId, _, _, wayIdList in nodes:           
             for wayId in wayIdList:
-                if nearestFound==True:
-                    break
-                (wayEntryId, tags, refs, streetTypeId, name, nameRef)=self.getWayEntryForIdAndCountry(wayId, refCountry)
+                (_, _, refs, _, _, _, _, _)=self.getWayEntryForIdAndCountry2(wayId, refCountry)
                 # use the refs before and after to check
                 index=refs.index(refId)
                 refList=list()
@@ -1130,49 +1123,44 @@ class OSMParserData():
                                     
                 lastRef=refList[0]
                 for ref in refList[1:]:
-                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxWayDistance)
-                    if onLine==True:
-                        usedRefId=ref
-                        usedLat=tmpLat
-                        usedLon=tmpLon
-                        usedCountry=refCountry
-                        usedRefs=refs
-                        usedCheckRefs=refList
-                        usedWayId=wayId
-                        nearestFound=True
+                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
+                    if onLine==True:            
+                        if not (wayId, ref, tmpLat, tmpLon, refs) in possibleWayList:
+                            possibleWayList.append((wayId, ref, tmpLat, tmpLon, refs))
+                        # one for every way is enough
                         break
                     lastRef=ref
                         
-        if usedWayId!=None:
-            usedEdgeId=None
-            # search all edges of this way for the nearset ref
-            resultList=self.getEdgeEntryForWayId(usedWayId)
-            if len(resultList)==1:
-                edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=resultList[0]
-                usedEdgeId=edgeId
-            else:
-                edgeFound=False
+        if len(possibleWayList)!=0:
+#            print(possibleWayList)
+            minDistance=maxDistance
+            doneEdges=list()
+            for wayId, ref, tmpLat, tmpLon, refs in possibleWayList:
+                resultList=self.getEdgeEntryForWayId(wayId)
+
                 for edge in resultList:
-                    if edgeFound==True:
-                        break
-                    edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=edge
-                    edgeRefList=self.getRefListSubset(usedRefs, startRef, endRef)
+                    edgeId, startRef, endRef, _, wayId, _, _, _, _=edge
+                    if edgeId in doneEdges:
+                        continue
+                    doneEdges.append(edgeId)
+                    edgeRefList=self.getRefListSubset(refs, startRef, endRef)
                                         
-                    if usedRefId in edgeRefList:
-                        lastRef=usedCheckRefs[0]
-                        for ref in usedCheckRefs[1:]:
-                            onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxWayDistance)
+                    if ref in edgeRefList:
+                        lastRef=refs[0]
+                        for ref in refs[1:]:
+                            onLine, distance=self.isMinimalDistanceOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
                             if onLine==True:
-                                usedEdgeId=edgeId
-                                edgeFound=True
-                                break
+                                if distance<minDistance:
+                                    minDistance=distance
+                                    usedEdgeId=edgeId
+                                    usedWayId=wayId
+                                    usedRefId=ref
+                                    usedLat=lat
+                                    usedLon=lon
+                                
                             lastRef=ref
                         
-#        stop=time.time()
-#        print(usedEdgeId)
-#        print("getEdgeIdOnPos:%f"%(stop-start))
-        
-        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), usedCountry
+        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), refCountry
 
     def getNodesInBBox(self, bbox, country, nodeTypeList=None):
         latMin=bbox[1]
@@ -2225,6 +2213,35 @@ class OSMParserData():
         if usedLat!=None and usedLon!=None:
             return True, (usedLat, usedLon)
         return False, (None, None)
+    
+    def isMinimalDistanceOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
+        _, country=self.getCountryOfRef(ref1)
+        if country==None:
+            return False, None
+        resultList=self.getRefEntryForIdAndCountry(ref1, country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return False, None
+        _, country=self.getCountryOfRef(ref2)
+        if country==None:
+            return False, None
+        resultList=self.getRefEntryForIdAndCountry(ref2, country)
+        if len(resultList)==1:
+            _, lat2, lon2, _, _=resultList[0]
+        else:
+            return False, None
+        
+        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
+        minDistance=maxDistance
+        onLine=False
+        for tmpLat, tmpLon in nodes:
+            distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
+            if distance<minDistance:
+                onLine=True
+                minDistance=distance
+                        
+        return onLine, minDistance
     
     def getEnforcmentsOnWay(self, wayId, refs, country):
         enforcementList=list()
@@ -4179,7 +4196,7 @@ class OSMParserData():
             
     def getCoordsOfEdge(self, edgeId, country):
         (edgeId, startRef, endRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)
-        wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=self.getWayEntryForIdAndCountry3(wayId, country)
+        wayId, _, refs, _, _, _, _, _, _=self.getWayEntryForIdAndCountry3(wayId, country)
                     
         refListPart=self.getRefListSubset(refs, startRef, endRef)
         coords=list()
@@ -4218,6 +4235,29 @@ class OSMParserData():
         
         return False
             
+    def getEdgesOfTunnel(self, edgeId):
+        tunnelEdgeList=list()
+        tunnelEdgeList.append(edgeId)
+        _, startRef, endRef, _, wayId, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+
+        endOfTunnel=False
+        nextStartRef=endRef
+        while endOfTunnel==False:
+            resultList=self.getEdgeEntryForStartPoint(nextStartRef, None)
+            if len(resultList)==1:
+                edgeId, startRef, endRef, _, wayId, _, _, _, _=resultList[0]
+                _, country=self.getCountryOfRef(startRef)
+                (_, tags, refs, streetTypeId, name, nameRef, oneway, roundabout)=self.getWayEntryForIdAndCountry2(wayId, country)
+                if not "tunnel" in tags:
+                    endOfTunnel=True
+                    continue
+                tunnelEdgeList.append(edgeId)
+                nextStartRef=endRef
+            else:
+                endOfTunnel=True
+
+        print(tunnelEdgeList)
+        
 def main(argv):    
     p = OSMParserData()
     

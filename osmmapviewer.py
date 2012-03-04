@@ -44,6 +44,8 @@ MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 
+DEFAULT_NODE_MARGIN=0.005
+
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
 
@@ -474,6 +476,7 @@ class QtOSMWidget(QWidget):
         self.speed=0
         self.track=None
         self.stop=True
+        self.isInTunnel=False
 
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -904,6 +907,25 @@ class QtOSMWidget(QWidget):
         self.painter.setPen(QPen(QColor(255, 0, 0)))
         self.painter.drawRect(rect)
         
+    def displayTrack(self, trackList):
+        polygon=QPolygon()
+        
+        for line in trackList:
+            lineParts=line.split(":")
+            if len(lineParts)==6:
+                lat=float(lineParts[1])
+                lon=float(lineParts[2])
+                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                if self.isPointVisible(x, y):
+                    point=QPoint(x, y);
+                    polygon.append( point )
+               
+        trackPen=QPen()
+        trackPen.setColor(QColor(0, 255, 0, 200))
+        trackPen.setWidth(self.getPenWidthForZoom())
+        self.painter.setPen(trackPen)
+        self.painter.drawPolyline(polygon)
+
     # only use if transform is active
     def displayEdges(self, edgeList, expectedNextEdge, approachingRef):
 #        print(edgeList)
@@ -921,6 +943,7 @@ class QtOSMWidget(QWidget):
     
                 coords=osmParserData.getCoordsOfEdge(edgeId, country)
                 self.displayEdge(coords, pen)
+        
         elif expectedNextEdge!=None:
             edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(expectedNextEdge)
             _, country=osmParserData.getCountryOfRef(startRef)
@@ -1072,6 +1095,9 @@ class QtOSMWidget(QWidget):
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())
 
+#        if self.osmWidget.trackLogLines!=None:
+#            self.displayTrack(self.osmWidget.trackLogLines)
+            
         self.painter.resetTransform()
         
         self.showEnforcementInfo()
@@ -1350,11 +1376,10 @@ class QtOSMWidget(QWidget):
                 return
             
             showTrackDetails=self.map_zoom>13
-                    
+            polygon=QPolygon()
+           
             for item in route.getTrackList():
                 streetType=item["type"]
-                
-                polygon=QPolygon()
                 
                 for itemRef in item["refs"]:
                     lat, lon=itemRef["coords"]
@@ -1364,11 +1389,11 @@ class QtOSMWidget(QWidget):
                     point=QPoint(x, y);
                     polygon.append( point )
                     
-                pen=self.getPenForStreetType(streetType)  
-                pen.setWidth(self.getPenWidthForZoom())
-                  
-                self.painter.setPen(pen)
-                self.painter.drawPolyline(polygon)
+            pen=self.getPenForStreetType(streetType)  
+            pen.setWidth(self.getPenWidthForZoom())
+              
+            self.painter.setPen(pen)
+            self.painter.drawPolyline(polygon)
                     
             if showTrackDetails==True:                                    
                 for item in route.getTrackList():
@@ -1943,7 +1968,7 @@ class QtOSMWidget(QWidget):
     
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, 0.001)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_NODE_MARGIN, 30.0)
         if edgeId==None:
             return 
         
@@ -1961,7 +1986,7 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, 0.001)
+        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_NODE_MARGIN, 30.0)
         if edgeId==None:
             return
         
@@ -2069,6 +2094,14 @@ class QtOSMWidget(QWidget):
 #                self.recalcRouteFromPointList(routingPointList)
                 self.recalcRouteFromPoint(recalcPoint)
             
+    def clearLastEdgeInfo(self):
+        self.wayInfo=None
+        self.currentCoords=None
+        self.lastEdgeId=None
+        self.lastWayId=None
+        self.speedInfo=None
+        self.enforcementInfoList=None
+        
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse, trackLog=False):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
@@ -2076,15 +2109,10 @@ class QtOSMWidget(QWidget):
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
 #            start=time.time()
-            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, 0.005, fromMouse, speed, trackLog)
+            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_NODE_MARGIN, fromMouse, speed, trackLog)
 #            print("%f"%(time.time()-start))
             if edgeId==None:
-                self.wayInfo=None
-                self.currentCoords=None
-                self.lastEdgeId=None
-                self.lastWayId=None
-                self.speedInfo=None
-                self.enforcementInfoList=None
+                self.clearLastEdgeInfo()
             else:   
                 if self.currentRoute!=None and self.remainingEdgeList!=None:                                               
                     if edgeId!=self.lastEdgeId:
@@ -2162,7 +2190,7 @@ class QtOSMWidget(QWidget):
                 if wayId!=self.lastWayId:
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
@@ -2172,6 +2200,13 @@ class QtOSMWidget(QWidget):
                     # TODO: play sound?
                     self.enforcementInfoList=osmParserData.getEnforcmentsOnWay(wayId, refs, country)
 
+                    if "tunnel" in tags:
+                        self.isInTunnel=True
+                        print("tunnel")
+#                        osmParserData.getEdgesOfTunnel(edgeId)
+                    else:
+                        self.isInTunnel=False
+                        
 #            stop=time.time()
 #            print("showTrackOnPos:%f"%(stop-start))
             if update==True:
@@ -2929,27 +2964,44 @@ class OSMWidget(QWidget):
         self.trackLogLines=lines
         self.trackLogLine=0
         osmRouting.cleanEdgeCalculations(None, None)
+        self.mapWidgetQt.clearLastEdgeInfo()
+        self.mapWidgetQt.update()
+        self._stepTrackLog()
 
     @pyqtSlot()
     def _stepTrackLog(self):
         if self.trackLogLines!=None:
             if self.trackLogLine<len(self.trackLogLines):
                 line=self.trackLogLines[self.trackLogLine]
+                
+                while (len(line)==0 or line=="\n") and self.trackLogLine<len(self.trackLogLines):
+                    self.trackLogLine=self.trackLogLine+1
+                    line=self.trackLogLines[self.trackLogLine]
+                
+                if self.trackLogLine==len(self.trackLogLines):
+                    return
+                
                 lineParts=line.split(":")
                 if len(lineParts)==6:
                     self.updateGPSDataDisplay(float(lineParts[1]), float(lineParts[2]), 0, int(lineParts[4]), int(lineParts[3]), False, True)
+                
                 self.trackLogLine=self.trackLogLine+1
-
+                
     @pyqtSlot()
     def _stepTrackLogBack(self):
         if self.trackLogLines!=None:
             if self.trackLogLine>0:
                 self.trackLogLine=self.trackLogLine-1
+                
                 line=self.trackLogLines[self.trackLogLine]
+                while (len(line)==0 or line=="\n") and self.trackLogLine>0:
+                    self.trackLogLine=self.trackLogLine-1
+                    line=self.trackLogLines[self.trackLogLine]
+                
                 lineParts=line.split(":")
                 if len(lineParts)==6:
                     self.updateGPSDataDisplay(float(lineParts[1]), float(lineParts[2]), 0, int(lineParts[4]), int(lineParts[3]), False, True)
-            
+    
     @pyqtSlot()
     def _resetTrackLogStep(self):
         if self.trackLogLine!=None:
