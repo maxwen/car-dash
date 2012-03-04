@@ -23,12 +23,17 @@ class TrackLog():
         stamp=datetime.fromtimestamp(time.time())
         return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
 
-    def addTrackLogLine(self, lat, lon, track, speed, info):
-        logLine="%s:%f:%f:%d:%d:%s"%(self.createTimeStamp(), lat, lon, track, speed, info)
+    def addTrackLogLine(self, lat, lon, track, speed, altitude):
+        logLine="%s:%f:%f:%d:%d:%d"%(self.createTimeStamp(), lat, lon, track, speed, altitude)
         if self.withPrint:
             print(logLine)
         self.logFile.write(logLine+"\n")
-                
+
+    def addTrackLogLine2(self, line):
+        if self.withPrint:
+            print(line)
+        self.logFile.write(line+"\n")     
+                   
     def removeLogFile(self):
         if os.path.exists(self.getLogFileName()):
             os.remove(self.getLogFileName())

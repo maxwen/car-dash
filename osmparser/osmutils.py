@@ -91,7 +91,7 @@ class OSMUtils():
 
         c= 2.0 * res
         d = (RADIUS_EARTH * c)*1000
-        return d
+        return int(d)
 
 
     #  Compute the position of a point partially along the geodesic from 
@@ -201,13 +201,13 @@ class OSMUtils():
         h = 360.0 - self.rad2deg(self.heading(lat1, lon1, lat2, lon2))
         if h >= 360.0:
             h -= 360.0
-        return h;
+        return int(h)
     
     def headingDegreesRad(self,  lat1,  lon1,  lat2,  lon2):
         h = 360.0 - self.rad2deg(self.headingRad(lat1, lon1, lat2, lon2))
         if h >= 360.0:
             h -= 360.0
-        return h;
+        return int(h)
     
     def headingDiffAbsolute(self, heading1, heading2):
         return abs((heading1 + 180 -  heading2) % 360 - 180);
@@ -265,10 +265,9 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat, lon, lat1, lon1, offset=0.0):
+    def createTemporaryPoints(self, lat, lon, lat1, lon1, offset=0.0, frac=5.0, addFirst=True, addLast=True):
         distance=int(self.distance(lat, lon, lat1, lon1))
         # create nodes with distance 5m
-        frac=5
         if offset!=0.0:
             pointsToIgnore=int(offset/frac)
         else:
@@ -276,7 +275,7 @@ class OSMUtils():
         pointsToCreate=int(distance/frac)
 
         points=list()
-        if offset==0.0:
+        if offset==0.0 and addFirst==True:
             points.append((lat, lon))
         if distance>frac:
             doneDistance=0
@@ -291,7 +290,7 @@ class OSMUtils():
                     
                 doneDistance=doneDistance+frac
                 i=i+1
-        if offset==0.0:
+        if offset==0.0 and addLast==True:
             points.append((lat1, lon1))
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))

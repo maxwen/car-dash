@@ -19,6 +19,8 @@ from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 from trsp.trspwrapper import TrspWrapper
 
+HEADING_CALC_LENGTH=20.0
+
 class OSMRoute():
     def __init__(self, name="", routingPointList=None):
         self.name=name
@@ -145,10 +147,7 @@ class OSMRoutingPoint():
         self.edgeId=None
         self.name=name
         self.usedRefId=0
-        self.country=None
-        self.targetOneway=False
-        self.oneway=0
-        
+        self.country=None        
         self.refLat=0.0
         self.refLon=0.0
         self.startRefLat=0.0
@@ -164,12 +163,10 @@ class OSMRoutingPoint():
         if self.source!=0:
             return
         
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.005, 30.0)
+        edgeId, _, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.005, 30.0)
         if edgeId==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
-
-        (wayEntryId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout)=osmParserData.getWayEntryForIdAndCountry2(wayId, country)
 
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, self.startRefLat, self.startRefLon, self.endRefLat, self.endRefLon)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         self.lat=usedPos[0]
@@ -177,12 +174,6 @@ class OSMRoutingPoint():
         self.edgeId=edgeId
         self.target=target
         self.source=source
-#        self.oneway=oneway
-        if oneway!=0:
-            self.targetOneway=True
-        else:
-            self.targetOneway=False
-        
         self.usedRefId=usedRefId
         
         self.refLat, self.refLon=osmParserData.getCoordsWithRefAndCountry(self.usedRefId, country)
@@ -202,12 +193,6 @@ class OSMRoutingPoint():
     
     def getPosOnEdge(self):
         return self.posOnEdge
-    
-    def getTargetOneway(self):
-        return self.targetOneway
-#    
-#    def getOneway(self):
-#        return self.oneway
     
     def __repr__(self):
         return "%s:%d:%f:%f"%(self.name, self.type, self.lat, self.lon)
@@ -1013,6 +998,15 @@ class OSMParserData():
         
         return (None, None, None, None, None, None, None, None)
     
+    def getTagsForWayEntry(self, wayId, country):
+        self.setDBCursorForCountry(country)
+        self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursor.fetchall()
+        if len(allentries)==1:
+            return self.decodeWayTags(allentries[0][1])
+        
+        return None
+
     def getWayEntryForIdAndCountry3(self, wayId, country):
         self.setDBCursorForCountry(country)
         self.cursor.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
@@ -2902,12 +2896,8 @@ class OSMParserData():
             (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, lat1, lon1, lat2, lon2)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
             refList=self.getRefListOfEdge(edgeId, wayId, currentStartRef, currentEndRef)
 
-            if startPoint.getTargetOneway()!=True:
-                # only one edge so we use distances on the same edge
-                distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
-                distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
-                if distanceStartRef>distanceEndRef:
-                    refList.reverse()
+            if startPoint.getPosOnEdge()>0.5:
+                refList.reverse()
 
             # TODO if only one edge draw line correct
             length=self.printSingleEdgeForRefList(refList, edgeId, trackWayList, startPoint, endPoint)
@@ -2937,24 +2927,14 @@ class OSMParserData():
                         if nextEdgeId!=edgeId:
                             if nextStartRef==currentStartRef or nextEndRef==currentStartRef:
                                 refList.reverse()
-#                                print("reverse refs of startEdge:%s"%refList)
     
                         else:
-                            if startPoint.getTargetOneway()!=True:
-                                # if we have a u-turn we use distances on the same edge
-                                distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
-                                distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
-                                if distanceStartRef>distanceEndRef:
-                                    refList.reverse()
-#                                    print("reverse refs of startEdge:%s"%refList)
-                    else:
-                        if startPoint.getTargetOneway()!=True:
-                            # only one edge so we use distances on the same edge
-                            distanceStartRef=self.osmutils.distance(startPointLat, startPointLon, lat1, lon1)
-                            distanceEndRef=self.osmutils.distance(startPointLat, startPointLon, lat2, lon2)
-                            if distanceStartRef>distanceEndRef:
+                            if startPoint.getPosOnEdge()>0.5:
                                 refList.reverse()
-#                                print("reverse refs of startEdge:%s"%refList)
+                    else:
+                        if startPoint.getPosOnEdge()>0.5:
+                            refList.reverse()
+
                 nextEdgeId=None
                 if i<len(edgeList)-2:
                     nextEdgeId=edgeList[i+1]
@@ -4234,29 +4214,135 @@ class OSMParserData():
             return restrictedEdge
         
         return False
-            
-    def getEdgesOfTunnel(self, edgeId):
-        tunnelEdgeList=list()
-        tunnelEdgeList.append(edgeId)
-        _, startRef, endRef, _, wayId, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
 
-        endOfTunnel=False
-        nextStartRef=endRef
-        while endOfTunnel==False:
-            resultList=self.getEdgeEntryForStartPoint(nextStartRef, None)
+    def getHeadingOnEdgeId(self, edgeId, ref):
+        edgeId, startRef, endRef, _, wayId, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+        refList=self.getRefListOfEdge(edgeId, wayId, startRef, endRef)
+        if len(refList)>1:
+            if ref==endRef:
+                refList.reverse()
+            heading=self.getHeadingForReflist(refList)
+            return heading
+        
+        return None
+    
+    def getHeadingForReflist(self, refs):
+        _, country=self.getCountryOfRef(refs[0])
+        if country==None:
+            return None
+        resultList=self.getRefEntryForIdAndCountry(refs[0], country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return None
+        
+        for ref in refs[1:]:
+            _, country=self.getCountryOfRef(ref)
+            if country==None:
+                return None
+            resultList=self.getRefEntryForIdAndCountry(ref, country)
             if len(resultList)==1:
-                edgeId, startRef, endRef, _, wayId, _, _, _, _=resultList[0]
-                _, country=self.getCountryOfRef(startRef)
-                (_, tags, refs, streetTypeId, name, nameRef, oneway, roundabout)=self.getWayEntryForIdAndCountry2(wayId, country)
-                if not "tunnel" in tags:
-                    endOfTunnel=True
-                    continue
-                tunnelEdgeList.append(edgeId)
-                nextStartRef=endRef
+                _, lat2, lon2, _, _=resultList[0]
             else:
-                endOfTunnel=True
+                return None
+            # use refs with distance more the 15m to calculate heading
+            # if available else use the last one
+            if self.osmutils.distance(lat1, lon1, lat2, lon2)>HEADING_CALC_LENGTH:
+                break
 
-        print(tunnelEdgeList)
+        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+        return heading    
+
+    def getHeadingForPoints(self, ref1, ref2):
+        _, country=self.getCountryOfRef(ref1)
+        if country==None:
+            return None
+        resultList=self.getRefEntryForIdAndCountry(ref1, country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return None
+        
+        _, country=self.getCountryOfRef(ref2)
+        if country==None:
+            return None
+        resultList=self.getRefEntryForIdAndCountry(ref2, country)
+        if len(resultList)==1:
+            _, lat2, lon2, _, _=resultList[0]
+        else:
+            return None
+        
+        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+        return heading
+
+    def getDistanceFromPointToRef(self, lat, lon, ref):
+        _, country=self.getCountryOfRef(ref)
+        if country==None:
+            return None
+        resultList=self.getRefEntryForIdAndCountry(ref, country)
+        if len(resultList)==1:
+            _, lat1, lon1, _, _=resultList[0]
+        else:
+            return None
+        
+        return self.osmutils.distance(lat, lon, lat1, lon1)
+
+    def getNearerRefToPoint(self, lat, lon, ref1, ref2):
+        distanceRef1=self.getDistanceFromPointToRef(lat, lon, ref1)
+        distanceRef2=self.getDistanceFromPointToRef(lat, lon, ref2)
+                
+        if distanceRef1 < distanceRef2:
+            return ref1
+        return ref2    
+    
+    def getEdgesOfTunnel(self, edgeId, ref):
+        tunnelEdgeList=list()
+        data=dict()
+        data["edge"]=edgeId
+        data["startRef"]=ref
+        data["heading"]=self.getHeadingOnEdgeId(edgeId, ref)
+        tunnelEdgeList.append(data)
+        
+        _, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+        if ref==startRef:
+            nextEndRef=endRef
+        else:
+            nextEndRef=startRef
+            
+        self.followEdge(edgeId, nextEndRef, tunnelEdgeList, self.followEdgeCheck, data)
+
+        return tunnelEdgeList
+
+    def followEdgeCheck(self, wayId, ref):
+        _, country=self.getCountryOfRef(ref)
+        tags=self.getTagsForWayEntry(wayId, country)
+        if not "tunnel" in tags:
+            return False
+        return True
+    
+    def followEdge(self, edgeId, ref, edgeList, followEdgeCheck, lastData):
+        resultList=self.getEdgeEntryForStartPoint(ref, None)
+        
+        for edge in resultList:    
+            edgeId, startRef, endRef, _, wayId, _, _, _, _=edge
+            if ref==startRef:
+                nextEndRef=endRef
+            else:
+                nextEndRef=startRef
+
+            if followEdgeCheck(wayId, nextEndRef)==False:
+                lastData["endRef"]=ref
+                return
+            
+            data=dict()
+            data["edge"]=edgeId
+            data["startRef"]=ref
+            data["heading"]=self.getHeadingOnEdgeId(edgeId, ref)
+
+            edgeList.append(data)
+
+            self.followEdge(edgeId, nextEndRef, edgeList, followEdgeCheck, data)
+
         
 def main(argv):    
     p = OSMParserData()
