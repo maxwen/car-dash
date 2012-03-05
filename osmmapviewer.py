@@ -747,14 +747,22 @@ class QtOSMWidget(QWidget):
         map_x, map_y=self.getMapZeroPos()
                     
         offset_x = - map_x % TILESIZE;
+        if offset_x==0:
+            offset_x= - TILESIZE
+            
         offset_y = - map_y % TILESIZE;
+        if offset_y==0:
+            offset_y= - TILESIZE
+
+#        print("%d %d %d %d"%(map_x, map_y, offset_x, offset_y))
         
         if offset_x > 0:
             offset_x -= TILESIZE*2
         if offset_y > 0:
             offset_y -= TILESIZE*2
 
-                
+#        print("%d %d"%(offset_x, offset_y))
+
         tiles_nx = int((self.width()  - offset_x) / TILESIZE + 1)+1
         tiles_ny = int((self.height() - offset_y) / TILESIZE + 1)+1
 
@@ -773,6 +781,7 @@ class QtOSMWidget(QWidget):
                 else:
                     pixbuf=self.getTile(self.map_zoom, i,j)
                 
+#                print("%d %d"%(offset_x, offset_y))
                 self.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)                
                     
                 offset_y += TILESIZE
@@ -1020,15 +1029,12 @@ class QtOSMWidget(QWidget):
     def displayTrack(self, trackList):
         polygon=QPolygon()
         
-        for line in trackList:
-            lineParts=line.split(":")
-            if len(lineParts)==6:
-                lat=float(lineParts[1])
-                lon=float(lineParts[2])
-                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                if self.isPointVisible(x, y):
-                    point=QPoint(x, y);
-                    polygon.append( point )
+        for gpsData in trackList:
+            lat=gpsData.getLat()
+            lon=gpsData.getLon()
+            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+            point=QPoint(x, y);
+            polygon.append( point )
                
         trackPen=QPen()
         trackPen.setColor(QColor(0, 255, 0, 200))
