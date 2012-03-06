@@ -81,7 +81,7 @@ class RenderThread:
         mapnik2.render(self.m, im)
 #        print("%f"%(time.time()-start))
 #        start=time.time()
-        im.save(tile_uri, 'pngTILESIZE')
+        im.save(tile_uri, 'png256')
 #        print("%f"%(time.time()-start))
 
 class MapnikWrapper(QObject):

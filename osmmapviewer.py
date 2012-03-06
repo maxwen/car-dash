@@ -27,6 +27,7 @@ from gpsutils import GPSMonitorUpateWorker
 from gps import gps, misc
 from osmdialogs import *
 from mapnik.mapnikwrapper import MapnikWrapper
+from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
 from datetime import datetime
 
@@ -46,6 +47,8 @@ TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 
 DEFAULT_NODE_MARGIN=0.005
+# length of tunnel where we expect gps signal failure
+MINIMAL_TUNNEL_LENGHTH=50
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
@@ -181,12 +184,25 @@ class OSMMapnikTilesWorker(QThread):
         self.lastZoom=None
         self.lastBBox=None
         self.lastZoom=None
+        self.tileDir=tileDir
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
+        self.mapnikWrapperCPP=MapnikWrapperCPP()
         self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
         self.workQueue=deque()
         self.tileQueue=deque()
         self.updateMapTrigger=0;
         
+    def getTileFullPath(self, zoom, x, y):
+        if not os.path.exists(os.path.join(self.tileDir, str(zoom))):
+            os.mkdir(os.path.join(self.tileDir, str(zoom)))
+
+        if not os.path.exists(os.path.join(self.tileDir, str(zoom), str(x))):
+            os.mkdir(os.path.join(self.tileDir, str(zoom), str(x)))
+            
+        tilePath=os.path.join(str(zoom), str(x), str(y)+".png")
+        fileName=os.path.join(self.tileDir, tilePath)
+        return fileName
+    
     def setWidget(self, osmWidget):
         self.osmWidget=osmWidget
         
@@ -235,15 +251,16 @@ class OSMMapnikTilesWorker(QThread):
                 (zoom, x, y)=self.tileQueue[0]
 #                start=time.time()
                 self.mapnikWrapper.render_tiles3(x, y, zoom)
+#                self.mapnikWrapperCPP.render_tile(self.getTileFullPath(zoom, x, y), x, y, zoom)
 #                print("%f"%(time.time()-start))
                 self.tileQueue.popleft()
                 
                 if self.updateMapTrigger==5:
-                    self.updateMap();
+                    self.updateMap()
                     self.updateMapTrigger=0
                 else:
                     self.updateMapTrigger=self.updateMapTrigger+1
-                                                     
+                         
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
 
@@ -329,6 +346,11 @@ class OSMGPSLocationWorker(QThread):
         self.currentGPSDataIndex=0
         self.gpsDataLines=None
         self.tunnelThread=tunnelThread
+        self.lastGpsData=None
+        if self.tunnelThread==True:
+            self.timeout=1000
+        else:
+            self.timeout=1000
         
     def isTunnelThread(self):
         return self.tunnelThread
@@ -340,6 +362,7 @@ class OSMGPSLocationWorker(QThread):
         self.exiting = False
         self.gpsDataLines=gpsDataLines
         self.currentGPSDataIndex=0
+        self.lastGpsData=None
         self.start()
  
     def stop(self):
@@ -347,6 +370,7 @@ class OSMGPSLocationWorker(QThread):
         self.wait()
         self.currentGPSDataIndex=0
         self.gpsDataLines=None
+        self.lastGpsData=None
  
     def continueReplay(self):
         if self.gpsDataLines!=None:
@@ -367,8 +391,15 @@ class OSMGPSLocationWorker(QThread):
         for gpsData in self.gpsDataLines[self.currentGPSDataIndex:]:
             if self.exiting==True:
                 break
+            
+#            if self.lastGpsData!=None:
+#                if self.lastGpsData==gpsData:
+#                    continue
+#                
+#            self.lastGpsData=gpsData
+            
             self.updateGPSDataDisplay(gpsData)
-            self.msleep(1000)
+            self.msleep(self.timeout)
             self.currentGPSDataIndex=self.currentGPSDataIndex+1
 
 class GPSData():
@@ -379,7 +410,12 @@ class GPSData():
         self.track=track
         self.speed=speed
         self.altitude=altitude
-        
+    
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
+            
     def isValid(self):
         return self.lat!=None and self.lon!=None and self.lat!=0.0 and self.lon!=0.0
     
@@ -422,7 +458,7 @@ class GPSData():
             
     def createTimeStamp(self):
         stamp=datetime.fromtimestamp(time.time())
-        return "".join(["%02d.%02d.%02d"%(stamp.hour, stamp.minute, stamp.second)])
+        return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
 
     def toLogLine(self):
         return "%s:%f:%f:%d:%d:%d"%(self.createTimeStamp(), self.lat, self.lon, self.track, self.speed, self.altitude)
@@ -496,8 +532,8 @@ class QtOSMWidget(QWidget):
         self.gps_rlat=0.0
         self.gps_rlon=0.0
         
-#        self.lastHeadingLat=0.0
-#        self.lastHeadingLon=0.0
+        self.lastHeadingLat=0.0
+        self.lastHeadingLon=0.0
         
         self.osmutils=OSMUtils()
         self.tileCache=OrderedDict()
@@ -560,6 +596,7 @@ class QtOSMWidget(QWidget):
         self.roundabout3Image=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit3.png"))
         self.roundabout4Image=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit4.png"))
         self.speedCameraImage=QPixmap(os.path.join(env.getImageRoot(), "speed_camera.png"))
+        self.tunnelPixmap=QPixmap(os.path.join(env.getImageRoot(), "tunnel.png"))
         
         self.currentRoute=None
         self.routeList=list()
@@ -576,6 +613,7 @@ class QtOSMWidget(QWidget):
         self.remainingTrackList=None
         
         self.mapnikWrapper=None
+        self.mapnikWrapperCPP=None
         self.lastCenterX=None
         self.lastCenterY=None
         self.withMapRotation=True
@@ -588,8 +626,8 @@ class QtOSMWidget(QWidget):
         self.isInTunnel=False
         self.altitude=0
 
-        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
-        self.setAttribute( Qt.WA_NoSystemBackground, True )
+#        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
+#        self.setAttribute( Qt.WA_NoSystemBackground, True )
         
         self.initPens()
         
@@ -781,7 +819,7 @@ class QtOSMWidget(QWidget):
                 else:
                     pixbuf=self.getTile(self.map_zoom, i,j)
                 
-#                print("%d %d"%(offset_x, offset_y))
+#                print("%d %d"%(i, j))
                 self.drawPixmap(offset_x, offset_y, TILESIZE, TILESIZE, pixbuf)                
                     
                 offset_y += TILESIZE
@@ -868,13 +906,13 @@ class QtOSMWidget(QWidget):
             
     def getTile(self, zoom, x, y):
         fileName=self.getTileFullPath(zoom, x, y)
-        pixbuf=self.getCachedTile(fileName)
-        if pixbuf!=None:
-            return pixbuf
+#        pixbuf=self.getCachedTile(fileName)
+#        if pixbuf!=None:
+#            return pixbuf
         
         if os.path.exists(fileName) and self.forceDownload==False:
             pixbuf=self.getTileFromFile(fileName)
-            self.addTileToCache(pixbuf, fileName)
+#            self.addTileToCache(pixbuf, fileName)
             return pixbuf
         else:
             if self.withMapnik==True:
@@ -1228,10 +1266,11 @@ class QtOSMWidget(QWidget):
             
         self.showTextInfo()
         self.showSpeedInfo()
-                
+        self.showTunnelInfo()
+        
         self.painter.end()
                         
-#        print(self.getVisibleBBoxDeg(TILESIZE))
+        #print(self.getVisibleBBoxDeg())
 #        print(self.getVisibleBBoxDegForMapnik())
 #        self.printTilesGeometry()
 #        print("QtOSMWidget:paintEvent")
@@ -1348,7 +1387,18 @@ class QtOSMWidget(QWidget):
             if os.path.exists(imagePath):
                 speedPixmap=QPixmap(imagePath)
                 self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, speedPixmap)
-
+                
+    def showTunnelInfo(self):
+        if self.isInTunnel==True:
+            x=self.width()-72
+            y=8
+            
+            tunnelBackground=QRect(self.width()-80, 0, 80, 80)
+            backgroundColor=QColor(120, 120, 120, 200)
+            self.painter.fillRect(tunnelBackground, backgroundColor)
+            
+            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.tunnelPixmap)
+            
     def showRoutingPoints(self):
 #        showTrackDetails=self.map_zoom>13
 #        if showTrackDetails==False:
@@ -1620,41 +1670,16 @@ class QtOSMWidget(QWidget):
     def stepRight(self, step):
         self.stepInDirection(step, 0)
 
-#    def calcCurrentHeading(self, lat, lon, speed):
-#        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
-#            self.lastHeadingLat=lat
-#            self.lastHeadingLon=lon
-#        else:    
-#            if speed<15:
-#                minDistance=2.0
-#            elif speed<30:
-#                minDistance=3.0
-#            elif speed<50:
-#                minDistance=4.0
-#            elif speed<80:
-#                minDistance=8.0
-#            elif speed<100:
-#                minDistance=10.0
-#            else:
-#                minDistance=15.0
-#                
-#            # only calculate heading if difference to last calculation is 
-#            # large then a specific length based on the current speed
-#            # to prevent unnecessary rotating
-#            if self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon)>minDistance:
-#                heading=self.osmutils.headingDegrees(self.lastHeadingLat, self.lastHeadingLon, lat, lon)
-#                if self.heading==None:
-#                    self.heading=heading
-#                else:
-##                    headingDiff=self.osmutils.headingDiffAbsolute(heading, self.heading)
-#                    # TODO: filter noise if headingDiff is to large
-#                    # make change "gradually"
-#                    self.heading=heading
-#                
-#                self.lastHeadingLat=lat
-#                self.lastHeadingLon=lon
+    def distanceFromLastPos(self, lat, lon):
+        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
+            self.lastHeadingLat=lat
+            self.lastHeadingLon=lon
+        else:    
+            print(self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon))
+            self.lastHeadingLat=lat
+            self.lastHeadingLon=lon
                 
-    def updateGPSLocation(self, gpsData, debug, trackLog):
+    def updateGPSLocation(self, gpsData, debug):
         lat=gpsData.getLat()
         lon=gpsData.getLon()
         self.speed=gpsData.getSpeed()
@@ -1686,8 +1711,7 @@ class QtOSMWidget(QWidget):
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
 #                print("gps update")
 #                if self.stop==False:  
-#                    # only calculate when moving
-#                    self.calcCurrentHeading(lat, lon, speed) 
+#                    self.distanceFromLastPos(lat, lon) 
                         
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
@@ -2321,7 +2345,7 @@ class QtOSMWidget(QWidget):
                     # TODO: play sound?
                     self.enforcementInfoList=osmParserData.getEnforcmentsOnWay(wayId, refs, country)
 
-                    if track!=None and speed!=0:
+                    if track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:
                         if "tunnel" in tags:
                             if self.isInTunnel==False:
                                 self.isInTunnel=True
@@ -2401,7 +2425,7 @@ class QtOSMWidget(QWidget):
                 heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
                 
                 if distance>tmpPointsFrac:
-                    nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, frac=tmpPointsFrac, offset=offsetOnNextEdge, addFirst=False, addLast=False)
+                    nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, frac=tmpPointsFrac, offsetStart=offsetOnNextEdge, offsetEnd=0.0, addStart=False, addEnd=False)
                     for tmpLat, tmpLon in nodes:
                         gpsData=GPSData(time.time(), tmpLat, tmpLon, heading, tunnelSpeed, tunnelAltitude)
                         tunnelTrackLogLines.append(gpsData)
@@ -2424,6 +2448,9 @@ class QtOSMWidget(QWidget):
       
     def stopTunnelMode(self):
         print("end of tunnel")
+        self.osmWidget.waitForInvalidGPSSignal=False
+        self.osmWidget.waitForInvalidGPSSignalReplay=False
+        
         if self.osmWidget.tunnelModeThread.isRunning():
             self.osmWidget.tunnelModeThread.stop()
 
@@ -2720,6 +2747,7 @@ class OSMWidget(QWidget):
         self.gpsSignalInvalid=False
         self.waitForInvalidGPSSignal=False
         self.waitForInvalidGPSSignalReplay=False
+#        self.lastGpsData=None
 
     def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
@@ -2876,7 +2904,7 @@ class OSMWidget(QWidget):
         self.connect(self.mapnikThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
 #        self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
 #        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
-        self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateDownloadThreadState)
+        self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateMapnikThreadState)
 #        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
         self.connect(self.mapnikThread, SIGNAL("startProgress()"), self.startProgress)
         self.connect(self.mapnikThread, SIGNAL("stopProgress()"), self.stopProgress)
@@ -2953,6 +2981,12 @@ class OSMWidget(QWidget):
                 
             gpsData=GPSData(time.time(), lat, lon, track, speed, altitude)
         
+#            if self.lastGpsData!=None:
+#                if gpsData==self.lastGpsData:
+#                    return
+#            else:
+#                self.lastGpsData=gpsData
+                
             if gpsData.isValid():
                 self.gpsSignalInvalid=False
                 if self.waitForInvalidGPSSignal==True:
@@ -2963,7 +2997,7 @@ class OSMWidget(QWidget):
                     self.tunnelModeThread.stop()
                     self.mapWidgetQt.clearLastEdgeInfo()
                     
-                self.updateGPSDataDisplay(gpsData, False, False)
+                self.updateGPSDataDisplay(gpsData, False)
             else:
                 self.gpsSignalInvalid=True
                 self.waitForInvalidGPSSignal=False
@@ -2971,33 +3005,33 @@ class OSMWidget(QWidget):
             # TODO: add invalid and equal lines?
             trackLog.addTrackLogLine2(gpsData.toLogLine())
 
-    def updateGPSDataDisplay1(self, gpsData):
+    def updateGPSDataDisplay1(self, gpsData):        
         if gpsData.isValid():
             if self.waitForInvalidGPSSignalReplay==True:
                 # ignore all further until first invalid
                 return
             
-            print("GPS data from replay thread")
+            print("GPS data from replay thread %s"%gpsData)
             if self.tunnelModeThread.isRunning():
                 self.tunnelModeThread.stop()
                 self.mapWidgetQt.clearLastEdgeInfo()
                 
-            self.updateGPSDataDisplay(gpsData, False, True)
+            self.updateGPSDataDisplay(gpsData, False)
         else:
             self.waitForInvalidGPSSignalReplay=False
             
     def updateGPSDataDisplay2(self, gpsData):
         if gpsData.isValid():
-            print("GPS data from tunnel thread")
-            self.updateGPSDataDisplay(gpsData, False, True)
+            print("GPS data from tunnel thread %s"%gpsData)
+            self.updateGPSDataDisplay(gpsData, False)
         
-    def updateGPSDataDisplay(self, gpsData, debug, trackLog):                
+    def updateGPSDataDisplay(self, gpsData, debug):                
         lat=gpsData.getLat()
         lon=gpsData.getLon()
         altitude=gpsData.getAltitude()
         speed=gpsData.getSpeed()
         
-        self.mapWidgetQt.updateGPSLocation(gpsData, debug, trackLog)
+        self.mapWidgetQt.updateGPSLocation(gpsData, debug)
 
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
@@ -3244,7 +3278,7 @@ class OSMWidget(QWidget):
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
         gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 42, 42)
-        self.updateGPSDataDisplay(gpsData, True, False) 
+        self.updateGPSDataDisplay(gpsData, True) 
     
 #    @pyqtSlot()
 #    def _stepRoute(self):
@@ -3288,7 +3322,7 @@ class OSMWidget(QWidget):
         if self.trackLogLines!=None:
             if self.trackLogLine<len(self.trackLogLines):
                 gpsData=self.trackLogLines[self.trackLogLine]
-                self.updateGPSDataDisplay(gpsData, False, True)
+                self.updateGPSDataDisplay(gpsData, False)
                 self.trackLogLine=self.trackLogLine+1
                 
     @pyqtSlot()
@@ -3297,7 +3331,7 @@ class OSMWidget(QWidget):
             if self.trackLogLine>0:
                 self.trackLogLine=self.trackLogLine-1
                 gpsData=self.trackLogLines[self.trackLogLine]
-                self.updateGPSDataDisplay(gpsData, False, True)
+                self.updateGPSDataDisplay(gpsData, False)
     
     @pyqtSlot()
     def _resetTrackLogStep(self):
@@ -3415,10 +3449,6 @@ class OSMWindow(QMainWindow):
     def connectGPSFailed(self):
         self.connectPSButton.setChecked(False)
                 
-    def logTrack(self, lat, lon, track, speed, text):
-        if trackLog!=None:
-            trackLog.addTrackLogLine(lat, lon, track, speed, text)
-
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
 #        print(text)

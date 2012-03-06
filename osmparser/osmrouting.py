@@ -163,7 +163,7 @@ class OSMRouting():
         return nodes
     
     def isOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance, offset=0.0):
-        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, offset)
+        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, frac=offset)
         minDistance=maxDistance
         for tmpLat, tmpLon in nodes:
             distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)

@@ -265,32 +265,38 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat, lon, lat1, lon1, offset=0.0, frac=5.0, addFirst=True, addLast=True):
+    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
         distance=int(self.distance(lat, lon, lat1, lon1))
-        # create nodes with distance 5m
-        if offset!=0.0:
-            pointsToIgnore=int(offset/frac)
-        else:
-            pointsToIgnore=None
+        pointsToIgnoreStart=0
+        pointsToIgnoreEnd=0
+        
+        if offsetStart!=0.0:
+            pointsToIgnoreStart=int(offsetStart/frac)
+        if offsetEnd!=0.0:
+            pointsToIgnoreEnd=int(offsetEnd/frac)
+       
         pointsToCreate=int(distance/frac)
 
         points=list()
-        if offset==0.0 and addFirst==True:
+        if offsetStart==0.0 and addStart==True:
             points.append((lat, lon))
         if distance>frac:
             doneDistance=0
             i=0
             while doneDistance<distance:
                 newLat, newLon=self.linepart(lat, lon, lat1, lon1, doneDistance/distance)
-                if pointsToIgnore!=None:
-                    if i>pointsToIgnore and i<pointsToCreate-pointsToIgnore:
+                if pointsToIgnoreStart!=0:
+                    if i>pointsToIgnoreStart:
+                        points.append((newLat, newLon))
+                if pointsToIgnoreEnd!=0:
+                    if i<pointsToCreate-pointsToIgnoreEnd:
                         points.append((newLat, newLon))
                 else:
                     points.append((newLat, newLon))
                     
                 doneDistance=doneDistance+frac
                 i=i+1
-        if offset==0.0 and addLast==True:
+        if offsetEnd==0.0 and addEnd==True:
             points.append((lat1, lon1))
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
