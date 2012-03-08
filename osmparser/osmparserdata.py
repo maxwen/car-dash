@@ -18,6 +18,7 @@ import env
 from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 from trsp.trspwrapper import TrspWrapper
+from osmparser.osmpoly import OSMPoly
 
 HEADING_CALC_LENGTH=20.0
 
@@ -163,21 +164,23 @@ class OSMRoutingPoint():
         if self.source!=0:
             return
         
-        edgeId, _, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.005, 30.0)
+        edgeId, _, usedRefId, usedPos=osmParserData.getEdgeIdOnPos(self.lat, self.lon, 0.005, 30.0)
         if edgeId==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
 
-        (edgeId, startRef, endRef, length, wayId, source, target, _, _, self.startRefLat, self.startRefLon, self.endRefLat, self.endRefLon)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
+        (edgeId, startRef, endRef, length, wayId, source, target, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         self.lat=usedPos[0]
         self.lon=usedPos[1]
         self.edgeId=edgeId
         self.target=target
         self.source=source
         self.usedRefId=usedRefId
+        self.startRefLat, self.startRefLon=coords[0]
+        self.endRefLat, self.endRefLon=coords[-1]
         
+        country=osmParserData.getCountryOfPos(self.lat, self.lon)
         self.refLat, self.refLon=osmParserData.getCoordsWithRefAndCountry(self.usedRefId, country)
-        latStartRef, lonStartRef=osmParserData.getCoordsWithRefAndCountry(startRef, country)
 
         self.wayId=wayId
         self.country=country
@@ -185,7 +188,7 @@ class OSMRoutingPoint():
         self.endRef=endRef
         
         osmUtils=OSMUtils()
-        distance=osmUtils.distance(self.lat, self.lon, latStartRef, lonStartRef)
+        distance=osmUtils.distance(self.lat, self.lon, self.startRefLat, self.startRefLo)
         posOnEdge=distance/length
         if posOnEdge>1.0:
             posOnEdge=1.0
@@ -212,14 +215,14 @@ class OSMRoutingPoint():
     def getPos(self):
         return (self.lat, self.lon)
     
-    def getRefPos(self):
-        return (self.refLat, self.refLon)
-        
-    def getStartRefPos(self):
-        return (self.startRefLat, self.startRefLon)
-    
-    def getEndRefPos(self):
-        return (self.endRefLat, self.endRefLon)
+#    def getRefPos(self):
+#        return (self.refLat, self.refLon)
+#        
+#    def getStartRefPos(self):
+#        return (self.startRefLat, self.startRefLon)
+#    
+#    def getEndRefPos(self):
+#        return (self.endRefLat, self.endRefLon)
     
     def getEdgeId(self):
         return self.edgeId
@@ -292,6 +295,7 @@ class OSMParserData():
         self.checkExpectedEdge=False
         self.approachingRef=None
         self.getPosTrigger=0
+        self.osmPoly=OSMPoly()
         
     def initCountryData(self):
         self.crossingId=0
@@ -334,6 +338,7 @@ class OSMParserData():
         self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
         self.cursorCoords=self.connectionCoords.cursor()
         self.createCoordsTable()
+        self.createWayRefTable()
 
     def closeCountryDB(self, country):
         cursor=self.osmList[country]["cursor"]
@@ -433,9 +438,9 @@ class OSMParserData():
 
     def openCountryDB(self, country):
         self.connection=sqlite3.connect(self.getDBFile(country))
-#        self.connection.enable_load_extension(True)
+        self.connection.enable_load_extension(True)
         self.cursor=self.connection.cursor()
-#        self.cursor.execute("SELECT load_extension('libspatialite.so')")
+        self.cursor.execute("SELECT load_extension('libspatialite.so')")
 #        self.cursor.execute("PRAGMA cache_size=10000")
 
         self.osmList[country]["cursor"]=self.cursor
@@ -444,19 +449,28 @@ class OSMParserData():
     def createCoordsTable(self):
         self.cursorCoords.execute('CREATE TABLE coordsTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL)')
 
+    def createWayRefTable(self):
+        self.cursorCoords.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
+
     def addToCoordsTable(self, ref, lat, lon):
-        if ref==1530718191 or ref==1530718193:
-            print("addToCoordsTable: %d"%ref)
         self.cursorCoords.execute('INSERT INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
     
+    def addToWayRefTable(self, wayId, refs):
+        self.cursorCoords.execute('INSERT INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
+        
     def getCoordsEntry(self, ref):
         self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))
         allentries=self.cursorCoords.fetchall()
-        if ref==1530718191:
-            print(allentries)
         if len(allentries)==1:
             return(allentries[0][0], allentries[0][1], allentries[0][2])
         return None, None, None
+
+    def getWayRefEntry(self, wayId):
+        self.cursorCoords.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
+        allentries=self.cursorCoords.fetchall()
+        if len(allentries)==1:
+            return(allentries[0][0], pickle.loads(allentries[0][1]))
+        return None, None    
     
     def createRefTable(self):
         self.cursor.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL, wayId BLOB, tags BLOB, type BLOB)')
@@ -498,8 +512,8 @@ class OSMParserData():
         self.cursorEdge.execute("SELECT * from edgeTable")
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, lat1, lon1, lat2, lon2)=self.edgeFromDBWithCoords(x)
-            self.cursorEdge.execute("UPDATE edgeTable SET geom=MakeLine(MakePoint(%f, %f, 4326), MakePoint(%f, %f, 4326)) WHERE id=%d"%(lon1, lat1, lon2, lat2, edgeId))
+            (edgeId, _, _, _, _, _, _, _, _, coords)=self.edgeFromDBWithCoords(x)
+            self.cursorEdge.execute("UPDATE edgeTable SET geom=MakeLine(MakePoint(%f, %f, 4326), MakePoint(%f, %f, 4326)) WHERE id=%d"%(coords[0][1], coords[0][0], coords[-1][1], coords[-1][0], edgeId))
         
         self.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
         print("end create geom column date for edgeTable")
@@ -563,7 +577,7 @@ class OSMParserData():
         self.cursor.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
     def createEdgeTable(self):
-        self.cursorEdge.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, wayId INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, lat1 REAL, lon1 REAL, lat2 REAL, lon2 REAL)')
+        self.cursorEdge.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, wayId INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, coords BLOB)')
         self.cursorEdge.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
         self.cursorEdge.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
         self.cursorEdge.execute("CREATE INDEX wayId_idx ON edgeTable (wayId)")
@@ -749,7 +763,7 @@ class OSMParserData():
                 # merge tags
                 for key, value in tags.items():
                     storedTags[key]=value
-                print("updateRefTableEntry: ref %d merged tags %s"%(refId, storedTags))
+#                print("updateRefTableEntry: ref %d merged tags %s"%(refId, storedTags))
             else:
                 storedTags=tags
                 
@@ -758,7 +772,7 @@ class OSMParserData():
                 if nodeType!=0:
                     if not nodeType in storedNodeTypeList:
                         storedNodeTypeList.append(nodeType)
-                        print("updateRefTableEntry: ref %d merged list %s"%(refId, storedNodeTypeList))
+#                        print("updateRefTableEntry: ref %d merged list %s"%(refId, storedNodeTypeList))
             else:
                 if nodeType!=0:
                     storedNodeTypeList=list()
@@ -784,10 +798,10 @@ class OSMParserData():
         self.cursor.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
         self.crossingId=self.crossingId+1
 
-    def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, lat1, lon1, lat2, lon2):
+    def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, coords):
         resultList=self.getEdgeEntryForStartAndEndPointAndWayId(startRef, endRef, wayId)
         if len(resultList)==0:
-            self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, lat1, lon1, lat2, lon2))
+            self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, pickle.dumps(coords)))
             self.edgeId=self.edgeId+1
 #        else:
 #            print("addToEdgeTable: edge for wayId %d with startRef %d and endRef %d already exists in DB"%(wayId, startRef, endRef))
@@ -890,7 +904,7 @@ class OSMParserData():
             edge=self.edgeFromDBWithCoords(allentries[0])
             return edge
         print("no edge with %d"%(edgeId))
-        return (None, None, None, None, None, None, None, None, None, None, None, None, None)
+        return (None, None, None, None, None, None, None, None, None, None)
         
     
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
@@ -950,13 +964,31 @@ class OSMParserData():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
-        
+
+    def getDifferentEdgeEntryForStartOrEndPointWithCoords(self, ref, edgeId):
+        self.cursorEdge.execute('SELECT * FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
+        resultList=list()
+        allentries=self.cursorEdge.fetchall()
+        for result in allentries:
+            edge=self.edgeFromDBWithCoords(result)
+            resultList.append(edge)
+        return resultList        
+    
     def getEdgeEntryForWayId(self, wayId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=%d'%(wayId))
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for result in allentries:
             edge=self.edgeFromDB(result)
+            resultList.append(edge)
+        return resultList
+    
+    def getEdgeEntryForWayIdWithCoords(self, wayId):
+        self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=%d'%(wayId))
+        resultList=list()
+        allentries=self.cursorEdge.fetchall()
+        for result in allentries:
+            edge=self.edgeFromDBWithCoords(result)
             resultList.append(edge)
         return resultList
     
@@ -1084,77 +1116,125 @@ class OSMParserData():
             refId, lat, lon, wayIdList, tags=self.refFromDB(x)
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " wayIdList:"+str(wayIdList) + " tags:"+str(tags))
 
+#    def getEdgeIdOnPos(self, lat, lon, margin, maxDistance):
+#        maxNodeDistance=500.0
+#        usedEdgeId=None
+#        usedWayId=None
+#        usedRefId=None
+#        usedPoint=None
+#        
+#        refCountry=self.getCountryOfPos(lat, lon)
+#        if refCountry==None:
+#            return None, None, None, None, None
+#
+#        possibleWayList=list()
+#        nodes=self.getNearNodes(lat, lon, refCountry, maxNodeDistance, margin)
+#        for refId, _, _, wayIdList in nodes:           
+#            for wayId in wayIdList:
+#                (_, _, refs, _, _, _, _, _)=self.getWayEntryForIdAndCountry2(wayId, refCountry)
+#                # use the refs before and after to check
+#                index=refs.index(refId)
+#                refList=list()
+#                if index==0:
+#                    refList.append(refId)
+#                    refList.append(refs[index+1])
+#                elif index==len(refs)-1:
+#                    refList.append(refs[-1])
+#                    refList.append(refId)
+#                else:
+#                    refList.append(refs[index-1])
+#                    refList.append(refId)
+#                    refList.append(refs[index+1])
+#                                    
+#                lastRef=refList[0]
+#                for ref in refList[1:]:
+#                    onLine=self.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
+#                    if onLine==True:            
+#                        if not (wayId, ref, refs) in possibleWayList:
+#                            possibleWayList.append((wayId, ref, refs))
+#                        # one for every way is enough
+#                        break
+#                    lastRef=ref
+#                        
+#        if len(possibleWayList)!=0:
+##            print(possibleWayList)
+#            minDistance=maxDistance
+#            doneEdges=list()
+#            for wayId, ref, refs in possibleWayList:
+#                resultList=self.getEdgeEntryForWayIdWithCoords(wayId)
+#
+#                for edge in resultList:
+#                    edgeId, startRef, endRef, _, wayId, _, _, _, _, coords=edge
+#                    if edgeId in doneEdges:
+#                        continue
+#                    doneEdges.append(edgeId)
+#                    edgeRefList=self.getRefListSubset(refs, startRef, endRef)
+#                                        
+#                    if ref in edgeRefList:
+#                        lat1, lon1=coords[0]
+#                        for lat2, lon2 in coords[1:]:
+#                            onLine, distance, point=self.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+#                            if onLine==True:
+#                                if distance<minDistance:
+#                                    minDistance=distance
+#                                    usedEdgeId=edgeId
+#                                    usedWayId=wayId
+#                                    usedRefId=ref
+#                                    usedPoint=point
+#                                
+#                            lat1=lat2
+#                            lon1=lon2
+#                        
+#        return usedEdgeId, usedWayId, usedRefId, usedPoint, refCountry
+
     def getEdgeIdOnPos(self, lat, lon, margin, maxDistance):
         maxNodeDistance=500.0
         usedEdgeId=None
         usedWayId=None
         usedRefId=None
-        usedLat=None
-        usedLon=None
+        usedPoint=None
         
         refCountry=self.getCountryOfPos(lat, lon)
         if refCountry==None:
-            return None, None, None, (None, None), None
+            return None, None, None, None
 
-        possibleWayList=list()
+        doneWays=list()
+        minDistance=maxDistance
+
         nodes=self.getNearNodes(lat, lon, refCountry, maxNodeDistance, margin)
         for refId, _, _, wayIdList in nodes:           
             for wayId in wayIdList:
+                if wayId in doneWays:
+                    continue
+                doneWays.append(wayId)
+                
+                doneEdges=list()
                 (_, _, refs, _, _, _, _, _)=self.getWayEntryForIdAndCountry2(wayId, refCountry)
-                # use the refs before and after to check
-                index=refs.index(refId)
-                refList=list()
-                if index==0:
-                    refList.append(refId)
-                    refList.append(refs[index+1])
-                elif index==len(refs)-1:
-                    refList.append(refs[-1])
-                    refList.append(refId)
-                else:
-                    refList.append(refs[index-1])
-                    refList.append(refId)
-                    refList.append(refs[index+1])
-                                    
-                lastRef=refList[0]
-                for ref in refList[1:]:
-                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
-                    if onLine==True:            
-                        if not (wayId, ref, tmpLat, tmpLon, refs) in possibleWayList:
-                            possibleWayList.append((wayId, ref, tmpLat, tmpLon, refs))
-                        # one for every way is enough
-                        break
-                    lastRef=ref
-                        
-        if len(possibleWayList)!=0:
-#            print(possibleWayList)
-            minDistance=maxDistance
-            doneEdges=list()
-            for wayId, ref, tmpLat, tmpLon, refs in possibleWayList:
-                resultList=self.getEdgeEntryForWayId(wayId)
+                resultList=self.getEdgeEntryForWayIdWithCoords(wayId)
 
                 for edge in resultList:
-                    edgeId, startRef, endRef, _, wayId, _, _, _, _=edge
+                    edgeId, startRef, endRef, _, _, _, _, _, _, coords=edge
                     if edgeId in doneEdges:
                         continue
                     doneEdges.append(edgeId)
                     edgeRefList=self.getRefListSubset(refs, startRef, endRef)
                                         
-                    if ref in edgeRefList:
-                        lastRef=refs[0]
-                        for ref in refs[1:]:
-                            onLine, distance=self.isMinimalDistanceOnLineBetweenRefs(lat, lon, ref, lastRef, maxDistance)
+                    if refId in edgeRefList:
+                        lat1, lon1=coords[0]
+                        for lat2, lon2 in coords[1:]:
+                            onLine, distance, point=self.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
                             if onLine==True:
                                 if distance<minDistance:
                                     minDistance=distance
                                     usedEdgeId=edgeId
                                     usedWayId=wayId
-                                    usedRefId=ref
-                                    usedLat=lat
-                                    usedLon=lon
+                                    usedRefId=refId
+                                    usedPoint=point
                                 
-                            lastRef=ref
+                            lat1=lat2
+                            lon1=lon2
                         
-        return usedEdgeId, usedWayId, usedRefId, (usedLat, usedLon), refCountry
+        return usedEdgeId, usedWayId, usedRefId, usedPoint
 
     def getNodesInBBox(self, bbox, country, nodeTypeList=None):
         latMin=bbox[1]
@@ -1241,8 +1321,8 @@ class OSMParserData():
         self.cursorEdge.execute('SELECT * FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.edgeFromDB(x)
-            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost))
+            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, coords=self.edgeFromDBWithCoords(x)
+            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "coords:"+str(coords))
 
     def wayFromDB(self, x):
         wayId=x[0]
@@ -1350,20 +1430,15 @@ class OSMParserData():
         target=x[6]
         cost=x[7]
         reverseCost=x[8]
-        lat1=x[9]
-        lon1=x[10]
-        lat2=x[11]
-        lon2=x[12]
-        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, lat1, lon1, lat2, lon2)
+        coords=pickle.loads(x[9])
+        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, coords)
                    
     def addWayToDB(self, wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, wayCountries):
-        if wayId==5210165 or wayId==5111290:
-            print(wayCountries)
-
         if len(wayCountries)==0:
 #            print("addWayToDB: skipping way %d because all refs are not in global ref DB"%(wayId))
             return False
         
+        # TODO: merge ways with equal tags
         for country in wayCountries:
             self.addToWayTable(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, country)   
             self.addToCountryWayTable(wayId, country)
@@ -1601,6 +1676,9 @@ class OSMParserData():
             if len(refs)==1:
                 print("way with len(ref)==1 %d"%(wayid))
                 continue
+            
+            self.addToWayRefTable(wayid, refs)
+            
             if "building" in tags:
                 if "addr:street" in tags:
                     # TODO: use first ref as location for addr?
@@ -1682,7 +1760,7 @@ class OSMParserData():
                     elif tags["oneway"]=="1":
                         oneway=1
                     elif tags["oneway"]=="-1":
-                        print("way %d has oneway==-1"%(wayid))
+#                        print("way %d has oneway==-1"%(wayid))
                         oneway=2
                 if "junction" in tags:
                     if tags["junction"]=="roundabout":
@@ -1747,7 +1825,7 @@ class OSMParserData():
                         isNode=False
                         fromWayId=0
                         toWayId=0
-                        viaNode=0
+                        viaNode=None
                         viaWay=list()
     
                         for part in ways:
@@ -1765,9 +1843,9 @@ class OSMParserData():
                             elif roleTag=="to":
                                 toWayId=roleId
                             elif roleTag=="via":
-                                if isNode:
+                                if isNode==True:
                                     viaNode=roleId
-                                elif isWay:
+                                elif isWay==True:
                                     viaWay.append(roleId)
                         if fromWayId!=0 and toWayId!=0:
                             restrictionEntry=dict()
@@ -1777,7 +1855,7 @@ class OSMParserData():
                             restrictionEntry["from"]=fromWayId
                             if viaNode!=None:
                                 restrictionEntry["viaNode"]=viaNode
-                            elif len(viaWay)!=0:
+                            if len(viaWay)!=0:
                                 restrictionEntry["viaWay"]=viaWay
     
                             self.wayRestricitionList.append(restrictionEntry)
@@ -1798,9 +1876,24 @@ class OSMParserData():
                 elif tags["type"]=="multipolygon":
                     if "boundary" in tags:
                         if tags["boundary"]=="administrative":
-#                            print(tags)
-                            None
-                
+                            # (59178604, 'way', 'outer')
+                            polyData=list()
+                            for way in ways:
+                                memberType=way[1]
+                                ref=int(way[0])
+                                role=way[2]
+                                
+                                if role=="outer" and memberType=="way":
+                                    wayId=ref
+                                    wayId, refs=self.getWayRefEntry(wayId)
+                                    if wayId!=None:
+                                        for ref in refs:
+                                            _, lat, lon=self.getCoordsEntry(ref)
+                                            polyData.append((lon, lat))
+                            
+                            if len(polyData)!=0:
+                                self.osmPoly.addPoly(polyData, tags)
+                                           
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
@@ -2176,66 +2269,83 @@ class OSMParserData():
             return "%s"%(nameRef)
         return "No name"
 
-    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
-        _, country=self.getCountryOfRef(ref1)
-        if country==None:
-            return False, (None, None)
-        resultList=self.getRefEntryForIdAndCountry(ref1, country)
-        if len(resultList)==1:
-            _, lat1, lon1, _, _=resultList[0]
-        else:
-            return False, (None, None)
-        _, country=self.getCountryOfRef(ref2)
-        if country==None:
-            return False, (None, None)
-        resultList=self.getRefEntryForIdAndCountry(ref2, country)
-        if len(resultList)==1:
-            _, lat2, lon2, _, _=resultList[0]
-        else:
-            return False, (None, None)
+    def isOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance):
         nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
-#        print(nodes)
         minDistance=maxDistance
-        usedLat=None
-        usedLon=None
         for tmpLat, tmpLon in nodes:
             distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
             if distance<minDistance:
-                minDistance=distance
-                usedLat=tmpLat
-                usedLon=tmpLon
-        if usedLat!=None and usedLon!=None:
-            return True, (usedLat, usedLon)
-        return False, (None, None)
+                return True
+        
+        return False
     
-    def isMinimalDistanceOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
+    # true if any point is closer then maxDistance
+    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
         _, country=self.getCountryOfRef(ref1)
         if country==None:
-            return False, None
+            return False
         resultList=self.getRefEntryForIdAndCountry(ref1, country)
         if len(resultList)==1:
             _, lat1, lon1, _, _=resultList[0]
         else:
-            return False, None
+            return False
         _, country=self.getCountryOfRef(ref2)
         if country==None:
-            return False, None
+            return False
         resultList=self.getRefEntryForIdAndCountry(ref2, country)
         if len(resultList)==1:
             _, lat2, lon2, _, _=resultList[0]
         else:
-            return False, None
+            return False
         
+        return self.isOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+    
+    # return true, the minimal distance to the closest point
+    # if any and the point which can be a temporary point
+#    def isMinimalDistanceOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
+#        _, country=self.getCountryOfRef(ref1)
+#        if country==None:
+#            return False, None, None
+#        resultList=self.getRefEntryForIdAndCountry(ref1, country)
+#        if len(resultList)==1:
+#            _, lat1, lon1, _, _=resultList[0]
+#        else:
+#            return False, None, None
+#        _, country=self.getCountryOfRef(ref2)
+#        if country==None:
+#            return False, None, None
+#        resultList=self.getRefEntryForIdAndCountry(ref2, country)
+#        if len(resultList)==1:
+#            _, lat2, lon2, _, _=resultList[0]
+#        else:
+#            return False, None, None
+#        
+#        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
+#        minDistance=maxDistance
+#        onLine=False
+#        point=None
+#        for tmpLat, tmpLon in nodes:
+#            distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
+#            if distance<minDistance:
+#                onLine=True
+#                minDistance=distance
+#                point=(tmpLat, tmpLon)
+#                        
+#        return onLine, minDistance, point
+    
+    def isMinimalDistanceOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance):        
         nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
         minDistance=maxDistance
         onLine=False
+        point=None
         for tmpLat, tmpLon in nodes:
             distance=self.osmutils.distance(lat, lon, tmpLat, tmpLon)
             if distance<minDistance:
                 onLine=True
                 minDistance=distance
+                point=(tmpLat, tmpLon)
                         
-        return onLine, minDistance
+        return onLine, minDistance, point
     
     def getEnforcmentsOnWay(self, wayId, refs, country):
         enforcementList=list()
@@ -2243,7 +2353,7 @@ class OSMParserData():
         wayId, _, _, _, _, _, _, _, _, poiList=self.getWayEntryForIdAndCountry4(wayId, country)
         if wayId!=None:
             if poiList!=None:
-                print(poiList)
+#                print(poiList)
                 for ref, deviceRef, nodeType in poiList:
                     # enforcement
                     # TODO: create constant for nodetypes
@@ -2336,7 +2446,7 @@ class OSMParserData():
                      
                 if prevRefId!=routeEndRefId:
                     lat, lon=endPoint.getPos()
-                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
+                    onLine=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
                     if onLine==True:
                         routeEndRefId=prevRefId
         
@@ -2356,7 +2466,7 @@ class OSMParserData():
                                     
                 if nextRefId!=routeStartRefId:
                     lat, lon=startPoint.getPos()
-                    onLine, (tmpLat, tmpLon)=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
+                    onLine=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
                     if onLine==True:
                         routeStartRefId=nextRefId
         
@@ -2369,6 +2479,7 @@ class OSMParserData():
             if country==None:
                 continue
             
+            # TODO: use edge coords
             resultList=self.getRefEntryForIdAndCountry2(ref, country)
             if len(resultList)==1:
                 ref, lat, lon, _, _, _=resultList[0]
@@ -2633,6 +2744,7 @@ class OSMParserData():
         trackItem["length"]=length
         self.sumLength=self.sumLength+length
         trackItem["sumLength"]=self.sumLength
+        # TODO: calc time for edge
 
         trackItem["refs"]=trackItemRefs
 #        print(trackItem)
@@ -2689,7 +2801,7 @@ class OSMParserData():
                 _, country=self.getCountryOfRef(ref)
                 if country==None:
                     continue
-                
+                # TODO: use edge coords
                 resultList=self.getRefEntryForIdAndCountry2(ref, country)
                 if len(resultList)==1:
                     ref, lat, lon, _, storedTags, storedNodeTypeList=resultList[0]
@@ -2716,12 +2828,6 @@ class OSMParserData():
                 if storedNodeTypeList!=None and 1 in storedNodeTypeList:
                     # enforcement
                     trackItemRef["enforcement"]="maxspeed:%s"%(storedTags["maxspeed"])
-               
-                # TODO: speed_camera refs can also be "near" this ref
-#                speedCameraNodes=self.getNearNodes(lat, lon, country, 10, 1)
-#                for speedCameraRef, _, _, _ in speedCameraNodes:
-#                    if speedCameraRef!=ref:
-#                    trackItemRef["enforcement"]="maxspeed"
 
                 trackItemRefs.append(trackItemRef)
                 
@@ -2795,6 +2901,9 @@ class OSMParserData():
             coordsList.append(trackItemRef["coords"])
            
         crossingLength=self.getRemainingDistanceOnEdge(edgeId, refList, coordsList, lat, lon, usedRefId)
+        if crossingLength==None:
+            return (None, None, None, None, None, None)
+        
         for trackItemRef in firstTrackItem["refs"]:
             if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
                 crossingList=trackItemRef["crossing"]
@@ -2837,6 +2946,7 @@ class OSMParserData():
         return endLength
     
     def getRemainingDistanceOnEdge(self, edgeId, refList, coordsList, lat, lon, usedRefId):
+        index=None
         if not usedRefId in refList:
             if refList[0]==-1:
                 index=1
@@ -2847,6 +2957,9 @@ class OSMParserData():
             if index<len(refList)-1:
                 index=index+1
 
+        if index==None:
+            return None
+        
         coordsListPart=coordsList[index:]
         distance=0
         lastLat=None
@@ -2887,13 +3000,13 @@ class OSMParserData():
         endPoint=routingPointList[-1]
         startPoint=routingPointList[0]
         
-        startPointLat, startPointLon=startPoint.getRefPos()
+#        startPointLat, startPointLon=startPoint.getRefPos()
         
         currentRefList=None
 
         if len(edgeList)==1:
             edgeId=edgeList[0]
-            (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, lat1, lon1, lat2, lon2)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
+            (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
             refList=self.getRefListOfEdge(edgeId, wayId, currentStartRef, currentEndRef)
 
             if startPoint.getPosOnEdge()>0.5:
@@ -2906,7 +3019,7 @@ class OSMParserData():
         else:
             i=0
             for edgeId in edgeList:
-                (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, lat1, lon1, lat2, lon2)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
+                (edgeId, currentStartRef, currentEndRef, _, wayId, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                       
                 refList=self.getRefListOfEdge(edgeId, wayId, currentStartRef, currentEndRef)
     
                 # use last ref to check how to continue the next reflist
@@ -3053,6 +3166,7 @@ class OSMParserData():
 
             if "viaWay" in wayRestrictionEntry:
                 print("relation with via type way %s"%(wayRestrictionEntry))
+                continue
 
             resultList=self.getEdgeEntryForWayId(fromWayId)
             for fromWayIdResult in resultList:
@@ -3303,12 +3417,12 @@ class OSMParserData():
         doneRefs=list()
         for ref in refs:                  
             if ref in nextWayDict:                                                                        
-                nextWayIdList=nextWayDict[ref]
-                for _, crossingType, _ in nextWayIdList:
-                    cf=self.getCrossingsFactor(crossingType)
-                    if cf>crossingFactor:
-                        crossingFactor=cf
-                        
+#                nextWayIdList=nextWayDict[ref]
+#                for _, crossingType, _ in nextWayIdList:
+#                    cf=self.getCrossingsFactor(crossingType)
+#                    if cf>crossingFactor:
+#                        crossingFactor=cf
+#                        
                 doneRefs.append(ref)
         
         refNodeList=list()
@@ -3348,8 +3462,10 @@ class OSMParserData():
                         lat2, lon2=self.getCoordsWithRefAndCountry(endRef, countryEnd)
                     
                     if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
+                        refList=self.getRefListSubset(refs, startRef, endRef)
+                        coords=self.createEdgeCoords(refList)
                         cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetTypeId, oneway, roundabout, maxspeed)                                         
-                        self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, lat1, lon1, lat2, lon2)
+                        self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, coords)
 #                    else:
 #                        print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
 
@@ -3377,11 +3493,25 @@ class OSMParserData():
                     lat2, lon2=self.getCoordsWithRefAndCountry(endRef, countryEnd)
 
                 if lat1!=None and lon1!=None and lat2!=None and lon2!=None:
+                    refList=self.getRefListSubset(refs, startRef, endRef)
+                    coords=self.createEdgeCoords(refList)
+
                     cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetTypeId, oneway, roundabout, maxspeed)                    
-                    self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, lat1, lon1, lat2, lon2)
+                    self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, coords)
 #                else:
 #                    print("createEdgeTableEntriesForWay: skipping wayId %s from starRef %d to endRef %d"%(wayId, startRef, endRef))
 
+    def createEdgeCoords(self, refList):
+        coords=list()
+        for ref in refList:
+            storedRef, country=self.getCountryOfRef(ref)
+            if storedRef!=None and country!=None:
+                lat, lon=self.getCoordsWithRefAndCountry(ref, country)
+                coords.append((lat, lon))
+            else:
+                print("createEdgeCoords: coords of ref %d unknown"%(ref))
+        return coords
+    
     def isLinkToLink(self, streetTypeId, streetTypeId2):
         return (streetTypeId==3 and streetTypeId2==3) or (streetTypeId==5 and streetTypeId2==5) or (streetTypeId==7 and streetTypeId2==7) or (streetTypeId==9 and streetTypeId2==9) or (streetTypeId==11 and streetTypeId2==11)
 
@@ -3647,7 +3777,7 @@ class OSMParserData():
 #                                        poiList.append((ref, 1))
 
             if len(poiList)!=0:
-                print(poiList)
+#                print(poiList)
                 self.updateWayTableEntry(wayId, poiList, country)
                 
             
@@ -3774,6 +3904,9 @@ class OSMParserData():
             self.createPOIEntriesForWays(country)
             print("end create POI entries")
             
+            pickle.dump(self.osmPoly.getPolyData(), open("/tmp/osmPoly"+str(country), "wb"))
+            pickle.dump(self.wayRestricitionList, open("/tmp/wayRestricitionList"+str(country), "wb"))
+
             self.commitAdressDB()
             self.commitCountryDB(country)
             self.commitGlobalCountryDB()
@@ -4039,7 +4172,9 @@ class OSMParserData():
         print("recreate edge nodes")
         self.createEdgeTableNodeEntries()
         print("end recreate edge nodes")
-
+        
+        self.createGeomForEdgeTable()
+        self.createGeomDataForEdgeTable()
         self.commitEdgeDB()
                  
     def recreateEdgeNodes(self):
@@ -4174,22 +4309,8 @@ class OSMParserData():
         for x in allentries:
             print(self.edgeFromDB(x))
             
-    def getCoordsOfEdge(self, edgeId, country):
-        (edgeId, startRef, endRef, _, wayId, _, _, _, _)=self.getEdgeEntryForEdgeId(edgeId)
-        wayId, _, refs, _, _, _, _, _, _=self.getWayEntryForIdAndCountry3(wayId, country)
-                    
-        refListPart=self.getRefListSubset(refs, startRef, endRef)
-        coords=list()
-        for ref in refListPart:
-            _, country=self.getCountryOfRef(ref)
-            if country==None:
-                continue
-
-            resultList=self.getRefEntryForIdAndCountry2(ref, country)
-            if len(resultList)==1:
-                ref, lat, lon, _, _, _=resultList[0]
-                coords.append((lat, lon))
-                        
+    def getCoordsOfEdge(self, edgeId):
+        (edgeId, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
         return coords
 
     def getCoordsOfTrackItem(self, trackItem):
@@ -4216,35 +4337,15 @@ class OSMParserData():
         return False
 
     def getHeadingOnEdgeId(self, edgeId, ref):
-        edgeId, startRef, endRef, _, wayId, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-        refList=self.getRefListOfEdge(edgeId, wayId, startRef, endRef)
-        if len(refList)>1:
-            if ref==endRef:
-                refList.reverse()
-            heading=self.getHeadingForReflist(refList)
-            return heading
-        
-        return None
-    
-    def getHeadingForReflist(self, refs):
-        _, country=self.getCountryOfRef(refs[0])
-        if country==None:
-            return None
-        resultList=self.getRefEntryForIdAndCountry(refs[0], country)
-        if len(resultList)==1:
-            _, lat1, lon1, _, _=resultList[0]
-        else:
-            return None
-        
-        for ref in refs[1:]:
-            _, country=self.getCountryOfRef(ref)
-            if country==None:
-                return None
-            resultList=self.getRefEntryForIdAndCountry(ref, country)
-            if len(resultList)==1:
-                _, lat2, lon2, _, _=resultList[0]
-            else:
-                return None
+        edgeId, _, endRef, _, _, _, _, _, _, coords=self.getEdgeEntryForEdgeIdWithCoords(edgeId)
+        if ref==endRef:
+            coords.reverse()
+        heading=self.getHeadingForPoints(coords)
+        return heading
+            
+    def getHeadingForPoints(self, coords):
+        lat1, lon1=coords[0]
+        for lat2, lon2 in coords[1:]:
             # use refs with distance more the 15m to calculate heading
             # if available else use the last one
             if self.osmutils.distance(lat1, lon1, lat2, lon2)>HEADING_CALC_LENGTH:
@@ -4252,28 +4353,6 @@ class OSMParserData():
 
         heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
         return heading    
-
-    def getHeadingForPoints(self, ref1, ref2):
-        _, country=self.getCountryOfRef(ref1)
-        if country==None:
-            return None
-        resultList=self.getRefEntryForIdAndCountry(ref1, country)
-        if len(resultList)==1:
-            _, lat1, lon1, _, _=resultList[0]
-        else:
-            return None
-        
-        _, country=self.getCountryOfRef(ref2)
-        if country==None:
-            return None
-        resultList=self.getRefEntryForIdAndCountry(ref2, country)
-        if len(resultList)==1:
-            _, lat2, lon2, _, _=resultList[0]
-        else:
-            return None
-        
-        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
-        return heading
 
     def getDistanceFromPointToRef(self, lat, lon, ref):
         _, country=self.getCountryOfRef(ref)
@@ -4388,7 +4467,7 @@ def main(argv):
 
 #    p.testDBConistency()
 #    p.testRestrictionTable()
-#    p.recreateEdges()
+    p.recreateEdges()
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()
 

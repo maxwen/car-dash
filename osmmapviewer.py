@@ -49,6 +49,7 @@ WITH_CROSSING_DEBUG=True
 DEFAULT_NODE_MARGIN=0.005
 # length of tunnel where we expect gps signal failure
 MINIMAL_TUNNEL_LENGHTH=50
+GPS_SIGNAL_MINIMAL_DIFF=0.5
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
@@ -186,7 +187,7 @@ class OSMMapnikTilesWorker(QThread):
         self.lastZoom=None
         self.tileDir=tileDir
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
-        self.mapnikWrapperCPP=MapnikWrapperCPP()
+        self.mapnikWrapperCPP=MapnikWrapperCPP(mapFile)
         self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
         self.workQueue=deque()
         self.tileQueue=deque()
@@ -348,9 +349,9 @@ class OSMGPSLocationWorker(QThread):
         self.tunnelThread=tunnelThread
         self.lastGpsData=None
         if self.tunnelThread==True:
-            self.timeout=1000
+            self.timeout=500
         else:
-            self.timeout=1000
+            self.timeout=500
         
     def isTunnelThread(self):
         return self.tunnelThread
@@ -411,10 +412,10 @@ class GPSData():
         self.speed=speed
         self.altitude=altitude
     
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
+#    def __eq__(self, other):
+#        if not isinstance(other, self.__class__):
+#            return False
+#        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
             
     def isValid(self):
         return self.lat!=None and self.lon!=None and self.lat!=0.0 and self.lon!=0.0
@@ -457,7 +458,7 @@ class GPSData():
             self.altitude=0
             
     def createTimeStamp(self):
-        stamp=datetime.fromtimestamp(time.time())
+        stamp=datetime.fromtimestamp(self.time)
         return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
 
     def toLogLine(self):
@@ -612,8 +613,6 @@ class QtOSMWidget(QWidget):
         self.remainingEdgeList=None
         self.remainingTrackList=None
         
-        self.mapnikWrapper=None
-        self.mapnikWrapperCPP=None
         self.lastCenterX=None
         self.lastCenterY=None
         self.withMapRotation=True
@@ -626,8 +625,8 @@ class QtOSMWidget(QWidget):
         self.isInTunnel=False
         self.altitude=0
 
-#        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
-#        self.setAttribute( Qt.WA_NoSystemBackground, True )
+        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
+        self.setAttribute( Qt.WA_NoSystemBackground, True )
         
         self.initPens()
         
@@ -639,8 +638,10 @@ class QtOSMWidget(QWidget):
         return pen
 
     def initPens(self):
-        self.edgePen=self.createStreetPen(QColor(0, 0, 255, 100))
+        self.edgePen=self.createStreetPen(QColor(0, 0, 255, 150))
         self.routePen=self.createStreetPen(QColor(255, 0, 0, 150))
+        self.trackPen=self.createStreetPen(QColor(0, 255, 0, 150))
+        self.routeOverlayPen=self.createStreetPen(QColor(0, 255, 0, 150))
         
 #        self.motorwayPen=self.createStreetPen(Qt.blue)
 #        self.primaryPen=self.createStreetPen(Qt.red)
@@ -906,13 +907,13 @@ class QtOSMWidget(QWidget):
             
     def getTile(self, zoom, x, y):
         fileName=self.getTileFullPath(zoom, x, y)
-#        pixbuf=self.getCachedTile(fileName)
-#        if pixbuf!=None:
-#            return pixbuf
+        pixbuf=self.getCachedTile(fileName)
+        if pixbuf!=None:
+            return pixbuf
         
         if os.path.exists(fileName) and self.forceDownload==False:
             pixbuf=self.getTileFromFile(fileName)
-#            self.addTileToCache(pixbuf, fileName)
+            self.addTileToCache(pixbuf, fileName)
             return pixbuf
         else:
             if self.withMapnik==True:
@@ -1074,10 +1075,9 @@ class QtOSMWidget(QWidget):
             point=QPoint(x, y);
             polygon.append( point )
                
-        trackPen=QPen()
-        trackPen.setColor(QColor(0, 255, 0, 200))
-        trackPen.setWidth(self.getPenWidthForZoom())
-        self.painter.setPen(trackPen)
+        pen=self.trackPen
+        pen.setWidth(self.getPenWidthForZoom())
+        self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
 
     # only use if transform is active
@@ -1086,25 +1086,19 @@ class QtOSMWidget(QWidget):
         pen=QPen()
         pen.setWidth(3)
         if len(edgeList)!=0:
-            edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(edgeList[0])
-            _, country=osmParserData.getCountryOfRef(startRef)
-
             for edgeId in edgeList:
+                edgeId, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
                 if expectedNextEdge!=None and edgeId==expectedNextEdge:
                     pen.setColor(QColor(0, 255, 0))
                 else:
                     pen.setColor(QColor(255, 0, 0))
     
-                coords=osmParserData.getCoordsOfEdge(edgeId, country)
                 self.displayEdge(coords, pen)
         
         elif expectedNextEdge!=None:
-            edgeId, startRef, _, _, _, _, _, _, _=osmParserData.getEdgeEntryForEdgeId(expectedNextEdge)
-            _, country=osmParserData.getCountryOfRef(startRef)
+            edgeId, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(expectedNextEdge)
             pen.setColor(QColor(0, 255, 0))
-            coords=osmParserData.getCoordsOfEdge(edgeId, country)
             self.displayEdge(coords, pen)
-
         
         if approachingRef!=None:
             _, country=osmParserData.getCountryOfRef(approachingRef)
@@ -1529,7 +1523,7 @@ class QtOSMWidget(QWidget):
                         point=QPoint(x, y);
                         polygon.append( point )
 
-            pen=self.edgePen
+            pen=self.routeOverlayPen
             pen.setWidth(self.getPenWidthForZoom())
             self.painter.setPen(pen)
             self.painter.drawPolyline(polygon)
@@ -1749,11 +1743,11 @@ class QtOSMWidget(QWidget):
     def getBBoxDifference(self, bbox1, bbox2):
         None
         
-    def callMapnikForTile(self):
-        bbox=self.getVisibleBBoxForMapnik()  
-#        print("call mapnik with %s"%bbox)   
-#        print(bbox)       
-        self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
+#    def callMapnikForTile(self):
+#        bbox=self.getVisibleBBoxForMapnik()  
+##        print("call mapnik with %s"%bbox)   
+##        print(bbox)       
+#        self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
 
     def callMapnikForTile2(self, zoom, x, y):      
         self.osmWidget.mapnikThread.addTile(zoom, x, y)
@@ -2254,7 +2248,7 @@ class QtOSMWidget(QWidget):
 #        start=time.time()
         if self.osmWidget.dbLoaded==True:
 #            start=time.time()
-            edgeId, wayId, usedRefId, usedPos, country=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_NODE_MARGIN, fromMouse, speed)
+            edgeId, wayId, usedRefId, usedPos=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_NODE_MARGIN, fromMouse, speed)
 #            print("%f"%(time.time()-start))
             if edgeId==None:
                 self.clearLastEdgeInfo()
@@ -2325,7 +2319,7 @@ class QtOSMWidget(QWidget):
                 else:
                     if edgeId!=self.lastEdgeId:
                         self.lastEdgeId=edgeId
-                        coords=osmParserData.getCoordsOfEdge(edgeId, country)
+                        coords=osmParserData.getCoordsOfEdge(edgeId)
                         self.currentCoords=coords
                         self.distanceToEnd=0
                         self.routeInfo=None
@@ -2333,6 +2327,7 @@ class QtOSMWidget(QWidget):
                         self.nextEdgeOnRoute=None
                           
                 if wayId!=self.lastWayId:
+                    country=osmParserData.getCountryOfPos(lat, lon)
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
 #                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
@@ -2350,11 +2345,11 @@ class QtOSMWidget(QWidget):
                             if self.isInTunnel==False:
                                 self.isInTunnel=True
                                 ref=osmParserData.getNearerRefToPoint(lat, lon, startRef, endRef)
-                                self.startTunnelMode(edgeId, ref)
+#                                self.startTunnelMode(edgeId, ref)
                         else:
                             if self.isInTunnel==True:
                                 self.isInTunnel=False
-                                self.stopTunnelMode()
+#                                self.stopTunnelMode()
 
                         
 #            stop=time.time()
@@ -2394,33 +2389,13 @@ class QtOSMWidget(QWidget):
             if heading!=None and self.osmutils.headingDiffAbsolute(heading, edgeHeading)>10:
                 continue
             
-            _, country=osmParserData.getCountryOfRef(ref)
-            (edgeId, start, end, _, wayId, _, _, _, _)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-            wayId, _, refs, _, _, _, _, _, _=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    
-            refListPart=osmParserData.getRefListSubset(refs, start, end)
-            if startRef==end:
-                refListPart.reverse()
+            (edgeId, _, endRef, _, _, _, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
+            if startRef==endRef:
+                coords.reverse()
                 
-            i=1
             offsetOnNextEdge=0
-            for ref in refListPart[1:]:
-                _, country=osmParserData.getCountryOfRef(refListPart[i-1])
-                if country==None:
-                    continue
-    
-                resultList=osmParserData.getRefEntryForIdAndCountry2(refListPart[i-1], country)
-                if len(resultList)==1:
-                    _, lat1, lon1, _, _, _=resultList[0]
-
-                _, country=osmParserData.getCountryOfRef(ref)
-                if country==None:
-                    continue
-    
-                resultList=osmParserData.getRefEntryForIdAndCountry2(ref, country)
-                if len(resultList)==1:
-                    _, lat2, lon2, _, _, _=resultList[0]
-                
+            lat1, lon1=coords[0]
+            for lat2, lon2 in coords[1:]:
                 distance=self.osmutils.distance(lat1, lon1, lat2, lon2)
                 heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
                 
@@ -2439,8 +2414,9 @@ class QtOSMWidget(QWidget):
                     gpsData=GPSData(time.time(), lat2, lon2, tunnelTrack, tunnelSpeed, tunnelAltitude)
                     tunnelTrackLogLines.append(gpsData)
                     
-                i=i+1
-            
+                lat1=lat2
+                lon1=lon2
+                            
         if self.osmWidget.tunnelModeThread.isRunning():
             self.osmWidget.tunnelModeThread.stop()
                 
@@ -2748,6 +2724,7 @@ class OSMWidget(QWidget):
         self.waitForInvalidGPSSignal=False
         self.waitForInvalidGPSSignalReplay=False
 #        self.lastGpsData=None
+        self.lastGPSDataTime=None
 
     def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
@@ -2960,6 +2937,9 @@ class OSMWidget(QWidget):
  
     def updateGPSDisplay(self, session):
         if session!=None:   
+            timeStamp=time.time()
+            
+            #print(session)
             speed=0
             altitude=0
             track=0
@@ -2979,8 +2959,8 @@ class OSMWidget(QWidget):
                 lat=session.fix.latitude
                 lon=session.fix.longitude
                 
-            gpsData=GPSData(time.time(), lat, lon, track, speed, altitude)
-        
+            gpsData=GPSData(timeStamp, lat, lon, track, speed, altitude)
+#            print(gpsData)
 #            if self.lastGpsData!=None:
 #                if gpsData==self.lastGpsData:
 #                    return
@@ -3003,6 +2983,19 @@ class OSMWidget(QWidget):
                 self.waitForInvalidGPSSignal=False
                 
             # TODO: add invalid and equal lines?
+#18.37.55.140448:47.834265:13.053648:170:27:454
+#18.37.55.142580:47.834218:13.053708:153:25:454
+#18.37.56.150736:47.834218:13.053708:153:25:454
+#18.37.56.152826:47.834170:13.053818:134:30:454
+#18.37.57.170406:47.834170:13.053818:134:30:454
+#18.37.57.171695:47.834147:13.053955:104:32:453 
+
+            if self.lastGPSDataTime!=None:
+                # 500msec
+                if timeStamp-self.lastGPSDataTime<GPS_SIGNAL_MINIMAL_DIFF:
+                    return
+
+            self.lastGPSDataTime=timeStamp
             trackLog.addTrackLogLine2(gpsData.toLogLine())
 
     def updateGPSDataDisplay1(self, gpsData):        
@@ -3031,8 +3024,10 @@ class OSMWidget(QWidget):
         altitude=gpsData.getAltitude()
         speed=gpsData.getSpeed()
         
+        start=time.time()
         self.mapWidgetQt.updateGPSLocation(gpsData, debug)
-
+        print("updateGPSLocation %f"%(time.time()-start))
+        
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
         self.gpsAltitudeValue.setText("%d"%(altitude))
@@ -3277,7 +3272,7 @@ class OSMWidget(QWidget):
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
-        gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 42, 42)
+        gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 0, 42)
         self.updateGPSDataDisplay(gpsData, True) 
     
 #    @pyqtSlot()
@@ -3312,7 +3307,7 @@ class OSMWidget(QWidget):
             self.trackLogLines.append(gpsData)
         
         self.trackLogLine=0
-        osmRouting.cleanEdgeCalculations(None, None)
+        osmRouting.cleanEdgeCalculations(True)
         self.mapWidgetQt.clearLastEdgeInfo()
         self.mapWidgetQt.update()
         self._stepTrackLog()
@@ -3434,7 +3429,8 @@ class OSMWindow(QMainWindow):
     def _connectGPS(self):
         value=self.connectPSButton.isChecked()
         if value==True:
-            self.updateGPSThread.setup(True)
+            if not self.updateGPSThread.isRunning():
+                self.updateGPSThread.setup(True)
         else:
             self.disconnectGPS()
         

@@ -1,4 +1,4 @@
-from math import pi,cos,sin,log,exp,atan
+from math import pi,cos,sin,log,exp,atan, tan, radians, sinh, degrees
 import sys, os, time
 import mapnik2
 from queue import Queue
@@ -44,6 +44,20 @@ class GoogleProjection:
         h = RAD_TO_DEG * ( 2 * atan(exp(g)) - 0.5 * pi)
         return (f,h)
 
+def deg2num(lat_deg, lon_deg, zoom):
+    lat_rad = radians(lat_deg)
+    n = 2.0 ** zoom
+    xtile = int((lon_deg + 180.0) / 360.0 * n)
+    ytile = int((1.0 - log(tan(lat_rad) + (1 / cos(lat_rad))) / pi) / 2.0 * n)
+    return (xtile, ytile)
+
+def num2deg(xtile, ytile, zoom):
+    n = 2.0 ** zoom
+    lon_deg = xtile / n * 360.0 - 180.0
+    lat_rad = atan(sinh(pi * (1 - 2 * ytile / n)))
+    lat_deg = degrees(lat_rad)
+    return (lat_deg, lon_deg)
+
 class RenderThread:
     def __init__(self, m, prj, tileproj):
         self.m=m
@@ -53,16 +67,23 @@ class RenderThread:
     def render_tile(self, tile_uri, x, y, z):
         # Calculate pixel positions of bottom-left & top-right
 #        start=time.time()
-        p0 = (x * TILESIZE, (y + 1) * TILESIZE)
-        p1 = ((x + 1) * TILESIZE, y * TILESIZE)
+#        p0 = (x * TILESIZE, (y + 1) * TILESIZE)
+#        p1 = ((x + 1) * TILESIZE, y * TILESIZE)
+#
+#        # Convert to LatLong (EPSG:4326)
+#        l0 = self.tileproj.fromPixelToLL(p0, z);
+#        l1 = self.tileproj.fromPixelToLL(p1, z);
+#
+#        # Convert to map projection (e.g. mercator co-ords EPSG:900913)
+#        c0 = self.prj.forward(mapnik2.Coord(l0[0],l0[1]))
+#        c1 = self.prj.forward(mapnik2.Coord(l1[0],l1[1]))
 
-        # Convert to LatLong (EPSG:4326)
-        l0 = self.tileproj.fromPixelToLL(p0, z);
-        l1 = self.tileproj.fromPixelToLL(p1, z);
-
+        l0y, l0x=num2deg(x, y+1, z)
+        l1y, l1x=num2deg(x+1, y, z)
+        
         # Convert to map projection (e.g. mercator co-ords EPSG:900913)
-        c0 = self.prj.forward(mapnik2.Coord(l0[0],l0[1]))
-        c1 = self.prj.forward(mapnik2.Coord(l1[0],l1[1]))
+        c0 = self.prj.forward(mapnik2.Coord(l0x,l0y))
+        c1 = self.prj.forward(mapnik2.Coord(l1x,l1y))
 
         # Bounding box for the tile
         if hasattr(mapnik2,'mapnik_version') and mapnik2.mapnik_version() >= 800:

@@ -13,10 +13,12 @@ RADIUS_EARTH = 6371
 
 class OSMUtils():
     def deg2rad(self, deg):
-        return (deg * math.pi / 180.0)
+        return math.radians(deg)
+#        return (deg * math.pi / 180.0)
 
     def rad2deg(self,  rad):
-        return (rad / math.pi * 180.0)
+        return math.degrees(rad)
+#        return (rad / math.pi * 180.0)
 
     def lat2pixel(self, zoom, lat):
         lat_m = math.atanh(math.sin(lat))
@@ -265,7 +267,7 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
+    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=10.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
         distance=int(self.distance(lat, lon, lat1, lon1))
         pointsToIgnoreStart=0
         pointsToIgnoreEnd=0
