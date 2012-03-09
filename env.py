@@ -14,6 +14,9 @@ def getRoot():
         return os.environ["CARDASH_ROOT"]
     return DEFAULT_ROOT
 
+def getDataRoot():
+    return getRoot()
+
 def getImageRoot():
     return os.path.join(getRoot(), "images")
 

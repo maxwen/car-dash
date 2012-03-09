@@ -46,7 +46,7 @@ MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 
-DEFAULT_NODE_MARGIN=0.005
+DEFAULT_SEARCH_MARGIN=0.005
 # length of tunnel where we expect gps signal failure
 MINIMAL_TUNNEL_LENGHTH=50
 GPS_SIGNAL_MINIMAL_DIFF=0.5
@@ -605,7 +605,8 @@ class QtOSMWidget(QWidget):
         self.currentEdgeIndexList=None
         self.currentCoords=None
         self.distanceToEnd=0
-        self.routeInfo=None
+        self.distanceToCrossing=0
+        self.routeInfo=None, None, None, None
 #        self.track=None
         self.nextEdgeOnRoute=None
         self.enforcementInfoList=None
@@ -1305,15 +1306,16 @@ class QtOSMWidget(QWidget):
                 
             self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
 
-        if self.routeInfo!=None:
-            (direction, crossingLength, crossingInfo, crossingType, crossingRef)=self.routeInfo
+        if self.distanceToCrossing!=0:
             routeInfoPos=QPoint(self.width()-70, self.height()-60)
-            
-            if crossingLength>500:
-                crossingLengthStr="%.1f km"%(crossingLength/1000)
+            if self.distanceToCrossing>500:
+                crossingLengthStr="%.1f km"%(self.distanceToCrossing/1000)
             else:
-                crossingLengthStr="%d m"%crossingLength
+                crossingLengthStr="%d m"%self.distanceToCrossing
+            self.painter.drawText(routeInfoPos, "%s"%crossingLengthStr)
 
+        if self.routeInfo[0]!=None:
+            (direction, crossingInfo, crossingType, crossingRef)=self.routeInfo
             crossingInfoStr=crossingInfo
 
             exitNumber=0
@@ -1335,7 +1337,6 @@ class QtOSMWidget(QWidget):
                 crossingInfoStr="Take motorway exit "+crossingInfoStr[len("motorway:exit:info:"):]
             elif "motorway:exit" in crossingInfo:
                 crossingInfoStr="Take motorway exit"
-            self.painter.drawText(routeInfoPos, "%s"%crossingLengthStr)
             
             routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-10, self.height()-15)
             self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
@@ -1353,8 +1354,8 @@ class QtOSMWidget(QWidget):
                     lat, lon=enforcement["coords"]
                     (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
 #                    print("%f %f %f %f"%(lat, lon, x, y))
-                    if self.isPointVisibleTransformed(x, y):
-                        self.painter.drawPixmap(x, y, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
+                    if self.isPointVisibleTransformed(x, y):           
+                        self.painter.drawPixmap(int(x-IMAGE_WIDTH_SMALL/2), int(y-IMAGE_HEIGHT_SMALL/2), IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.speedCameraImage)
 
             backgroundColor=QColor(255, 0, 0, 200)
             enforcementBackground=QRect(0, self.height()-210, 80, 80)
@@ -2107,9 +2108,13 @@ class QtOSMWidget(QWidget):
     
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_NODE_MARGIN, 30.0)
+        edgeId, wayId=osmParserData.getEdgeIdOnPos2(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return 
+        
+        country=osmParserData.getCountryOfPos(lat, lon)
+        if country==None:
+            return
         
         wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
         defaultPointTag=self.getDefaultPositionTagWithCountry(name, nameRef, country)
@@ -2125,10 +2130,14 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        edgeId, wayId, usedRefId, usedPos, country=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_NODE_MARGIN, 30.0)
+        edgeId, wayId=osmParserData.getEdgeIdOnPos2(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return
         
+        country=osmParserData.getCountryOfPos(lat, lon)
+        if country==None:
+            return
+
         wayId, tags, refs, streetTypeId, name, nameRef=osmParserData.getWayEntryForIdAndCountry(wayId, country)
         defaultPointTag=self.getDefaultPositionTagWithCountry(name, nameRef, country)
 
@@ -2240,16 +2249,36 @@ class QtOSMWidget(QWidget):
         self.lastWayId=None
         self.speedInfo=None
         self.enforcementInfoList=None
+        self.distanceToEnd=0
+        self.distanceToCrossing=0
+        self.nextEdgeOnRoute=None
+        self.routeInfo=None, None, None, None
         
+    def calcNextCrossingInfo(self, lat, lon):
+        (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.remainingTrackList, lat, lon)
+        self.currentEdgeIndexList=list()
+        if crossingEdgeId!=None and crossingEdgeId in self.remainingEdgeList:
+            crossingEdgeIdIndex=self.remainingEdgeList.index(crossingEdgeId)+1
+        else:
+            crossingEdgeIdIndex=len(self.remainingEdgeList)-1
+
+        for i in range(0, crossingEdgeIdIndex+1, 1):
+            self.currentEdgeIndexList.append(i)
+            
+        if direction!=None:
+            self.routeInfo=(direction, crossingInfo, crossingType, crossingRef)
+        else:
+            self.routeInfo=None, None, None, None
+            
+    def calcRouteDistances(self, lat, lon):
+        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.remainingTrackList, lat, lon, self.currentRoute)
+
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
-#        start=time.time()
         if self.osmWidget.dbLoaded==True:
-#            start=time.time()
-            edgeId, wayId, usedRefId, usedPos=osmRouting.getEdgeIdOnPosForRouting2(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_NODE_MARGIN, fromMouse, speed)
-#            print("%f"%(time.time()-start))
+            edgeId, wayId=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)
             if edgeId==None:
                 self.clearLastEdgeInfo()
             else:   
@@ -2266,7 +2295,10 @@ class QtOSMWidget(QWidget):
                                 else:
                                     self.nextEdgeOnRoute=None
                            
-                                self.currentEdgeIndexList=None
+                                self.calcNextCrossingInfo(lat, lon)      
+                                # initial            
+                                self.calcRouteDistances(lat, lon)
+
                             else:
                                 # we are not going to the expected next edge
                                 # but way 3 more locations before deciding
@@ -2289,40 +2321,35 @@ class QtOSMWidget(QWidget):
                                 return
                             else:
                                 self.recalcTrigger=self.recalcTrigger+1
-                                self.routeInfo=(98, 0, "Please turn", 98, -1)
+                                self.routeInfo=(98, "Please turn", 98, 0)
                                 self.update()
                                 return
                             
                         self.recalcTrigger=0
-                        if len(self.remainingEdgeList)>1:
-                            self.nextEdgeOnRoute=self.remainingEdgeList[1]
-                        else:
-                            self.nextEdgeOnRoute=None
                         
-                        self.distanceToEnd=self.getDistanceToEnd(self.remainingEdgeList, self.remainingTrackList, lat, lon, self.currentRoute, usedRefId)
-                        (direction, crossingLength, crossingInfo, crossingType, crossingRef, crossingEdgeId)=self.getRouteInformationForPos(self.remainingEdgeList, self.remainingTrackList, lat, lon, self.currentRoute, usedRefId)
+                        # initial
+                        if self.nextEdgeOnRoute==None:
+                            if len(self.remainingEdgeList)>1:
+                                self.nextEdgeOnRoute=self.remainingEdgeList[1]
+                            else:
+                                self.nextEdgeOnRoute=None
                         
-                        if crossingEdgeId!=None and crossingEdgeId in self.remainingEdgeList:
-                            crossingEdgeIdIndex=self.remainingEdgeList.index(crossingEdgeId)+1
-                        else:
-                            crossingEdgeIdIndex=len(self.remainingEdgeList)-1
-                            
-                        self.currentEdgeIndexList=list()
-                        for i in range(0, crossingEdgeIdIndex+1, 1):
-                            self.currentEdgeIndexList.append(i)
-                            
-                        if direction!=None:
-                            self.routeInfo=(direction, crossingLength, crossingInfo, crossingType, crossingRef)
-                        else:
-                            self.routeInfo=None
-                        
+                        # only distanceToEnd and crossingLength need to 
+                        # be recalculated every time
+                        # the rest only if the edge changes above
+                        self.calcRouteDistances(lat, lon)
+                              
+                        # initial
+                        if self.routeInfo[0]==None:
+                            self.calcNextCrossingInfo(lat, lon)                  
                 else:
                     if edgeId!=self.lastEdgeId:
                         self.lastEdgeId=edgeId
                         coords=osmParserData.getCoordsOfEdge(edgeId)
                         self.currentCoords=coords
                         self.distanceToEnd=0
-                        self.routeInfo=None
+                        self.distanceToCrossing=0
+                        self.routeInfo=None, None, None, None
                         self.currentEdgeIndexList=None
                         self.nextEdgeOnRoute=None
                           
@@ -2512,13 +2539,7 @@ class QtOSMWidget(QWidget):
             # show start pos at zoom level 15
 #            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             
-            self.currentCoords=None
-            self.distanceToEnd=0
-            self.currentEdgeIndexList=None
-            self.wayInfo=None
-            self.lastEdgeId=self.currentRoute.getEdgeList()[0]
-            self.nextEdgeOnRoute=None
-            self.lastWayId=None
+            self.clearLastEdgeInfo()
             self.remainingEdgeList=self.currentRoute.getEdgeList()
             self.remainingTrackList=self.currentRoute.getTrackList()
             self.update()       
@@ -2550,26 +2571,12 @@ class QtOSMWidget(QWidget):
 #        self.update()
 #        print(trackItem)
 
-    def getRouteInformationForPos(self, edgeList, trackList, lat, lon, route, usedRefId):
-#        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())     
-#        if edgeList==None or trackList==None:
-#            return
-#        
-        edgeId=edgeList[0]
-        (direction, crossingLength, crossingInfo, crossingType, crossingRef, edgeId)=osmParserData.getNextCrossingInfoFromPos(edgeId, trackList, lat, lon, usedRefId)
-        if direction!=None and crossingInfo!=None and crossingLength!=None:
-            return (direction, crossingLength, crossingInfo, crossingType, crossingRef, edgeId)
-             
-        return (None, None, None, None, None, None)
-      
-    def getDistanceToEnd(self, edgeList, trackList, lat, lon, route, usedRefId):
-#        edgeList, trackList=self.getTrackListFromEdge(edgeListIndex, route.getEdgeList(), route.getTrackList())
-#        if edgeList==None or trackList==None:
-#            return
-        
-        edgeId=edgeList[0]
-        distance=osmParserData.getDistanceToEnd(edgeId, trackList, lat, lon, route, usedRefId)
-        return distance
+#    def getCrossingInformationForPos(self, trackList, lat, lon, route):        
+#        (direction, crossingInfo, crossingType, crossingRef, lastEdgeId)=osmParserData.getNextCrossingInfoFromPos(trackList, lat, lon)
+#        if direction!=None and crossingInfo!=None:
+#            return (direction, crossingInfo, crossingType, crossingRef, lastEdgeId)
+#             
+#        return (None, None, None, None, None)
     
     def getTrackListFromEdge(self, indexEnd, edgeList, trackList):
         if indexEnd < len(edgeList):

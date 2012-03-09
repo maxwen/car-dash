@@ -34,8 +34,9 @@ class TrspWrapper():
             
     def getSQLQueryEdge(self):
         if self.lastBBox!=None:
-            xmin, ymin, xmax, ymax=self.lastBBox        
-            return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
+            xmin, ymin, xmax, ymax=self.lastBBox
+            return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeWithin(%f, %f, %f, %f))'%(xmin, ymin, xmax, ymax)
+#            return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
         else:
             return 'SELECT id, source, target, cost, reverseCost FROM edgeTable'
             
