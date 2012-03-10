@@ -45,9 +45,9 @@ class RoutingTest(unittest.TestCase):
             print(route)
             route.resolveRoutingPoints(self.p)
             route.calcRoute(self.p)
-            self.assertTrue(route.getEdgeList()!=None, "routing %s failed"%route)
-            if route.getEdgeList()!=None:
-                print(route.getEdgeList())
+            self.assertTrue(route.getRouteInfo()!=None, "routing %s failed"%route)
+            if route.getRouteInfo()!=None:
+                print(route.getRouteInfo())
                 
 def routingSuite():
     suite = unittest.TestSuite()

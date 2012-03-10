@@ -267,7 +267,7 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=10.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
+    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
         distance=int(self.distance(lat, lon, lat1, lon1))
         pointsToIgnoreStart=0
         pointsToIgnoreEnd=0

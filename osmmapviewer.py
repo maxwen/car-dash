@@ -46,7 +46,7 @@ MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 
-DEFAULT_SEARCH_MARGIN=0.005
+DEFAULT_SEARCH_MARGIN=0.0005
 # length of tunnel where we expect gps signal failure
 MINIMAL_TUNNEL_LENGHTH=50
 GPS_SIGNAL_MINIMAL_DIFF=0.5
@@ -351,7 +351,7 @@ class OSMGPSLocationWorker(QThread):
         if self.tunnelThread==True:
             self.timeout=500
         else:
-            self.timeout=500
+            self.timeout=100
         
     def isTunnelThread(self):
         return self.tunnelThread
@@ -625,6 +625,7 @@ class QtOSMWidget(QWidget):
         self.stop=True
         self.isInTunnel=False
         self.altitude=0
+        self.currentDisplayBBox=None
 
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -1114,33 +1115,60 @@ class QtOSMWidget(QWidget):
 
     # get bbox in deg mapnik style (left, bottom, right, top)
     # untransformed
-    def getVisibleBBoxDeg(self, margin=0):
+#    def getVisibleBBoxDeg(self, margin=0):
+#        invertedTransform=self.transformHeading.inverted()
+#        map_x, map_y=self.getMapZeroPos()
+#
+#        point=QPointF(0, 0+self.height())        
+#        point0=invertedTransform[0].map(point)        
+#        rlat1 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()+margin);
+#        rlon1 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()-margin);
+#
+#        point=QPointF(self.width(), 0)        
+#        point0=invertedTransform[0].map(point)        
+#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()-margin);
+#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()+margin);
+#        
+#        return [self.osmutils.rad2deg(rlon1), self.osmutils.rad2deg(rlat1), 
+#                self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
+#
+#    # get bbox in deg with margin mapnik style (left, bottom, right, top)
+#    def getVisibleBBoxDegWithMargin(self):
+#        return self.getVisibleBBoxDeg(TILESIZE)
+
+    def getVisibleBBoxDeg2(self):
         invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
-
-        point=QPointF(0, 0+self.height())        
+        
+        point=QPointF(0, 0)        
         point0=invertedTransform[0].map(point)        
-        rlat1 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()+margin);
-        rlon1 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()-margin);
+        lat1 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
+        lon1 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
 
         point=QPointF(self.width(), 0)        
         point0=invertedTransform[0].map(point)        
-        rlat2 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()-margin);
-        rlon2 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()+margin);
+        lat2 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
+        lon2 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
+            
+        point=QPointF(0, self.height())        
+        point0=invertedTransform[0].map(point)        
+        lat3 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
+        lon3 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
+
+        point=QPointF(self.width(), self.height())        
+        point0=invertedTransform[0].map(point)        
+        lat4 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
+        lon4 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
+            
+        lonList=[lon1, lon2, lon3, lon4]
+        latList=[lat1, lat2, lat3, lat4]
         
-        return [self.osmutils.rad2deg(rlon1), self.osmutils.rad2deg(rlat1), 
-                self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
-
-    # get bbox in deg with margin mapnik style (left, bottom, right, top)
-    def getVisibleBBoxDegWithMargin(self):
-        return self.getVisibleBBoxDeg(TILESIZE)
-    
-    # with transformation
-    def getVisibleBBoxForMapnik(self, margin=TILESIZE):
-        map_x, map_y=self.getMapZeroPos()
-
-        return [map_x + 0-margin, map_y + self.height()+margin, 
-                map_x + self.width()+margin, map_y + 0-margin]
+        bboxLon1=min(lonList)
+        bboxLat1=min(latList)
+        bboxLon2=max(lonList)
+        bboxLat2=max(latList)
+                    
+        return [bboxLon1, bboxLat1, bboxLon2, bboxLat2]
 
     def show(self, zoom, lat, lon):
         self.osm_center_map_to_position(lat, lon)
@@ -1247,6 +1275,8 @@ class QtOSMWidget(QWidget):
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
             
+#        self.displayVisibleEdges()
+        
         self.painter.resetTransform()
         
         self.showEnforcementInfo()
@@ -1271,6 +1301,16 @@ class QtOSMWidget(QWidget):
 #        print("QtOSMWidget:paintEvent")
 
   
+    def displayVisibleEdges(self):
+        if self.osmWidget.dbLoaded:
+            pen=self.edgePen
+            pen.setWidth(3)
+            bbox=self.getVisibleBBoxDeg2()
+            resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
+            for edge in resultList:
+                _, _, _, _, _, _, _, _, _, coords=edge
+                self.displayEdge(coords, pen)
+
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
         backgroundColor=QColor(120, 120, 120, 200)
@@ -2108,7 +2148,7 @@ class QtOSMWidget(QWidget):
     
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
-        edgeId, wayId=osmParserData.getEdgeIdOnPos2(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
+        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return 
         
@@ -2130,7 +2170,7 @@ class QtOSMWidget(QWidget):
             
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-        edgeId, wayId=osmParserData.getEdgeIdOnPos2(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
+        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return
         
@@ -2217,25 +2257,10 @@ class QtOSMWidget(QWidget):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
-        # we should recalc from the next crossing 
+        # TODO: we should recalc from the next crossing 
         # else we always get a u-turn on the current edge
         # add a temporary waypoint at the next crossing
-#        routingPointList=list()
         recalcPoint=OSMRoutingPoint("tmp", 5, (lat, lon))    
-#        routingPointList.append(recalcPoint)
-        
-        # find the next crossing
-        # TODO; use the correct direction
-#        (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-#        country=osmParserData.getCountryOfPos(lat, lon)
-#        resultList=osmParserData.getCrossingEntryFor(wayId, country)
-#        if len(resultList)!=0:
-#            for crossing in resultList:
-#                _, wayId, refId, nextWayIdList=crossing
-#                lat1, lon1=osmParserData.getCoordsWithRefAndCountry(refId, country)
-#                tmpPoint=OSMRoutingPoint("tmpCrossing", 5, (lat1, lon1))    
-#                routingPointList.append(tmpPoint)
-#                break
         
         if self.currentRoute!=None:
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
@@ -2530,16 +2555,15 @@ class QtOSMWidget(QWidget):
         self.emit(SIGNAL("stopProgress()"))
 
     def routeCalculationDone(self):
-        if self.currentRoute.getEdgeList()!=None:
+        if self.currentRoute.getRouteInfo()!=None:
             self.currentRoute.printRoute(osmParserData)
-#            print("edgeList=%d %s"%(len(self.currentRoute.getEdgeList()), self.currentRoute.getEdgeList()))
-#            print("cost=%f"%(self.currentRoute.getPathCost()))
-#            print("len=%d"%(self.currentRoute.getLength()))
-#            self.printRouteDescription(self.currentRoute)
+            self.printRouteDescription(self.currentRoute)
             # show start pos at zoom level 15
 #            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             
             self.clearLastEdgeInfo()
+            # TODO: must not combine in one list
+            # but seperate
             self.remainingEdgeList=self.currentRoute.getEdgeList()
             self.remainingTrackList=self.currentRoute.getTrackList()
             self.update()       
@@ -2588,33 +2612,38 @@ class QtOSMWidget(QWidget):
                
     def printRouteDescription(self, route):        
         print("start:")
-        indexEnd=0
-        edgeList=route.getEdgeList()
-        trackList=route.getTrackList()
-        while True:
-            edgeList, trackList=self.getTrackListFromEdge(indexEnd, edgeList, trackList)
-
-            (direction, crossingLength, crossingInfo, crossingType, crossingRef, lastEdgeId)=osmParserData.getNextCrossingInfo(trackList)
+        routeInfo=route.getRouteInfo()
+        
+        for routeInfoEntry in routeInfo:
+            edgeList=routeInfoEntry["edgeList"]   
+            trackList=routeInfoEntry["trackList"] 
+            indexEnd=0
+            lastEdgeId=None
             
-            if lastEdgeId!=None:
-                indexEnd=edgeList.index(lastEdgeId)+1
-            else:
-                indexEnd=len(edgeList)
+            while True:
+                edgeList, trackList=self.getTrackListFromEdge(indexEnd, edgeList, trackList)
+    
+                (direction, crossingLength, crossingInfo, crossingType, crossingRef, lastEdgeId)=osmParserData.getNextCrossingInfo(trackList)
                 
-            trackListPart=trackList[0:indexEnd]
-
-            name, nameRef=trackListPart[0]["info"]     
-            sumLength=0  
-            for trackItem in trackListPart:
-                length=trackItem["length"]
-                sumLength=sumLength+length
-            
-            print("%s %s %d"%(name, nameRef, sumLength))
-            if crossingInfo!=None:
-                print("%s %s"%(crossingInfo, self.osmutils.directionName(direction)))
-
-            if indexEnd==len(edgeList):
-                break
+                if lastEdgeId!=None:
+                    indexEnd=edgeList.index(lastEdgeId)+1
+                else:
+                    indexEnd=len(edgeList)
+                    
+                trackListPart=trackList[0:indexEnd]
+    
+                name, nameRef=trackListPart[0]["info"]     
+                sumLength=0  
+                for trackItem in trackListPart:
+                    length=trackItem["length"]
+                    sumLength=sumLength+length
+                
+                print("%s %s %d"%(name, nameRef, sumLength))
+                if crossingInfo!=None:
+                    print("%s %s"%(crossingInfo, self.osmutils.directionName(direction)))
+    
+                if indexEnd==len(edgeList):
+                    break
             
         print("end:")
 
@@ -2629,8 +2658,10 @@ class QtOSMWidget(QWidget):
     
     def getMousePosition(self, x, y):
         point=QPointF(x, y)        
+#        print(point)
         invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)        
+        point0=invertedTransform[0].map(point)    
+#        print(point0)    
         map_x, map_y=self.getMapZeroPos()
         rlat = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y());
         rlon = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x());
@@ -3280,6 +3311,7 @@ class OSMWidget(QWidget):
         
         print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
         gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 0, 42)
+        print(gpsData)
         self.updateGPSDataDisplay(gpsData, True) 
     
 #    @pyqtSlot()

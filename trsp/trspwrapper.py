@@ -120,10 +120,10 @@ class TrspWrapper():
         cost=0
         
 #        print(self.lastBBox)
-        print(startEdge)
-        print(endEdge)
-        print(startPos)
-        print(endPos)
+#        print(startEdge)
+#        print(endEdge)
+#        print(startPos)
+#        print(endPos)
         
         newBBox=True
         if bbox!=None:
@@ -172,8 +172,8 @@ class TrspWrapper():
                 edgeList.append(pathPointer[i].edge_id)
                 cost=cost+pathPointer[i].cost
                 
-            print(edgeList)
-            print(len(edgeList))
+#            print(edgeList)
+#            print(len(edgeList))
 #            print(cost)
             return edgeList, cost
         else:
