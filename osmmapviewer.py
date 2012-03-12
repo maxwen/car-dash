@@ -46,7 +46,7 @@ MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 
-DEFAULT_SEARCH_MARGIN=0.0005
+DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
 MINIMAL_TUNNEL_LENGHTH=50
 GPS_SIGNAL_MINIMAL_DIFF=0.5
@@ -351,7 +351,7 @@ class OSMGPSLocationWorker(QThread):
         if self.tunnelThread==True:
             self.timeout=500
         else:
-            self.timeout=100
+            self.timeout=500
         
     def isTunnelThread(self):
         return self.tunnelThread
@@ -412,10 +412,10 @@ class GPSData():
         self.speed=speed
         self.altitude=altitude
     
-#    def __eq__(self, other):
-#        if not isinstance(other, self.__class__):
-#            return False
-#        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
             
     def isValid(self):
         return self.lat!=None and self.lon!=None and self.lat!=0.0 and self.lon!=0.0
@@ -611,8 +611,12 @@ class QtOSMWidget(QWidget):
         self.nextEdgeOnRoute=None
         self.enforcementInfoList=None
         self.speedInfo=None
-        self.remainingEdgeList=None
-        self.remainingTrackList=None
+        
+        self.currentEdgeList=None
+        self.currentTrackList=None
+        self.currentStartPoint=None
+        self.currentTargetPoint=None
+        self.currentRoutePart=0
         
         self.lastCenterX=None
         self.lastCenterY=None
@@ -1089,7 +1093,7 @@ class QtOSMWidget(QWidget):
         pen.setWidth(3)
         if len(edgeList)!=0:
             for edgeId in edgeList:
-                edgeId, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
+                edgeId, _, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
                 if expectedNextEdge!=None and edgeId==expectedNextEdge:
                     pen.setColor(QColor(0, 255, 0))
                 else:
@@ -1098,7 +1102,7 @@ class QtOSMWidget(QWidget):
                 self.displayEdge(coords, pen)
         
         elif expectedNextEdge!=None:
-            edgeId, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(expectedNextEdge)
+            edgeId, _, _, _, _, _, _, _, _, _, coords=osmParserData.getEdgeEntryForEdgeIdWithCoords(expectedNextEdge)
             pen.setColor(QColor(0, 255, 0))
             self.displayEdge(coords, pen)
         
@@ -1255,10 +1259,10 @@ class QtOSMWidget(QWidget):
         self.showTiles()
 #        self.showTiles2()
 
-        if self.currentRoute!=None:
+        if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
             if self.currentEdgeIndexList!=None:
-                self.displayEdgeOfRoute(self.remainingTrackList, self.currentEdgeIndexList)
+                self.displayEdgeOfRoute(self.currentTrackList, self.currentEdgeIndexList)
         
         elif self.currentCoords!=None:
             self.displayEdge(self.currentCoords)
@@ -1286,7 +1290,7 @@ class QtOSMWidget(QWidget):
         
         self.showTextInfoBackground()
         
-        if self.currentRoute!=None and self.remainingTrackList!=None:
+        if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
             self.showRouteInfo()
             
         self.showTextInfo()
@@ -1308,7 +1312,7 @@ class QtOSMWidget(QWidget):
             bbox=self.getVisibleBBoxDeg2()
             resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
             for edge in resultList:
-                _, _, _, _, _, _, _, _, _, coords=edge
+                _, _, _, _, _, _, _, _, _, _, coords=edge
                 self.displayEdge(coords, pen)
 
     def showTextInfoBackground(self):
@@ -1316,7 +1320,7 @@ class QtOSMWidget(QWidget):
         backgroundColor=QColor(120, 120, 120, 200)
         self.painter.fillRect(textBackground, backgroundColor)
         
-        if self.currentRoute!=None and self.remainingTrackList!=None:
+        if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
             routeInfoBackground=QRect(self.width()-80, self.height()-210, 80, 160)
             self.painter.fillRect(routeInfoBackground, backgroundColor)
             
@@ -1573,13 +1577,14 @@ class QtOSMWidget(QWidget):
 #        start=time.time()
         if route!=None:
             # before calculation is done
-            if route.getTrackList()==None:
+            trackList=route.getTrackList(self.currentRoutePart)
+            if trackList==None:
                 return
             
             showTrackDetails=self.map_zoom>13
             polygon=QPolygon()
            
-            for item in route.getTrackList():
+            for item in trackList:
                 streetType=item["type"]
                 
                 for itemRef in item["refs"]:
@@ -1597,7 +1602,7 @@ class QtOSMWidget(QWidget):
             self.painter.drawPolyline(polygon)
                     
             if showTrackDetails==True:                                    
-                for item in route.getTrackList():
+                for item in trackList:
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]
                             
@@ -2262,7 +2267,7 @@ class QtOSMWidget(QWidget):
         # add a temporary waypoint at the next crossing
         recalcPoint=OSMRoutingPoint("tmp", 5, (lat, lon))    
         
-        if self.currentRoute!=None:
+        if self.currentRoute!=None and not self.currentRoute.isRouteFinished():
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
 #                self.recalcRouteFromPointList(routingPointList)
                 self.recalcRouteFromPoint(recalcPoint)
@@ -2280,12 +2285,12 @@ class QtOSMWidget(QWidget):
         self.routeInfo=None, None, None, None
         
     def calcNextCrossingInfo(self, lat, lon):
-        (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.remainingTrackList, lat, lon)
+        (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.currentTrackList, lat, lon)
         self.currentEdgeIndexList=list()
-        if crossingEdgeId!=None and crossingEdgeId in self.remainingEdgeList:
-            crossingEdgeIdIndex=self.remainingEdgeList.index(crossingEdgeId)+1
+        if crossingEdgeId!=None and crossingEdgeId in self.currentEdgeList:
+            crossingEdgeIdIndex=self.currentEdgeList.index(crossingEdgeId)+1
         else:
-            crossingEdgeIdIndex=len(self.remainingEdgeList)-1
+            crossingEdgeIdIndex=len(self.currentEdgeList)-1
 
         for i in range(0, crossingEdgeIdIndex+1, 1):
             self.currentEdgeIndexList.append(i)
@@ -2296,27 +2301,27 @@ class QtOSMWidget(QWidget):
             self.routeInfo=None, None, None, None
             
     def calcRouteDistances(self, lat, lon):
-        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.remainingTrackList, lat, lon, self.currentRoute)
+        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute)
 
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
         if self.osmWidget.dbLoaded==True:
-            edgeId, wayId=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.lastEdgeId, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)
+            edgeId, wayId=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)
             if edgeId==None:
                 self.clearLastEdgeInfo()
             else:   
-                if self.currentRoute!=None and self.remainingEdgeList!=None:                                               
+                if self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                               
                     if edgeId!=self.lastEdgeId:
-                        if len(self.remainingEdgeList)>1:
-                            if edgeId==self.remainingEdgeList[1]: 
-                                self.lastEdgeId=edgeId
+                        self.lastEdgeId=edgeId
+                        if len(self.currentEdgeList)>1:
+                            if edgeId==self.currentEdgeList[1]: 
                                 self.recalcTrigger=0
-                                self.remainingEdgeList=self.remainingEdgeList[1:]
-                                self.remainingTrackList=self.remainingTrackList[1:]
-                                if len(self.remainingEdgeList)>1:
-                                    self.nextEdgeOnRoute=self.remainingEdgeList[1]
+                                self.currentEdgeList=self.currentEdgeList[1:]
+                                self.currentTrackList=self.currentTrackList[1:]
+                                if len(self.currentEdgeList)>1:
+                                    self.nextEdgeOnRoute=self.currentEdgeList[1]
                                 else:
                                     self.nextEdgeOnRoute=None
                            
@@ -2334,10 +2339,10 @@ class QtOSMWidget(QWidget):
                                     return
                                 else:
                                     self.recalcTrigger=self.recalcTrigger+1
-                           
-                    if edgeId==self.remainingEdgeList[0]:    
+                              
+                    if edgeId==self.currentEdgeList[0]:    
                         # look if we are on the tracklist start                   
-                        onRoute=osmRouting.checkForPosOnTracklist(lat, lon, self.remainingTrackList)                            
+                        onRoute=osmRouting.checkForPosOnTracklist(lat, lon, self.currentTrackList)                            
 #                        print(onRoute)
                         if onRoute==False:
                             if self.recalcTrigger==3:
@@ -2354,8 +2359,8 @@ class QtOSMWidget(QWidget):
                         
                         # initial
                         if self.nextEdgeOnRoute==None:
-                            if len(self.remainingEdgeList)>1:
-                                self.nextEdgeOnRoute=self.remainingEdgeList[1]
+                            if len(self.currentEdgeList)>1:
+                                self.nextEdgeOnRoute=self.currentEdgeList[1]
                             else:
                                 self.nextEdgeOnRoute=None
                         
@@ -2366,7 +2371,15 @@ class QtOSMWidget(QWidget):
                               
                         # initial
                         if self.routeInfo[0]==None:
-                            self.calcNextCrossingInfo(lat, lon)                  
+                            self.calcNextCrossingInfo(lat, lon)     
+                        
+                        # TODO: start route when start point reached
+                        if self.currentTargetPointReached(lat, lon):
+                            self.currentRoute.targetPointReached(self.currentRoutePart)
+                            self.switchToNextRoutePart()     
+                            print(self.currentRoute.isRouteFinished())
+                            if self.currentRoute.isRouteFinished():
+                                self.clearLastEdgeInfo()
                 else:
                     if edgeId!=self.lastEdgeId:
                         self.lastEdgeId=edgeId
@@ -2441,7 +2454,7 @@ class QtOSMWidget(QWidget):
             if heading!=None and self.osmutils.headingDiffAbsolute(heading, edgeHeading)>10:
                 continue
             
-            (edgeId, _, endRef, _, _, _, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
+            (edgeId, _, endRef, _, _, _, _, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
             if startRef==endRef:
                 coords.reverse()
                 
@@ -2529,24 +2542,24 @@ class QtOSMWidget(QWidget):
             if not self.routeCalculationThread.isRunning():
                 self.routeCalculationThread.setup(self.currentRoute)
 
-    def recalcRouteFromPointList(self, routingPointList):
-        if self.osmWidget.dbLoaded==True:  
-            # make sure all are resolved because we cannot access
-            # the db from the thread
-            self.currentRoute.changeRouteFromPointList(routingPointList, osmParserData)
-            self.currentRoute.resolveRoutingPoints(osmParserData)
-            if not self.currentRoute.routingPointValid():
-                print("route has invalid routing points")
-                return
-            
-            self.routeCalculationThread=OSMRouteCalcWorker(self)
-            self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
-            self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-            self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
-            self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
-
-            if not self.routeCalculationThread.isRunning():
-                self.routeCalculationThread.setup(self.currentRoute)
+#    def recalcRouteFromPointList(self, routingPointList):
+#        if self.osmWidget.dbLoaded==True:  
+#            # make sure all are resolved because we cannot access
+#            # the db from the thread
+#            self.currentRoute.changeRouteFromPointList(routingPointList, osmParserData)
+#            self.currentRoute.resolveRoutingPoints(osmParserData)
+#            if not self.currentRoute.routingPointValid():
+#                print("route has invalid routing points")
+#                return
+#            
+#            self.routeCalculationThread=OSMRouteCalcWorker(self)
+#            self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
+#            self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+#            self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
+#            self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
+#
+#            if not self.routeCalculationThread.isRunning():
+#                self.routeCalculationThread.setup(self.currentRoute)
 
     def startProgress(self):
         self.emit(SIGNAL("startProgress()"))
@@ -2564,10 +2577,29 @@ class QtOSMWidget(QWidget):
             self.clearLastEdgeInfo()
             # TODO: must not combine in one list
             # but seperate
-            self.remainingEdgeList=self.currentRoute.getEdgeList()
-            self.remainingTrackList=self.currentRoute.getTrackList()
+            self.currentRoutePart=0
+            self.currentEdgeList=self.currentRoute.getEdgeList(self.currentRoutePart)
+            self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
+            self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
+            self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
             self.update()       
 
+    # TODO: must check if we reached the current endppoint
+    def switchToNextRoutePart(self):
+        if self.currentRoutePart < self.currentRoute.getRouteInfoLength()-1:
+            print("switch to next route part")
+            self.currentRoutePart=self.currentRoutePart+1
+            self.currentEdgeList=self.currentRoute.getEdgeList(self.currentRoutePart)
+            self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
+            self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
+            self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
+        
+    def currentTargetPointReached(self, lat, lon):
+        targetLat, targetLon=self.currentTargetPoint.getPos()
+        if self.osmutils.distance(lat, lon, targetLat, targetLon)<10:
+            return True
+        return False
+    
     def clearRoute(self):
         self.distanceToEnd=0
         self.currentEdgeIndexList=None
@@ -2575,8 +2607,11 @@ class QtOSMWidget(QWidget):
         self.wayInfo=None
         self.lastEdgeId=None
         self.lastWayId=None
-        self.remainingEdgeList=None
-        self.remainingTrackList=None
+        self.currentEdgeList=None
+        self.currentTrackList=None
+        self.currentStartPoint=None
+        self.currentTargetPoint=None
+        self.currentRoutePart=0
         
 #    def printRouteInformationForStep(self, stepNumber, route):
 #        if route==None or route.getEdgeList()==None:
@@ -3042,7 +3077,7 @@ class OSMWidget(QWidget):
                 # ignore all further until first invalid
                 return
             
-            print("GPS data from replay thread %s"%gpsData)
+#            print("GPS data from replay thread %s"%gpsData)
             if self.tunnelModeThread.isRunning():
                 self.tunnelModeThread.stop()
                 self.mapWidgetQt.clearLastEdgeInfo()
