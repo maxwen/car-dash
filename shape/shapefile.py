@@ -992,15 +992,15 @@ class Editor(Writer):
 def test1():
     sf = Reader("/home/maxl/Downloads/geofabrik/austria.shp/roads")
 #    print(sf.shapes())
-#    for field in sf.fields:
-#        print(field)
+    for field in sf.fields:
+        print(field)
 #    for shape in sf.shapes():
 #        print(shape)
 #        print(shape.points)
 #    i=0
 #    types=list()
-#    for record in sf.records():
-#        print(record[2])
+    for record in sf.records():
+        print(record)
 #        if not record[2] in types:
 #            types.append(record[2])
 #    print(types)

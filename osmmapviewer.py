@@ -1270,7 +1270,7 @@ class QtOSMWidget(QWidget):
         self.showRoutingPoints()            
                     
         if WITH_CROSSING_DEBUG==True:
-            if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None:
+            if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
                 self.displayEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
     
             if osmParserData.getCurrentSearchBBox()!=None:
@@ -1279,7 +1279,9 @@ class QtOSMWidget(QWidget):
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
             
+#        start=time.time()
 #        self.displayVisibleEdges()
+#        print("displayVisibleEdges:%f"%(time.time()-start))
         
         self.painter.resetTransform()
         
@@ -1305,6 +1307,17 @@ class QtOSMWidget(QWidget):
 #        print("QtOSMWidget:paintEvent")
 
   
+    def getStreetTypeListForZoom(self):
+        if self.map_zoom in range(16, 18):
+            return [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        if self.map_zoom in range(14, 16):
+            return [2, 3, 4, 6, 7, 8, 9, 10, 11, 12]
+        if self.map_zoom in range(12, 14):
+            return [2, 3, 4, 6, 7, 8, 9, 10, 11]
+        if self.map_zoom in range(10, 12):
+            return [2, 4, 6]
+        return []
+    
     def displayVisibleEdges(self):
         if self.osmWidget.dbLoaded:
             pen=self.edgePen
@@ -1312,8 +1325,10 @@ class QtOSMWidget(QWidget):
             bbox=self.getVisibleBBoxDeg2()
             resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
             for edge in resultList:
-                _, _, _, _, _, _, _, _, _, _, coords=edge
-                self.displayEdge(coords, pen)
+                _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+                streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+                if streetTypeId in self.getStreetTypeListForZoom():
+                    self.displayEdge(coords, pen)
 
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
@@ -2312,35 +2327,36 @@ class QtOSMWidget(QWidget):
             if edgeId==None:
                 self.clearLastEdgeInfo()
             else:   
-                if self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                               
-                    if edgeId!=self.lastEdgeId:
-                        self.lastEdgeId=edgeId
-                        if len(self.currentEdgeList)>1:
-                            if edgeId==self.currentEdgeList[1]: 
-                                self.recalcTrigger=0
-                                self.currentEdgeList=self.currentEdgeList[1:]
-                                self.currentTrackList=self.currentTrackList[1:]
-                                if len(self.currentEdgeList)>1:
-                                    self.nextEdgeOnRoute=self.currentEdgeList[1]
-                                else:
-                                    self.nextEdgeOnRoute=None
-                           
-                                self.calcNextCrossingInfo(lat, lon)      
-                                # initial            
-                                self.calcRouteDistances(lat, lon)
-
+                if self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                                                       
+                    if edgeId!=self.currentEdgeList[0]:
+                        # it is possible that edges are "skipped"
+                        # so we need to synchronize here
+                        if edgeId in self.currentEdgeList:
+                            index=self.currentEdgeList.index(edgeId)
+                            self.recalcTrigger=0
+                            self.currentEdgeList=self.currentEdgeList[index:]
+                            self.currentTrackList=self.currentTrackList[index:]
+                            if len(self.currentEdgeList)>1:
+                                self.nextEdgeOnRoute=self.currentEdgeList[1]
                             else:
-                                # we are not going to the expected next edge
-                                # but way 3 more locations before deciding
-                                # to recalculate
-                                if self.recalcTrigger==3:
-                                    self.recalcTrigger=0
-                                    self.recalcRoute(lat, lon, edgeId)
-                                    return
-                                else:
-                                    self.recalcTrigger=self.recalcTrigger+1
-                              
-                    if edgeId==self.currentEdgeList[0]:    
+                                self.nextEdgeOnRoute=None
+                       
+                            self.calcNextCrossingInfo(lat, lon)      
+                            # initial            
+                            self.calcRouteDistances(lat, lon)
+
+                        else:
+                            # we are not going to the expected next edge
+                            # but way 3 more locations before deciding
+                            # to recalculate
+                            if self.recalcTrigger==3:
+                                self.recalcTrigger=0
+                                self.recalcRoute(lat, lon, edgeId)
+                                return
+                            else:
+                                self.recalcTrigger=self.recalcTrigger+1
+                      
+                    if edgeId==self.currentEdgeList[0]:                                    
                         # look if we are on the tracklist start                   
                         onRoute=osmRouting.checkForPosOnTracklist(lat, lon, self.currentTrackList)                            
 #                        print(onRoute)
@@ -2356,7 +2372,7 @@ class QtOSMWidget(QWidget):
                                 return
                             
                         self.recalcTrigger=0
-                        
+                            
                         # initial
                         if self.nextEdgeOnRoute==None:
                             if len(self.currentEdgeList)>1:
@@ -2367,6 +2383,9 @@ class QtOSMWidget(QWidget):
                         # only distanceToEnd and crossingLength need to 
                         # be recalculated every time
                         # the rest only if the edge changes above
+                        
+                        # TODO: if edge decision takes time the distances
+                        # are NOT updated in the meantime
                         self.calcRouteDistances(lat, lon)
                               
                         # initial
@@ -2395,9 +2414,9 @@ class QtOSMWidget(QWidget):
                     country=osmParserData.getCountryOfPos(lat, lon)
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-#                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
 #                    osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
@@ -2575,8 +2594,7 @@ class QtOSMWidget(QWidget):
 #            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             
             self.clearLastEdgeInfo()
-            # TODO: must not combine in one list
-            # but seperate
+
             self.currentRoutePart=0
             self.currentEdgeList=self.currentRoute.getEdgeList(self.currentRoutePart)
             self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
@@ -2652,6 +2670,7 @@ class QtOSMWidget(QWidget):
         for routeInfoEntry in routeInfo:
             edgeList=routeInfoEntry["edgeList"]   
             trackList=routeInfoEntry["trackList"] 
+            print(trackList)
             indexEnd=0
             lastEdgeId=None
             
@@ -3382,6 +3401,7 @@ class OSMWidget(QWidget):
         
         self.trackLogLine=0
         osmRouting.cleanEdgeCalculations(True)
+        osmRouting.cleanCurrentEdge()
         self.mapWidgetQt.clearLastEdgeInfo()
         self.mapWidgetQt.update()
         self._stepTrackLog()
