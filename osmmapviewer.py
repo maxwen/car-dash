@@ -3027,6 +3027,11 @@ class OSMWidget(QWidget):
         if self.trackLogReplayThread.isRunning():
             self.trackLogReplayThread.stop()
  
+    def handleMissingGPSSignal(self):
+        osmRouting.cleanAll()
+        self.mapWidgetQt.clearLastEdgeInfo()
+        self.mapWidgetQt.update()
+    
     def updateGPSDisplay(self, session):
         if session!=None:   
             timeStamp=time.time()
@@ -3074,6 +3079,8 @@ class OSMWidget(QWidget):
                 self.gpsSignalInvalid=True
                 self.waitForInvalidGPSSignal=False
                 
+                self.handleMissingGPSSignal()
+                
             # TODO: add invalid and equal lines?
 #18.37.55.140448:47.834265:13.053648:170:27:454
 #18.37.55.142580:47.834218:13.053708:153:25:454
@@ -3104,6 +3111,7 @@ class OSMWidget(QWidget):
             self.updateGPSDataDisplay(gpsData, False)
         else:
             self.waitForInvalidGPSSignalReplay=False
+            self.handleMissingGPSSignal()
             
     def updateGPSDataDisplay2(self, gpsData):
         if gpsData.isValid():
@@ -3400,10 +3408,9 @@ class OSMWidget(QWidget):
             self.trackLogLines.append(gpsData)
         
         self.trackLogLine=0
-        osmRouting.cleanEdgeCalculations(True)
-        osmRouting.cleanCurrentEdge()
-        self.mapWidgetQt.clearLastEdgeInfo()
-        self.mapWidgetQt.update()
+        
+        self.handleMissingGPSSignal()
+        
         self._stepTrackLog()
 
     @pyqtSlot()

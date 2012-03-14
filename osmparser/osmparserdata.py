@@ -1751,11 +1751,6 @@ class OSMParserData():
         return None
         
     def parse_ways(self, way):
-        # TODO: hack
-        if self.firstWay==False:
-            self.firstWay=True
-            self.commitCoordsDB()            
-            
         for wayid, tags, refs in way:
             if len(refs)==1:
                 print("way with len(ref)==1 %d"%(wayid))
@@ -1869,7 +1864,6 @@ class OSMParserData():
                 for ref in refs:  
                     storedRef, lat, lon=self.getCoordsEntry(ref)
                     if storedRef==None:
-#                        print("no ccords for ref==%d on wayid==%d"%(ref, wayid))
                         continue
                         
                     storedRef, refCountry=self.getCountryOfRef(ref)
@@ -1975,8 +1969,9 @@ class OSMParserData():
                                     wayId, refs=self.getWayRefEntry(wayId)
                                     if wayId!=None:
                                         for ref in refs:
-                                            _, lat, lon=self.getCoordsEntry(ref)
-                                            polyData.append((lon, lat))
+                                            storedRef, lat, lon=self.getCoordsEntry(ref)
+                                            if storedRef!=None:
+                                                polyData.append((lon, lat))
                             
                             if len(polyData)!=0:
                                 self.osmPoly.addPoly(polyData, tags)
@@ -3509,16 +3504,13 @@ class OSMParserData():
         lastLon=None
         
         for ref in refs:
-            storedRef, countryRef=self.getCountryOfRef(ref)
-            if storedRef!=None and countryRef!=None:
-                lat, lon=self.getCoordsWithRefAndCountry(ref, countryRef)
+            storedRef, lat, lon=self.getCoordsEntry(ref)
+            if storedRef!=None:                
+                if lastLat!=None and lastLon!=None:
+                    distance=distance+self.osmutils.distance(lat, lon, lastLat, lastLon)
                 
-                if lat!=None and lon!=None:
-                    if lastLat!=None and lastLon!=None:
-                        distance=distance+self.osmutils.distance(lat, lon, lastLat, lastLon)
-                    
-                    lastLat=lat
-                    lastLon=lon
+                lastLat=lat
+                lastLon=lon
 
             if ref in doneRefs:
                 if len(refNodeList)!=0:
@@ -3558,9 +3550,8 @@ class OSMParserData():
     def createEdgeCoords(self, refList):
         coords=list()
         for ref in refList:
-            storedRef, country=self.getCountryOfRef(ref)
-            if storedRef!=None and country!=None:
-                lat, lon=self.getCoordsWithRefAndCountry(ref, country)
+            storedRef, lat, lon=self.getCoordsEntry(ref)
+            if storedRef!=None:
                 coords.append((lat, lon))
             else:
                 # it is possible that we dont have these coords
@@ -3856,6 +3847,7 @@ class OSMParserData():
 
     def initDB(self):
         print(self.getDataDir())
+        self.openCoordsDB()
         createEdgeDB=not self.edgeDBExists()
         if createEdgeDB:
             self.openEdgeDB()
@@ -3897,7 +3889,6 @@ class OSMParserData():
             self.country=country
             self.debugCountry=country
             self.setDBCursorForCountry(country)
-            self.openCoordsDB()
             
             print(self.osmList[country])
             self.initCountryData()
@@ -3917,7 +3908,6 @@ class OSMParserData():
             self.commitAdressDB()
             self.commitCountryDB(country)
             self.commitGlobalCountryDB()
-            self.closeCoordsDB()
                             
         for country in countryList:
             self.country=country
@@ -3952,7 +3942,8 @@ class OSMParserData():
 
             self.commitEdgeDB()    
                            
-        self.initGraph()   
+        self.initGraph() 
+        self.closeCoordsDB()
         self.closeAllDB()
 
     def initBoarders(self):
