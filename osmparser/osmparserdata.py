@@ -476,10 +476,10 @@ class OSMParserData():
         self.cursorCoords.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
 
     def addToCoordsTable(self, ref, lat, lon):
-        self.cursorCoords.execute('INSERT INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
+        self.cursorCoords.execute('INSERT OR IGNORE INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
     
     def addToWayRefTable(self, wayId, refs):
-        self.cursorCoords.execute('INSERT INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
+        self.cursorCoords.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
         
     def getCoordsEntry(self, ref):
         self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))

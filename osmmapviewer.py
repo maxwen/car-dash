@@ -15,6 +15,7 @@ from collections import deque, OrderedDict
 import fnmatch
 import time
 import env
+import cProfile
 
 from PyQt4.QtCore import QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
@@ -1279,9 +1280,7 @@ class QtOSMWidget(QWidget):
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
             
-#        start=time.time()
 #        self.displayVisibleEdges()
-#        print("displayVisibleEdges:%f"%(time.time()-start))
         
         self.painter.resetTransform()
         
@@ -1308,7 +1307,7 @@ class QtOSMWidget(QWidget):
 
   
     def getStreetTypeListForZoom(self):
-        if self.map_zoom in range(16, 18):
+        if self.map_zoom in range(16, 19):
             return [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14]
         if self.map_zoom in range(14, 16):
             return [2, 3, 4, 6, 7, 8, 9, 10, 11, 12]
@@ -1323,7 +1322,11 @@ class QtOSMWidget(QWidget):
             pen=self.edgePen
             pen.setWidth(3)
             bbox=self.getVisibleBBoxDeg2()
+            
+            start=time.time()
             resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
+            print("displayVisibleEdges:%f"%(time.time()-start))
+
             for edge in resultList:
                 _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
                 streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
@@ -2414,9 +2417,9 @@ class QtOSMWidget(QWidget):
                     country=osmParserData.getCountryOfPos(lat, lon)
                     self.lastWayId=wayId
                     wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed=osmParserData.getWayEntryForIdAndCountry3(wayId, country)
-                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
+#                    print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
                     (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
-                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
+#                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                     
 #                    osmParserData.printCrossingsForWayId(wayId, country)
                     self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
@@ -3574,4 +3577,5 @@ def main(argv):
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
+#    cProfile.run('main(sys.argv)')
     main(sys.argv)

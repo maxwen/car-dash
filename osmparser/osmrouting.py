@@ -576,7 +576,7 @@ class OSMRouting():
                 self.updateCrossingDistances(lat, lon, distance, speed)
             
             # check if we turned on the edge
-            if (self.nearCrossing==False or self.approachingRef==None) and speed<30:
+            if (self.nearCrossing==False and speed<15) or self.approachingRef==None:
                 changed, newApproachingRef=self.isChangedApproachingRef(lat, lon, track)
                 if changed==True:
                     # can still be None
