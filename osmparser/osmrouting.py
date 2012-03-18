@@ -19,6 +19,7 @@ NO_CROSSING_SPEED=60
 NEAR_CROSSING_LENGTH_MIN=NORMAL_EDGE_RANGE
 PAST_CROSSING_LENGTH_MIN=15.0
 CROSSING_CALC_LENGTH_MIN=NORMAL_EDGE_RANGE*2
+CLOSE_SEARCH_MARGIN=0.0001
 
 class OSMRouting():
     def __init__(self, osmParserData):
@@ -185,19 +186,11 @@ class OSMRouting():
             nextEdgeLength=expectedNextEdge[3]
             return expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges
             
-        minHeadingDiff=360
-        minHeadingEntry=None
-        i=0
-        for heading in edgeHeadings:
-            if heading!=None:
-                # use best matching heading
-                headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
-                if headingDiff < minHeadingDiff:
-                    minHeadingDiff=headingDiff
-                    minHeadingEntry=i
-                
-            i=i+1
-        self.debugPrint(lat, lon, "minHeadingDiff=%f"%minHeadingDiff)
+        closestEdge=self.getCurrentBestMatchingEdge(lat, lon, track, possibleEdges, NORMAL_EDGE_RANGE)
+        if closestEdge==None:
+            return None, None, None, None
+        
+        minHeadingEntry=possibleEdges.index(closestEdge)
         if minHeadingEntry!=None:
             i=0
             for heading in edgeHeadings:
@@ -674,6 +667,73 @@ class OSMRouting():
             if currentEdgeData!=None and edge==currentEdgeData:
                 return currentEdgeData
             
+            streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
+                                                
+            lat1, lon1=coords[0]
+            for lat2, lon2 in coords[1:]:
+                onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+                if onLine==True:
+                    if oneway==0 or oneway==2:
+                        heading=self.osmutils.headingDegrees(lat2, lon2, lat1, lon1)
+                        headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
+                        if headingDiff<CLOSE_HEADING_RANGE and headingDiff < minHeadingDiff:
+                            if distance<minDistance:
+                                minHeadingDiff=headingDiff
+                                minDistance=distance
+                                closestEdge=edge
+                        
+                    if oneway==0 or oneway==1 or roundabout==1:
+                        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+                        headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
+                        if headingDiff<CLOSE_HEADING_RANGE and headingDiff < minHeadingDiff:
+                            if distance<minDistance:
+                                minHeadingDiff=headingDiff
+                                minDistance=distance
+                                closestEdge=edge
+
+                lat1=lat2
+                lon1=lon2
+                    
+        return closestEdge
+    
+    def getMatchinEdgesInMargin(self, lat, lon, track, margin, maxDistance):
+        resultList=self.osmParserData.getEdgesInBboxWithGeom(lat, lon, margin)  
+        edgeList=list()
+        minHeadingDiff=CLOSE_HEADING_RANGE
+                    
+        for edge in resultList:
+            _, _, _, _, _, _, _, _, _, streetInfo, coords=edge            
+            streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
+                                                
+            lat1, lon1=coords[0]
+            for lat2, lon2 in coords[1:]:
+                onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+                if onLine==True:
+                    if oneway==0 or oneway==2:
+                        heading=self.osmutils.headingDegrees(lat2, lon2, lat1, lon1)
+                        headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
+                        if headingDiff<CLOSE_HEADING_RANGE and headingDiff < minHeadingDiff:
+                            edgeList.append(edge)
+                        
+                    if oneway==0 or oneway==1 or roundabout==1:
+                        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+                        headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
+                        if headingDiff<CLOSE_HEADING_RANGE and headingDiff < minHeadingDiff:
+                            edgeList.append(edge)
+
+
+                lat1=lat2
+                lon1=lon2
+                    
+        return edgeList
+    
+    def getCurrentBestMatchingEdge(self, lat, lon, track, possibleEdges, maxDistance):
+        closestEdge=None
+        minDistance=maxDistance
+        minHeadingDiff=CLOSE_HEADING_RANGE
+                    
+        for edge in possibleEdges:
+            _, _, _, _, _, _, _, _, _, streetInfo, coords=edge            
             streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
                                                 
             lat1, lon1=coords[0]
