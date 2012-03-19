@@ -1457,6 +1457,7 @@ class OSMOptionsDialog(QDialog):
         self.withDownload=parent.getWithDownloadValue()
         self.withMapnik=parent.getWithMapnikValue()
         self.withMapRotation=parent.getWithMapRotationValue()
+        self.withShowGL=parent.getShowGLValue()
         self.initUI()
 
     def initUI(self):
@@ -1469,30 +1470,31 @@ class OSMOptionsDialog(QDialog):
 
         self.followGPSButton=QCheckBox("Follow GPS", self)
         self.followGPSButton.setIcon(self.gpsIcon)
-#        self.followGPSButton.setToolTip("Follow GPS")
         self.followGPSButton.setIconSize(iconSize) 
         self.followGPSButton.setChecked(self.followGPS)       
         top.addWidget(self.followGPSButton)
         
         self.downloadTilesButton=QCheckBox("Download missing tiles", self)
         self.downloadTilesButton.setIcon(self.downloadIcon)
-#        self.downloadTilesButton.setToolTip("Download")
         self.downloadTilesButton.setChecked(self.withDownload)
         self.downloadTilesButton.setIconSize(iconSize)        
         top.addWidget(self.downloadTilesButton)
 
         self.withMapnikButton=QCheckBox("Use Mapnik", self)
-#        self.downloadTilesButton.setToolTip("Download")
         self.withMapnikButton.setChecked(self.withMapnik)
         self.withMapnikButton.setIconSize(iconSize)        
         top.addWidget(self.withMapnikButton)
 
         self.withMapRotationButton=QCheckBox("Map rotation", self)
-#        self.downloadTilesButton.setToolTip("Download")
         self.withMapRotationButton.setChecked(self.withMapRotation)
         self.withMapRotationButton.setIconSize(iconSize)        
         top.addWidget(self.withMapRotationButton)
-        
+
+        self.withShowGLButton=QCheckBox("Use GL View", self)
+        self.withShowGLButton.setChecked(self.withShowGL)
+        self.withShowGLButton.setIconSize(iconSize)        
+        top.addWidget(self.withShowGLButton)   
+             
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1522,6 +1524,8 @@ class OSMOptionsDialog(QDialog):
         self.followGPS=self.followGPSButton.isChecked()
         self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
+        self.withShowGL=self.withShowGLButton.isChecked()
+        
         self.done(QDialog.Accepted)
 
 class OSMGPSDataDialog(QDialog):

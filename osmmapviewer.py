@@ -1088,7 +1088,7 @@ class QtOSMWidget(QWidget):
         self.painter.drawPolyline(polygon)
 
     # only use if transform is active
-    def displayEdges(self, edgeList, expectedNextEdge, approachingRef):
+    def displayRoutingEdges(self, edgeList, expectedNextEdge, approachingRef):
 #        print(edgeList)
         pen=QPen()
         pen.setWidth(3)
@@ -1272,7 +1272,7 @@ class QtOSMWidget(QWidget):
                     
         if WITH_CROSSING_DEBUG==True:
             if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
-                self.displayEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
+                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
     
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())

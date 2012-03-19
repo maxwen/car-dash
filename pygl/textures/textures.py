@@ -172,7 +172,7 @@ void main(void)
 
     def resizeGL(self, width, height):
         side = min(width, height)
-        glViewport((width - side) / 2, (height - side) / 2, side, side)
+        glViewport(int((width - side) / 2), int((height - side) / 2), side, side)
 
     def mousePressEvent(self, event):
         self.lastPos = event.pos()
@@ -199,7 +199,7 @@ void main(void)
         for i in range(6):
             self.textures.append(
                     self.bindTexture(
-                            QtGui.QPixmap(':/images/side%d.png' % (i + 1))))
+                            QtGui.QPixmap('/home/maxl/workspaces/pydev/car-dash/pygl/textures/images/side%d.png' % (i + 1))))
 
             for j in range(4):
                 self.texCoords.append(((j == 0 or j == 3), (j == 0 or j == 1)))
@@ -257,7 +257,6 @@ class Window(QtGui.QWidget):
 
 
 if __name__ == '__main__':
-
     app = QtGui.QApplication(sys.argv)
     window = Window()
     window.show()
