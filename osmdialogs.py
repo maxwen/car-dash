@@ -1457,7 +1457,7 @@ class OSMOptionsDialog(QDialog):
         self.withDownload=parent.getWithDownloadValue()
         self.withMapnik=parent.getWithMapnikValue()
         self.withMapRotation=parent.getWithMapRotationValue()
-        self.withShowGL=parent.getShowGLValue()
+        self.withShow3D=parent.getShow3DValue()
         self.initUI()
 
     def initUI(self):
@@ -1490,8 +1490,8 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotationButton.setIconSize(iconSize)        
         top.addWidget(self.withMapRotationButton)
 
-        self.withShowGLButton=QCheckBox("Use GL View", self)
-        self.withShowGLButton.setChecked(self.withShowGL)
+        self.withShowGLButton=QCheckBox("Use 3D View", self)
+        self.withShowGLButton.setChecked(self.withShow3D)
         self.withShowGLButton.setIconSize(iconSize)        
         top.addWidget(self.withShowGLButton)   
              
@@ -1524,7 +1524,7 @@ class OSMOptionsDialog(QDialog):
         self.followGPS=self.followGPSButton.isChecked()
         self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
-        self.withShowGL=self.withShowGLButton.isChecked()
+        self.withShow3D=self.withShowGLButton.isChecked()
         
         self.done(QDialog.Accepted)
 

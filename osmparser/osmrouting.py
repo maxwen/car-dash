@@ -515,7 +515,7 @@ class OSMRouting():
             
         # check the current expected
         if not self.checkEdgeDataForPos(lat, lon, edge, maxDistance):
-            if self.distanceFromCrossing>self.nextEdgeLength:
+            if self.distanceFromCrossing>self.longestPossibleEdge:
                 self.debugPrint(lat, lon, "distance from crossing longer then edge length  fallback")
                 return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
             
@@ -601,7 +601,7 @@ class OSMRouting():
                                 elif onlyOneMatchingEdge==None:
                                     self.debugPrint(lat, lon, "current point match none of the possible edge")
                                     
-                                if self.distanceFromCrossing>self.nextEdgeLength:
+                                if self.distanceFromCrossing>self.longestPossibleEdge:
                                     self.debugPrint(lat, lon, "distance from crossing longer then edge length  fallback")
                                     return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
                             

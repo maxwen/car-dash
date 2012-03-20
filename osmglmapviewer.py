@@ -636,7 +636,7 @@ class QtOSMWidget(QGLWidget):
         self.altitude=0
         self.currentDisplayBBox=None
         self.setAutoFillBackground(False)
-        self.showGL=True
+        self.show3D=True
         self.backgroundColor=QColor(120, 120, 120, 200)
 
 #        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
@@ -791,7 +791,7 @@ class QtOSMWidget(QGLWidget):
         return x
 
     def getMapZeroPos(self):
-        if self.showGL==True:
+        if self.show3D==True:
             map_x=int(self.center_x-self.width()/2)
             map_y=int(self.center_y-self.height()/2)
             return (map_x, map_y)
@@ -967,7 +967,7 @@ class QtOSMWidget(QGLWidget):
 #        
 #        if self.heading!=None and self.withMapRotation==True:
 #            None
-###            self.painter.setTransform(self.transformHeading)
+###            self.painter.getTransform(self.transformHeading)
 ##            map_x, map_y=self.getMapZeroPos()
 ##            point=QPointF(xPos, yPos)   
 ##            invertedTransform=self.transformHeading.inverted()
@@ -976,7 +976,7 @@ class QtOSMWidget(QGLWidget):
 ##            xPos=point0.x()
 ##
 #        else:
-#            self.painter.setTransform(self.transformTrack)
+#            self.painter.getTransform(self.transformTrack)
 #       
 #        self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
 #        
@@ -986,17 +986,7 @@ class QtOSMWidget(QGLWidget):
         if self.gps_rlon==0.0 and self.gps_rlat==0.0:
             return
          
-        if self.showGL==True:
-            (y, x)=(self.height()/2+self.height()/4+13, self.width()/2)
-            
-            xPos=int(x-IMAGE_WIDTH/2)
-            yPos=int(y-IMAGE_HEIGHT/2)
-            
-            if self.track!=None:
-                self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
-            else:
-                self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImageStop)
-        else:
+        if self.show3D==False:
             if self.withMapRotation==True:
                 y,x=self.getTransformedPixelPosForLocationRad(self.gps_rlat, self.gps_rlon)
      
@@ -1019,7 +1009,7 @@ class QtOSMWidget(QGLWidget):
                     transform.rotate(self.track)
                 transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
     
-                self.painter.setTransform(transform)
+                self.painter.getTransform(transform)
            
                 x=self.osmutils.lon2pixel(self.map_zoom, self.gps_rlon)
                 y=self.osmutils.lat2pixel(self.map_zoom, self.gps_rlat)
@@ -1181,26 +1171,22 @@ class QtOSMWidget(QGLWidget):
         return [bboxLon1, bboxLat1, bboxLon2, bboxLat2]
 
     def getVisibleBBoxDegGL(self):
-        invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
+        bbox=self.getVisibleBBoxPointsGL()
         
-        point=QPointF(-100, 0-self.height()*2)        
-        point0=invertedTransform[0].map(point)        
+        point0=QPointF(bbox[0][0], bbox[0][1])        
         lat1 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon1 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
 
-        point=QPointF(self.width()+100, 0-self.height()*2)        
-        point0=invertedTransform[0].map(point)        
+        point0=QPointF(bbox[1][0], bbox[1][1])        
         lat2 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon2 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
             
-        point=QPointF(-100, self.height()/2+100)        
-        point0=invertedTransform[0].map(point)        
+        point0=QPointF(bbox[2][0], bbox[2][1])        
         lat3 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon3 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
 
-        point=QPointF(self.width()+100, self.height()/2+100)        
-        point0=invertedTransform[0].map(point)        
+        point0=QPointF(bbox[3][0], bbox[3][1])        
         lat4 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon4 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
             
@@ -1213,6 +1199,24 @@ class QtOSMWidget(QGLWidget):
         bboxLat2=max(latList)
                     
         return [bboxLon1, bboxLat1, bboxLon2, bboxLat2]
+
+    def getVisibleBBoxPointsGL(self):
+        invertedTransform=self.transformHeading.inverted()
+        
+        point=QPointF(0, 0-self.height()*1.5)        
+        point0=invertedTransform[0].map(point)        
+
+        point=QPointF(self.width(), 0-self.height()*1.5)        
+        point1=invertedTransform[0].map(point)        
+            
+        point=QPointF(0, self.height()/2+80)        
+        point2=invertedTransform[0].map(point)        
+
+        point=QPointF(self.width(), self.height()/2+80)        
+        point3=invertedTransform[0].map(point)        
+               
+        return [(point0.x(), point0.y()), (point1.x(), point1.y()), 
+                (point2.x(), point2.y()), (point3.x(), point3.y())]
 
     def show(self, zoom, lat, lon):
         self.osm_center_map_to_position(lat, lon)
@@ -1242,29 +1246,48 @@ class QtOSMWidget(QGLWidget):
                     QPixmap(os.path.join(env.getImageRoot(), "road-texture.png"))))
                 
     def paintEvent(self, event):
-        self.makeCurrent()
+#        self.makeCurrent()
 #        self.loadTexture()
                 
         self.transformHeading=QTransform()
         map_x, map_y=self.getMapZeroPos()
 
         self.transformHeading.translate( self.center_x-map_x, self.center_y-map_y )
-        if self.track!=None and (self.withMapRotation==True or self.showGL==True):
+        self.transformHeading.rotate(62, Qt.XAxis)
+
+        if self.track!=None and (self.withMapRotation==True or self.show3D==True):
             self.transformHeading.rotate(360-self.track)
         self.transformHeading.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
 
-        if self.showGL==True:
+        if self.show3D==True:
             GL.glMatrixMode(GL.GL_MODELVIEW)
             GL.glPushMatrix()
             
-            self.qglClearColor(Qt.white)
-            GL.glEnable(GL.GL_DEPTH_TEST)
+            self.qglClearColor(Qt.lightGray)
+            GL.glEnable(GL.GL_BLEND)
             GL.glEnable(GL.GL_LINE_SMOOTH)
-            GL.glEnable(GL.GL_NORMALIZE)
+            GL.glEnable(GL.GL_POINT_SMOOTH)
+            GL.glEnable(GL.GL_POLYGON_SMOOTH)
+            
+            GL.glEnable(GL.GL_MULTISAMPLE)
+#            GL.glEnable(GL.GL_NORMALIZE)
 #            GL.glEnable(GL.GL_TEXTURE_2D)
-            GL.glShadeModel(GL.GL_SMOOTH)
+
+#            GL.glShadeModel(GL.GL_SMOOTH)
+#            GL.glClearColor(0.5,0.5,0.5,1.0)
+#            GL.glEnable (GL.GL_FOG)
+#            GL.glFogi (GL.GL_FOG_MODE, GL.GL_EXP2)
+#            fogColor = [0.0, 0.0, 1.0, 1.0]
+#            GL.glFogfv (GL.GL_FOG_COLOR, fogColor)
+#            GL.glFogf (GL.GL_FOG_DENSITY, 0.3)
+##            GL.glFogf (GL.GL_FOG_START, 4.0)
+##            GL.glFogf (GL.GL_FOG_END, 3.0)
+##            GL.glHint (GL.GL_FOG_HINT, GL.GL_NICEST)
+    
             GL.glHint(GL.GL_PERSPECTIVE_CORRECTION_HINT, GL.GL_NICEST)
             GL.glHint(GL.GL_LINE_SMOOTH_HINT, GL.GL_NICEST)
+            GL.glHint(GL.GL_POLYGON_SMOOTH_HINT, GL.GL_NICEST)
+
 #            GL.glBindTexture(GL.GL_TEXTURE_2D, self.textures[0])
             
             self.setupViewport(self.width(), self.height())
@@ -1272,18 +1295,22 @@ class QtOSMWidget(QGLWidget):
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
             GL.glLoadIdentity()
             
-            GL.glTranslatef(0.0, -0.3, -2.0)
-            GL.glRotated(-65.0, 1.0, 0.0, 0.0)  
+            GL.glTranslatef(0.0, -0.4, -2.0)
+            GL.glRotated(-62.0, 1.0, 0.0, 0.0)  
 #            GLU.gluLookAt(0.0, 0.0, 0.0, 0.0,0.0,1.0)     
-                
+
+            GL.glPushMatrix()
+            
             if self.track!=None:
                 GL.glRotatef(self.track, 0.0, 0.0, 1.0)  
             
             self.displayVisibleEdgesGL()
+            self.displayBordersGL()
             
-            if self.currentCoords!=None:
-                self.displayEdgeGL(self.currentCoords, QColor(0, 0, 255, 150), 8.0)
+            GL.glPopMatrix()
             
+            self.displayDirectionGL()
+              
             GL.glMatrixMode(GL.GL_MODELVIEW)
             GL.glPopMatrix()
         
@@ -1295,7 +1322,7 @@ class QtOSMWidget(QGLWidget):
         self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-        if self.showGL==True:
+        if self.show3D==True:
             self.displayMapGL()
         else:
             self.displayMap()
@@ -1323,7 +1350,7 @@ class QtOSMWidget(QGLWidget):
     def displayMapGL(self):
         self.showEnforcementInfo()
         
-        self.osm_gps_show_location()
+#        self.osm_gps_show_location()
 
         self.showControlOverlay()
         
@@ -1337,7 +1364,7 @@ class QtOSMWidget(QGLWidget):
         self.showTunnelInfo()
             
     def displayMap(self):                
-        self.painter.setTransform(self.transformHeading)
+        self.painter.getTransform(self.transformHeading)
             
         self.showTiles()
 
@@ -1402,23 +1429,23 @@ class QtOSMWidget(QGLWidget):
                 if streetTypeId in self.getStreetTypeListForZoom():
                     self.displayEdge(coords, pen)
 
-    def displayEdgeGL(self, coords, color, lineWidth):
-        self.qglColor(color)
-        GL.glLineWidth(lineWidth)   
-
-        GL.glBegin(GL.GL_LINE_STRIP)
-        lat, lon=coords[0] 
-        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-        xGL, yGL=self.convertCoordsToGL(x, y)
-        GL.glVertex2f(xGL, yGL)
-
-        for point in coords[1:]:
-            lat, lon=point 
-            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-            xGL, yGL=self.convertCoordsToGL(x, y)
-
-            GL.glVertex2f(xGL, yGL)
-        GL.glEnd() 
+#    def displayEdgeGL(self, coords, color, lineWidth):
+#        self.qglColor(color)
+#        GL.glLineWidth(lineWidth)   
+#
+#        GL.glBegin(GL.GL_LINE_STRIP)
+#        lat, lon=coords[0] 
+#        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+#        xGL, yGL=self.convertCoordsToGL(x, y)
+#        GL.glVertex2f(xGL, yGL)
+#
+#        for point in coords[1:]:
+#            lat, lon=point 
+#            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+#            xGL, yGL=self.convertCoordsToGL(x, y)
+#
+#            GL.glVertex2f(xGL, yGL)
+#        GL.glEnd() 
 
 #    def intersection(self, p1, p2, p3, p4):
 #        x1 = p1[0]
@@ -1502,16 +1529,47 @@ class QtOSMWidget(QGLWidget):
         
         return (px1, py1),(px2, py2)  
 
+    def displayBBoxGL(self, bbox):
+        GL.glLineWidth(1.0)
+        self.qglColor(Qt.green)
+        GL.glBegin(GL.GL_LINE_STRIP)
+        
+        x, y=bbox[0]
+        x1GL, y1GL=self.convertCoordsToGL(x, y)
+        GL.glVertex2f(x1GL, y1GL)
+
+        x, y=bbox[1]
+        x1GL, y1GL=self.convertCoordsToGL(x, y)
+        GL.glVertex2f(x1GL, y1GL)
+
+        x, y=bbox[3]
+        x1GL, y1GL=self.convertCoordsToGL(x, y)
+        GL.glVertex2f(x1GL, y1GL)
+
+        x, y=bbox[2]
+        x1GL, y1GL=self.convertCoordsToGL(x, y)
+        GL.glVertex2f(x1GL, y1GL)
+
+        x, y=bbox[0]
+        x1GL, y1GL=self.convertCoordsToGL(x, y)
+        GL.glVertex2f(x1GL, y1GL)
+        
+        GL.glEnd()
+
     def createQuad(self, p1, p2, p3, p4):
         GL.glBegin(GL.GL_QUADS)
 
         x1GL, y1GL=self.convertCoordsToGL(p1[0], p1[1])
+#        GL.glTexCoord2f(0.5, 0.0)
         GL.glVertex2f(x1GL, y1GL)
         x2GL, y2GL=self.convertCoordsToGL(p3[0], p3[1])
+#        GL.glTexCoord2f(0.5, 1.0)
         GL.glVertex2f(x2GL, y2GL)
         x3GL, y3GL=self.convertCoordsToGL(p4[0], p4[1])
+#        GL.glTexCoord2f(0.5, 1.0)
         GL.glVertex2f(x3GL, y3GL)
         x4GL, y4GL=self.convertCoordsToGL(p2[0], p2[1])
+#        GL.glTexCoord2f(0.5, 0.0)
         GL.glVertex2f(x4GL, y4GL)
         
         GL.glEnd()
@@ -1553,12 +1611,10 @@ class QtOSMWidget(QGLWidget):
 
         lat1, lon1=coords[0] 
         (y1, x1)=self.getPixelPosForLocationDeg(lat1, lon1, True)
-        self.createCircle2(x1, y1, lineWidth)
         i=0
         for coord in coords[1:]:
             lat2, lon2=coord
             (y2, x2)=self.getPixelPosForLocationDeg(lat2, lon2, True)
-            self.createCircle2(x2, y2, lineWidth)
 
             p1, p2=self.getParalell(x1, y1, x2, y2, lineWidth/2)
             p3, p4=self.getParalell(x1, y1, x2, y2, -lineWidth/2) 
@@ -1568,7 +1624,22 @@ class QtOSMWidget(QGLWidget):
             x1=x2
             y1=y2
             i=i+1
-        
+
+    def displayEdgeCirclesGL2(self, coords, color, lineWidth):
+        self.qglColor(color)
+
+        lat1, lon1=coords[0] 
+        (y1, x1)=self.getPixelPosForLocationDeg(lat1, lon1, True)
+        self.createCircle2(x1, y1, lineWidth)
+        i=0
+        for coord in coords[1:]:
+            lat2, lon2=coord
+            (y2, x2)=self.getPixelPosForLocationDeg(lat2, lon2, True)
+            self.createCircle2(x2, y2, lineWidth)
+            
+            x1=x2
+            y1=y2
+            i=i+1        
         
     def getRelativePenWidthForZoom(self):
         if self.map_zoom==18:
@@ -1583,46 +1654,157 @@ class QtOSMWidget(QGLWidget):
             return 0.2
         return 0.1
     
-    def getStreetWidth(self, streetTypeId):
+    def getStreetPropertiesGL(self, streetTypeId):
+        color=QColor(0xdd, 0xdd, 0xdd)
         width=10
         if streetTypeId==2:
             width=width*2
-        # motorway exit
+            color=QColor(0x80, 0x9b, 0xc0)
+        # motorway link
         elif streetTypeId==3:
             width=width*1
+            color=QColor(0x80, 0x9b, 0xc0)
         # trunk
         elif streetTypeId==4:
             width=width*1.6
-        # trunk exit
+            color=QColor(0xa9, 0xdb, 0xa9)
+        # trunk link
         elif streetTypeId==5:
             width=width*1
+            color=QColor(0xa9, 0xdb, 0xa9)
         # primary
         elif streetTypeId==6 or streetTypeId==7:
             width=width*1.4
+            color=QColor(0xec, 0x98, 0x9a)
         # secondary
         elif streetTypeId==8 or streetTypeId==9:
             width=width*1.2
+            color=QColor(0xfe, 0xd7, 0xa5)
         # tertiary
         elif streetTypeId==10 or streetTypeId==11:
             width=width*1.0
+            color=QColor(0xff, 0xff, 0xb3)
         # residential
         elif streetTypeId==12:
             width=width*1.0
+            color=QColor(0xdd, 0xdd, 0xdd)
             
-        return self.getRelativePenWidthForZoom()*width
+        return self.getRelativePenWidthForZoom()*width, color
     
+    def displayVisibleEdgesGLCasing(self, edgeList):
+        casingColor=Qt.black
+        for edge in edgeList:
+            _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+            streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+            if streetTypeId in self.getStreetTypeListForZoom():
+                lineWidth, _=self.getStreetPropertiesGL(streetTypeId)
+                lineWidth=lineWidth+4
+                self.displayEdgeCirclesGL2(coords, casingColor, lineWidth)
+
+        for edge in edgeList:
+            _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+            streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+            if streetTypeId in self.getStreetTypeListForZoom():
+                lineWidth, _=self.getStreetPropertiesGL(streetTypeId)
+                lineWidth=lineWidth+4
+                self.displayEdgeGL2(coords, casingColor, lineWidth)
+
+    def displayVisibleEdgesGLFill(self, edgeList):
+        for edge in edgeList:
+            edgeId, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+            streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+            if streetTypeId in self.getStreetTypeListForZoom():
+                lineWidth, roadColor=self.getStreetPropertiesGL(streetTypeId)
+                self.displayEdgeCirclesGL2(coords, roadColor, lineWidth)
+
+        for edge in edgeList:
+            edgeId, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+            streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+            if streetTypeId in self.getStreetTypeListForZoom():
+                lineWidth, roadColor=self.getStreetPropertiesGL(streetTypeId)
+                self.displayEdgeGL2(coords, roadColor, lineWidth)    
+            
+    def displayCurrentRouteGL(self, edgeList):
+        if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and not self.routeCalculationThread.isRunning():
+            if self.currentEdgeList==None:
+                return
+            
+            routeColor=Qt.red
+            for edge in edgeList:
+                edgeId, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+                if edgeId in self.currentEdgeList:
+                    streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+                    if streetTypeId in self.getStreetTypeListForZoom():
+                        lineWidth, roadColor=self.getStreetPropertiesGL(streetTypeId)
+                        self.displayEdgeCirclesGL2(coords, routeColor, lineWidth)
+    
+            for edge in edgeList:
+                edgeId, _, _, _, _, _, _, _, _, streetInfo, coords=edge
+                if edgeId in self.currentEdgeList:
+                    streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+                    if streetTypeId in self.getStreetTypeListForZoom():
+                        lineWidth, roadColor=self.getStreetPropertiesGL(streetTypeId)
+                        self.displayEdgeGL2(coords, routeColor, lineWidth)    
+                 
+    def displayCurrentEdge(self):
+        currentEdgeData=osmRouting.currentEdgeData
+        if currentEdgeData==None:
+            return
+        
+        streetInfo=currentEdgeData[9]
+        coords=currentEdgeData[10]
+        currentEdgeColor=Qt.yellow
+        
+        streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
+
+        if streetTypeId in self.getStreetTypeListForZoom():
+            lineWidth, _=self.getStreetPropertiesGL(streetTypeId)
+            self.displayEdgeCirclesGL2(coords, currentEdgeColor, lineWidth)
+
+        if streetTypeId in self.getStreetTypeListForZoom():
+            lineWidth, _=self.getStreetPropertiesGL(streetTypeId)
+            self.displayEdgeGL2(coords, currentEdgeColor, lineWidth)     
+                                       
     def displayVisibleEdgesGL(self):
-        print(self.map_zoom)
         if self.osmWidget.dbLoaded:
             bbox=self.getVisibleBBoxDegGL()
-            roadColor=Qt.red
             resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
-            for edge in resultList:
-                _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
-                streetTypeId, oneway, roundabout=osmParserData.decodeStreetInfo(streetInfo)
-                if streetTypeId in self.getStreetTypeListForZoom():
-                    lineWidth=self.getStreetWidth(streetTypeId)
-                    self.displayEdgeGL2(coords, roadColor, lineWidth)
+            
+            self.displayVisibleEdgesGLCasing(resultList)
+            self.displayVisibleEdgesGLFill(resultList)
+            
+            if self.currentRoute!=None and not self.currentRoute.isRouteFinished():
+                self.displayCurrentRouteGL(resultList)
+            else:
+                self.displayCurrentEdge()
+
+    def displayBordersGL(self):
+        self.displayBBoxGL(self.getVisibleBBoxPointsGL())
+
+        GL.glLineWidth(1.0)
+        self.qglColor(Qt.green)
+        self.createCircle2(self.width()/2, self.height()/2, 8)
+
+    def displayDirectionGL(self):
+        if self.gps_rlon==0.0 and self.gps_rlat==0.0:
+            return
+
+        GL.glLineWidth(2.0)
+        self.qglColor(Qt.red)
+        x=self.width()/2
+        y=self.height()/2
+        GL.glBegin(GL.GL_TRIANGLE_FAN)
+
+        xGL, yGL=self.convertCoordsToGL(x - 10, y + 20)
+        GL.glVertex2f(xGL, yGL)
+
+        xGL, yGL=self.convertCoordsToGL(x, y - 20)
+        GL.glVertex2f(xGL, yGL)
+            
+        xGL, yGL=self.convertCoordsToGL(x + 10, y + 20)
+        GL.glVertex2f(xGL, yGL)            
+    
+        GL.glEnd()
 
     def showTextInfoBackground(self):
         textBackground=QRect(0, self.height()-50, self.width(), 50)
@@ -2993,7 +3175,7 @@ class QtOSMWidget(QGLWidget):
 
     def showTrackOnMousePos(self, x, y):
         # TODO: can we calculate the pos in GL mode?
-        if self.osmWidget.dbLoaded==True and self.showGL==False:
+        if self.osmWidget.dbLoaded==True and self.show3D==False:
             (lat, lon)=self.getMousePosition(x, y)
             self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)
 
@@ -3294,7 +3476,7 @@ class OSMWidget(QWidget):
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
             oldMapnikValue=self.getWithMapnikValue()
-            oldShowGLValue=self.getShowGLValue()
+            oldShowGLValue=self.getShow3DValue()
             self.setWithDownloadValue(optionsDialog.withDownload)
             self.setAutocenterGPSValue(optionsDialog.followGPS)
             self.setWithMapnikValue(optionsDialog.withMapnik)
@@ -3302,8 +3484,8 @@ class OSMWidget(QWidget):
             if optionsDialog.withMapnik!=oldMapnikValue:
                 self.mapWidgetQt.cleanImageCache()
                 self.mapWidgetQt.update()
-            self.setShowGLValue(optionsDialog.withShowGL)
-            if optionsDialog.withShowGL!=oldShowGLValue:
+            self.setShow3DValue(optionsDialog.withShow3D)
+            if optionsDialog.withShow3D!=oldShowGLValue:
                 self.mapWidgetQt.update()
             
             
@@ -3472,11 +3654,11 @@ class OSMWidget(QWidget):
     def setAutocenterGPSValue(self, value):
         self.mapWidgetQt.autocenterGPS=value
 
-    def getShowGLValue(self):
-        return self.mapWidgetQt.showGL
+    def getShow3DValue(self):
+        return self.mapWidgetQt.show3D
     
-    def setShowGLValue(self, value):
-        self.mapWidgetQt.showGL=value
+    def setShow3DValue(self, value):
+        self.mapWidgetQt.show3D=value
                    
     def getWithDownloadValue(self):
         return self.mapWidgetQt.withDownload
@@ -3520,7 +3702,7 @@ class OSMWidget(QWidget):
         self.setTileServer(config.getDefaultSection().get("tileServer", defaultTileServer))
         self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
         self.setWithMapRotationValue(config.getDefaultSection().getboolean("withMapRotation", False))
-        self.setShowGLValue(config.getDefaultSection().getboolean("withGLView", False))
+        self.setShow3DValue(config.getDefaultSection().getboolean("withGLView", False))
 
         section="favorites"
         self.favoriteList=list()
@@ -3539,7 +3721,7 @@ class OSMWidget(QWidget):
         config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())
         config.getDefaultSection()["withMapnik"]=str(self.getWithMapnikValue())
         config.getDefaultSection()["withMapRotation"]=str(self.getWithMapRotationValue())
-        config.getDefaultSection()["withGLView"]=str(self.getShowGLValue())
+        config.getDefaultSection()["withGLView"]=str(self.getShow3DValue())
         if self.mapWidgetQt.gps_rlat!=0.0:
             config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
         else:

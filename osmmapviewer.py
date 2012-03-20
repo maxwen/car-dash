@@ -631,9 +631,10 @@ class QtOSMWidget(QWidget):
         self.isInTunnel=False
         self.altitude=0
         self.currentDisplayBBox=None
+        self.show3D=True
 
-        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
-        self.setAttribute( Qt.WA_NoSystemBackground, True )
+#        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
+#        self.setAttribute( Qt.WA_NoSystemBackground, True )
         
         self.initPens()
         
@@ -780,16 +781,31 @@ class QtOSMWidget(QWidget):
 
     def getMapZeroPos(self):
         map_x=int(self.center_x-self.width()/2)
+        
         if self.withMapRotation==True and self.autocenterGPS==True:
             map_y=int(self.center_y-self.height()/2)-self.height()/4
         else:
             map_y=int(self.center_y-self.height()/2)
         return (map_x, map_y)
     
+    def getMapZeroPos2(self, width, height):
+        map_x=int(self.center_x-width/2)
+        map_y=int(self.center_y-height/2)
+        return (map_x, map_y)
+    
     def printTilesGeometry(self):
         print("%d %d %d %f %f %s %f %f"%(self.center_x, self.center_y, self.map_zoom, self.osmutils.rad2deg(self.center_rlon), self.osmutils.rad2deg(self.center_rlat), self.getMapZeroPos(), self.osmutils.rad2deg(self.gps_rlon), self.osmutils.rad2deg(self.gps_rlat)))
     
-    def showTiles (self):        
+    def showTiles (self):     
+#        invertedTransform=self.transformHeading.inverted()
+#        boundingBox = invertedTransform[0].mapRect( QRect( 0, 0, self.width(), self.height() ) )
+   
+#        map_x=int(self.center_x-boundingBox.width()/2)
+#        map_y=int(self.center_y-boundingBox.height()/2)
+#        print(map_x)
+#        print(map_y)
+        
+#        map_x, map_y=self.getMapZeroPos2(boundingBox.width(), boundingBox.height())
         map_x, map_y=self.getMapZeroPos()
                     
         offset_x = - map_x % TILESIZE;
@@ -943,27 +959,6 @@ class QtOSMWidget(QWidget):
             return pixbuf
         else:
             return self.getEmptyTile()
-
-#    def drawRotateGPSImageForTrack(self, x, y):
-#        xPos=int(x-IMAGE_WIDTH/2)
-#        yPos=int(y-IMAGE_HEIGHT/2)
-#        
-#        if self.heading!=None and self.withMapRotation==True:
-#            None
-###            self.painter.setTransform(self.transformHeading)
-##            map_x, map_y=self.getMapZeroPos()
-##            point=QPointF(xPos, yPos)   
-##            invertedTransform=self.transformHeading.inverted()
-##            point0=invertedTransform[0].map(point)
-##            yPos=point0.y()
-##            xPos=point0.x()
-##
-#        else:
-#            self.painter.setTransform(self.transformTrack)
-#       
-#        self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
-#        
-#        self.painter.resetTransform()
         
     def osm_gps_show_location(self):
         if self.gps_rlon==0.0 and self.gps_rlat==0.0:
@@ -975,22 +970,17 @@ class QtOSMWidget(QWidget):
             xPos=int(x-IMAGE_WIDTH/2)
             yPos=int(y-IMAGE_HEIGHT/2)
          
+            transform=self.getTransform(False, None)
+            self.painter.setTransform(transform)
+
             if self.track!=None:
                 self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
             else:
                 self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImageStop)
         
+            self.painter.resetTransform()
         else:
-            transform=QTransform()
-            map_x, map_y=self.getMapZeroPos()
-
-            transform.translate( self.center_x-map_x, self.center_y-map_y )
-#            if self.track!=None:
-#                transform.rotate(self.track)
-            if self.track!=None:
-                transform.rotate(self.track)
-            transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
-
+            transform=self.getTransform(True, self.track)
             self.painter.setTransform(transform)
        
             x=self.osmutils.lon2pixel(self.map_zoom, self.gps_rlon)
@@ -1005,10 +995,7 @@ class QtOSMWidget(QWidget):
             
             xPos=int(x-IMAGE_WIDTH/2)
             yPos=int(y-IMAGE_HEIGHT/2)
-            
-#            print("osm_gps_show_location: %d %d %f %f"%(x, y, self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon)))
-            
-#            if self.track!=None:
+                        
             if self.track!=None:
                 self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH, IMAGE_HEIGHT, self.gpsPointImage)
             else:
@@ -1039,6 +1026,8 @@ class QtOSMWidget(QWidget):
             (pixel_y, pixel_x)=self.getPixelPosForLocationRad(lat, lon, False)
             self.center_x=pixel_x
             self.center_y=pixel_y
+            print(pixel_x)
+            print(pixel_y)
             self.center_coord_update();
             self.update()
             
@@ -1118,44 +1107,21 @@ class QtOSMWidget(QWidget):
                 self.painter.setPen(pen)
                 self.painter.drawPoint(x, y)
 
-    # get bbox in deg mapnik style (left, bottom, right, top)
-    # untransformed
-#    def getVisibleBBoxDeg(self, margin=0):
-#        invertedTransform=self.transformHeading.inverted()
-#        map_x, map_y=self.getMapZeroPos()
-#
-#        point=QPointF(0, 0+self.height())        
-#        point0=invertedTransform[0].map(point)        
-#        rlat1 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()+margin);
-#        rlon1 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()-margin);
-#
-#        point=QPointF(self.width(), 0)        
-#        point0=invertedTransform[0].map(point)        
-#        rlat2 = self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()-margin);
-#        rlon2 = self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()+margin);
-#        
-#        return [self.osmutils.rad2deg(rlon1), self.osmutils.rad2deg(rlat1), 
-#                self.osmutils.rad2deg(rlon2), self.osmutils.rad2deg(rlat2)]
-#
-#    # get bbox in deg with margin mapnik style (left, bottom, right, top)
-#    def getVisibleBBoxDegWithMargin(self):
-#        return self.getVisibleBBoxDeg(TILESIZE)
-
     def getVisibleBBoxDeg2(self):
         invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
         
         point=QPointF(0, 0)        
-        point0=invertedTransform[0].map(point)        
+        point0=invertedTransform[0].map(point)   
         lat1 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon1 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
 
-        point=QPointF(self.width(), 0)        
+        point=QPointF(self.width(), 0)            
         point0=invertedTransform[0].map(point)        
         lat2 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon2 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
             
-        point=QPointF(0, self.height())        
+        point=QPointF(0, self.height())             
         point0=invertedTransform[0].map(point)        
         lat3 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon3 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
@@ -1190,18 +1156,9 @@ class QtOSMWidget(QWidget):
         self.osm_map_handle_resize()
              
 #    def showTiles2(self):
-#        self.painter.translate( self.width() / 2, self.height() / 2 )
-#        if self.useVirtualZoom==True:
-#            self.painter.scale( self.virtualZoom, self.virtualZoom )
+#        invertedTransform=self.transformHeading.inverted()
+#        boundingBox = invertedTransform[0].mapRect( QRect( 0, 0, self.width(), self.height() ) )
 #            
-#        if self.heading!=None and self.withMapRotation==True:
-#            self.painter.rotate(360-self.heading)
-#        self.painter.translate( -self.width() / 2, -self.height() / 2 )
-#
-#        transform = self.painter.worldTransform()
-#        inverseTransform = transform.inverted()
-#        boundingBox = inverseTransform[0].mapRect( QRect( 0, 0, self.width(), self.height() ) )
-#
 #        center_x=int(self.center_x/TILESIZE)+1
 #        center_y=int(self.center_y/TILESIZE)+1
 #        
@@ -1210,23 +1167,11 @@ class QtOSMWidget(QWidget):
 #        minY = math.floor( boundingBox.y() / TILESIZE + center_y )
 #        maxY = math.ceil( boundingBox.bottom() / TILESIZE + center_y )
 #        
-#        self.painter.resetTransform()
 #        print("%d %d %d %d"%(minX, minY, maxX, maxY))
-#        
-#        self.transformHeading=QTransform()
-#        self.transformHeading.translate( self.width() / 2, self.height() / 2 )
-#        
-#        if self.heading!=None and self.withMapRotation==True:
-#            self.transformHeading.rotate(360-self.heading)
-#        
-#        self.transformHeading.translate( -self.width() / 2, -self.height() / 2 )
-#        self.painter.setTransform(self.transformHeading)
-#
-#        posX = ( minX - center_x ) * TILESIZE
-#        for x in range(minX, maxX, 1):
-#            posY = ( minY - center_y ) * TILESIZE;
-#            for y in range(minY, maxY, 1):
-#                print("%d %d %d %d"%(x, y, posX, posY))
+#        posX = ( minX - center_x) * TILESIZE 
+#        for x in range(minX, maxX+1, 1):
+#            posY = ( minY - center_y ) * TILESIZE
+#            for y in range(minY, maxY+1, 1):
 #                pixbuf=self.getTile(self.map_zoom, x,y)
 #                
 #                self.drawPixmap(posX, posY, TILESIZE, TILESIZE, pixbuf)                
@@ -1234,6 +1179,20 @@ class QtOSMWidget(QWidget):
 #                posY += TILESIZE
 #            posX += TILESIZE
     
+    def getTransform(self, withMapRotate, rotateAngle):
+        transform=QTransform()
+        map_x, map_y=self.getMapZeroPos()
+        transform.translate( self.center_x-map_x, self.center_y-map_y )
+        
+        if self.show3D==True:
+            transform.rotate(50, Qt.XAxis)
+
+        if withMapRotate==True and rotateAngle!=None:
+            transform.rotate(rotateAngle)
+        
+        transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
+        return transform
+
     def paintEvent(self, event):
 #        print("paintEvent %s"%(QRectF(0, 0, self.width(), self.height())))
 #        print(self.pos())
@@ -1246,15 +1205,12 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
                 
-        self.transformHeading=QTransform()
-        map_x, map_y=self.getMapZeroPos()
+        rotateAngle=None
+        if self.track!=None:
+            rotateAngle=360-self.track
+            
+        self.transformHeading=self.getTransform(self.withMapRotation, rotateAngle)
 
-        self.transformHeading.translate( self.center_x-map_x, self.center_y-map_y )
-        
-        if self.track!=None and self.withMapRotation==True:
-            self.transformHeading.rotate(360-self.track)
-        
-        self.transformHeading.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
         self.painter.setTransform(self.transformHeading)
             
         self.showTiles()
@@ -1285,8 +1241,9 @@ class QtOSMWidget(QWidget):
         self.painter.resetTransform()
         
         self.showEnforcementInfo()
+        
         self.osm_gps_show_location()
-
+        
         self.showControlOverlay()
         
         self.showTextInfoBackground()
@@ -1320,7 +1277,7 @@ class QtOSMWidget(QWidget):
     def displayVisibleEdges(self):
         if self.osmWidget.dbLoaded:
             pen=self.edgePen
-            pen.setWidth(3)
+            pen.setWidth(8)
             bbox=self.getVisibleBBoxDeg2()
             
             start=time.time()
@@ -3006,6 +2963,7 @@ class OSMWidget(QWidget):
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
             oldMapnikValue=self.getWithMapnikValue()
+            oldShow3DValue=self.getShow3DValue()
             self.setWithDownloadValue(optionsDialog.withDownload)
             self.setAutocenterGPSValue(optionsDialog.followGPS)
             self.setWithMapnikValue(optionsDialog.withMapnik)
@@ -3013,6 +2971,10 @@ class OSMWidget(QWidget):
             if optionsDialog.withMapnik!=oldMapnikValue:
                 self.mapWidgetQt.cleanImageCache()
                 self.mapWidgetQt.update()
+            self.setShow3DValue(optionsDialog.withShow3D)
+            if optionsDialog.withShow3D!=oldShow3DValue:
+                self.mapWidgetQt.update()
+            
             
     @pyqtSlot()
     def _cleanup(self):
@@ -3178,8 +3140,13 @@ class OSMWidget(QWidget):
 
     def setAutocenterGPSValue(self, value):
         self.mapWidgetQt.autocenterGPS=value
-        #self.centerGPSButton.setDisabled(value==True)
-           
+
+    def getShow3DValue(self):
+        return self.mapWidgetQt.show3D
+    
+    def setShow3DValue(self, value):
+        self.mapWidgetQt.show3D=value
+                   
     def getWithDownloadValue(self):
         return self.mapWidgetQt.withDownload
 
@@ -3222,6 +3189,7 @@ class OSMWidget(QWidget):
         self.setTileServer(config.getDefaultSection().get("tileServer", defaultTileServer))
         self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
         self.setWithMapRotationValue(config.getDefaultSection().getboolean("withMapRotation", False))
+        self.setShow3DValue(config.getDefaultSection().getboolean("with3DView", False))
 
         section="favorites"
         self.favoriteList=list()
@@ -3240,6 +3208,7 @@ class OSMWidget(QWidget):
         config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())
         config.getDefaultSection()["withMapnik"]=str(self.getWithMapnikValue())
         config.getDefaultSection()["withMapRotation"]=str(self.getWithMapRotationValue())
+        config.getDefaultSection()["with3DView"]=str(self.getShow3DValue())
         if self.mapWidgetQt.gps_rlat!=0.0:
             config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
         else:
