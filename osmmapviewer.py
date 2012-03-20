@@ -18,7 +18,7 @@ import env
 import cProfile
 
 from PyQt4.QtCore import QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QLinearGradient, QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmrouting import OSMRouting
 
@@ -637,6 +637,9 @@ class QtOSMWidget(QWidget):
 #        self.setAttribute( Qt.WA_NoSystemBackground, True )
         
         self.initPens()
+#        palette=self.palette()
+#        palette.setColor(QPalette.Normal, QPalette.Background, Qt.blue)
+#        self.setPalette( palette )
         
     def createStreetPen(self, color):
         pen=QPen()
@@ -781,31 +784,19 @@ class QtOSMWidget(QWidget):
 
     def getMapZeroPos(self):
         map_x=int(self.center_x-self.width()/2)
-        
         if self.withMapRotation==True and self.autocenterGPS==True:
-            map_y=int(self.center_y-self.height()/2)-self.height()/4
+            map_y=int(self.center_y-self.height()/2)-self.height()/3
         else:
             map_y=int(self.center_y-self.height()/2)
         return (map_x, map_y)
     
-    def getMapZeroPos2(self, width, height):
-        map_x=int(self.center_x-width/2)
-        map_y=int(self.center_y-height/2)
-        return (map_x, map_y)
     
     def printTilesGeometry(self):
         print("%d %d %d %f %f %s %f %f"%(self.center_x, self.center_y, self.map_zoom, self.osmutils.rad2deg(self.center_rlon), self.osmutils.rad2deg(self.center_rlat), self.getMapZeroPos(), self.osmutils.rad2deg(self.gps_rlon), self.osmutils.rad2deg(self.gps_rlat)))
     
     def showTiles (self):     
-#        invertedTransform=self.transformHeading.inverted()
-#        boundingBox = invertedTransform[0].mapRect( QRect( 0, 0, self.width(), self.height() ) )
-   
-#        map_x=int(self.center_x-boundingBox.width()/2)
-#        map_y=int(self.center_y-boundingBox.height()/2)
-#        print(map_x)
-#        print(map_y)
-        
-#        map_x, map_y=self.getMapZeroPos2(boundingBox.width(), boundingBox.height())
+        width=self.width()
+        height=self.width()
         map_x, map_y=self.getMapZeroPos()
                     
         offset_x = - map_x % TILESIZE;
@@ -816,20 +807,20 @@ class QtOSMWidget(QWidget):
         if offset_y==0:
             offset_y= - TILESIZE
 
-#        print("%d %d %d %d"%(map_x, map_y, offset_x, offset_y))
+        print("%d %d %d %d"%(map_x, map_y, offset_x, offset_y))
         
-        if offset_x > 0:
-            offset_x -= TILESIZE*2
-        if offset_y > 0:
-            offset_y -= TILESIZE*2
+        if offset_x >= 0:
+            offset_x -= TILESIZE*4
+        if offset_y >= 0:
+            offset_y -= TILESIZE*4
 
 #        print("%d %d"%(offset_x, offset_y))
 
-        tiles_nx = int((self.width()  - offset_x) / TILESIZE + 1)+1
-        tiles_ny = int((self.height() - offset_y) / TILESIZE + 1)+1
+        tiles_nx = int((width  - offset_x) / TILESIZE + 1)+2
+        tiles_ny = int((height - offset_y) / TILESIZE + 1)+2
 
-        tile_x0 =  int(math.floor((map_x-TILESIZE) / TILESIZE))
-        tile_y0 =  int(math.floor((map_y-TILESIZE) / TILESIZE))
+        tile_x0 =  int(math.floor((map_x-TILESIZE) / TILESIZE))-2
+        tile_y0 =  int(math.floor((map_y-TILESIZE) / TILESIZE))-2
 
         i=tile_x0
         j=tile_y0
@@ -1191,8 +1182,41 @@ class QtOSMWidget(QWidget):
             transform.rotate(rotateAngle)
         
         transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
-        return transform
 
+        return transform
+    
+    def displayTestPoints(self):
+        pen=QPen(QColor(255, 0, 0))
+        pen.setWidth(20)
+        self.painter.setPen(pen)
+        self.painter.drawPoint(QPointF(self.width()/2, self.height()/2))
+        
+        map_x, map_y=self.getMapZeroPos()
+        pen=QPen(QColor(0, 255, 0))
+        pen.setWidth(15)
+        self.painter.setPen(pen)
+        self.painter.drawPoint(QPointF(self.center_x-map_x, self.center_y-map_y))
+        
+        (y, x)=self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon, True)
+        pen=QPen(QColor(0, 0, 255))
+        pen.setWidth(10)
+        self.painter.setPen(pen)
+        self.painter.drawPoint(QPointF(x, y))
+        
+        pen=QPen(QColor(255, 0, 0))
+        pen.setWidth(20)
+        self.painter.setPen(pen)
+        
+        map_x, map_y=self.getMapZeroPos()
+        point=QPointF(self.width()/2, 0)   
+        invertedTransform=self.transformHeading.inverted()
+        point0=invertedTransform[0].map(point)
+        self.painter.drawPoint(point0)
+
+#        point0=self.transformHeading.map(point)
+#        self.painter.drawPoint(point0)
+
+        
     def paintEvent(self, event):
 #        print("paintEvent %s"%(QRectF(0, 0, self.width(), self.height())))
 #        print(self.pos())
@@ -1210,9 +1234,9 @@ class QtOSMWidget(QWidget):
             rotateAngle=360-self.track
             
         self.transformHeading=self.getTransform(self.withMapRotation, rotateAngle)
-
-        self.painter.setTransform(self.transformHeading)
             
+        self.painter.setTransform(self.transformHeading)
+
         self.showTiles()
 #        self.showTiles2()
 
@@ -1238,8 +1262,17 @@ class QtOSMWidget(QWidget):
             
 #        self.displayVisibleEdges()
         
+#        self.displayTestPoints()
+        
         self.painter.resetTransform()
         
+        if self.show3D==True:
+            skyRect=QRectF(0, 0, self.width(), 100)
+            gradient=QLinearGradient(skyRect.topLeft(), skyRect.bottomLeft())
+            gradient.setColorAt(1, Qt.white)
+            gradient.setColorAt(0, Qt.blue)
+            self.painter.fillRect(skyRect, gradient)
+            
         self.showEnforcementInfo()
         
         self.osm_gps_show_location()
@@ -1647,21 +1680,6 @@ class QtOSMWidget(QWidget):
     def center_coord_update(self):
         self.center_rlon = self.osmutils.pixel2lon(self.map_zoom, self.center_x)
         self.center_rlat = self.osmutils.pixel2lat(self.map_zoom, self.center_y)
-        
-        # check if we are near the end of the "tiles area"
-        # and call for new tiles e.g. download or mapnik
-
-#        if self.lastCenterX!=None and self.lastCenterY!=None:
-#            if abs(self.lastCenterX-self.center_x)>TILESIZE or abs(self.lastCenterY-self.center_y)>TILESIZE:
-#                if self.withMapnik==True:
-#                    print("callMapnikForTile from center_coord_update")
-#                    self.callMapnikForTile()
-#
-#                self.lastCenterX=self.center_x
-#                self.lastCenterY=self.center_y
-#        else:
-#            self.lastCenterX=self.center_x
-#            self.lastCenterY=self.center_y
             
     def stepInDirection(self, step_x, step_y):
         map_x, map_y=self.getMapZeroPos()
@@ -1685,14 +1703,14 @@ class QtOSMWidget(QWidget):
     def stepRight(self, step):
         self.stepInDirection(step, 0)
 
-    def distanceFromLastPos(self, lat, lon):
-        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
-            self.lastHeadingLat=lat
-            self.lastHeadingLon=lon
-        else:    
-            print(self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon))
-            self.lastHeadingLat=lat
-            self.lastHeadingLon=lon
+#    def distanceFromLastPos(self, lat, lon):
+#        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
+#            self.lastHeadingLat=lat
+#            self.lastHeadingLon=lon
+#        else:    
+#            print(self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon))
+#            self.lastHeadingLat=lat
+#            self.lastHeadingLon=lon
                 
     def updateGPSLocation(self, gpsData, debug):
         lat=gpsData.getLat()

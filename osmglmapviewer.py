@@ -2197,14 +2197,14 @@ class QtOSMWidget(QGLWidget):
     def stepRight(self, step):
         self.stepInDirection(step, 0)
 
-    def distanceFromLastPos(self, lat, lon):
-        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
-            self.lastHeadingLat=lat
-            self.lastHeadingLon=lon
-        else:    
-            print(self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon))
-            self.lastHeadingLat=lat
-            self.lastHeadingLon=lon
+#    def distanceFromLastPos(self, lat, lon):
+#        if self.lastHeadingLat==0.0 and self.lastHeadingLon==0.0:
+#            self.lastHeadingLat=lat
+#            self.lastHeadingLon=lon
+#        else:    
+#            print(self.osmutils.distance(lat, lon, self.lastHeadingLat, self.lastHeadingLon))
+#            self.lastHeadingLat=lat
+#            self.lastHeadingLon=lon
                 
     def updateGPSLocation(self, gpsData, debug):
         lat=gpsData.getLat()
