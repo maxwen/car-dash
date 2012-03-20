@@ -1490,10 +1490,10 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotationButton.setIconSize(iconSize)        
         top.addWidget(self.withMapRotationButton)
 
-        self.withShowGLButton=QCheckBox("Use 3D View", self)
-        self.withShowGLButton.setChecked(self.withShow3D)
-        self.withShowGLButton.setIconSize(iconSize)        
-        top.addWidget(self.withShowGLButton)   
+        self.withShow3DButton=QCheckBox("Use 3D View", self)
+        self.withShow3DButton.setChecked(self.withShow3D)
+        self.withShow3DButton.setIconSize(iconSize)        
+        top.addWidget(self.withShow3DButton)   
              
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
@@ -1517,6 +1517,7 @@ class OSMOptionsDialog(QDialog):
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
+     
         
     @pyqtSlot()
     def _ok(self):
@@ -1524,7 +1525,7 @@ class OSMOptionsDialog(QDialog):
         self.followGPS=self.followGPSButton.isChecked()
         self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
-        self.withShow3D=self.withShowGLButton.isChecked()
+        self.withShow3D=self.withShow3DButton.isChecked()
         
         self.done(QDialog.Accepted)
 
