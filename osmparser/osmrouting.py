@@ -5,6 +5,7 @@ Created on Feb 22, 2012
 '''
 
 from osmparser.osmutils import OSMUtils
+from osmparser.osmparserdata import Constants
 import time
 
 WITH_CROSSING_DEBUG=True
@@ -133,8 +134,7 @@ class OSMRouting():
                 streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
        
                 # ignore certain types for crossing expectations
-                #if streetTypeId==0 or streetTypeId==1 or streetTypeId==13 or streetTypeId==14:
-                if streetTypeId==13:
+                if streetTypeId==Constants.STREET_TYPE_SERVICE:
                     # street type service
                     continue
             
@@ -526,19 +526,6 @@ class OSMRouting():
 
         # no decision possible
         return None, None
-
-#    def getDistanceFromPointToRef(self, lat, lon, ref):
-#        _, country=self.osmParserData.getCountryOfRef(ref)
-#        if country==None:
-#            return None
-#        resultList=self.osmParserData.getRefEntryForIdAndCountry(ref, country)
-#        if len(resultList)==1:
-#            _, lat1, lon1, _, _=resultList[0]
-#        else:
-#            return None
-#        
-#        print("%f %f %f %f"%(lat, lon, lat1, lon1))
-#        return self.osmutils.distance(lat, lon, lat1, lon1)
     
     def getDistanceToNextCrossing(self, lat, lon):
 #        distance1=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)

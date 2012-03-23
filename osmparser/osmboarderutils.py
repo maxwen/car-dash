@@ -204,162 +204,203 @@ class OSMBoarderUtils():
         p.y=lat
         ret=self.lib_pip.InsidePolygon(byref(cData), N, p)
         return ret
-        
+
+def resolveRefRings(allRefs, refsDictStart):
+    refRings=list()
+    refRing=list()
+    
+    refs=allRefs[0]
+    refRing.extend(refs)
+    allRefs.remove(refs)
+    del refsDictStart[refRing[0]]
+    lastRef=refs[-1]
+    while len(allRefs)!=0:
+        if lastRef in refsDictStart.keys():
+            refRing.extend(refsDictStart[lastRef][1:])
+            newLastRef=refsDictStart[lastRef][-1]
+            allRefs.remove(refsDictStart[lastRef])
+            del refsDictStart[lastRef]
+            lastRef=newLastRef
+        else:
+            if refRing[0]==refRing[-1]:
+                refRings.append(refRing)
+            refRing=list()
+            refRing.extend(allRefs[0])
+            allRefs.remove(allRefs[0])
+    
+    if len(refRing)!=0:
+        if refRing[0]==refRing[-1]:
+            refRings.append(refRing)
+            
+    return refRings
+
+def test():
+    allRefs=[[1,2],[2,3,4],[5,1],[4,5], [9, 10, 9], [11, 12]]
+    
+    refsDictStart=dict()
+    
+    for refs in allRefs:
+        refsDictStart[refs[0]]=refs
+    
+    print(resolveRefRings(allRefs, refsDictStart))
+
 def main(argv):    
-    bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data")
-    bu.initData()
+    test()
     
-    lat=47.8205
-    lon=13.0170
-
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.7692939563131    
-    lon=12.91818334579633
-    
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.83561
-    lon=12.9949712
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.3488298
-    lon=8.4264838
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-
-    lat=48.0226404
-    lon=10.1370363
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=49.7012251
-    lon=9.7963434
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=49.7861356
-    lon=9.4873953
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.5052856
-    lon=12.1236208
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.8365546
-    lon=12.494849 
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.1381654
-    lon=9.5227332
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=52.3850137
-    lon=9.8277221
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=52.3864665
-    lon=9.8288629
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start) 
-        
-    lat=50.7111547
-    lon=7.0521705
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-
-    lat=47.835959
-    lon=12.9945014
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=49.6093006
-    lon=8.7411465
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.2968614
-    lon=9.5550945
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.29675
-    lon=9.55553
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-    
-    lat=47.936814
-    lon=12.9390762
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    print(end-start)
-
-    lat=48.4109412
-    lon=13.4256467
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    
-    lat=48.4098733
-    lon=13.4266383
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    
-    lat=49.4682774
-    lon=11.0271253
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
-    
-    lat=49.467988
-    lon=11.0278791
-    start=time.time()
-    print(bu.countryNameOfPoint(lat, lon))  
-    end=time.time()
+#    bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data")
+#    bu.initData()
+#    
+#    lat=47.8205
+#    lon=13.0170
+#
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.7692939563131    
+#    lon=12.91818334579633
+#    
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.83561
+#    lon=12.9949712
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.3488298
+#    lon=8.4264838
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#
+#    lat=48.0226404
+#    lon=10.1370363
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=49.7012251
+#    lon=9.7963434
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=49.7861356
+#    lon=9.4873953
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.5052856
+#    lon=12.1236208
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.8365546
+#    lon=12.494849 
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.1381654
+#    lon=9.5227332
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=52.3850137
+#    lon=9.8277221
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=52.3864665
+#    lon=9.8288629
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start) 
+#        
+#    lat=50.7111547
+#    lon=7.0521705
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#
+#    lat=47.835959
+#    lon=12.9945014
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=49.6093006
+#    lon=8.7411465
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.2968614
+#    lon=9.5550945
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.29675
+#    lon=9.55553
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#    
+#    lat=47.936814
+#    lon=12.9390762
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    print(end-start)
+#
+#    lat=48.4109412
+#    lon=13.4256467
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    
+#    lat=48.4098733
+#    lon=13.4266383
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    
+#    lat=49.4682774
+#    lon=11.0271253
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
+#    
+#    lat=49.467988
+#    lon=11.0278791
+#    start=time.time()
+#    print(bu.countryNameOfPoint(lat, lon))  
+#    end=time.time()
     
 if __name__ == "__main__":
     main(sys.argv)  
