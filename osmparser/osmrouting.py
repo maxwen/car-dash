@@ -130,7 +130,7 @@ class OSMRouting():
         resultList=self.osmParserData.getDifferentEdgeEntryForStartOrEndPointWithCoords(crossingRef, self.currentEdge[0])
         if len(resultList)!=0: 
             for edge in resultList:
-                nextEdgeId, startRef, endRef, length, _, _, _, _, _, streetInfo, coords=edge
+                edgeId, startRef, endRef, length, _, _, _, _, _, streetInfo, coords=edge
                 streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
        
                 # ignore certain types for crossing expectations
@@ -148,18 +148,16 @@ class OSMRouting():
                     if not crossingRef==startRef:
                         continue
                     
-                # TODO: check turn restrictions but that takes time
-                if self.osmParserData.isActiveTurnRestriction(self.currentEdge[0], nextEdgeId, self.approachingRef):
+                # check turn restrictions but that takes time
+                if self.osmParserData.isActiveTurnRestriction(self.currentEdge[0], edgeId, self.approachingRef):
                     continue
                         
                 # filter out access limited streets
 #                if "access" in tags:
 #                    continue
                 
-                self.currentPossibleEdgeList.append(nextEdgeId)
-                # TODO heading is calculated only from crossinfRef
-                # but e.g. in a curve the heading can change depending
-                # on the position
+                self.currentPossibleEdgeList.append(edgeId)
+
                 headingCoords=coords
                 if crossingRef==endRef:
                     headingCoords=list()

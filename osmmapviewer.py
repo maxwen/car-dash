@@ -61,25 +61,6 @@ stoppedState="stopped"
 osmParserData = OSMParserData()
 trackLog=TrackLog(False)
 osmRouting=OSMRouting(osmParserData)
-
-def cmp_to_key(mycmp):
-    'Convert a cmp= function into a key= function'
-    class K(object):
-        def __init__(self, obj, *args):
-            self.obj = obj
-        def __lt__(self, other):
-            return mycmp(self.obj, other.obj) < 0
-        def __gt__(self, other):
-            return mycmp(self.obj, other.obj) > 0
-        def __eq__(self, other):
-            return mycmp(self.obj, other.obj) == 0
-        def __le__(self, other):
-            return mycmp(self.obj, other.obj) <= 0
-        def __ge__(self, other):
-            return mycmp(self.obj, other.obj) >= 0
-        def __ne__(self, other):
-            return mycmp(self.obj, other.obj) != 0
-    return K
     
 class OSMRoutingPointAction(QAction):
     def __init__(self, text, routingPoint, parent):
@@ -607,12 +588,8 @@ class QtOSMWidget(QWidget):
         self.showBackgroundTiles=True
         self.backgroundColor=QColor(120, 120, 120, 200)
         self.widgetBackgroundColor=QColor(200, 200, 200)
+#        self.refRing=None
         
-#        p=QPalette(self.palette())
-#        p.setColor(QPalette.Background, Qt.black)
-#        self.setPalette(p)
-        
-        self.setAutoFillBackground(False)
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
         self.setAttribute( Qt.WA_NoSystemBackground, True )
         
@@ -631,14 +608,14 @@ class QtOSMWidget(QWidget):
         self.trackPen=self.createStreetPen(QColor(0, 255, 0, 200))
         self.routeOverlayPen=self.createStreetPen(QColor(0, 255, 0, 200))
          
-        self.blueCrossingPen=self.createStreetPen(Qt.blue)
-        self.redCrossingPen=self.createStreetPen(Qt.red)
-        self.greenCrossingPen=self.createStreetPen(Qt.green)
-        self.cyanCrossingPen=self.createStreetPen(Qt.cyan)
-        self.grayCrossingPen=self.createStreetPen(Qt.gray)
-        self.blackCrossingPen=self.createStreetPen(Qt.black)
-        self.yellowCrossingPen=self.createStreetPen(Qt.yellow)
-        self.whiteCrossingPen=self.createStreetPen(Qt.white)
+        self.blueCrossingPen=self.createStreetPen(QColor(0, 0, 255, 200))
+        self.redCrossingPen=self.createStreetPen(QColor(255, 0, 0, 200))
+        self.greenCrossingPen=self.createStreetPen(QColor(0, 255, 0, 200))
+        self.cyanCrossingPen=self.createStreetPen(QColor(0, 255, 255, 200))
+        self.grayCrossingPen=self.createStreetPen(QColor(120, 120, 120, 200))
+        self.blackCrossingPen=self.createStreetPen(QColor(0, 0, 0, 200))
+        self.yellowCrossingPen=self.createStreetPen(QColor(255, 255, 0, 200))
+        self.whiteCrossingPen=self.createStreetPen(QColor(255, 255, 255, 200))
         
     def getPenForCrossingType(self, crossingType):
         if crossingType==Constants.CROSSING_TYPE_NORMAL:
@@ -893,52 +870,42 @@ class QtOSMWidget(QWidget):
         else:
             return self.getEmptyTile()
         
+    def getGPSTransform(self, x, y):
+        transform=QTransform()
+        
+        transform.translate(x, y)      
+        
+        if self.show3D==True:
+            transform.rotate(50, Qt.XAxis)        
+
+        if self.withMapRotation==False:
+            transform.rotate(self.track)
+        
+        transform.translate(-(x), -(y))
+
+        return transform
+    
     def displayGPSPosition(self):
         if self.gps_rlon==0.0 and self.gps_rlat==0.0:
             return
          
         imageWidth=IMAGE_WIDTH
         imageHeight=IMAGE_HEIGHT
-#        if self.show3D==True:
-#            imageHeight=imageHeight*1.5
         
-        if self.withMapRotation==True:
-            y,x=self.getTransformedPixelPosForLocationRad(self.gps_rlat, self.gps_rlon)
- 
-            xPos=int(x-imageWidth/2)
-            yPos=int(y-imageHeight/2)
-         
-#            transform=self.getTransform(False, None)
-#            self.painter.setTransform(transform)
-
-            if self.track!=None:
-                self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImage)
-            else:
-                self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImageStop)
+        y,x=self.getTransformedPixelPosForLocationRad(self.gps_rlat, self.gps_rlon)
         
-#            self.painter.resetTransform()
+        xPos=int(x-imageWidth/2)
+        yPos=int(y-imageHeight/2)
+        
+        transform=self.getGPSTransform(x, y)
+        self.painter.setTransform(transform)
+        
+        if self.track!=None:
+            self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImage)
         else:
-            transform=self.getTransform(True, self.track)
-            self.painter.setTransform(transform)
-       
-            x=self.osmutils.lon2pixel(self.map_zoom, self.gps_rlon)
-            y=self.osmutils.lat2pixel(self.map_zoom, self.gps_rlat)
-            map_x, map_y=self.getMapZeroPos()
-            point=QPointF(x-map_x, y-map_y)
-
-            invertedTransform=transform.inverted()
-            point0=invertedTransform[0].map(point)      
-            x=point0.x()
-            y=point0.y()
-            
-            xPos=int(x-imageWidth/2)
-            yPos=int(y-imageHeight/2)
-                        
-            if self.track!=None:
-                self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImage)
-            else:
-                self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImageStop)
-            self.painter.resetTransform()
+            self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.gpsPointImageStop)
+                
+        self.painter.resetTransform()
         
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
@@ -1184,7 +1151,7 @@ class QtOSMWidget(QWidget):
 
 #        print(self.map_zoom)
 
-        if self.map_zoom>=15:
+        if self.map_zoom>=13:
             if self.showBackgroundTiles==True:
                 self.showTiles()
             
@@ -1212,6 +1179,11 @@ class QtOSMWidget(QWidget):
     
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())
+
+#        if self.refRing!=None:   
+#            pen=self.trackPen
+#            pen.setWidth(self.getPenWidthForZoom())   
+#            self.displayRefs(self.refRing, pen)
 
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
@@ -1259,27 +1231,10 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_SECONDARY_LINK,
                 Constants.STREET_TYPE_TERTIARY,
                 Constants.STREET_TYPE_TERTIARY_LINK]
-                #Constants.STREET_TYPE_RESIDENTIAL,
-                #Constants.STREET_TYPE_LIVING_STREET,
-                #Constants.STREET_TYPE_UNCLASSIFIED,
-                #Constants.STREET_TYPE_ROAD]
-#        if self.map_zoom in range(12, 14):
-#            return [Constants.STREET_TYPE_MOTORWAY,
-#                Constants.STREET_TYPE_MOTORWAY_LINK,
-#                Constants.STREET_TYPE_TRUNK,
-#                Constants.STREET_TYPE_TRUNK_LINK,
-#                Constants.STREET_TYPE_PRIMARY,
-#                Constants.STREET_TYPE_PRIMARY_LINK,
-#                Constants.STREET_TYPE_SECONDARY,
-#                Constants.STREET_TYPE_SECONDARY_LINK,
-#                Constants.STREET_TYPE_TERTIARY,
-#                Constants.STREET_TYPE_TERTIARY_LINK]
-#        if self.map_zoom in range(10, 12):
-#            return [Constants.STREET_TYPE_MOTORWAY, 
-#                Constants.STREET_TYPE_TRUNK, 
-#                Constants.STREET_TYPE_PRIMARY,
-#                Constants.STREET_TYPE_SECONDARY,
-#                Constants.STREET_TYPE_TERTIARY]
+        if self.map_zoom in range(12, 14):
+            return [Constants.STREET_TYPE_MOTORWAY, 
+                Constants.STREET_TYPE_TRUNK, 
+                Constants.STREET_TYPE_PRIMARY]
         return None
     
     def getRelativePenWidthForZoom(self):
@@ -1351,7 +1306,7 @@ class QtOSMWidget(QWidget):
         bridgeWays=list()
         tunnelWays=list()
         otherWays=list()
-        showBridges=self.map_zoom in range(17, 19)
+        showBridges=self.map_zoom in range(15, 19)
         showCasing=self.map_zoom in range(15, 19)
         
         for way in resultList:
@@ -1398,16 +1353,16 @@ class QtOSMWidget(QWidget):
             self.displayCoords(coords, pen)  
              
         # bridges         
-        pen.setCapStyle(Qt.SquareCap)
+#        pen.setCapStyle(Qt.SquareCap)
         for way, streetTypeId in bridgeWays:
             wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
             lineWidth, roadColor=self.getStreetProperties(streetTypeId)
-            pen.setWidth(lineWidth+2)
+            pen.setWidth(lineWidth)
             pen.setBrush(QBrush(Qt.black, Qt.SolidPattern))
             self.displayCoords(coords, pen)
 
             pen.setWidth(lineWidth-2)
-            pen.setBrush(QBrush(roadColor, Qt.SolidPattern))
+            pen.setBrush(QBrush(roadColor, Qt.Dense1Pattern))
             self.displayCoords(coords, pen)
 
     def showTextInfoBackground(self):
@@ -1617,9 +1572,6 @@ class QtOSMWidget(QWidget):
             return 4
         
         return 0
-    
-    def getPenWithForOverlay(self):
-        return self.getPenWidthForZoom()+4
 
     def getPenWithForPoints(self):
         return self.getPenWidthForZoom()+4
@@ -1629,6 +1581,18 @@ class QtOSMWidget(QWidget):
         
         for point in coords:
             lat, lon=point 
+            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+            point=QPoint(x, y);
+            polygon.append( point )
+               
+        self.painter.setPen(pen)
+        self.painter.drawPolyline(polygon)
+        
+    def displayRefs(self, refList, pen):        
+        polygon=QPolygon()
+        
+        for ref in refList:
+            lat, lon=osmParserData.getCoordsWithRef(ref)
             (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
             point=QPoint(x, y);
             polygon.append( point )
@@ -1671,11 +1635,10 @@ class QtOSMWidget(QWidget):
                         
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
                     point=QPoint(x, y);
-                    polygon.append( point )
-                    
+                    polygon.append( point )                    
+            
             pen=self.routePen
             pen.setWidth(self.getPenWidthForZoom())
-              
             self.painter.setPen(pen)
             self.painter.drawPolyline(polygon)
                     
@@ -1690,14 +1653,15 @@ class QtOSMWidget(QWidget):
                             crossing=True
                             crossingType=itemRef["crossingType"]
                             
-                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                        if crossing==True:
+                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
                         
-                        if crossing==True and self.isPointVisible(x, y):
-                            pen=self.getPenForCrossingType(crossingType)
-                            pen.setWidth(self.getPenWithForPoints())
-                            
-                            self.painter.setPen(pen)
-                            self.painter.drawPoint(x, y)
+                            if self.isPointVisible(x, y):
+                                pen=self.getPenForCrossingType(crossingType)
+                                pen.setWidth(self.getPenWithForPoints())
+                                
+                                self.painter.setPen(pen)
+                                self.painter.drawPoint(x, y)
                             
             
     def drawDirectionImage(self, direction, exitNumber, width, height, x, y):
@@ -2319,6 +2283,7 @@ class QtOSMWidget(QWidget):
         self.distanceToCrossing=0
         self.nextEdgeOnRoute=None
         self.routeInfo=None, None, None, None
+#        self.refRing=None
         
     def calcNextCrossingInfo(self, lat, lon):
         (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.currentTrackList, lat, lon)
@@ -2438,7 +2403,16 @@ class QtOSMWidget(QWidget):
                 (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                 
-#                    osmParserData.printCrossingsForWayId(wayId)
+#                refRings=osmParserData.mergeEqualWayEntries(wayId)
+##                print(refRings)
+#                if refRings!=None:
+#                    for refRingEntry in refRings:
+#                        wayIdList=refRingEntry["wayIdList"]
+#                        if wayId in wayIdList:
+#                            self.refRing=refRingEntry["refs"]
+#                            print(wayIdList)
+                    
+#                osmParserData.printCrossingsForWayId(wayId)
                 self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
                 self.speedInfo=maxspeed
                 # TODO: play sound?

@@ -1458,6 +1458,7 @@ class OSMOptionsDialog(QDialog):
         self.withMapnik=parent.getWithMapnikValue()
         self.withMapRotation=parent.getWithMapRotationValue()
         self.withShow3D=parent.getShow3DValue()
+        self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
         self.initUI()
 
     def initUI(self):
@@ -1494,7 +1495,12 @@ class OSMOptionsDialog(QDialog):
         self.withShow3DButton.setChecked(self.withShow3D)
         self.withShow3DButton.setIconSize(iconSize)        
         top.addWidget(self.withShow3DButton)   
-             
+
+        self.withShowBackgroundTilesButton=QCheckBox("Show Background Tiles", self)
+        self.withShowBackgroundTilesButton.setChecked(self.withShowBackgroundTiles)
+        self.withShowBackgroundTilesButton.setIconSize(iconSize)        
+        top.addWidget(self.withShowBackgroundTilesButton) 
+                     
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1526,6 +1532,7 @@ class OSMOptionsDialog(QDialog):
         self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
         self.withShow3D=self.withShow3DButton.isChecked()
+        self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
         
         self.done(QDialog.Accepted)
 
