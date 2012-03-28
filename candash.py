@@ -1188,7 +1188,7 @@ class CANMonitor(QMainWindow):
 def main(argv): 
     test=False
     try:
-        if argv[1]=="test":
+        if argv[1]=="cantest":
             test=True
     except IndexError:
         test=False

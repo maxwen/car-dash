@@ -990,7 +990,7 @@ class Editor(Writer):
 #    doctest.testfile("README.txt", verbose=1)
 
 def test1():
-    sf = Reader("/home/maxl/Downloads/geofabrik/austria.shp/railways")
+    sf = Reader("/home/maxl/Downloads/geofabrik/austria.shp/roads")
 #    print(sf.shapes())
     for field in sf.fields:
         print(field)
@@ -999,8 +999,8 @@ def test1():
 #        print(shape.points)
 #    i=0
 #    types=list()
-    for record in sf.records():
-        print(record)
+#    for record in sf.records():
+#        print(record)
 #        if not record[2] in types:
 #            types.append(record[2])
 #    print(types)

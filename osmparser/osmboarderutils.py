@@ -205,44 +205,146 @@ class OSMBoarderUtils():
         ret=self.lib_pip.InsidePolygon(byref(cData), N, p)
         return ret
 
-def resolveRefRings(allRefs, refsDictStart):
+#def resolveRefRings(allRefs, refsDictStart):
+#    refRings=list()
+#    refRing=list()
+#    
+#    refs=allRefs[0]
+#    refRing.extend(refs)
+#    allRefs.remove(refs)
+#    del refsDictStart[refRing[0]]
+#    lastRef=refs[-1]
+#    while len(allRefs)!=0:
+#        if lastRef in refsDictStart.keys():
+#            refRing.extend(refsDictStart[lastRef][1:])
+#            newLastRef=refsDictStart[lastRef][-1]
+#            allRefs.remove(refsDictStart[lastRef])
+#            del refsDictStart[lastRef]
+#            lastRef=newLastRef
+#        else:
+#            if refRing[0]==refRing[-1]:
+#                refRings.append(refRing)
+#            refRing=list()
+#            refRing.extend(allRefs[0])
+#            allRefs.remove(allRefs[0])
+#    
+#    if len(refRing)!=0:
+#        if refRing[0]==refRing[-1]:
+#            refRings.append(refRing)
+#            
+#    return refRings
+
+def mergeWayRefs(allRefs):
     refRings=list()
+    refRingEntry=dict()
     refRing=list()
-    
-    refs=allRefs[0]
-    refRing.extend(refs)
-    allRefs.remove(refs)
-    del refsDictStart[refRing[0]]
-    lastRef=refs[-1]
-    while len(allRefs)!=0:
-        if lastRef in refsDictStart.keys():
-            refRing.extend(refsDictStart[lastRef][1:])
-            newLastRef=refsDictStart[lastRef][-1]
-            allRefs.remove(refsDictStart[lastRef])
-            del refsDictStart[lastRef]
-            lastRef=newLastRef
-        else:
-            if refRing[0]==refRing[-1]:
-                refRings.append(refRing)
-            refRing=list()
-            refRing.extend(allRefs[0])
-            allRefs.remove(allRefs[0])
-    
-    if len(refRing)!=0:
-        if refRing[0]==refRing[-1]:
-            refRings.append(refRing)
+    wayIdList=list()
             
+    while len(allRefs)!=0:
+        refEntry=allRefs[0]
+        
+        wayId=refEntry[0]
+        refs=refEntry[1]   
+    #            oneway=refEntry[2]  
+        roundAbout=refEntry[3]
+        wayIdList.append(wayId)
+        refRingEntry["wayId"]=wayId
+        
+        if roundAbout==1 and refs[-1]==refs[0]:
+            refRingEntry["refs"]=refs
+            refRingEntry["wayIdList"]=wayIdList
+    
+            refRings.append(refRingEntry)
+            allRefs.remove(refEntry)
+            refRingEntry=dict()
+            refRing=list()
+            wayIdList=list()
+            continue
+        
+        refRing.extend(refs)
+        allRefs.remove(refEntry)
+    
+        roundAboutClosed=False
+        while True and roundAboutClosed==False:
+            removedRefs=list()
+    
+            for refEntry in allRefs:
+                wayId=refEntry[0]
+                refs=refEntry[1]   
+                oneway=refEntry[2] 
+                newRoundAbout=refEntry[3]
+                
+                if roundAbout==1 and newRoundAbout==0:
+                    continue
+                
+                if roundAbout==0 and newRoundAbout==1:
+                    continue
+                
+                if roundAbout==1 and refRing[-1]==refRing[0]:
+                    removedRefs.append(refEntry)
+                    roundAboutClosed=True
+                    break
+                
+                if refRing[-1]==refs[0]:
+                    wayIdList.append(wayId)
+                    refRing.extend(refs[1:])
+                    removedRefs.append(refEntry)
+                    continue
+                
+                if refRing[0]==refs[-1]:
+                    wayIdList.append(wayId)
+                    removedRefs.append(refEntry)
+                    newRefRing=list()
+                    newRefRing.extend(refs[:-1])
+                    newRefRing.extend(refRing)
+                    refRing=newRefRing
+                    continue
+                        
+                if (oneway==0 or oneway==2) and roundAbout==0:        
+                    reversedRefs=list()
+                    reversedRefs.extend(refs)
+                    reversedRefs.reverse()
+                    if refRing[-1]==reversedRefs[0]:
+                        wayIdList.append(wayId)
+                        refRing.extend(reversedRefs[1:])
+                        removedRefs.append(refEntry)
+                        continue
+                    
+                    if refRing[0]==reversedRefs[-1]:
+                        wayIdList.append(wayId)
+                        removedRefs.append(refEntry)
+                        newRefRing=list()
+                        newRefRing.extend(reversedRefs[:-1])
+                        newRefRing.extend(refRing)
+                        refRing=newRefRing
+                        continue
+    
+            if len(removedRefs)==0:
+                break
+            
+            for refEntry in removedRefs:
+                allRefs.remove(refEntry)
+            
+        if len(refRing)!=0:
+            refRingEntry["refs"]=refRing
+            refRingEntry["wayIdList"]=wayIdList
+            refRings.append(refRingEntry)
+        
+        refRingEntry=dict()
+        refRing=list()
+        wayIdList=list()
+        
     return refRings
 
 def test():
-    allRefs=[[1,2],[2,3,4],[5,1],[4,5], [9, 10, 9], [11, 12]]
+    allRefs=[(0, [1,2], 0, 0),
+             (1, [2,3,4], 0, 0),
+             (2, [5,1], 0, 0),
+             (3, [4,5],0, 0),
+             (4, [9, 10, 9], 0, 0),
+             (5, [11, 12], 0, 0)]
     
-    refsDictStart=dict()
-    
-    for refs in allRefs:
-        refsDictStart[refs[0]]=refs
-    
-    print(resolveRefRings(allRefs, refsDictStart))
+    print(mergeWayRefs(allRefs))
 
 def main(argv):    
     test()

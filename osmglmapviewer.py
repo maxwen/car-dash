@@ -1322,8 +1322,8 @@ class QtOSMWidget(QGLWidget):
             if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
                 self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
     
-            if osmParserData.getCurrentSearchBBox()!=None:
-                self.displayBBox(osmParserData.getCurrentSearchBBox())
+#            if osmParserData.getCurrentSearchBBox()!=None:
+#                self.displayBBox(osmParserData.getCurrentSearchBBox())
 
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
@@ -1360,7 +1360,7 @@ class QtOSMWidget(QGLWidget):
         pen.setWidth(3)
         bbox=self.getVisibleBBoxDeg()
         
-        resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
+        resultList=osmParserData.getEdgesInBboxWithGeom(bbox, 0.0)
 
         for edge in resultList:
             _, _, _, _, _, _, _, _, _, streetInfo, coords=edge
@@ -1705,7 +1705,7 @@ class QtOSMWidget(QGLWidget):
                                        
     def displayVisibleEdgesGL(self):
         bbox=self.getVisibleBBoxDegGL()
-        resultList=osmParserData.getEdgesInBboxWithGeom(0.0, 0.0, 0.0, bbox)
+        resultList=osmParserData.getEdgesInBboxWithGeom(bbox, 0.0)
         
         self.displayVisibleEdgesGLCasing(resultList)
         self.displayVisibleEdgesGLFill(resultList)

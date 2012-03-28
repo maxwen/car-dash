@@ -637,7 +637,7 @@ class OSMRouting():
             print("%f %f %s"%(lat, lon, text))
     
     def getEdgeIdOnPosWithTrack(self, lat, lon, track, margin, maxDistance):
-        resultList=self.osmParserData.getEdgesInBboxWithGeom(lat, lon, margin)  
+        resultList=self.osmParserData.getEdgesAroundPointWithGeom(lat, lon, margin)  
         closestEdge=None
         minDistance=maxDistance
         minHeadingDiff=CLOSE_HEADING_RANGE
@@ -682,7 +682,7 @@ class OSMRouting():
         return closestEdge
     
     def getMatchinEdgesInMargin(self, lat, lon, track, margin, maxDistance):
-        resultList=self.osmParserData.getEdgesInBboxWithGeom(lat, lon, margin)  
+        resultList=self.osmParserData.getEdgesAroundPointWithGeom(lat, lon, margin)  
         edgeList=list()
         minHeadingDiff=CLOSE_HEADING_RANGE
                     

@@ -10,15 +10,14 @@ import time
 TILESIZE=256
 M_LN2=0.69314718055994530942    #log_e 2
 RADIUS_EARTH = 6371
+PI2=2*math.pi
 
 class OSMUtils():
     def deg2rad(self, deg):
         return math.radians(deg)
-#        return (deg * math.pi / 180.0)
 
     def rad2deg(self,  rad):
         return math.degrees(rad)
-#        return (rad / math.pi * 180.0)
 
     def lat2pixel(self, zoom, lat):
         lat_m = math.atanh(math.sin(lat))
@@ -26,7 +25,7 @@ class OSMUtils():
         #
         # pixel_y = -(2^zoom * TILESIZE * lat_m) / 2PI + (2^zoom * TILESIZE) / 2
         #
-        pixel_y = -(lat_m * TILESIZE * (1 << zoom) ) / (2*math.pi) +((1 << zoom) * TILESIZE)/2
+        pixel_y = -(lat_m * TILESIZE * (1 << zoom) ) / PI2 +((1 << zoom) * TILESIZE)/2
 
         return pixel_y
 
@@ -35,7 +34,7 @@ class OSMUtils():
         #
         # pixel_x = (2^zoom * TILESIZE * lon) / 2PI + (2^zoom * TILESIZE) / 2
         #
-        pixel_x = ( lon * TILESIZE * (1 << zoom) ) / (2*math.pi) +((1 << zoom) * TILESIZE)/2
+        pixel_x = ( lon * TILESIZE * (1 << zoom) ) / PI2 +((1 << zoom) * TILESIZE)/2
         return pixel_x
 
     def pixel2lon(self, zoom, pixel_x):
@@ -44,22 +43,11 @@ class OSMUtils():
         return lon
 
     def pixel2lat(self, zoom, pixel_y):
-        lat_m = ((-( pixel_y - ( math.exp(zoom * M_LN2) * (TILESIZE/2) ) ) * (2*math.pi)) /
+        lat_m = ((-( pixel_y - ( math.exp(zoom * M_LN2) * (TILESIZE/2) ) ) * PI2) /
             (TILESIZE * math.exp(zoom * M_LN2)))
 
         lat = math.asin(math.tanh(lat_m))
         return lat
-    
-#    def distance(self, oldLat, oldLon, newLat, newLon):
-#        dLat = self.deg2rad(oldLat-newLat)
-#        dLon = self.deg2rad(oldLon-newLon)
-#        lat1 = self.deg2rad(oldLat)
-#        lat2 = self.deg2rad(newLat)
-#
-#        a = math.pow(math.sin(dLat/2), 2) + math.pow(math.sin(dLon/2),2) * math.cos(lat1) * math.cos(lat2) 
-#        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-#        d = (RADIUS_EARTH * c)*1000
-#        return d
    
     def crossproduct(self, x1, y1, z1, x2, y2, z2):
         xa = y1*z2-y2*z1
@@ -69,7 +57,6 @@ class OSMUtils():
 
     def dotproduct(self, x1, y1, z1, x2, y2, z2 ):
         return (x1*x2+y1*y2+z1*z2);
-    
     
     def distance(self,  lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
