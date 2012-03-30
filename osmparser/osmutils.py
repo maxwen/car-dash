@@ -25,7 +25,8 @@ class OSMUtils():
         #
         # pixel_y = -(2^zoom * TILESIZE * lat_m) / 2PI + (2^zoom * TILESIZE) / 2
         #
-        pixel_y = -(lat_m * TILESIZE * (1 << zoom) ) / PI2 +((1 << zoom) * TILESIZE)/2
+        z=(1 << zoom)
+        pixel_y = -(lat_m * TILESIZE * z ) / PI2 +(z * TILESIZE)/2
 
         return pixel_y
 
@@ -34,18 +35,18 @@ class OSMUtils():
         #
         # pixel_x = (2^zoom * TILESIZE * lon) / 2PI + (2^zoom * TILESIZE) / 2
         #
-        pixel_x = ( lon * TILESIZE * (1 << zoom) ) / PI2 +((1 << zoom) * TILESIZE)/2
+        z=(1 << zoom)
+        pixel_x = ( lon * TILESIZE * z ) / PI2 +(z * TILESIZE)/2
         return pixel_x
 
     def pixel2lon(self, zoom, pixel_x):
-        lon = (((pixel_x - ( math.exp(zoom * M_LN2) * (TILESIZE/2) ) ) *2*math.pi) / 
-            (TILESIZE * math.exp(zoom * M_LN2) ))
+        z=math.exp(zoom * M_LN2)
+        lon = (((pixel_x - ( z * (TILESIZE/2) ) ) * PI2) / (TILESIZE * z ))
         return lon
 
     def pixel2lat(self, zoom, pixel_y):
-        lat_m = ((-( pixel_y - ( math.exp(zoom * M_LN2) * (TILESIZE/2) ) ) * PI2) /
-            (TILESIZE * math.exp(zoom * M_LN2)))
-
+        z=math.exp(zoom * M_LN2)
+        lat_m = ((-( pixel_y - ( z * (TILESIZE/2) ) ) * PI2) /(TILESIZE * z))
         lat = math.asin(math.tanh(lat_m))
         return lat
    
@@ -58,14 +59,12 @@ class OSMUtils():
     def dotproduct(self, x1, y1, z1, x2, y2, z2 ):
         return (x1*x2+y1*y2+z1*z2);
     
-    def distance(self,  lat1, lon1, lat2, lon2 ):
+    def distance1(self,  lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
         lon1 = self.deg2rad(lon1)
         lat2 = self.deg2rad(lat2)
         lon2 = self.deg2rad(lon2)
-        return self.distanceRad(lat1, lon1, lat2, lon2)
-
-    def distanceRad(self, lat1, lon1, lat2, lon2):
+        
         sdlat = math.sin((lat1 - lat2) / 2.0)
         sdlon = math.sin((lon1 - lon2) / 2.0)
 
@@ -82,12 +81,27 @@ class OSMUtils():
         d = (RADIUS_EARTH * c)*1000
         return int(d)
 
+    def distance(self,  lat1, lon1, lat2, lon2 ):
+        lat1 = self.deg2rad(lat1)
+        lon1 = self.deg2rad(lon1)
+        lat2 = self.deg2rad(lat2)
+        lon2 = self.deg2rad(lon2)
+        
+        return self.distanceRad(lat1, lon1, lat2, lon2)
 
+    def distanceRad(self,  lat1, lon1, lat2, lon2 ):
+        return int(self.distanceRadRad(lat1, lon1, lat2, lon2) * RADIUS_EARTH *1000)
+
+    def distanceRadRad(self,  lat1, lon1, lat2, lon2 ):
+        x = (lon2-lon1) * math.cos((lat1+lat2)/2)
+        y = (lat2-lat1)
+        return math.sqrt(x*x + y*y)
+                       
     #  Compute the position of a point partially along the geodesic from 
     #  lat1,lon1 to lat2,lon2
     #  
     #  Ref: http://mathworld.wolfram.com/RotationFormula.html
-    def linepart(self, lat1, lon1, lat2,  lon2, frac):
+    def linepart1(self, lat1, lon1, lat2,  lon2, frac):
         x1=0.0
         y1=0.0
         z1=0.0
@@ -169,6 +183,23 @@ class OSMUtils():
             
         return (reslat, reslon)
     
+    def linepart(self, lat1, lon1, lat2,  lon2, frac):
+        lat1 = self.deg2rad(lat1)
+        lon1 = self.deg2rad(lon1)
+        lat2 = self.deg2rad(lat2)
+        lon2 = self.deg2rad(lon2)
+        
+        d=self.distanceRadRad(lat1, lon1, lat2, lon2)
+        A=math.sin((1-frac)*d)/math.sin(d)
+        B=math.sin(frac*d)/math.sin(d)
+        x = A*math.cos(lat1)*math.cos(lon1) +  B*math.cos(lat2)*math.cos(lon2)
+        y = A*math.cos(lat1)*math.sin(lon1) +  B*math.cos(lat2)*math.sin(lon2)
+        z = A*math.sin(lat1)           +  B*math.sin(lat2)
+        lat=math.atan2(z,math.sqrt(x*x+y*y))
+        lon=math.atan2(y,x)
+
+        return (self.rad2deg(lat), self.rad2deg(lon))
+
     def heading(self, lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
         lon1 = self.deg2rad(lon1)
@@ -336,36 +367,50 @@ def main():
 #    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latRight, lonRight)))
 #    print(osmutils.azimuth((latCross, lonCross), (latLeft, lonLeft), (latStraight, lonStraight)))
 #
-#    latCross=47.8380837
-#    lonCross=12.9875343
-#    
-#    latFrom=47.8387129
-#    lonFrom=12.9882358
-#    
-#    latTo=47.8383155
-#    lonTo=12.9885131
+    latCross=47.8380837
+    lonCross=12.9875343
+    
+    latFrom=47.8387129
+    lonFrom=12.9882358
+    
+    latTo=47.8383155
+    lonTo=12.9885131
 #    
 #    print(osmutils.azimuth((latCross, lonCross), (latFrom, lonFrom), (latTo, lonTo)))
 
-    print(osmutils.headingDiffAbsolute(90, 90))
-    print(osmutils.headingDiffAbsolute(180, 181))
-    print(osmutils.headingDiffAbsolute(181, 180))
-    print(osmutils.headingDiffAbsolute(360, 360))
-    print(osmutils.headingDiffAbsolute(320, 20))
-    print(osmutils.headingDiffAbsolute(20, 320))
-    print(osmutils.headingDiffAbsolute(45, 270))
-    print(osmutils.headingDiffAbsolute(270, 45))
+#    print(osmutils.headingDiffAbsolute(90, 90))
+#    print(osmutils.headingDiffAbsolute(180, 181))
+#    print(osmutils.headingDiffAbsolute(181, 180))
+#    print(osmutils.headingDiffAbsolute(360, 360))
+#    print(osmutils.headingDiffAbsolute(320, 20))
+#    print(osmutils.headingDiffAbsolute(20, 320))
+#    print(osmutils.headingDiffAbsolute(45, 270))
+#    print(osmutils.headingDiffAbsolute(270, 45))
 
-#    start=time.time()
-#    for i in range(0, 100000):
-#        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
-#    print("distance:%f"%(time.time()-start))
-#    
-#    start=time.time()
-#    for i in range(0, 100000):
-#        osmutils.distance1(latFrom, lonFrom, latTo, lonTo)
-#    print("distance1:%f"%(time.time()-start))
+    start=time.time()
+    print(osmutils.distance(latFrom, lonFrom, latTo, lonTo))
+    for i in range(0, 100000):
+        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
+    print("distance:%f"%(time.time()-start))
+    
+    start=time.time()
+    print(osmutils.distance1(latFrom, lonFrom, latTo, lonTo))
+    for i in range(0, 100000):
+        osmutils.distance1(latFrom, lonFrom, latTo, lonTo)
+    print("distance1:%f"%(time.time()-start))
 
+    start=time.time()
+    print(osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5))
+    for i in range(0, 100000):
+        osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5)
+    print("linepart:%f"%(time.time()-start))
+
+    start=time.time()
+    print(osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5))
+    for i in range(0, 100000):
+        osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5)
+    print("linepart1:%f"%(time.time()-start))
+        
 if __name__ == "__main__":
     main()  
 

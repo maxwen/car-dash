@@ -802,6 +802,7 @@ class CANMonitor(QMainWindow):
 
         self.osmWidget.addToWidget(osmTabLayout)
         self.osmWidget.loadConfig(self.config)
+        self.osmWidget.initWorkers()
                 
         self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
         self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
@@ -847,9 +848,7 @@ class CANMonitor(QMainWindow):
         self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
         self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         self._connectGPS()
-        
-        self.osmWidget.loadData()
-    
+
     #def mousePressEvent(self, event):
     #    print("CANMonitor mousePressEvent")
     #    self.tabs.mousePressEvent(event)

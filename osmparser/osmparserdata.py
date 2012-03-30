@@ -12,6 +12,7 @@ from osmparser.osmutils import OSMUtils
 import pickle
 import time
 import env
+import re
 from misc.progress import ProgressBar
 
 #from pygraph-routing.dijkstrapygraph import DijkstraWrapperPygraph
@@ -127,7 +128,8 @@ class OSMRoute():
     def getTrackList(self, index):
         if self.routeInfo!=None:
             if len(self.routeInfo)>index:
-                return self.routeInfo[index]["trackList"]
+                if "trackList" in self.routeInfo[index]:
+                    return self.routeInfo[index]["trackList"]
         return None
     
     def printRoute(self, osmParserData):
@@ -1030,7 +1032,7 @@ class OSMParserData():
         self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, AsText(geom) FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursorGlobal.fetchall()
         if len(allentries)==1:
-            return self.wayFromDBWithCoords(allentries[0])
+            return self.wayFromDBWithCoordsList(allentries[0])
         
         return (None, None, None, None, None, None, None, None, None)
     
@@ -1039,7 +1041,7 @@ class OSMParserData():
         allentries=self.cursorGlobal.fetchall()
         resultList=list()
         for x in allentries:
-            resultList.append(self.wayFromDBWithCoords(x))
+            resultList.append(self.wayFromDBWithCoordsList(x))
         return resultList
 
 #    def getTmpWayEntryForStreetName(self, streetName):
@@ -1159,9 +1161,8 @@ class OSMParserData():
         self.cursorArea.execute('SELECT id, tags, AsText(geom) FROM areaTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            areaId, osmId, tags, coords=self.areaFromDB(x)
-#            print("id: "+str(areaId)+" tags: "+str(tags) + " coords:"+str(coords))
-            print("id: "+str(areaId)+ " osmId:" + str(osmId) +" tags: "+str(tags))
+            areaId, osmId, tags, coords=self.areaFromDBWithCoordsList(x)
+            print("id: "+str(areaId)+ " osmId:" + str(osmId) +" tags: "+str(tags)+ " coords:"+str(coords))
 
     def dropAreaTable(self):
         self.cursorArea.execute('DROP TABLE areaTable')
@@ -1234,7 +1235,7 @@ class OSMParserData():
             poiList=pickle.loads(x[7])
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList)
  
-    def wayFromDBWithCoords(self, x):
+    def wayFromDBWithCoordsList(self, x):
         wayId=x[0]
         refs=pickle.loads(x[2])
         tags=self.decodeWayTags(x[1])
@@ -1245,13 +1246,25 @@ class OSMParserData():
         poiList=None
         if x[7]!=None:
             poiList=pickle.loads(x[7])    
-        if len(x)==10:    
-            coordsStr=x[9]
-        else:
-            coordsStr=x[8]
+        coordsStr=x[8]
         coords=self.createCoordsFromLineString(coordsStr)
         
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords)   
+
+    def wayFromDBWithCoordsString(self, x):
+        wayId=x[0]
+        refs=pickle.loads(x[2])
+        tags=self.decodeWayTags(x[1])
+        streetInfo=x[3]
+        name=x[4]
+        nameRef=x[5]
+        maxspeed=x[6]
+        poiList=None
+        if x[7]!=None:
+            poiList=pickle.loads(x[7])    
+        coordsStr=x[8]
+        
+        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coordsStr)   
     
     def refFromDB(self, x):
         refId=x[0]
@@ -1306,7 +1319,7 @@ class OSMParserData():
         coords=self.createCoordsFromLineString(coordsStr)
         return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords)
             
-    def areaFromDB(self, x):
+    def areaFromDBWithCoordsList(self, x):
         areaId=x[0]
         osmId=x[1]
         tags=pickle.loads(x[2])  
@@ -1314,29 +1327,22 @@ class OSMParserData():
         allCoordsList=list()      
         if coordsStr==None:
             return (areaId, osmId, tags, allCoordsList)
-                  
-        coordsStr=coordsStr[15:-3]
-        polyParts=coordsStr.split(")), ((")
-        if len(polyParts)==1:
-            poly=coordsStr
-            coords=list()
-            coordsList=poly.split(',')
-            for coordPair in coordsList:
-                coordPair=coordPair.lstrip().rstrip()
-                lon, lat=coordPair.split(" ")
-                coords.append((float(lat), float(lon)))
-            allCoordsList.append(coords)
-        else:
-            for poly in polyParts:
-                coords=list()
-                coordsList=poly.split(',')
-                for coordPair in coordsList:
-                    coordPair=coordPair.lstrip().rstrip()
-                    lon, lat=coordPair.split(" ")
-                    coords.append((float(lat), float(lon)))
-                
-                allCoordsList.append(coords)
+    
+        allCoordsList=self.createCoordsFromMultiPolygon(coordsStr)
         return (areaId, osmId, tags, allCoordsList)
+
+    def areaFromDBWithCoordsString(self, x):
+        areaId=x[0]
+        osmId=x[1]
+        tags=pickle.loads(x[2])  
+        coordsStr=x[3]
+        return (areaId, osmId, tags, coordsStr)
+        
+    def areaFromDB(self, x):
+        areaId=x[0]
+        osmId=x[1]
+        tags=pickle.loads(x[2])  
+        return (areaId, osmId, tags)
     
     def isUsableNode(self):
         return ["motorway_junction", "traffic_signals", "mini_roundabout", "stop", "speed_camera"]
@@ -3356,14 +3362,58 @@ class OSMParserData():
     def createCoordsFromLineString(self, lineString):
         coords=list()
         coordsStr=lineString[11:-1]
-        coordsPairs=coordsStr.split(",")
-        for coordPair in coordsPairs:
-            coordPair=coordPair.lstrip().rstrip()
-            lon, lat=coordPair.split(" ")
-            coords.append((float(lat), float(lon)))
+        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
+        i=0
+        while i<len(x)-2:
+            coords.append((float(x[i+2]), float(x[i])))
+            i=i+4
+            
+#        coordsPairs=coordsStr.split(",")
+#        for coordPair in coordsPairs:
+#            coordPair=coordPair.lstrip().rstrip()
+#            lon, lat=coordPair.split(" ")
+#            coords.append((float(lat), float(lon)))
             
         return coords
 
+    def createCoordsFromMultiPolygon(self, coordsStr):
+        allCoordsList=list()
+        coordsStr=coordsStr[15:-3]
+        polyParts=coordsStr.split(")), ((")
+        if len(polyParts)==1:
+            poly=coordsStr
+            coords=list()
+            x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
+            i=0
+            while i<len(x)-2:
+                coords.append((float(x[i+2]), float(x[i])))
+                i=i+4
+
+#            coordsList=poly.split(',')
+#            for coordPair in coordsList:
+#                coordPair=coordPair.lstrip().rstrip()
+#                lon, lat=coordPair.split(" ")
+#                coords.append((float(lat), float(lon)))
+            allCoordsList.append(coords)
+        else:
+            for poly in polyParts:
+                coords=list()
+                x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
+                i=0
+                while i<len(x)-2:
+                    coords.append((float(x[i+2]), float(x[i])))
+                    i=i+4
+                    
+#                coordsList=poly.split(',')
+#                for coordPair in coordsList:
+#                    coordPair=coordPair.lstrip().rstrip()
+#                    lon, lat=coordPair.split(" ")
+#                    coords.append((float(lat), float(lon)))
+                
+                allCoordsList.append(coords)
+        
+        return allCoordsList
+    
     def isLinkToLink(self, streetTypeId, streetTypeId2):
         return (streetTypeId==Constants.STREET_TYPE_MOTORWAY_LINK and streetTypeId2==Constants.STREET_TYPE_MOTORWAY_LINK) or (streetTypeId==Constants.STREET_TYPE_TRUNK_LINK and streetTypeId2==Constants.STREET_TYPE_TRUNK_LINK) or (streetTypeId==Constants.STREET_TYPE_PRIMARY_LINK and streetTypeId2==Constants.STREET_TYPE_PRIMARY_LINK) or (streetTypeId==Constants.STREET_TYPE_SECONDARY_LINK and streetTypeId2==Constants.STREET_TYPE_SECONDARY_LINK) or (streetTypeId==Constants.STREET_TYPE_TERTIARY_LINK and streetTypeId2==Constants.STREET_TYPE_TERTIARY_LINK)
 
@@ -3944,12 +3994,25 @@ class OSMParserData():
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
             print(x)
-                            
-    def getNodesAroundPointWithGeom(self, lat, lon, margin):
+                   
+    def createBBoxAroundPoint(self, lat, lon, margin):
         latRangeMax=lat+margin
         lonRangeMax=lon+margin*1.4
         latRangeMin=lat-margin
-        lonRangeMin=lon-margin*1.4       
+        lonRangeMin=lon-margin*1.4          
+        
+        return lonRangeMin, latRangeMin, lonRangeMax, latRangeMax
+    
+    def createBBoxWithMargin(self, bbox, margin):
+        latRangeMax=bbox[3]+margin
+        lonRangeMax=bbox[2]+margin
+        latRangeMin=bbox[1]-margin
+        lonRangeMin=bbox[0]-margin  
+
+        return lonRangeMin, latRangeMin, lonRangeMax, latRangeMax
+        
+    def getNodesAroundPointWithGeom(self, lat, lon, margin):
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 
         self.cursorGlobal.execute('SELECT refId, tags, type, AsText(geom) FROM refTable WHERE ROWID IN (SELECT rowid FROM idx_refTable_geom WHERE rowid MATCH RTreeWithin(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         allentries=self.cursorGlobal.fetchall()
@@ -3958,10 +4021,7 @@ class OSMParserData():
             resultList.append(self.refFromDB(x))
         
     def getEdgesInBboxWithGeom(self, bbox, margin):
-        latRangeMax=bbox[3]+margin
-        lonRangeMax=bbox[2]+margin
-        latRangeMin=bbox[1]-margin
-        lonRangeMin=bbox[0]-margin  
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
    
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         allentries=self.cursorEdge.fetchall()
@@ -3972,16 +4032,11 @@ class OSMParserData():
         return resultList
 
     def getEdgesAroundPointWithGeom(self, lat, lon, margin):
-        # make it a square
-        latRangeMax=lat+margin
-        lonRangeMax=lon+margin*1.4
-        latRangeMin=lat-margin
-        lonRangeMin=lon-margin*1.4 
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
         self.currentSearchBBox=[lonRangeMin, latRangeMin, lonRangeMax, latRangeMax]
 
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         allentries=self.cursorEdge.fetchall()
-#        print(len(allentries))
         resultList=list()
         for x in allentries:
             resultList.append(self.edgeFromDBWithCoords(x))
@@ -3989,10 +4044,7 @@ class OSMParserData():
         return resultList
     
     def getWaysInBboxWithGeom(self, bbox, margin, streetTypeList):
-        latRangeMax=bbox[3]+margin
-        lonRangeMax=bbox[2]+margin
-        latRangeMin=bbox[1]-margin
-        lonRangeMin=bbox[0]-margin  
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
         # streetTypeList [] means all
         if streetTypeList==None or len(streetTypeList)==0:    
@@ -4006,33 +4058,30 @@ class OSMParserData():
             
             self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, AsText(geom) FROM wayTable WHERE streetTypeId IN %s AND ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
             
+        wayIdSet=set()
         allentries=self.cursorGlobal.fetchall()
         resultList=list()
         for x in allentries:
-            resultList.append(self.wayFromDBWithCoords(x))
+            way=self.wayFromDBWithCoordsString(x)
+            resultList.append(way)
+            wayIdSet.add(way[0])
             
-        return resultList
+        return resultList, wayIdSet
 
     def getAreasInBboxWithGeom(self, bbox, margin):
-        latRangeMax=bbox[3]+margin
-        lonRangeMax=bbox[2]+margin
-        latRangeMin=bbox[1]-margin
-        lonRangeMin=bbox[0]-margin  
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
         self.cursorArea.execute('SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Intersects(geom, BuildMbr(%f, %f, %f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
              
         allentries=self.cursorArea.fetchall()
         resultList=list()
         for x in allentries:
-            resultList.append(self.areaFromDB(x))
+            resultList.append(self.areaFromDBWithCoordsString(x))
             
         return resultList          
       
     def getAreasOnPointWithGeom(self, lat, lon, margin):
-        latRangeMax=lat+margin
-        lonRangeMax=lon+margin*1.4
-        latRangeMin=lat-margin
-        lonRangeMin=lon-margin*1.4 
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 
         sql='SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat)
         self.cursorArea.execute(sql)
@@ -4040,10 +4089,21 @@ class OSMParserData():
         allentries=self.cursorArea.fetchall()
         resultList=list()
         for x in allentries:
-            resultList.append(self.areaFromDB(x))
+            resultList.append(self.areaFromDBWithCoordsString(x))
             
         return resultList          
         
+    def getAreaEntryForIdWithCoords(self, areaId):
+        sql='SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE id=%d'%(areaId)
+        self.cursorArea.execute(sql)
+
+        allentries=self.cursorArea.fetchall()
+        resultList=list()
+        for x in allentries:
+            resultList.append(self.areaFromDBWithCoordsList(x))
+            
+        return resultList     
+            
     def getCoordsOfEdge(self, edgeId):
         (edgeId, _, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
         return coords
@@ -4156,7 +4216,7 @@ class OSMParserData():
 
         allWays=self.cursorGlobal.fetchall()
         way=allWays[0]
-        wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=self.wayFromDBWithCoords(way)
+        wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=self.wayFromDBWithCoordsList(way)
         if name!=None:
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
             
