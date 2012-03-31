@@ -190,8 +190,12 @@ class OSMUtils():
         lon2 = self.deg2rad(lon2)
         
         d=self.distanceRadRad(lat1, lon1, lat2, lon2)
-        A=math.sin((1-frac)*d)/math.sin(d)
-        B=math.sin(frac*d)/math.sin(d)
+        sinD=math.sin(d)
+        return self.linepartRad(lat1, lon1, lat2, lon2, d, sinD, frac)
+
+    def linepartRad(self, lat1, lon1, lat2,  lon2, d, sinD, frac):        
+        A=math.sin((1-frac)*d)/sinD
+        B=math.sin(frac*d)/sinD
         x = A*math.cos(lat1)*math.cos(lon1) +  B*math.cos(lat2)*math.cos(lon2)
         y = A*math.cos(lat1)*math.sin(lon1) +  B*math.cos(lat2)*math.sin(lon2)
         z = A*math.sin(lat1)           +  B*math.sin(lat2)
@@ -199,7 +203,7 @@ class OSMUtils():
         lon=math.atan2(y,x)
 
         return (self.rad2deg(lat), self.rad2deg(lon))
-
+    
     def heading(self, lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
         lon1 = self.deg2rad(lon1)
@@ -285,7 +289,52 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
+    def createTemporaryPoints(self, lat1, lon1, lat2, lon2, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
+        rlat1 = self.deg2rad(lat1)
+        rlon1 = self.deg2rad(lon1)
+        rlat2 = self.deg2rad(lat2)
+        rlon2 = self.deg2rad(lon2)
+        
+        rDistance=self.distanceRadRad(rlat1, rlon1, rlat2, rlon2)  
+        sinD=math.sin(rDistance)  
+        distance=int(rDistance * RADIUS_EARTH *1000)
+        
+        pointsToIgnoreStart=0
+        pointsToIgnoreEnd=0
+        
+        if offsetStart!=0.0:
+            pointsToIgnoreStart=int(offsetStart/frac)
+        if offsetEnd!=0.0:
+            pointsToIgnoreEnd=int(offsetEnd/frac)
+       
+        pointsToCreate=int(distance/frac)
+
+        points=list()
+        if offsetStart==0.0 and addStart==True:
+            points.append((lat1, lon1))
+        if distance>frac:
+            doneDistance=0
+            i=0
+            while doneDistance<distance:
+                newLat, newLon=self.linepartRad(rlat1, rlon1, rlat2, rlon2, rDistance, sinD, doneDistance/distance)
+                if pointsToIgnoreStart!=0:
+                    if i>pointsToIgnoreStart:
+                        points.append((newLat, newLon))
+                if pointsToIgnoreEnd!=0:
+                    if i<pointsToCreate-pointsToIgnoreEnd:
+                        points.append((newLat, newLon))
+                else:
+                    points.append((newLat, newLon))
+                    
+                doneDistance=doneDistance+frac
+                i=i+1
+        if offsetEnd==0.0 and addEnd==True:
+            points.append((lat2, lon2))
+
+#        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
+        return points
+    
+    def createTemporaryPoints1(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
         distance=int(self.distance(lat, lon, lat1, lon1))
         pointsToIgnoreStart=0
         pointsToIgnoreEnd=0
@@ -304,7 +353,7 @@ class OSMUtils():
             doneDistance=0
             i=0
             while doneDistance<distance:
-                newLat, newLon=self.linepart(lat, lon, lat1, lon1, doneDistance/distance)
+                newLat, newLon=self.linepart1(lat, lon, lat1, lon1, doneDistance/distance)
                 if pointsToIgnoreStart!=0:
                     if i>pointsToIgnoreStart:
                         points.append((newLat, newLon))
@@ -321,7 +370,6 @@ class OSMUtils():
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
         return points
-    
 def main():    
 #    # 84194738 
 #    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
@@ -411,6 +459,14 @@ def main():
         osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5)
     print("linepart1:%f"%(time.time()-start))
         
+    start=time.time()
+    print(osmutils.createTemporaryPoints(latFrom, lonFrom, latTo, lonTo, 0.1))
+    print("createTemporaryPoints:%f"%(time.time()-start))
+    
+    start=time.time()
+    print(osmutils.createTemporaryPoints1(latFrom, lonFrom, latTo, lonTo, 0.1))
+    print("createTemporaryPoints1:%f"%(time.time()-start))
+    
 if __name__ == "__main__":
     main()  
 

@@ -58,6 +58,10 @@ class Constants():
     POI_TYPE_ADDRESS=6
     POI_TYPE_ENFORCEMENT=1
     POI_TYPE_MOTORWAY_JUNCTION=2
+    
+    AREA_TYPE_ADMIN=0
+    AREA_TYPE_NATURAL=1
+    AREA_TYPE_LANDUSE=2
 
 class OSMRoute():
     def __init__(self, name="", routingPointList=None):
@@ -330,6 +334,8 @@ class OSMParserData():
         self.skipNodes=False
         self.skipWays=False
         self.skipRelations=False
+        self.skipHighways=False
+        self.skipAddress=False
 
     def createEdgeTables(self):
         self.createEdgeTable(True)
@@ -598,8 +604,9 @@ class OSMParserData():
 
     def createAreaTable(self):
         self.cursorArea.execute("SELECT InitSpatialMetaData()")
-        self.cursorArea.execute('CREATE TABLE areaTable (id INTEGER PRIMARY KEY, osmId INTEGER, tags BLOB)')
+        self.cursorArea.execute('CREATE TABLE areaTable (id INTEGER PRIMARY KEY, type INTEGER, osmId INTEGER, tags BLOB)')
         self.cursorArea.execute('CREATE INDEX osmId_idx on areaTable(osmId)')
+        self.cursorArea.execute('CREATE INDEX type_idx on areaTable(type)')
         self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
 
     def createRestrictionTable(self):
@@ -756,13 +763,15 @@ class OSMParserData():
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, streetInfo))
             self.edgeId=self.edgeId+1
         
-    def addToAreaTable(self, osmId, tags, polyString):
-        if not self.isAreaEntryWithOsmIdInDB(osmId):
-            self.cursorArea.execute('INSERT INTO areaTable VALUES( ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (self.areaId, osmId, pickle.dumps(tags)))
+    def addToAreaTable(self, areaType, osmId, tags, polyString):
+        # relationId and wayId could be the same
+        # so we also need to check the type
+        if not self.isAreaEntryInDB(osmId, areaType):
+            self.cursorArea.execute('INSERT INTO areaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (self.areaId, areaType, osmId, pickle.dumps(tags)))
             self.areaId=self.areaId+1
         
-    def isAreaEntryWithOsmIdInDB(self, osmId):
-        self.cursorArea.execute('SELECT id, osmId, tags FROM areaTable WHERE osmId=%d'%(osmId))
+    def isAreaEntryInDB(self, osmId, areaType):
+        self.cursorArea.execute('SELECT id, osmId, tags FROM areaTable WHERE osmId=%d AND type=%d'%(osmId, areaType))
         allentries=self.cursorArea.fetchall()
         return len(allentries)!=0
     
@@ -1158,11 +1167,11 @@ class OSMParserData():
             print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
 
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT id, tags, AsText(geom) FROM areaTable')
+        self.cursorArea.execute('SELECT id, type, tags, AsText(geom) FROM areaTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            areaId, osmId, tags, coords=self.areaFromDBWithCoordsList(x)
-            print("id: "+str(areaId)+ " osmId:" + str(osmId) +" tags: "+str(tags)+ " coords:"+str(coords))
+            areaId, areaType, osmId, tags, coords=self.areaFromDBWithCoordsList(x)
+            print("id: "+str(areaId)+ "type: "+areaType +"  osmId:" + str(osmId) +" tags: "+str(tags)+ " coords:"+str(coords))
 
     def dropAreaTable(self):
         self.cursorArea.execute('DROP TABLE areaTable')
@@ -1321,28 +1330,31 @@ class OSMParserData():
             
     def areaFromDBWithCoordsList(self, x):
         areaId=x[0]
-        osmId=x[1]
-        tags=pickle.loads(x[2])  
-        coordsStr=x[3]
+        areaType=x[1]
+        osmId=x[2]
+        tags=pickle.loads(x[3])  
+        coordsStr=x[4]
         allCoordsList=list()      
         if coordsStr==None:
-            return (areaId, osmId, tags, allCoordsList)
+            return (areaId, areaType, osmId, tags, allCoordsList)
     
         allCoordsList=self.createCoordsFromMultiPolygon(coordsStr)
-        return (areaId, osmId, tags, allCoordsList)
+        return (areaId, areaType, osmId, tags, allCoordsList)
 
     def areaFromDBWithCoordsString(self, x):
         areaId=x[0]
-        osmId=x[1]
-        tags=pickle.loads(x[2])  
-        coordsStr=x[3]
-        return (areaId, osmId, tags, coordsStr)
+        areaType=x[1]
+        osmId=x[2]
+        tags=pickle.loads(x[3])  
+        coordsStr=x[4]
+        return (areaId, areaType, osmId, tags, coordsStr)
         
     def areaFromDB(self, x):
         areaId=x[0]
-        osmId=x[1]
-        tags=pickle.loads(x[2])  
-        return (areaId, osmId, tags)
+        areaType=x[1]
+        osmId=x[2]
+        tags=pickle.loads(x[3])  
+        return (areaId, areaType, osmId, tags)
     
     def isUsableNode(self):
         return ["motorway_junction", "traffic_signals", "mini_roundabout", "stop", "speed_camera"]
@@ -1558,6 +1570,18 @@ class OSMParserData():
         tags=pickle.loads(plainTags)
         return tags
         
+    def getWaterwayTypes(self):
+        return ["riverbank", "river", "stream"]
+
+    def getNaturalTypes(self):
+        return ["water", "wood", "tree"]
+
+    def getLanduseTypes(self):
+        return ["forest", "grass", "farm", "farmland", "meadow"]
+            
+    def getBoundaryTypes(self):
+        return ["administrative"]
+
     def parse_ways(self, way):
         if self.skipWays==True:
             return 
@@ -1571,11 +1595,45 @@ class OSMParserData():
                 print("way with len(ref)==1 %d"%(wayid))
                 continue
             
-            if not "highway" in tags and "boundary" in tags:
-                if tags["boundary"]=="administrative":
-                    self.addToWayRefTable(wayid, refs)
+            if not "highway" in tags and not "building" in tags:
+                
+                self.addToWayRefTable(wayid, refs)
             
-            if "building" in tags:
+                if "boundary" in tags:
+                    if tags["boundary"] in self.getBoundaryTypes():
+                        continue
+
+                if "waterway" in tags:
+                    if not tags["waterway"] in self.getWaterwayTypes():
+                        continue
+                                            
+                elif "natural" in tags:
+                    if not tags["natural"] in self.getNaturalTypes():
+                        continue
+
+                elif "landuse" in tags:
+                    if not tags["landuse"] in self.getLanduseTypes():
+                        continue
+                
+                else:
+                    continue
+                  
+                polyString="'MULTIPOLYGON((("
+
+                for ref in refs:
+                    storedRef, lat, lon=self.getCoordsEntry(ref)
+                    if storedRef!=None:
+                        polyString=polyString+"%f %f"%(lon, lat)+","
+                        
+                polyString=polyString[:-1]
+                polyString=polyString+")))'"
+
+                if "natural" in tags or "waterway" in tags:
+                    self.addToAreaTable(Constants.AREA_TYPE_NATURAL, wayid, tags, polyString)
+                elif "landuse" in tags:
+                    self.addToAreaTable(Constants.AREA_TYPE_LANDUSE, wayid, tags, polyString)
+                                            
+            if self.skipAddress==False and "building" in tags:
                 if "addr:street" in tags:
                     # TODO: use first ref as location for addr?
                     storedRef, lat, lon=self.getCoordsEntry(refs[0])
@@ -1586,24 +1644,8 @@ class OSMParserData():
                             if refCountry!=None:
                                 self.parseFullAddress(tags, refs[0], lat, lon, refCountry)
 
-            if "area" in tags:        
-                if tags["area"]=="yes":
-                    # TODO: store in area table as polygon
-                    # or if startRef==endref and !=roundabout
-                    None
-                        
-                if "landuse" in tags:
-                    None
                 
-                if "waterway" in tags:
-                    None
-                
-                if "natural" in tags:
-                    None
-                
-                continue
-                
-            if "highway" in tags:
+            if self.skipHighways==False and "highway" in tags:
                 streetType=tags["highway"]
                 if not self.isUsableRoad(streetType):
                     continue
@@ -1634,7 +1676,6 @@ class OSMParserData():
                     elif tags["oneway"]=="1":
                         oneway=1
                     elif tags["oneway"]=="-1":
-#                        print("way %d has oneway==-1"%(wayid))
                         oneway=2
                 if "junction" in tags:
                     if tags["junction"]=="roundabout":
@@ -1651,9 +1692,6 @@ class OSMParserData():
                         bridge=1
                         
                 maxspeed=self.getMaxspeed(tags, streetTypeId)
-                
-#                if refs[0]==refs[-1] and roundabout==0:
-#                    print("way %d has same start and endref"%(wayid))
                     
                 missingRefCount=0
                 for ref in refs:  
@@ -1661,11 +1699,6 @@ class OSMParserData():
                     if storedRef==None:
                         missingRefCount=missingRefCount+1
                         continue
-
-#                    refCountry=self.getCountryOfPos(lat, lon)
-#                    if refCountry==None:
-#                        missingRefCount=missingRefCount+1
-#                        continue
 
                     self.addToRefTable(ref, lat, lon, None, 0)
                     self.addToTmpRefWayTable(ref, wayid)
@@ -1675,7 +1708,6 @@ class OSMParserData():
                     continue
                 
                 requiredTags=self.stripUnneededTags(tags)
-#                self.addToTmpWayTable(wayid, requiredTags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge)   
 
                 coords, newRefList=self.createRefsCoords(refs)
                 if len(coords)!=0:
@@ -1755,54 +1787,78 @@ class OSMParserData():
 #    <tag k="ref:at:gkz" v="407"/>
                 elif tags["type"]=="multipolygon":
                     if "boundary" in tags:
-                        if tags["boundary"]=="administrative":
-                            # (59178604, 'way', 'outer')
-                            allRefs=list()
+                        if not tags["boundary"] in self.getBoundaryTypes():
+                            continue
+                    elif "waterway" in tags:
+                        if not tags["waterway"] in self.getWaterwayTypes():
+                            continue
+                    elif "natural" in tags:
+                        if not tags["natural"] in self.getNaturalTypes():
+                            continue
+                    elif "landuse" in tags:
+                        if not tags["landuse"] in self.getLanduseTypes():
+                            continue
+                    else:
+                        continue
+                    
+                    # (59178604, 'way', 'outer')
+                    allRefs=list()
 
-                            for way in ways:
-                                memberType=way[1]
-                                relationWayId=int(way[0])
-                                role=way[2]
+                    for way in ways:
+                        memberType=way[1]
+                        relationWayId=int(way[0])
+                        role=way[2]
+                        
+                        if role=="outer" and memberType=="way":
+                            # from boundary way table
+                            wayId, refs=self.getWayRefEntry(relationWayId)
+                            if wayId!=None:
+                                allRefs.append((wayId, refs, 0, 0))
+                            else:
+                                # from "real" way table
+                                wayId, _, refs, streetTypeId, name, nameRef, oneway, roundabout=self.getWayEntryForId2(relationWayId)
+                                if wayId!=None:
+                                    allRefs.append((wayId, refs, oneway, roundabout))
+                                            
+                    if len(allRefs)!=0:
+                        refRings=self.mergeWayRefs(allRefs)
+                        if len(refRings)!=0:
+                            skipArea=False
+                            # convert to multipolygon
+                            polyString="'MULTIPOLYGON("
+                            for refRingEntry in refRings:
+                                if skipArea==True:
+                                    break
                                 
-                                if role=="outer" and memberType=="way":
-                                    # from boundary way table
-                                    wayId, refs=self.getWayRefEntry(relationWayId)
-                                    if wayId!=None:
-                                        allRefs.append((wayId, refs, 0, 0))
+                                refs=refRingEntry["refs"]
+                                if refs[0]!=refs[-1]:
+                                    skipArea=True
+                                    break   
+                                
+                                polyString=polyString+'(('
+                                
+                                for ref in refs:
+                                    ref, lat, lon=self.getCoordsEntry(ref)
+                                    if ref!=None:
+                                        polyString=polyString+"%f %f"%(lon, lat)+","
                                     else:
-                                        # from "real" way table
-                                        wayId, _, refs, streetTypeId, name, nameRef, oneway, roundabout=self.getWayEntryForId2(relationWayId)
-                                        if wayId!=None:
-                                            allRefs.append((wayId, refs, oneway, roundabout))
-                                                    
-                            if len(allRefs)!=0:
-                                refRings=self.mergeWayRefs(allRefs)
-                                if len(refRings)!=0:
-                                    skipArea=False
-                                    # convert to multipolygon
-                                    polyString="'MULTIPOLYGON("
-                                    for refRingEntry in refRings:
-                                        if skipArea==True:
-                                            break
-                                        refs=refRingEntry["refs"]
-                                        if refs[0]!=refs[-1]:
-                                            skipArea=True
-                                            break
-                                        polyString=polyString+'(('
-                                        for ref in refs:
-                                            ref, lat, lon=self.getCoordsEntry(ref)
-                                            if ref!=None:
-                                                polyString=polyString+"%f %f"%(lon, lat)+","
-                                            else:
-                                                skipArea=True
-                                                break
-                                        polyString=polyString[:-1]
-                                        polyString=polyString+')),'
-                                    polyString=polyString[:-1]
-                                    polyString=polyString+")'"
-                                    if skipArea==False:
-                                        self.addToAreaTable(osmid, tags, polyString)
-                                           
+                                        skipArea=True
+                                        break
+                                        
+                                polyString=polyString[:-1]
+                                polyString=polyString+')),'
+                                
+                            polyString=polyString[:-1]
+                            polyString=polyString+")'"
+
+                            if skipArea==False:
+                                if "boundary" in tags:
+                                    self.addToAreaTable(Constants.AREA_TYPE_ADMIN, osmid, tags, polyString)
+                                elif "natural" or "waterway" in tags:
+                                    self.addToAreaTable(Constants.AREA_TYPE_NATURAL, osmid, tags, polyString)
+                                elif "landuse" in tags:
+                                    self.addToAreaTable(Constants.AREA_TYPE_LANDUSE, osmid, tags, polyString)
+                                        
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
@@ -3732,6 +3788,8 @@ class OSMParserData():
                 self.skipNodes=False
                 self.skipWays=False
                 self.skipRelations=False
+                self.skipAddress=False
+                self.skipHighways=False
   
                 print(self.osmList[country])
                 print("start parsing")
@@ -3804,9 +3862,11 @@ class OSMParserData():
         self.closeAllDB()
 
     def parseAreaRelations(self):
-        self.skipWays=True
+        self.skipWays=False
         self.skipNodes=True
         self.skipRelations=False
+        self.skipAddress=True
+        self.skipHighways=True
         
         countryList=self.osmList.keys()
         for country in countryList:       
@@ -3839,8 +3899,8 @@ class OSMParserData():
         osmDataList=dict()
         osmData=dict()
         osmData["country"]="Austria"
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -3854,16 +3914,16 @@ class OSMParserData():
 #        osmData["countryCode"]="CH"
 #        osmDataList[1]=osmData
     
-        osmData=dict()
-        osmData["country"]="Germany"
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-south.osm'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-thueringen.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
-        osmData["poly"]="germany.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Germany"
-        osmData["countryCode"]="DE"
-        osmDataList[2]=osmData
+#        osmData=dict()
+#        osmData["country"]="Germany"
+##        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-south.osm'
+##        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-thueringen.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+##        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
+#        osmData["poly"]="germany.poly"
+#        osmData["polyCountry"]="Europe / Western Europe / Germany"
+#        osmData["countryCode"]="DE"
+#        osmDataList[2]=osmData
         
 #        osmData=dict()
 #        osmData["country"]="liechtenstein"
@@ -4068,22 +4128,45 @@ class OSMParserData():
             
         return resultList, wayIdSet
 
-    def getAreasInBboxWithGeom(self, bbox, margin):
+    def getAreasInBboxWithGeom(self, areaTypeList, bbox, margin):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
-        self.cursorArea.execute('SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Intersects(geom, BuildMbr(%f, %f, %f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+        filterString='('
+        for areaType in areaTypeList:
+            filterString=filterString+str(areaType)+','
+        filterString=filterString[:-1]
+        filterString=filterString+')'
+
+        self.cursorArea.execute('SELECT id, type, osmId, tags, AsText(geom) FROM areaTable WHERE type IN %s AND ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
              
         allentries=self.cursorArea.fetchall()
         resultList=list()
+        areaIdSet=set()
         for x in allentries:
             resultList.append(self.areaFromDBWithCoordsString(x))
+            areaIdSet.add(x[0])
             
-        return resultList          
+        return resultList, areaIdSet    
+    
+    def getAdminAreasInBboxWithGeom(self, bbox, margin):
+        areaType=Constants.AREA_TYPE_ADMIN
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
+        
+        self.cursorArea.execute('SELECT id, type, osmId, tags, AsText(geom) FROM areaTable WHERE type=%d AND ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236))'%(areaType, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+             
+        allentries=self.cursorArea.fetchall()
+        resultList=list()
+        areaIdSet=set()
+        for x in allentries:
+            resultList.append(self.areaFromDBWithCoordsString(x))
+            areaIdSet.add(x[0])
+            
+        return resultList, areaIdSet        
       
-    def getAreasOnPointWithGeom(self, lat, lon, margin):
+    def getAreasOnPointWithGeom(self, areaType, lat, lon, margin):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 
-        sql='SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat)
+        sql='SELECT id, type, osmId, tags, AsText(geom) FROM areaTable WHERE type=%d AND ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND Contains(geom, MakePoint(%f, %f, 4236))'%(areaType, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat)
         self.cursorArea.execute(sql)
              
         allentries=self.cursorArea.fetchall()
@@ -4092,17 +4175,6 @@ class OSMParserData():
             resultList.append(self.areaFromDBWithCoordsString(x))
             
         return resultList          
-        
-    def getAreaEntryForIdWithCoords(self, areaId):
-        sql='SELECT id, osmId, tags, AsText(geom) FROM areaTable WHERE id=%d'%(areaId)
-        self.cursorArea.execute(sql)
-
-        allentries=self.cursorArea.fetchall()
-        resultList=list()
-        for x in allentries:
-            resultList.append(self.areaFromDBWithCoordsList(x))
-            
-        return resultList     
             
     def getCoordsOfEdge(self, edgeId):
         (edgeId, _, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
@@ -4439,7 +4511,7 @@ def main(argv):
 #    p.removeOrphanedEdges()
 #    p.createGeomDataForEdgeTable()
 
-#    p.parseAreaRelations()
+    p.parseAreaRelations()
 #    p.testAreaTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()

@@ -782,7 +782,7 @@ class QtOSMWidget(QGLWidget):
             polygon.append( point )
                
         pen=self.trackPen
-        pen.setWidth(self.getPenWidthForZoom())
+        pen.setWidth(self.getStreetPenWidthForZoom())
         self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
 
@@ -1575,7 +1575,7 @@ class QtOSMWidget(QGLWidget):
             
         return (y, x)
     
-    def getPenWidthForZoom(self):
+    def getStreetPenWidthForZoom(self):
         if self.map_zoom==18:
             return 16
         if self.map_zoom==17:
@@ -1590,7 +1590,7 @@ class QtOSMWidget(QGLWidget):
         return 0
 
     def getPenWithForPoints(self):
-        return self.getPenWidthForZoom()+4
+        return self.getStreetPenWidthForZoom()+4
     
     def displayCoords(self, coords, pen=None):        
         polygon=QPolygon()
@@ -1606,7 +1606,7 @@ class QtOSMWidget(QGLWidget):
             self.painter.setPen(pen)
         else:
             pen=self.edgePen
-            pen.setWidth(self.getPenWidthForZoom())
+            pen.setWidth(self.getStreetPenWidthForZoom())
             self.painter.setPen(self.edgePen)
 
         self.painter.drawPolyline(polygon)
@@ -1626,7 +1626,7 @@ class QtOSMWidget(QGLWidget):
                         polygon.append( point )
 
             pen=self.routeOverlayPen
-            pen.setWidth(self.getPenWidthForZoom())
+            pen.setWidth(self.getStreetPenWidthForZoom())
             self.painter.setPen(pen)
             self.painter.drawPolyline(polygon)
         
@@ -1649,7 +1649,7 @@ class QtOSMWidget(QGLWidget):
                     polygon.append( point )                    
             
             pen=self.routePen
-            pen.setWidth(self.getPenWidthForZoom())
+            pen.setWidth(self.getStreetPenWidthForZoom())
             self.painter.setPen(pen)
             self.painter.drawPolyline(polygon)
                     

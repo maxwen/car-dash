@@ -513,11 +513,6 @@
       &minscale_zoom18;
       <PolygonSymbolizer fill="#bca9a9"/>
     </Rule>
-    <Rule>
-      &maxscale_zoom16;
-      &minscale_zoom18;
-      <LineSymbolizer stroke="#330066" stroke-width="0.2"/>
-    </Rule>
 </Style>
 
 <Style name="landuse">

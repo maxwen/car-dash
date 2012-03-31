@@ -257,11 +257,11 @@ class OSMMapnikTilesWorker(QThread):
 #                print("%f"%(time.time()-start))
                 self.tileQueue.popleft()
                 
-                if self.updateMapTrigger==5:
-                    self.updateMap()
-                    self.updateMapTrigger=0
-                else:
-                    self.updateMapTrigger=self.updateMapTrigger+1
+#                if self.updateMapTrigger==5:
+#                    self.updateMap()
+#                    self.updateMapTrigger=0
+#                else:
+#                    self.updateMapTrigger=self.updateMapTrigger+1
                          
             self.updateStatusLabel("OSM mapnik thread idle")
             self.updateMapnikThreadState(idleState)
@@ -294,7 +294,7 @@ class OSMMapnikTilesWorker(QThread):
 #            if len(self.workQueue)==0:
 #                self.exiting=True
                 
-        self.updateMap();
+#        self.updateMap();
         self.updateStatusLabel("OSM mapnik thread stopped")
         self.updateMapnikThreadState(stoppedState)
 
@@ -592,7 +592,9 @@ class QtOSMWidget(QWidget):
         self.backgroundColor=QColor(120, 120, 120, 200)
         self.widgetBackgroundColor=QColor(200, 200, 200)
         self.wayCasingColor=QColor(20, 20, 20, 200)
-        self.accessWaysColor=QColor(255, 0, 0, 200)
+        self.accessWaysColor=QColor(255, 0, 0, 100)
+        self.onewayWaysColor=QColor(0, 0, 255, 100)
+        self.waterColor=QColor(0, 0, 255, 254)
         self.refRing=None
         
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
@@ -600,10 +602,10 @@ class QtOSMWidget(QWidget):
         
         self.initPens()
         self.lastWayIdSet=None
-        self.remainingWays=set()
-        self.newWays=set()
         self.wayPolygonCache=dict()
         self.currentRoutePolygon=None
+        self.areaPolygonCache=dict()
+        self.lastAreaIdSet=None
         
     def createStreetPen(self, color):
         pen=QPen()
@@ -698,7 +700,7 @@ class QtOSMWidget(QWidget):
         
     def osm_map_set_zoom (self, zoom):
         self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
-        self.clearWayCache()
+        self.clearPolygonCache()
         self.checkTileDirForZoom()
         
         self.osm_map_handle_resize()
@@ -990,7 +992,7 @@ class QtOSMWidget(QWidget):
             polygon.append( point )
                
         pen=self.trackPen
-        pen.setWidth(self.getPenWidthForZoom())
+        pen.setWidth(self.getStreetPenWidthForZoom())
         self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
 
@@ -1145,11 +1147,12 @@ class QtOSMWidget(QWidget):
             if self.showBackgroundTiles==True:
                 self.showTiles()
             
+            self.displayVisiblePolygons(bbox)
             self.displayVisibleWays(bbox)
         else:
             self.showTiles()
         
-#        self.displayVisibleBoundaries(bbox)
+#        self.displayVisibleAdminBoundaries(bbox)
             
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
@@ -1157,7 +1160,7 @@ class QtOSMWidget(QWidget):
                 self.displayEdgeOfRoute(self.currentTrackList, self.currentEdgeIndexList)
         
         elif self.currentCoords!=None:
-            self.edgePen.setWidth(self.getPenWidthForZoom())
+            self.edgePen.setWidth(self.getStreetPenWidthForZoom())
             self.displayCoords(self.currentCoords, self.edgePen)
             
         self.showRoutingPoints()            
@@ -1171,7 +1174,7 @@ class QtOSMWidget(QWidget):
 
         if self.refRing!=None:   
             pen=self.trackPen
-            pen.setWidth(self.getPenWidthForZoom())   
+            pen.setWidth(self.getStreetPenWidthForZoom())   
             self.displayRefs(self.refRing, pen)
 
 #        if self.osmWidget.trackLogLines!=None:
@@ -1205,11 +1208,20 @@ class QtOSMWidget(QWidget):
         
         self.painter.end()
   
+    def getStreetTypeListForOneway(self):
+        return [Constants.STREET_TYPE_SERVICE,
+                Constants.STREET_TYPE_UNCLASSIFIED,
+                Constants.STREET_TYPE_ROAD,
+                Constants.STREET_TYPE_PRIMARY,
+                Constants.STREET_TYPE_SECONDARY,
+                Constants.STREET_TYPE_TERTIARY,
+                Constants.STREET_TYPE_RESIDENTIAL]
+        
     def getStreetTypeListForZoom(self):
-        if self.map_zoom in range(15, 19):
+        if self.map_zoom in range(16, 19):
             # all
             return []
-        elif self.map_zoom in range(14, 15):
+        elif self.map_zoom in range(14, 16):
             return [Constants.STREET_TYPE_MOTORWAY,
                 Constants.STREET_TYPE_MOTORWAY_LINK,
                 Constants.STREET_TYPE_TRUNK,
@@ -1288,9 +1300,10 @@ class QtOSMWidget(QWidget):
     def streetTypeIdSort(self, item):
         return item[1]
                    
-    def clearWayCache(self):
+    def clearPolygonCache(self):
         self.wayPolygonCache=dict()
         self.currentRoutePolygon=None
+        self.areaPolygonCache=dict()
         
     def displayVisibleWays(self, bbox):
         pen=QPen()
@@ -1303,17 +1316,11 @@ class QtOSMWidget(QWidget):
             return 
         
         start=time.time()
-        resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)
-        print("fetch %f"%(time.time()-start))
-        
+        resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
         
         if self.lastWayIdSet==None:
             self.lastWayIdSet=wayIdSet
-            self.remainingWays=set()
-            self.newWays=wayIdSet
         else:
-            self.remainingWays=self.lastWayIdSet & wayIdSet
-            self.newWays=wayIdSet - self.lastWayIdSet
             removedWays=self.lastWayIdSet-wayIdSet
             self.lastWayIdSet=wayIdSet
             
@@ -1321,18 +1328,17 @@ class QtOSMWidget(QWidget):
                 if wayId in self.wayPolygonCache.keys():
                     del self.wayPolygonCache[wayId]
             
-        start=time.time()
         bridgeWays=list()
         tunnelWays=list()
         otherWays=list()
-        showBridges=self.map_zoom in range(15, 19)
-        showTunnels=self.map_zoom in range(15, 19)
-        showCasing=self.map_zoom in range(15, 19)
-        showAccess=self.map_zoom in range(15, 19)
+        showBridges=self.map_zoom in range(16, 19)
+        showTunnels=self.map_zoom in range(16, 19)
+        showCasing=self.map_zoom in range(16, 19)
+        showAccess=self.map_zoom in range(17, 19)
+        showOneway=self.map_zoom in range(17, 19)
         
         for way in resultList:
             wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
-            
             streetTypeId, oneway, roundabout, tunnel, bridge=osmParserData.decodeStreetInfo2(streetInfo)
             
             if showBridges==True and bridge==1:
@@ -1344,27 +1350,14 @@ class QtOSMWidget(QWidget):
                 continue
             
             otherWays.append((way, streetTypeId))
-            
-        # TODO: mark oneways
-        
+                    
         # tunnel 
-#        if showCasing==True:
-#            pen.setStyle(Qt.DashLine)
-#            pen.setBrush(QBrush(self.wayCasingColor, Qt.SolidPattern))
-#            for way, streetTypeId in tunnelWays:   
-#                wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
-#                lineWidth, roadColor=self.getStreetProperties(streetTypeId)
-#                pen.setWidth(lineWidth)
-#                self.displayCoords(coords, pen)
-
-#        pen.setStyle(Qt.SolidLine)
-
         for way, streetTypeId in tunnelWays:   
             wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
             lineWidth, roadColor=self.getStreetProperties(streetTypeId)
             pen.setWidth(lineWidth)
             pen.setBrush(QBrush(roadColor, Qt.Dense2Pattern))
-            self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+            self.displayWayCoordsWithCache(way, pen)
 
         otherWays=sorted(otherWays, key=self.streetTypeIdSort)
         
@@ -1375,7 +1368,7 @@ class QtOSMWidget(QWidget):
                 wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
                 lineWidth, roadColor=self.getStreetProperties(streetTypeId)
                 pen.setWidth(lineWidth)
-                self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+                self.displayWayCoordsWithCache(way, pen)
 
         # fill
         for way, streetTypeId in otherWays:   
@@ -1384,63 +1377,106 @@ class QtOSMWidget(QWidget):
 
             lineWidth, roadColor=self.getStreetProperties(streetTypeId)
             pen.setWidth(lineWidth-2)
-#            pen.setStyle(Qt.SolidLine)
+            pen.setStyle(Qt.SolidLine)
             pen.setBrush(QBrush(roadColor, Qt.SolidPattern))
-            self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+            self.displayWayCoordsWithCache(way, pen)
             
             if showAccess==True and "access" in tags and tags["access"]!="yes":
                 pen.setWidth(lineWidth/2)
-                pen.setBrush(QBrush(self.accessWaysColor, Qt.Dense5Pattern))
-                self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+                pen.setStyle(Qt.DotLine)
+                pen.setBrush(QBrush(self.accessWaysColor, Qt.SolidPattern))
+                self.displayWayCoordsWithCache(way, pen)
             
-#            if oneway!=0:
-#                pen.setWidth(2)
-#                pen.setStyle(Qt.DashLine)
-#                pen.setBrush(QBrush(QColor(0, 0, 255, 200), Qt.Dense5Pattern))
-#                self.displayCoords(coords, pen)                 
+            # TODO: mark oneway direction
+            if showOneway==True and (oneway!=0 or roundabout==1) and streetTypeId in self.getStreetTypeListForOneway():
+                pen.setWidth(lineWidth/2)
+                pen.setStyle(Qt.DotLine)
+                pen.setBrush(QBrush(self.onewayWaysColor, Qt.SolidPattern))
+                self.displayWayCoordsWithCache(way, pen)                 
                 
         # bridges  
-#        pen.setStyle(Qt.SolidLine)
+        pen.setStyle(Qt.SolidLine)
         for way, streetTypeId in bridgeWays:
             wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, coords=way
             lineWidth, roadColor=self.getStreetProperties(streetTypeId)
             pen.setWidth(lineWidth)
             pen.setBrush(QBrush(Qt.black, Qt.SolidPattern))
-            self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+            self.displayWayCoordsWithCache(way, pen)
 
             pen.setWidth(lineWidth-2)
             pen.setBrush(QBrush(roadColor, Qt.SolidPattern))
-            self.displayWayCoordsWithCache(way, pen, self.newWays, self.remainingWays)
+            self.displayWayCoordsWithCache(way, pen)
 
-        print("draw %f"%(time.time()-start))
-#        print(len(self.wayPolygonCache))
+        print("displayVisibleWays: %f"%(time.time()-start))
 
+    def getDisplayAreaTypeList(self):
+        return [Constants.AREA_TYPE_LANDUSE, Constants.AREA_TYPE_NATURAL]
+    
     def displayVisiblePolygons(self, bbox):
         start=time.time()     
-        resultList=osmParserData.getAreasInBboxWithGeom(bbox, 0.0)
-
-#        resultList=osmParserData.getAreasOnPointWithGeom(self.osmutils.rad2deg(self.center_rlat), self.osmutils.rad2deg(self.center_rlon), 0.0)
-
-        print("%f"%(time.time()-start))
-#        pen=QPen(QColor(0, 0, 255, 200))
-#        pen.setWidth(5)
-#        pen.setStyle(Qt.DashDotLine)
+        resultList, areaIdSet=osmParserData.getAreasInBboxWithGeom(self.getDisplayAreaTypeList(), bbox, 0.0)
+        print("displayVisiblePolygons: %f"%(time.time()-start))
         
-#        for area in resultList:
-#            areaId, osmId, tags=area
-#            print(tags)
-#            for coords in allCoordsList:
-#                self.displayPolygon(coords, pen)
-
-    def displayVisibleBoundaries(self, bbox):
-        start=time.time()     
-        resultList=osmParserData.getAreasInBboxWithGeom(bbox, 0.0)
-
-        print("%f"%(time.time()-start))
-        
+        if self.lastAreaIdSet==None:
+            self.lastAreaIdSet=areaIdSet
+        else:
+            removedAreas=self.lastAreaIdSet-areaIdSet
+            self.lastAreaIdSet=areaIdSet
+            
+            for areaId in removedAreas:
+                if areaId in self.areaPolygonCache.keys():
+                    del self.areaPolygonCache[areaId]
+                    
         for area in resultList:
-            areaId, osmId, tags, coordsStr=area
+            tags=area[3]
+#        print("%d %s"%(osmId, tags))
+
+            brush=Qt.NoBrush
+            pen=Qt.NoPen
+            if "natural" in tags:
+                if tags["natural"]=="water":
+                    brush=QBrush(self.waterColor, Qt.SolidPattern)
+                else:
+                    brush=QBrush(QColor(0, 255, 0, 254), Qt.SolidPattern)
+            
+            elif "landuse" in tags:
+                brush=QBrush(QColor(0, 255, 0, 254), Qt.SolidPattern)
+            
+            elif "waterway" in tags:
+                if tags["waterway"]!="riverbank":
+                    pen=QPen()
+                    pen.setColor(self.waterColor)
+                    width=self.getWaterwayPenWidthForZoom()                        
+                    pen.setWidth(width)  
+                    pen.setCapStyle(Qt.RoundCap)
+                    pen.setJoinStyle(Qt.RoundJoin)
+                    pen.setStyle(Qt.SolidLine)
+                else:
+                    brush=QBrush(self.waterColor, Qt.SolidPattern)
+            
+            else:
+                continue
+               
+            self.displayPolygonWithCache(area, pen, brush)
+
+        self.painter.setBrush(Qt.NoBrush)
+
+    def displayVisibleAdminBoundaries(self, bbox):
+        start=time.time()     
+        resultList, areaIdSet=osmParserData.getAdminAreasInBboxWithGeom(bbox, 0.0)
+        print("displayVisibleAdminBoundaries: %f"%(time.time()-start))
+        
+        pen=QPen(Qt.white)
+        pen.setStyle(Qt.DashDotDotLine)
+        pen.setWidth(4.0)
+
+        for area in resultList:
+            tags=area[3]
+            coordsStr=area[4]
+            coords=osmParserData.createCoordsFromMultiPolygon(coordsStr)[0]
+
             print("%s %s"%(tags["admin_level"], tags["name"]))
+            self.displayPolygon(coords, pen)
 
      
     def showTextInfoBackground(self):
@@ -1637,7 +1673,7 @@ class QtOSMWidget(QWidget):
             
         return (y, x)
     
-    def getPenWidthForZoom(self):
+    def getStreetPenWidthForZoom(self):
         if self.map_zoom==18:
             return 16
         if self.map_zoom==17:
@@ -1651,8 +1687,22 @@ class QtOSMWidget(QWidget):
         
         return 0
 
+    def getWaterwayPenWidthForZoom(self):
+        if self.map_zoom==18:
+            return 10
+        if self.map_zoom==17:
+            return 8
+        if self.map_zoom==16:
+            return 6
+        if self.map_zoom==15:
+            return 4
+        if self.map_zoom==13 or self.map_zoom==14:
+            return 2
+        
+        return 0
+    
     def getPenWithForPoints(self):
-        return self.getPenWidthForZoom()+4
+        return self.getStreetPenWidthForZoom()+4
     
     def displayCoords(self, coords, pen):        
         polygon=QPolygon()
@@ -1677,7 +1727,7 @@ class QtOSMWidget(QWidget):
         self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
 
-    def displayWayCoordsWithCache(self, way, pen, newWays, remainingWays):        
+    def displayWayCoordsWithCache(self, way, pen):        
         polygon=None
         wayId=way[0]
         coordsStr=way[8]
@@ -1715,7 +1765,7 @@ class QtOSMWidget(QWidget):
         polygon=QPolygon()
         
         displayCoords=coords
-        fullCoords=self.map_zoom>=16
+        fullCoords=self.map_zoom>=15
         if fullCoords==False:
             if len(coords)>6:
                 displayCoords=coords[1:-2:2]
@@ -1730,6 +1780,45 @@ class QtOSMWidget(QWidget):
                
         self.painter.setPen(pen)
         self.painter.drawPolygon(polygon)    
+
+    def displayPolygonWithCache(self, area, pen, brush):        
+        polygon=None
+        areaId=area[0]
+        coordsStr=area[4]
+        map_x, map_y=self.getMapZeroPos()
+        
+        if not areaId in self.areaPolygonCache.keys():
+            polygon=QPolygon()
+            coords=osmParserData.createCoordsFromMultiPolygon(coordsStr)[0]
+
+            displayCoords=coords
+            fullCoords=self.map_zoom>=15
+            if fullCoords==False:
+                if len(coords)>6:
+                    displayCoords=coords[1:-2:2]
+                    displayCoords[0]=coords[0]
+                    displayCoords[-1]=coords[-1]
+            
+            for point in displayCoords:
+                lat, lon=point 
+                (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                point=QPoint(x, y);
+                polygon.append( point )
+               
+            self.areaPolygonCache[areaId]=polygon
+        
+        else:
+            polygon=self.areaPolygonCache[areaId]
+
+        displayPolygon=polygon.translated(-map_x, -map_y)
+                
+        self.painter.setBrush(brush)
+        self.painter.setPen(pen)
+            
+        if displayPolygon.first()==displayPolygon.last():
+            self.painter.drawPolygon(displayPolygon)  
+        else:
+            self.painter.drawPolyline(displayPolygon)  
         
     def displayRefs(self, refList, pen):        
         polygon=QPolygon()
@@ -1758,7 +1847,7 @@ class QtOSMWidget(QWidget):
                         polygon.append( point )
 
             pen=self.routeOverlayPen
-            pen.setWidth(self.getPenWidthForZoom())
+            pen.setWidth(self.getStreetPenWidthForZoom())
             self.painter.setPen(pen)
             self.painter.drawPolyline(polygon)
         
@@ -1788,7 +1877,7 @@ class QtOSMWidget(QWidget):
             displayPolygon=self.currentRoutePolygon.translated(-map_x, -map_y)   
             
             pen=self.routePen
-            pen.setWidth(self.getPenWidthForZoom())
+            pen.setWidth(self.getStreetPenWidthForZoom())
             self.painter.setPen(pen)
             self.painter.drawPolyline(displayPolygon)
                     

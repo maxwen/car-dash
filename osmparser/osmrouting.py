@@ -255,7 +255,7 @@ class OSMRouting():
     # still use track info if available to select a "good" edge
     def getEdgeIdOnPosForRoutingFallback(self, lat, lon, fromMouse, margin, track, speed):        
         # TODO: should be and fromMouse==False
-        if track!=None:  
+        if track!=None and fromMouse==False:  
             # use close range if no current edge is available
             edge=self.getEdgeIdOnPosWithTrack(lat, lon, track, margin, DECISION_EDGE_RANGE)
             if edge!=None:
@@ -565,8 +565,7 @@ class OSMRouting():
             # check if we are still on the expected edge
             # only used between crossingPassed and nearCrossing            
             if self.nearCrossing==False:
-                self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)                
-                return self.currentEdge 
+                return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)                
 
             if self.expectedNextEdgeId!=None:                
                 if self.crossingPassed==True or self.crossingReached==True:                    
