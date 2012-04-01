@@ -370,6 +370,36 @@ class OSMUtils():
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
         return points
+    
+    def createLineStringFromCoords(self, coords):
+        lineString="'LINESTRING("
+        
+        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])
+        
+#        for lat, lon in coords:
+#            lineString=lineString+"%f %f"%(lon, lat)+","
+            
+        coordString=coordString[:-1]
+        lineString=lineString+coordString+")'"
+        return lineString
+    
+    def createLineStringFromCoords1(self, coords):
+        lineString="'LINESTRING("
+                
+        for lat, lon in coords:
+            lineString=lineString+"%f %f"%(lon, lat)+","
+            
+        lineString=lineString[:-1]
+        lineString=lineString+")'"
+        return lineString
+    
+    def createMultiPolygonFromCoords(self, coords):
+        polyString="'MULTIPOLYGON((("
+        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
+        coordString=coordString[:-1]
+        polyString=polyString+coordString+")))'"        
+        return polyString
+        
 def main():    
 #    # 84194738 
 #    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
@@ -435,37 +465,41 @@ def main():
 #    print(osmutils.headingDiffAbsolute(45, 270))
 #    print(osmutils.headingDiffAbsolute(270, 45))
 
-    start=time.time()
-    print(osmutils.distance(latFrom, lonFrom, latTo, lonTo))
-    for i in range(0, 100000):
-        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
-    print("distance:%f"%(time.time()-start))
+#    start=time.time()
+#    print(osmutils.distance(latFrom, lonFrom, latTo, lonTo))
+#    for i in range(0, 100000):
+#        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
+#    print("distance:%f"%(time.time()-start))
+#    
+#    start=time.time()
+#    print(osmutils.distance1(latFrom, lonFrom, latTo, lonTo))
+#    for i in range(0, 100000):
+#        osmutils.distance1(latFrom, lonFrom, latTo, lonTo)
+#    print("distance1:%f"%(time.time()-start))
+#
+#    start=time.time()
+#    print(osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5))
+#    for i in range(0, 100000):
+#        osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5)
+#    print("linepart:%f"%(time.time()-start))
+#
+#    start=time.time()
+#    print(osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5))
+#    for i in range(0, 100000):
+#        osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5)
+#    print("linepart1:%f"%(time.time()-start))
+#        
+#    start=time.time()
+#    print(osmutils.createTemporaryPoints(latFrom, lonFrom, latTo, lonTo, 0.1))
+#    print("createTemporaryPoints:%f"%(time.time()-start))
+#    
+#    start=time.time()
+#    print(osmutils.createTemporaryPoints1(latFrom, lonFrom, latTo, lonTo, 0.1))
+#    print("createTemporaryPoints1:%f"%(time.time()-start))
     
-    start=time.time()
-    print(osmutils.distance1(latFrom, lonFrom, latTo, lonTo))
-    for i in range(0, 100000):
-        osmutils.distance1(latFrom, lonFrom, latTo, lonTo)
-    print("distance1:%f"%(time.time()-start))
-
-    start=time.time()
-    print(osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5))
-    for i in range(0, 100000):
-        osmutils.linepart(latFrom, lonFrom, latTo, lonTo, 0.5)
-    print("linepart:%f"%(time.time()-start))
-
-    start=time.time()
-    print(osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5))
-    for i in range(0, 100000):
-        osmutils.linepart1(latFrom, lonFrom, latTo, lonTo, 0.5)
-    print("linepart1:%f"%(time.time()-start))
-        
-    start=time.time()
-    print(osmutils.createTemporaryPoints(latFrom, lonFrom, latTo, lonTo, 0.1))
-    print("createTemporaryPoints:%f"%(time.time()-start))
-    
-    start=time.time()
-    print(osmutils.createTemporaryPoints1(latFrom, lonFrom, latTo, lonTo, 0.1))
-    print("createTemporaryPoints1:%f"%(time.time()-start))
+    coords=[(1.0, 2.0), (2.0, 3.0), (4.0, 5.0)]
+    print(osmutils.createLineStringFromCoords(coords))
+    print(osmutils.createMultiPolygonFromCoords(coords))
     
 if __name__ == "__main__":
     main()  

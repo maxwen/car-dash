@@ -1084,7 +1084,7 @@ class QtOSMWidget(QWidget):
                 self.showTiles()
             
 #            self.displayVisibleAdminBoundaries(bbox)
-#            self.displayVisiblePolygons(bbox)
+            self.displayVisiblePolygons(bbox)
             self.displayVisibleWays(bbox)
         else:
             self.showTiles()
@@ -1127,7 +1127,14 @@ class QtOSMWidget(QWidget):
 #            gradient.setColorAt(0, Qt.blue)
 #            self.painter.fillRect(skyRect, gradient)
             
-        self.displayVisibleNodes(bbox)
+        if self.map_zoom>=16:
+            self.displayVisibleNodes(bbox)
+            
+#        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
+#            osmParserData.getNearestNodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 0.1, Constants.POI_TYPE_GAS_STATION)
+#        else:
+#            osmParserData.getNearestNodeOfType(self.osmutils.rad2deg(self.center_rlat), self.osmutils.rad2deg(self.center_rlon), 0.1, Constants.POI_TYPE_GAS_STATION)
+        
         self.showRoutingPoints2()
         self.displayGPSPosition()
 
@@ -1280,37 +1287,33 @@ class QtOSMWidget(QWidget):
 
         print("displayVisibleWays: %f"%(time.time()-start))
 
-    def getNodeTypeList(self):
+    def getDisplayNodeTypeList(self):
         return [Constants.POI_TYPE_ENFORCEMENT, 
-                Constants.POI_TYPE_BARRIER, 
+#                Constants.POI_TYPE_BARRIER, 
                 Constants.POI_TYPE_GAS_STATION]
     
     def getPixmapForNodeType(self, nodeType):
-        if nodeType==Constants.POI_TYPE_ENFORCEMENT:
-            return self.style.getStylePixmap("speedCameraImage")
-        if nodeType==Constants.POI_TYPE_GAS_STATION:
-            return self.style.getStylePixmap("gasStationPixmap")
-        if nodeType==Constants.POI_TYPE_BARRIER:
-            return self.style.getStylePixmap("barrierPixmap")
-            
-        return self.style.getStylePixmap("poiPixmap")
+        return self.style.getPixmapForNodeType(nodeType)
     
     def displayVisibleNodes(self, bbox):
         start=time.time()
-        resultList=osmParserData.getNodesInBBoxWithGeom(bbox, 0.0, self.getNodeTypeList())        
+        resultList=osmParserData.getNodesInBBoxWithGeom(bbox, 0.0, self.getDisplayNodeTypeList())        
 
+        nodeTyleListSet=set(self.getDisplayNodeTypeList())
         for node in resultList:
             ref, lat, lon, tags, nodeTypeList=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
-                for nodeType in nodeTypeList:      
-                    self.painter.drawPixmap(int(x-IMAGE_WIDTH_SMALL/2), int(y-IMAGE_HEIGHT_SMALL), IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.getPixmapForNodeType(nodeType))
+                for nodeType in nodeTypeList:  
+                    if nodeType in nodeTyleListSet:    
+                        self.painter.drawPixmap(int(x-IMAGE_WIDTH_SMALL/2), int(y-IMAGE_HEIGHT_SMALL), IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.getPixmapForNodeType(nodeType))
 
         print("displayVisibleNodes: %f"%(time.time()-start))
 
 
     def getDisplayAreaTypeList(self):
-        return [Constants.AREA_TYPE_LANDUSE, Constants.AREA_TYPE_NATURAL]
+        return [Constants.AREA_TYPE_LANDUSE, 
+                Constants.AREA_TYPE_NATURAL]
     
     def displayVisiblePolygons(self, bbox):
         start=time.time()     
@@ -1329,7 +1332,6 @@ class QtOSMWidget(QWidget):
                     
         for area in resultList:
             tags=area[3]
-#        print("%d %s"%(osmId, tags))
 
             brush=Qt.NoBrush
             pen=Qt.NoPen
@@ -1345,7 +1347,7 @@ class QtOSMWidget(QWidget):
             elif "waterway" in tags:
                 if tags["waterway"]!="riverbank":
                     pen=self.style.getStylePen("waterwayPen")
-                    pen.setWidth(self.style.getWaterwayPenWidthForZoom(self.map_zoom))                      
+                    pen.setWidth(self.style.getWaterwayPenWidthForZoom(self.map_zoom, tags))                      
                 else:
                     brush=self.style.getStyleBrush("water")
             
@@ -1374,8 +1376,9 @@ class QtOSMWidget(QWidget):
                 if areaId in self.adminAreaPolygonCache.keys():
                     del self.adminAreaPolygonCache[areaId]
 
-        brush=self.style.getStyleBrush("adminArea")
-        pen=Qt.NoPen
+#        brush=self.style.getStyleBrush("adminArea")
+        brush=Qt.NoBrush
+        pen=self.style.getStylePen("adminArea")
 
         for area in resultList:
             tags=area[3]
@@ -2521,7 +2524,7 @@ class QtOSMWidget(QWidget):
                 self.lastWayId=wayId
                 wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList=osmParserData.getWayEntryForId5(wayId)
 #                print("%d %s %s %d %s %s %d %d %d"%(wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed))
-                print(tags)
+#                print(wayId)
                 (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=osmParserData.getEdgeEntryForEdgeId(edgeId)
 #                    print("%d %d %d %d %d %d %d %f %f"%(edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost))
                 

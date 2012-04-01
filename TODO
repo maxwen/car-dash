@@ -21,4 +21,10 @@ TODO: support for barriers
  
  TODO: add buildings to areas 
  -AREA_TYPE_BUILDING
-            
+ 
+ TODO parser
+ -pbf parser
+ -add filters   
+ 
+ TODO split DBs
+ -split global into way and node db        

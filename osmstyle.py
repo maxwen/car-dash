@@ -54,7 +54,7 @@ class OSMStyle():
         self.colorDict["accessWaysColor"]=QColor(255, 0, 0, 100)
         self.colorDict["onewayWaysColor"]=QColor(0, 0, 255, 100)
         self.colorDict["waterColor"]=QColor(0, 0, 255, 254)
-        self.colorDict["adminAreaColor"]=QColor(150, 150, 150, 254)
+        self.colorDict["adminAreaColor"]=QColor(0, 0, 0, 254)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0, 255, 0, 254)
 
@@ -105,6 +105,12 @@ class OSMStyle():
         pen=QPen()
         pen.setColor(Qt.white)
         self.penDict["textPen"]=pen
+
+        pen=QPen()
+        pen.setColor(self.getStyleColor("adminAreaColor"))
+        pen.setStyle(Qt.DotLine)
+        pen.setWidth(2.0)
+        self.penDict["adminArea"]=pen
         
     def getStylePen(self, key):
         if key in self.penDict:
@@ -202,17 +208,44 @@ class OSMStyle():
         
         return 0
 
-    def getWaterwayPenWidthForZoom(self, zoom):
-        if zoom==18:
-            return 10
-        if zoom==17:
-            return 8
-        if zoom==16:
-            return 6
-        if zoom==15:
-            return 4
-        if zoom==14:
-            return 2
+    def getWaterwayPenWidthForZoom(self, zoom, tags):
+        waterwayType=tags["waterway"]
+#        if "width" in tags:
+#            width=int(tags["width"])
+#            if zoom==18:
+#                return width*1.2
+#            if zoom==17:
+#                return width*0.8
+#            if zoom==16:
+#                return width*0.5
+#            if zoom==15:
+#                return width*0.3
+#            if zoom==14:
+#                return 1
+#        else:
+        if waterwayType=="river":
+            if zoom==18:
+                return 12
+            if zoom==17:
+                return 10
+            if zoom==16:
+                return 8
+            if zoom==15:
+                return 4
+            if zoom==14:
+                return 1
+            
+        elif waterwayType=="stream":
+            if zoom==18:
+                return 8
+            if zoom==17:
+                return 6
+            if zoom==16:
+                return 4
+            if zoom==15:
+                return 2
+            if zoom==14:
+                return 1
         
         return 0
     
@@ -275,4 +308,13 @@ class OSMStyle():
         self.brushDict["natural"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["adminArea"]=QBrush(self.getStyleColor("adminAreaColor"), Qt.SolidPattern)
         
+    def getPixmapForNodeType(self, nodeType):
+        if nodeType==Constants.POI_TYPE_ENFORCEMENT:
+            return self.getStylePixmap("speedCameraImage")
+        if nodeType==Constants.POI_TYPE_GAS_STATION:
+            return self.getStylePixmap("gasStationPixmap")
+        if nodeType==Constants.POI_TYPE_BARRIER:
+            return self.getStylePixmap("barrierPixmap")
+            
+        return self.getStylePixmap("poiPixmap")
         
