@@ -569,7 +569,7 @@ class QtOSMWidget(QGLWidget):
         self.distanceToCrossing=0
         self.routeInfo=None, None, None, None
         self.nextEdgeOnRoute=None
-        self.enforcementInfoList=None
+        self.wayPOIList=None
         self.speedInfo=None
         
         self.currentEdgeList=None
@@ -1455,10 +1455,10 @@ class QtOSMWidget(QGLWidget):
      
      
     def showEnforcementInfo(self):   
-        if self.enforcementInfoList!=None:  
+        if self.wayPOIList!=None:  
             showTrackDetails=self.map_zoom>13
             if showTrackDetails==True:
-                for enforcement in self.enforcementInfoList:
+                for enforcement in self.wayPOIList:
                     lat, lon=enforcement["coords"]
                     (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
 #                    print("%f %f %f %f"%(lat, lon, x, y))
@@ -2289,7 +2289,7 @@ class QtOSMWidget(QGLWidget):
         self.lastEdgeId=None
         self.lastWayId=None
         self.speedInfo=None
-        self.enforcementInfoList=None
+        self.wayPOIList=None
         self.distanceToEnd=0
         self.distanceToCrossing=0
         self.nextEdgeOnRoute=None
@@ -2418,7 +2418,7 @@ class QtOSMWidget(QGLWidget):
                 self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
                 self.speedInfo=maxspeed
                 # TODO: play sound?
-                self.enforcementInfoList=osmParserData.getEnforcmentsOnWay(wayId, refs)
+                self.wayPOIList=osmParserData.getPOIListOnWay(wayId)
 
                 _, _, _, tunnel, _=osmParserData.decodeStreetInfo2(streetInfo)
                 if tunnel==1 and track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:

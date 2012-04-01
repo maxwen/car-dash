@@ -1,0 +1,24 @@
+TODO: support for barriers
+ nodeTag=="barrier" + "bollard"
+ -can split ways
+ 	-what to do if way is not splitted at barrier
+ -must inhibit creating edges for routing over it
+ 	-create turn restrictions?
+ -render
+ 
+ TODO: use admin boundaries for addresses
+ -tag addresses with biundary info
+ -use in address dialog for filtering
+ 
+ TODO: turn restrications for "viaWay"
+ 
+ TODO: recalc route from next crossing to avoid u-turns
+ 
+ TODO: fix distance display during routing
+ can be negative numbers until next edge is selected
+ 
+ TODO: fix tunnel mode
+ 
+ TODO: add buildings to areas 
+ -AREA_TYPE_BUILDING
+            
