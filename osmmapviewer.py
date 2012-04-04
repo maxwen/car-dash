@@ -48,6 +48,7 @@ IMAGE_HEIGHT_SMALL=32
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
+ROTATE_X_AXIS=60
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -584,6 +585,7 @@ class QtOSMWidget(QWidget):
         self.lastAdminAreaIdSet=None       
         
         self.style=OSMStyle()
+        self.mapPoint=None
     
     def getRouteList(self):
         return self.routeList
@@ -652,10 +654,13 @@ class QtOSMWidget(QWidget):
             return low
         return x
 
+    def getYOffsetForRotationMap(self):
+        return self.height()/3
+    
     def calcMapZeroPos(self):
         map_x=int(self.center_x-self.width()/2)
         if self.withMapRotation==True:
-            map_y=int(self.center_y-self.height()/2)-self.height()/3
+            map_y=int(self.center_y-self.height()/2)-self.getYOffsetForRotationMap()
         else:
             map_y=int(self.center_y-self.height()/2)
         return (map_x, map_y)
@@ -828,7 +833,7 @@ class QtOSMWidget(QWidget):
         transform.translate(x, y)      
         
         if self.show3D==True:
-            transform.rotate(50, Qt.XAxis)    
+            transform.rotate(ROTATE_X_AXIS, Qt.XAxis)    
             transform.scale(1.2, 1.2)    
 
         if self.withMapRotation==False:
@@ -859,7 +864,18 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.style.getStylePixmap("gpsPointImageStop"))
                 
         self.painter.resetTransform()
+ 
+    def displayMapPosition(self, mapPoint):
+        imageWidth=IMAGE_WIDTH
+        imageHeight=IMAGE_HEIGHT
         
+        y,x=self.getPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1], True)
+        
+        xPos=int(x-imageWidth/2)
+        yPos=int(y-imageHeight/2)
+        
+        self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.style.getStylePixmap("mapPointPixmap"))
+         
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
             (pixel_y, pixel_x)=self.getPixelPosForLocationRad(self.gps_rlat, self.gps_rlon, False)
@@ -966,12 +982,16 @@ class QtOSMWidget(QWidget):
         invertedTransform=self.transformHeading.inverted()
         map_x, map_y=self.getMapZeroPos()
         
-        point=QPointF(0, 0)            
+        skyMargin=0
+        if self.show3D==True:
+            skyMargin=SKY_WIDTH
+            
+        point=QPointF(0, 0+skyMargin)            
         point0=invertedTransform[0].map(point)   
         lat1 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon1 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
 
-        point=QPointF(self.width(), 0)     
+        point=QPointF(self.width(), 0+skyMargin)     
         point0=invertedTransform[0].map(point)        
         lat2 = self.osmutils.rad2deg(self.osmutils.pixel2lat(self.map_zoom, map_y + point0.y()))
         lon2 = self.osmutils.rad2deg(self.osmutils.pixel2lon(self.map_zoom, map_x + point0.x()))
@@ -1017,7 +1037,7 @@ class QtOSMWidget(QWidget):
         transform.translate( self.center_x-map_x, self.center_y-map_y )
         
         if self.show3D==True:
-            transform.rotate(50, Qt.XAxis)   
+            transform.rotate(ROTATE_X_AXIS, Qt.XAxis)   
             transform.scale(1.2, 1.2)    
         
         if withMapRotate==True and rotateAngle!=None:
@@ -1118,14 +1138,17 @@ class QtOSMWidget(QWidget):
                     
 #        self.displayTestPoints()
         
+        if self.mapPoint!=None:
+            self.displayMapPosition(self.mapPoint)
+            
         self.painter.resetTransform()
                         
-#        if self.show3D==True:
-#            skyRect=QRectF(0, 0, self.width(), SKY_WIDTH)
-#            gradient=QLinearGradient(skyRect.topLeft(), skyRect.bottomLeft())
-#            gradient.setColorAt(1, self.style.getStyleColor("widgetBackgroundColor"))
-#            gradient.setColorAt(0, Qt.blue)
-#            self.painter.fillRect(skyRect, gradient)
+        if self.show3D==True:
+            skyRect=QRectF(0, 0, self.width(), SKY_WIDTH)
+            gradient=QLinearGradient(skyRect.topLeft(), skyRect.bottomLeft())
+            gradient.setColorAt(1, self.style.getStyleColor("widgetBackgroundColor"))
+            gradient.setColorAt(0, Qt.blue)
+            self.painter.fillRect(skyRect, gradient)
             
         if self.map_zoom>=16:
             self.displayVisibleNodes(bbox)
@@ -1288,8 +1311,8 @@ class QtOSMWidget(QWidget):
     def getDisplayNodeTypeList(self):
         return [Constants.POI_TYPE_ENFORCEMENT, 
 #                Constants.POI_TYPE_BARRIER, 
-                Constants.POI_TYPE_GAS_STATION,
-                Constants.POI_TYPE_PARKING]
+                Constants.POI_TYPE_GAS_STATION]
+#                Constants.POI_TYPE_PARKING]
     
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
@@ -1312,14 +1335,19 @@ class QtOSMWidget(QWidget):
 
 
     def getDisplayAreaTypeList(self):
-        if self.map_zoom>=17:
+        if self.map_zoom in range(17, 19):
             return [Constants.AREA_TYPE_LANDUSE, 
                     Constants.AREA_TYPE_NATURAL,
-                    Constants.AREA_TYPE_BUILDING]
-        else:
-            return [Constants.AREA_TYPE_LANDUSE, 
-                    Constants.AREA_TYPE_NATURAL]
+                    Constants.AREA_TYPE_BUILDING,
+                    Constants.AREA_TYPE_HIGHWAY_AREA]
             
+        elif self.map_zoom in range(15, 18):
+            return [Constants.AREA_TYPE_LANDUSE, 
+                    Constants.AREA_TYPE_NATURAL,
+                    Constants.AREA_TYPE_HIGHWAY_AREA]
+        else:
+            return []
+        
     def displayVisiblePolygons(self, bbox):
         start=time.time()     
         resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(self.getDisplayAreaTypeList(), bbox, 0.0)
@@ -1343,7 +1371,7 @@ class QtOSMWidget(QWidget):
             pen=Qt.NoPen
             if areaType==Constants.AREA_TYPE_NATURAL:
                 if "waterway" in tags:         
-                    print("%d %s"%(osmId, tags))  
+#                    print("%d %s"%(osmId, tags))  
                     brush=self.style.getStyleBrush("water")
          
                     if tags["waterway"]!="riverbank":
@@ -1361,6 +1389,9 @@ class QtOSMWidget(QWidget):
               
             elif areaType==Constants.AREA_TYPE_BUILDING:
                 brush=self.style.getStyleBrush("building")
+
+            elif areaType==Constants.AREA_TYPE_HIGHWAY_AREA:
+                brush=self.style.getStyleBrush("highway")
                 
             else:
                 continue
@@ -1393,8 +1424,8 @@ class QtOSMWidget(QWidget):
         for area in resultList:
             tags=area[2]
             adminLevel=area[3]
-            
-            print("%d %s"%(adminLevel, tags["name"]))
+            print(tags)
+#            print("%d %s"%(adminLevel, tags["name"]))
 #            self.displayPolygonWithCache(self.adminAreaPolygonCache, area, pen, brush)
         
         self.painter.setBrush(Qt.NoBrush)
@@ -1918,7 +1949,7 @@ class QtOSMWidget(QWidget):
                         self.showTrackOnGPSPos(lat, lon, False)
 
                 if self.wayInfo!=None:
-                    self.gpsPoint=OSMRoutingPoint(self.wayInfo, 3, (lat, lon))
+                    self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
                 else:
                     self.gpsPoint=None  
 
@@ -2082,14 +2113,18 @@ class QtOSMWidget(QWidget):
         recalcRouteAction=QAction("Recalc Route from here", self)
         recalcRouteGPSAction=QAction("Recalc Route from GPS", self)
         
-        
         routingPointSubMenu=QMenu(self)
-        routingPointSubMenu.setTitle("Routing Points")
+        routingPointSubMenu.setTitle("Map Points")
         routingPointList=self.getCompleteRoutingPoints()
         if routingPointList!=None:
             for point in routingPointList:
                 pointAction=OSMRoutingPointAction(point.getName(), point, self)
                 routingPointSubMenu.addAction(pointAction)
+            if self.mapPoint!=None:
+                routingPointSubMenu.addSeparator()
+                pointAction=OSMRoutingPointAction(self.mapPoint.getName(), self.mapPoint, self)
+                routingPointSubMenu.addAction(pointAction)
+
         else:
             routingPointSubMenu.setDisabled(True)
 
@@ -2171,7 +2206,7 @@ class QtOSMWidget(QWidget):
             self.clearCurrentRoute()
         elif action==recalcRouteAction:
             (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
-            currentPoint=OSMRoutingPoint("tmp", 5, (lat, lon))                
+            currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))                
             self.recalcRouteFromPoint(currentPoint)
         elif action==recalcRouteGPSAction:
             self.recalcRouteFromPoint(self.gpsPoint)
@@ -2199,17 +2234,22 @@ class QtOSMWidget(QWidget):
         endLat, endLon=routingPointList[-1].getPos()
         
         centerLat, centerLon=self.osmutils.linepart(endLat, endLon, startLat, startLon, 0.5)
-#        print("%f %f %f %f %f %f"%(startLat, startLon, endLat, endLon, centerLat, centerLon))
-        
+                
         for zoom in range(MAX_ZOOM, MIN_ZOOM, -1):
             (pixel_y1, pixel_x1)=self.getPixelPosForLocationDegForZoom(startLat, startLon, True, zoom, centerLat, centerLon)
             (pixel_y2, pixel_x2)=self.getPixelPosForLocationDegForZoom(endLat, endLon, True, zoom, centerLat, centerLon)
         
-#            print("%d:%d %d %d %d"%(zoom, pixel_x1, pixel_y1, pixel_x2, pixel_y2))
             if pixel_x1>0 and pixel_x2>0 and pixel_y1>0 and pixel_y2>0:
                 if pixel_x1<width and pixel_x2<width and pixel_y1<height and pixel_y2<height:
-#                    print("need zoom %d"%(zoom))
-                    self.osm_map_set_zoom(zoom)
+                    print(zoom)
+                    if zoom!=self.map_zoom:
+                        self.osm_map_set_zoom(zoom)
+                    
+                    if self.withMapRotation==True:
+                        y,x=self.getPixelPosForLocationDeg(centerLat, centerLon, False)
+                        y=y+self.getYOffsetForRotationMap()
+                        centerLat=self.osmutils.rad2deg(self.osmutils.pixel2lat(zoom, y))
+
                     self.osm_center_map_to_position(centerLat, centerLon)
                     break
         
@@ -2272,7 +2312,7 @@ class QtOSMWidget(QWidget):
         if result==QDialog.Accepted:
             routingPointList, self.routeList=routeDialog.getResult()
             self.setRoutingPointsFromList(routingPointList)
-#            self.showRoutingPointOnMap(self.startPoint)
+#            self.zoomToCompleteRoute(self.routingPointList)
         elif result==QDialog.Rejected:
             # even in case of cancel we might have save a route
             self.routeList=routeDialog.getRouteList()
@@ -2311,7 +2351,7 @@ class QtOSMWidget(QWidget):
         result=favNameDialog.exec()
         if result==QDialog.Accepted:
             favoriteName=favNameDialog.getResult()
-            favoritePoint=OSMRoutingPoint(favoriteName, 4, (lat, lon))
+            favoritePoint=OSMRoutingPoint(favoriteName, OSMRoutingPoint.TYPE_FAVORITE, (lat, lon))
             self.osmWidget.favoriteList.append(favoritePoint)
             
     def addRoutingPoint(self, pointType):
@@ -2371,6 +2411,10 @@ class QtOSMWidget(QWidget):
 
         self.osm_center_map_to_position(routingPoint.getPos()[0], routingPoint.getPos()[1])
 
+    def showPointOnMap(self, mapPoint):
+        self.mapPoint=mapPoint
+        self.showRoutingPointOnMap(mapPoint)        
+        
     def showPosPointOnMap(self, lat, lon):
         if self.map_zoom<15:
             self.osm_map_set_zoom(15)
@@ -2403,7 +2447,7 @@ class QtOSMWidget(QWidget):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
-        recalcPoint=OSMRoutingPoint("tmp", 5, (lat, lon))    
+        recalcPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))    
         
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished():
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
@@ -2694,8 +2738,6 @@ class QtOSMWidget(QWidget):
         if self.currentRoute.getRouteInfo()!=None:
             self.currentRoute.printRoute(osmParserData)
             self.printRouteDescription(self.currentRoute)
-            # show start pos at zoom level 15
-#            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             
             self.clearLastEdgeInfo()
 
@@ -3367,20 +3409,18 @@ class OSMWidget(QWidget):
                 name=streetName+" "+houseNumber+" - "+osmParserData.getCountryNameForId(country)
             else:
                 name=streetName+" - "+osmParserData.getCountryNameForId(country)
-            if pointType==0:
+            if pointType==OSMRoutingPoint.TYPE_START:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setStartPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==1:
+            elif pointType==OSMRoutingPoint.TYPE_END:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setEndPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==2:
+            elif pointType==OSMRoutingPoint.TYPE_WAY:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-            elif pointType==-1:
-                self.mapWidgetQt.showPosPointOnMap(lat, lon)
+            elif pointType==pointType:
+                mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                self.mapWidgetQt.showPointOnMap(mapPoint)
   
     @pyqtSlot()
     def _showFavorites(self):
@@ -3390,21 +3430,18 @@ class OSMWidget(QWidget):
             point, pointType, favoriteList=favoritesDialog.getResult()
             self.favoriteList=favoriteList
             if point!=None:
-                if pointType==0:
+                if pointType==OSMRoutingPoint.TYPE_START:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setStartPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-                elif pointType==1:
+                elif pointType==OSMRoutingPoint.TYPE_END:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setEndPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-                elif pointType==2:
+                elif pointType==OSMRoutingPoint.TYPE_WAY:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setWayPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
-                elif pointType==-1:
-                    self.mapWidgetQt.showRoutingPointOnMap(point)
-
+                elif pointType==OSMRoutingPoint.TYPE_MAP:
+                    mapPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    self.mapWidgetQt.showPointOnMap(mapPoint)
 
     @pyqtSlot()
     def _loadRoute(self):
@@ -3416,9 +3453,8 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setRouteList(routeList)
             if route!=None:
                 self.mapWidgetQt.setRoute(route)
-                # show start pos at zoom level 15
+                # zoom to route
                 self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
-#                self.mapWidgetQt.showRoutingPointOnMap(self.mapWidgetQt.startPoint)
                 
 #    def paintEvent(self, event):
 #        print("OSMWidget:paintEvent")

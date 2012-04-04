@@ -56,7 +56,8 @@ class OSMStyle():
         self.pixmapDict["centerGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "map-gps.png"))
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
-
+        self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "mappoint.png"))
+        
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["widgetBackgroundColor"]=QColor(200, 200, 200)
         self.colorDict["wayCasingColor"]=QColor(20, 20, 20, 200)
@@ -68,6 +69,7 @@ class OSMStyle():
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0, 255, 0, 254)
         self.colorDict["buildingColor"]=QColor(100, 100, 100, 254)
+        self.colorDict["highwayAreaColor"]=QColor(255, 255, 255, 254)
 
         self.initStreetColors()
         self.initBrush()
@@ -324,6 +326,7 @@ class OSMStyle():
         self.brushDict["natural"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["adminArea"]=QBrush(self.getStyleColor("adminAreaColor"), Qt.SolidPattern)
         self.brushDict["building"]=QBrush(self.getStyleColor("buildingColor"), Qt.SolidPattern)
+        self.brushDict["highway"]=QBrush(self.getStyleColor("highwayAreaColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType==Constants.POI_TYPE_ENFORCEMENT:
@@ -332,6 +335,8 @@ class OSMStyle():
             return self.getStylePixmap("gasStationPixmap")
         if nodeType==Constants.POI_TYPE_BARRIER:
             return self.getStylePixmap("barrierPixmap")
+        if nodeType==Constants.POI_TYPE_PARKING:
+            return self.getStylePixmap("parkingPixmap")
             
         return self.getStylePixmap("poiPixmap")
         

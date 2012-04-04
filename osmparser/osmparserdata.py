@@ -69,6 +69,7 @@ class Constants():
     AREA_TYPE_NATURAL=1
     AREA_TYPE_LANDUSE=2
     AREA_TYPE_BUILDING=3
+    AREA_TYPE_HIGHWAY_AREA=4
     
     LANDUSE_TYPE_SET=set(["forest", "grass", "farm", "farmland", "meadow"])
     NATURAL_TYPE_SET=set(["water", "wood", "tree"])
@@ -80,6 +81,14 @@ class Constants():
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle"])
     
     ONEWAY_OVERLAY_STREET_SET=set([STREET_TYPE_SERVICE,
+                STREET_TYPE_UNCLASSIFIED,
+                STREET_TYPE_ROAD,
+                STREET_TYPE_PRIMARY,
+                STREET_TYPE_SECONDARY,
+                STREET_TYPE_TERTIARY,
+                STREET_TYPE_RESIDENTIAL])
+    
+    ADDRESS_STREET_SET=set([STREET_TYPE_SERVICE,
                 STREET_TYPE_UNCLASSIFIED,
                 STREET_TYPE_ROAD,
                 STREET_TYPE_PRIMARY,
@@ -219,6 +228,14 @@ class OSMRoute():
 
         
 class OSMRoutingPoint():
+    TYPE_START=0
+    TYPE_END=1
+    TYPE_WAY=2
+    TYPE_GPS=3
+    TYPE_FAVORITE=4
+    TYPE_TMP=5
+    TYPE_MAP=6
+    
     def __init__(self, name="", pointType=0, pos=(0.0, 0.0)):
         self.lat=pos[0]
         self.lon=pos[1]
@@ -230,6 +247,7 @@ class OSMRoutingPoint():
         # 3 gps
         # 4 favorite
         # 5 temporary
+        # 6 map point
         self.type=pointType
         self.wayId=None
         self.edgeId=None
@@ -306,6 +324,9 @@ class OSMRoutingPoint():
     def getCountry(self):
         return self.country
     
+    def changeType(self, newType):
+        self.type=newType
+        
     def saveToConfig(self, config, section, name):        
         config.set(section, name, "%s"%(self.toString()))
         
@@ -403,8 +424,8 @@ class OSMParserData():
         self.setPragmaForDB(self.cursorAdress)
 
     def openCoordsDB(self):
-#        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
-        self.connectionCoords=sqlite3.connect(":memory:")
+        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
+#        self.connectionCoords=sqlite3.connect(":memory:")
         self.cursorCoords=self.connectionCoords.cursor()
         self.setPragmaForDB(self.cursorCoords)
 
@@ -485,7 +506,7 @@ class OSMParserData():
         self.openAreaDB()
         self.openAdressDB()
 #        self.openTmpDB()
-#        self.openCoordsDB()
+        self.openCoordsDB()
         
     def closeAllDB(self):
         self.closeGlobalDB()
@@ -493,7 +514,7 @@ class OSMParserData():
         self.closeAreaDB()
         self.closeAdressDB()
 #        self.closeTmpDB(False)
-#        self.closeCoordsDB(False)
+        self.closeCoordsDB(False)
       
     def getCountryForPolyCountry(self, polyCountry):
         for country, osmData in self.osmList.items():
@@ -1633,8 +1654,8 @@ class OSMParserData():
                                 refCountry=self.getCountryOfPos(lat, lon)
                                 if refCountry!=None:
                                     self.parseFullAddress(tags, refs[0], lat, lon, refCountry)
-                    else:
-                        print("address entry for %d exists"%(wayid))
+#                    else:
+#                        print("address entry for %d exists"%(wayid))
                         
             if "amenity" in tags:
                 if tags["amenity"] in self.isUsableAmenityNodeType():
@@ -1646,8 +1667,8 @@ class OSMParserData():
                             storedRef, lat, lon=self.getCoordsEntry(refs[0])
                             if storedRef!=None:
                                 self.addToRefTable(storedRef, lat, lon, tags, nodeType)
-                        else:
-                            print("amenity entry for %d exists"%(wayid))
+#                        else:
+#                            print("amenity entry for %d exists"%(wayid))
 
             if not "highway" in tags:    
                 # TODO: do we miss any waterways then?
@@ -1699,18 +1720,26 @@ class OSMParserData():
 
             # highway
             else:             
-                if self.skipHighways==False:
-                    streetType=tags["highway"]
-                                                                     
-                    streetTypeId=self.getStreetTypeId(streetType)
-                    if streetTypeId==-1:
+                streetType=tags["highway"]
+                                                                 
+                streetTypeId=self.getStreetTypeId(streetType)
+                if streetTypeId==-1:
+                    continue
+                
+                if "area" in tags:
+                    if tags["area"]=="yes":
+                        if refs[0]==refs[-1]:                                
+                            coords, newRefList=self.createRefsCoords(refs)
+                            if len(coords)<2:
+                                print("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
+                                continue
+                
+                            geomString=self.createMultiPolygonFromCoords(coords)
+                            self.addPolygonToAreaTable(Constants.AREA_TYPE_HIGHWAY_AREA, wayid, tags, None, geomString)
+                        
                         continue
-                    
-                    if "area" in tags:
-                        if tags["area"]=="yes":
-                            print("highway + area: %d %s"%(wayid, tags))
-                            continue
-            
+                
+                if self.skipHighways==False:
                     (name, nameRef)=self.getStreetNameInfo(tags, streetTypeId)
                     
                     oneway=0
@@ -1830,16 +1859,15 @@ class OSMParserData():
 #    <tag k="type" v="multipolygon"/>
 #    <tag k="boundary" v="administrative"/>
 #    <tag k="ref:at:gkz" v="407"/>
-                elif tags["type"]=="multipolygon" or tags["type"]=="boundary":
+                elif tags["type"]=="multipolygon":
                     isBuilding=False
                     isLanduse=False
                     isNatural=False
                     isAdminBoundary=False
                     
                     if "boundary" in tags:
-                        if not tags["boundary"] in self.getBoundaryTypes():
-                            continue
-                        isAdminBoundary=True
+                        if tags["boundary"] in self.getBoundaryTypes():
+                            isAdminBoundary=True
                         
                     if "waterway" in tags:
                         if tags["waterway"] in self.getWaterwayTypes():
@@ -1857,11 +1885,12 @@ class OSMParserData():
                         isBuilding=True
                         isLanduse=False
                         isNatural=False
+                        isAdminBoundary=False
                         
                     if isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
                         continue
                     
-                    print("multipolygon: %s"%(tags))
+#                    print("multipolygon: %s"%(tags))
                     
                     # (59178604, 'way', 'outer')
                     allRefs=list()
@@ -3764,7 +3793,7 @@ class OSMParserData():
             if len(poiList)!=0:
                 self.updateWayTableEntryPOIList(wayId, poiList)
             
-            print("")
+        print("")
             
     def parse(self, country):
         p = XMLParser(nodes_callback=self.parse_nodes, 
@@ -3778,7 +3807,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data1")
+        return os.path.join(env.getDataRoot(), "data3")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -3844,15 +3873,15 @@ class OSMParserData():
     def initDB(self):
         print(self.getDataDir())
         
-        self.openCoordsDB()
-        self.createCoordsDBTables()
+#        self.openCoordsDB()
+#        self.createCoordsDBTables()
         
-#        createCoordsDB=not self.coordsDBExists()
-#        if createCoordsDB:
-#            self.openCoordsDB()
-#            self.createCoordsDBTables()
-#        else:
-#            self.openCoordsDB()
+        createCoordsDB=not self.coordsDBExists()
+        if createCoordsDB:
+            self.openCoordsDB()
+            self.createCoordsDBTables()
+        else:
+            self.openCoordsDB()
 
         createEdgeDB=not self.edgeDBExists()
         if createEdgeDB:
@@ -3918,8 +3947,8 @@ class OSMParserData():
 #            self.mergeWayEntries()
 #            print("end merge ways")
                                                      
-            print("create POI entries")
-            self.createPOIEntriesForWays()
+#            print("create POI entries")
+#            self.createPOIEntriesForWays()
          
             print("create crossings")
             self.createCrossingEntries()
@@ -3952,11 +3981,6 @@ class OSMParserData():
             print("vacuum edge DB")
             self.vacuumEdgeDB()
             print("end vacuum edge DB")
-        
-        if createAdressDB==True:
-            self.resolveAddresses()
-            self.commitAdressDB()
-            self.vacuumAddressDB()
             
         if createGlobalDB==True:
             print("create spatial index for global table")
@@ -3973,6 +3997,11 @@ class OSMParserData():
             self.createSpatialIndexForEdgeTable()
             print("end create spatial index for edge table")
 
+        if createAdressDB==True:
+            self.resolveAddresses()
+            self.commitAdressDB()
+            self.vacuumAddressDB()
+            
         self.initGraph() 
         self.closeCoordsDB(False)
         self.closeTmpDB(False)
@@ -3984,7 +4013,7 @@ class OSMParserData():
         self.skipRelations=False
         self.skipAddress=True
         self.skipHighways=True
-        self.skipCoords=False
+        self.skipCoords=True
         
         countryList=self.osmList.keys()
         for country in countryList:       
@@ -4126,9 +4155,13 @@ class OSMParserData():
         self.vacuumEdgeDB()
         print("end vacuum edge DB")
 
+    def getStreetTypeIdForAddesses(self):
+        return Constants.ADDRESS_STREET_SET
+    
     def resolveAddresses(self):
         print("resolve addresses from admin boundaries")
-        adminLevelList=[8]
+        self.addressId=self.getLenOfAddressTable()
+        adminLevelList=[4, 6, 8]
         self.cursorAdress.execute('SELECT * FROM addressTable')
         allentries=self.cursorAdress.fetchall()
         
@@ -4138,18 +4171,58 @@ class OSMParserData():
         prog = ProgressBar(0, allAddressLength, 77)
         
         for x in allentries:
-            addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
+            addressId, refId, country, _, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
             
             prog.updateAmount(allAddressCount)
             print(prog, end="\r")
             allAddressCount=allAddressCount+1
             
-            resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList)
+            resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, True)
+            resultList.reverse()
             for area in resultList:
                 tags=area[2]
                 adminCity=tags["name"]
                 self.replaceInAddressTable(addressId, refId, country, adminCity, postCode, streetName, houseNumber, lat, lon)
-                
+                break
+            
+        print("")
+        
+        print("add all ways to address DB")
+        self.cursorGlobal.execute('SELECT * FROM wayTable')
+        allWays=self.cursorGlobal.fetchall()
+        
+        allWaysLength=len(allWays)
+        allWaysCount=0
+
+        prog = ProgressBar(0, allWaysLength, 77)
+        
+        addressSet=set()
+        for way in allWays:
+            _, _, refs, streetTypeId, name, _, _, _, _, _=self.wayFromDB4(way)    
+            
+            prog.updateAmount(allWaysCount)
+            print(prog, end="\r")
+            allWaysCount=allWaysCount+1
+            
+            if not streetTypeId in self.getStreetTypeIdForAddesses():
+                continue
+            
+            # TODO: which ref to use for way address
+            # could be somewhere in the middle 
+            refId, lat, lon=self.getCoordsEntry(refs[0])
+
+            if refId!=None:
+                refCountry=self.getCountryOfPos(lat, lon)
+                resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, False)
+                resultList.reverse()
+                for area in resultList:
+                    tags=area[2]
+                    adminCity=tags["name"]
+                    if not "%s-%s"%(name, adminCity) in addressSet:
+                        self.addToAddressTable(refId, refCountry, adminCity, None, name, None, lat, lon)
+                        addressSet.add("%s-%s"%(name, adminCity))
+                    break
+                    
         print("")
         
     def vacuumEdgeDB(self):
@@ -4380,7 +4453,7 @@ class OSMParserData():
             
         return resultList, areaIdSet                 
 
-    def getAdminAreasOnPointWithGeom(self, lat, lon, margin, adminLevelList):
+    def getAdminAreasOnPointWithGeom(self, lat, lon, margin, adminLevelList, sortByAdminLevel):
         areaType=Constants.AREA_TYPE_ADMIN
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 
@@ -4390,7 +4463,11 @@ class OSMParserData():
         filterString=filterString[:-1]
         filterString=filterString+')'
 
-        sql='SELECT osmId, type, tags, adminLevel FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type=%d AND adminLevel IN %s AND Contains(geom, MakePoint(%f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, areaType, filterString, lon, lat)
+        if sortByAdminLevel==True:
+            sql='SELECT osmId, type, tags, adminLevel FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type=%d AND adminLevel IN %s AND Contains(geom, MakePoint(%f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, areaType, filterString, lon, lat)
+        else:
+            sql='SELECT osmId, type, tags, adminLevel FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type=%d AND adminLevel IN %s AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, areaType, filterString, lon, lat)
+
         self.cursorArea.execute(sql)
              
         allentries=self.cursorArea.fetchall()
@@ -4736,10 +4813,15 @@ def main(argv):
 #    p.removeOrphanedWays()
 #    p.createGeomDataForEdgeTable()
 
+#    p.createSpatialIndexForEdgeTable()
+#    p.createSpatialIndexForGlobalTables()
+#    p.createSpatialIndexForAreaTable()
+    
+#    p.parseAreas()
 #    p.resolveAddresses()
 #    p.parseAreas()
 #    p.parseNodes()
-#    p.testAreaTable()
+#    p.testAddressTable()
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()

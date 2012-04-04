@@ -127,7 +127,7 @@ class OSMAdressDialog(QDialog):
         self.currentCountry=-1
         self.currentCity=None
         
-        self.pointType=0
+        self.pointType=-1
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
@@ -359,7 +359,7 @@ class OSMAdressDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=-1
+            self.pointType=OSMRoutingPoint.TYPE_MAP
         self.done(QDialog.Accepted)
 
 #    def _ok(self):
@@ -377,7 +377,7 @@ class OSMAdressDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=2
+            self.pointType=OSMRoutingPoint.TYPE_WAY
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -386,7 +386,7 @@ class OSMAdressDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=0
+            self.pointType=OSMRoutingPoint.TYPE_START
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -395,7 +395,7 @@ class OSMAdressDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=1
+            self.pointType=OSMRoutingPoint.TYPE_END
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -502,7 +502,7 @@ class OSMFavoritesDialog(QDialog):
         self.filteredFavoriteList=self.favoriteList
 
         self.selectedFavorite=None
-        self.pointType=0
+        self.pointType=-1
 
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
@@ -630,7 +630,7 @@ class OSMFavoritesDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=-1
+            self.pointType=OSMRoutingPoint.TYPE_MAP
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -639,7 +639,7 @@ class OSMFavoritesDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=2
+            self.pointType=OSMRoutingPoint.TYPE_WAY
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -648,7 +648,7 @@ class OSMFavoritesDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=0
+            self.pointType=OSMRoutingPoint.TYPE_START
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -657,7 +657,7 @@ class OSMFavoritesDialog(QDialog):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
-            self.pointType=1
+            self.pointType=OSMRoutingPoint.TYPE_END
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -1099,6 +1099,10 @@ class OSMRouteSaveDialog(QDialog):
 class OSMRouteTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
+        self.style=OSMStyle()
+        self.startPoint=self.style.getStylePixmap("startPixmap")
+        self.endPoint=self.style.getStylePixmap("finishPixmap")
+        self.wayPoint=self.style.getStylePixmap("flagPixmap")
         
     def rowCount(self, parent): 
         return len(self.routingPointList)
@@ -1109,16 +1113,29 @@ class OSMRouteTableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
-        elif role != Qt.DisplayRole:
-            return None
+        elif role == Qt.DecorationRole:
+            if index.row() >= len(self.routingPointList):
+                return None
+            point=self.routingPointList[index.row()]
+            pointType=point.getType()
+            if pointType==OSMRoutingPoint.TYPE_START:
+                return self.startPoint
+            elif pointType==OSMRoutingPoint.TYPE_END:
+                return self.endPoint
+            elif pointType==OSMRoutingPoint.TYPE_WAY:
+                return self.wayPoint
+            return None  
+           
+        elif role == Qt.DisplayRole:
+            if index.row() >= len(self.routingPointList):
+                return ""
+            point=self.routingPointList[index.row()]
+            name=point.getName()
+            
+            if index.column()==0:
+                return name
         
-        if index.row() >= len(self.routingPointList):
-            return ""
-        point=self.routingPointList[index.row()]
-        name=point.getName()
-        
-        if index.column()==0:
-            return name
+        return None
        
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
@@ -1146,6 +1163,7 @@ class OSMRouteDialog(QDialog):
         self.selectedRoutePoint=None
         self.routeList=list()
         self.routeList.extend(routeList)
+ 
         self.initUI()
       
     def getResult(self):
@@ -1261,6 +1279,7 @@ class OSMRouteDialog(QDialog):
     @pyqtSlot()
     def _revertRoute(self):
         self.routingPointList.reverse()
+        self.assignPointTypes()
         self.routeViewModel.update(self.routingPointList)
         self._selectionChanged()
         
@@ -1294,6 +1313,7 @@ class OSMRouteDialog(QDialog):
         if current.isValid():
             routingPoint=self.routingPointList[current.row()]
             self.routingPointList.remove(routingPoint)
+            self.assignPointTypes()
             self.routeViewModel.update(self.routingPointList)
             self._selectionChanged()
 
@@ -1307,6 +1327,8 @@ class OSMRouteDialog(QDialog):
             if index<=len(self.routingPointList)-1 and index>=1:
                 self.routingPointList.remove(routingPoint)
                 self.routingPointList.insert(index-1, routingPoint)
+            
+            self.assignPointTypes()
             self.routeViewModel.update(self.routingPointList)
             selmodel.setCurrentIndex(self.routeViewModel.index(current.row()-1, current.column()), QItemSelectionModel.ClearAndSelect)
 
@@ -1322,9 +1344,17 @@ class OSMRouteDialog(QDialog):
                 self.routingPointList.remove(routingPoint)
                 self.routingPointList.insert(index+1, routingPoint)
 
+            self.assignPointTypes()
             self.routeViewModel.update(self.routingPointList)
             selmodel.setCurrentIndex(self.routeViewModel.index(current.row()+1, current.column()), QItemSelectionModel.ClearAndSelect)
 
+    def assignPointTypes(self):
+        self.routingPointList[0].changeType(OSMRoutingPoint.TYPE_START)
+        self.routingPointList[-1].changeType(OSMRoutingPoint.TYPE_END)
+        for point in self.routingPointList[1:-1]:
+            point.changeType(OSMRoutingPoint.TYPE_WAY)
+            
+            
     @pyqtSlot()
     def _clearTableSelection(self):
         self.routeView.clearSelection()

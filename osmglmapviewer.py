@@ -1500,25 +1500,25 @@ class QtOSMWidget(QGLWidget):
             
             self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.tunnelPixmap)
             
-    def showRoutingPoints(self):
-#        showTrackDetails=self.map_zoom>13
-#        if showTrackDetails==False:
-#            return 
-
-        if self.startPoint!=None:
-            (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
-            if self.isPointVisible(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.startPointImage)
-
-        if self.endPoint!=None:
-            (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
-            if self.isPointVisible(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.endPointImage)
-            
-        for point in self.wayPoints:
-            (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
-            if self.isPointVisible(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.wayPointImage)
+#    def showRoutingPoints(self):
+##        showTrackDetails=self.map_zoom>13
+##        if showTrackDetails==False:
+##            return 
+#
+#        if self.startPoint!=None:
+#            (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
+#            if self.isPointVisible(x, y):
+#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.startPointImage)
+#
+#        if self.endPoint!=None:
+#            (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
+#            if self.isPointVisible(x, y):
+#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.endPointImage)
+#            
+#        for point in self.wayPoints:
+#            (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
+#            if self.isPointVisible(x, y):
+#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.wayPointImage)
             
     
     def getPixelPosForLocationDeg(self, lat, lon, relativeToEdge):
@@ -2143,7 +2143,6 @@ class QtOSMWidget(QGLWidget):
         if result==QDialog.Accepted:
             routingPointList, self.routeList=routeDialog.getResult()
             self.setRoutingPointsFromList(routingPointList)
-#            self.showRoutingPointOnMap(self.startPoint)
         elif result==QDialog.Rejected:
             # even in case of cancel we might have save a route
             self.routeList=routeDialog.getRouteList()
@@ -2565,8 +2564,6 @@ class QtOSMWidget(QGLWidget):
         if self.currentRoute.getRouteInfo()!=None:
             self.currentRoute.printRoute(osmParserData)
             self.printRouteDescription(self.currentRoute)
-            # show start pos at zoom level 15
-#            self.showRoutingPointOnMap(self.currentRoute.getRoutingPointList()[0])
             
             self.clearLastEdgeInfo()
 
@@ -3249,15 +3246,12 @@ class OSMWidget(QWidget):
             if pointType==0:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setStartPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==1:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setEndPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==2:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setWayPoint(routingPoint) 
-#                self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
             elif pointType==-1:
                 self.mapWidgetQt.showPosPointOnMap(lat, lon)
   
@@ -3272,15 +3266,12 @@ class OSMWidget(QWidget):
                 if pointType==0:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setStartPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
                 elif pointType==1:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setEndPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
                 elif pointType==2:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     self.mapWidgetQt.setWayPoint(routingPoint) 
-#                    self.mapWidgetQt.showRoutingPointOnMap(routingPoint)
                 elif pointType==-1:
                     self.mapWidgetQt.showRoutingPointOnMap(point)
 
@@ -3295,9 +3286,8 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setRouteList(routeList)
             if route!=None:
                 self.mapWidgetQt.setRoute(route)
-                # show start pos at zoom level 15
+                # show route
                 self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
-#                self.mapWidgetQt.showRoutingPointOnMap(self.mapWidgetQt.startPoint)
                 
 #    def paintEvent(self, event):
 #        print("OSMWidget:paintEvent")
