@@ -19,12 +19,16 @@ TODO: support for barriers
  
  TODO: fix tunnel mode
  
- TODO: add buildings to areas 
- -AREA_TYPE_BUILDING
- 
  TODO parser
  -pbf parser
  -add filters   
  
  TODO split DBs
- -split global into way and node db        
+ -split global into way and node db       
+ 
+ TODO geom data
+ -store also simple POLYGONS
+ -store line features as LINESTRINGS e.g. waterways 
+ 
+ TODO: remove also unneded ways
+ -way where all edges are orphaned

@@ -44,19 +44,30 @@ class OSMStyle():
         self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flag.png"))
         self.pixmapDict["gasStationPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "fillingstation.png"))
         self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "barrier.png"))
+        self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "parking.png"))
         self.pixmapDict["startPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "start.png"))
         self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "finish.png"))
         self.pixmapDict["flagPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flag.png"))
-        
+        self.pixmapDict["downloadPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "download.png"))
+        self.pixmapDict["followGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
+        self.pixmapDict["favoritesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "favorites.png"))
+        self.pixmapDict["addressesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "addresses.png"))
+        self.pixmapDict["routePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "route.png"))
+        self.pixmapDict["centerGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "map-gps.png"))
+        self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
+        self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
+
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["widgetBackgroundColor"]=QColor(200, 200, 200)
         self.colorDict["wayCasingColor"]=QColor(20, 20, 20, 200)
         self.colorDict["accessWaysColor"]=QColor(255, 0, 0, 100)
         self.colorDict["onewayWaysColor"]=QColor(0, 0, 255, 100)
+        self.colorDict["livingStreeColor"]=QColor(0, 255, 0, 100)
         self.colorDict["waterColor"]=QColor(0, 0, 255, 254)
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0, 254)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0, 255, 0, 254)
+        self.colorDict["buildingColor"]=QColor(100, 100, 100, 254)
 
         self.initStreetColors()
         self.initBrush()
@@ -252,11 +263,11 @@ class OSMStyle():
     def getPenWithForPoints(self, zoom):
         return self.getStreetPenWidthForZoom(zoom)+4
    
-    def getRoadPenKey(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access):
-        return "%s-%s-%s-%s-%s-%s-%s"%(str(streetTypeId), str(zoom), str(casing), str(oneway), str(tunnel), str(bridge), str(access))
+    def getRoadPenKey(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet):
+        return "%s-%s-%s-%s-%s-%s-%s-%s"%(str(streetTypeId), str(zoom), str(casing), str(oneway), str(tunnel), str(bridge), str(access), str(livingStreet))
     
-    def getRoadPen(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access):
-        key=self.getRoadPenKey(streetTypeId, zoom, casing, oneway, tunnel, bridge, access)
+    def getRoadPen(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet):
+        key=self.getRoadPenKey(streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet)
         
         if key in self.penDict:
             return self.penDict[key]
@@ -284,6 +295,11 @@ class OSMStyle():
                 brush=QBrush(self.getStyleColor("onewayWaysColor"), Qt.SolidPattern)
                 pen.setWidth(width/2)
                 pen.setStyle(Qt.DotLine)
+            
+            elif livingStreet==True:
+                brush=QBrush(self.getStyleColor("livingStreeColor"), Qt.SolidPattern)
+                pen.setWidth(width/2)
+                pen.setStyle(Qt.DotLine)
 
             else:
                 if tunnel==True:
@@ -307,6 +323,7 @@ class OSMStyle():
         self.brushDict["water"]=QBrush(self.getStyleColor("waterColor"), Qt.SolidPattern)
         self.brushDict["natural"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["adminArea"]=QBrush(self.getStyleColor("adminAreaColor"), Qt.SolidPattern)
+        self.brushDict["building"]=QBrush(self.getStyleColor("buildingColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType==Constants.POI_TYPE_ENFORCEMENT:

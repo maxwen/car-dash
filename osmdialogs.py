@@ -6,13 +6,13 @@ Created on Jan 17, 2012
 
 import fnmatch
 import re
-import env
 import os
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from gpsutils import GPSSimpleMonitor
+from osmstyle import OSMStyle
 
 class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, parent):
@@ -128,9 +128,10 @@ class OSMAdressDialog(QDialog):
         self.currentCity=None
         
         self.pointType=0
-        self.startPointIcon=QIcon(os.path.join(env.getImageRoot(), "source.png"))
-        self.endPointIcon=QIcon(os.path.join(env.getImageRoot(), "target.png"))
-        self.wayPointIcon=QIcon(os.path.join(env.getImageRoot(), "waypoint.png"))
+        self.style=OSMStyle()
+        self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
+        self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
+        self.wayPointIcon=QIcon(self.style.getStylePixmap("flagPixmap"))
         self.selectedAddress=None
         self.initUI()
          
@@ -502,9 +503,11 @@ class OSMFavoritesDialog(QDialog):
 
         self.selectedFavorite=None
         self.pointType=0
-        self.startPointIcon=QIcon(os.path.join(env.getImageRoot(), "source.png"))
-        self.endPointIcon=QIcon(os.path.join(env.getImageRoot(), "target.png"))
-        self.wayPointIcon=QIcon(os.path.join(env.getImageRoot(), "waypoint.png"))
+
+        self.style=OSMStyle()
+        self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
+        self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
+        self.wayPointIcon=QIcon(self.style.getStylePixmap("flagPixmap"))
 
         self.initUI()
          
@@ -1451,8 +1454,11 @@ class OSMOptionsDialog(QDialog):
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
-        self.downloadIcon=QIcon(os.path.join(env.getImageRoot(), "download.png"))
-        self.gpsIcon=QIcon(os.path.join(env.getImageRoot(), "gps.png"))
+        
+        self.style=OSMStyle()
+        self.downloadIcon=QIcon(self.style.getStylePixmap("downloadPixmap"))
+        self.gpsIcon=QIcon(self.style.getStylePixmap("followGPSPixmap"))
+        
         self.followGPS=parent.getAutocenterGPSValue()
         self.withDownload=parent.getWithDownloadValue()
         self.withMapnik=parent.getWithMapnikValue()
