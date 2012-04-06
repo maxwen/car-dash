@@ -9,7 +9,8 @@ TODO: support for barriers
  TODO: use admin boundaries for addresses
  -tag addresses with biundary info
  -use in address dialog for filtering
- 
+DONE
+
  TODO: turn restrications for "viaWay"
  relation with via type way {'to': 30031793, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 215852, 'from': 4408193}
 relation with via type way {'to': 40954792, 'viaWay': [40954793], 'type': 'no_u_turn', 'id': 253142, 'from': 23409578}
@@ -53,5 +54,29 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  
  TODO: remove also unneded ways
  -way where all edges are orphaned
+ DONE
  
  TODO: fix zoom to root with moved map zero pos
+ DONE
+ 
+ TODO: allow POI type filtering in options
+ 
+ TODO: search for nearest POI type
+ 
+ TODO: convert map point to routing point
+ 
+ TODO: add leisure park
+ 
+ TODO: place tags
+ e.g. village 240093479
+ add name display tag
+ DONE
+ 
+ TODO: railways
+ DONE
+ 
+ TODO: railway bridges and correct order with other area types
+ DONE
+ 
+ TODO: draw way tunnels before everything else
+ DONE

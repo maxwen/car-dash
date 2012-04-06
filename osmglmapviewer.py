@@ -3449,9 +3449,9 @@ class OSMWindow(QMainWindow):
         self.connect(self.osmWidget, SIGNAL("startProgress()"), self.startProgress)
         self.connect(self.osmWidget, SIGNAL("stopProgress()"), self.stopProgress)
         
-        self.connectPSButton=QCheckBox("Connect GPS", self)
-        self.connectPSButton.clicked.connect(self._connectGPS)        
-        self.statusbar.addPermanentWidget(self.connectPSButton)
+        self.connectGPSButton=QCheckBox("Connect GPS", self)
+        self.connectGPSButton.clicked.connect(self._connectGPS)        
+        self.statusbar.addPermanentWidget(self.connectGPSButton)
 
         self.setGeometry(0, 0, 900, 500)
         self.setWindowTitle('OSM')
@@ -3466,7 +3466,7 @@ class OSMWindow(QMainWindow):
         
     @pyqtSlot()
     def _connectGPS(self):
-        value=self.connectPSButton.isChecked()
+        value=self.connectGPSButton.isChecked()
         if value==True:
             if not self.updateGPSThread.isRunning():
                 self.updateGPSThread.setup(True)
@@ -3482,7 +3482,7 @@ class OSMWindow(QMainWindow):
         None
     
     def connectGPSFailed(self):
-        self.connectPSButton.setChecked(False)
+        self.connectGPSButton.setChecked(False)
                 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)

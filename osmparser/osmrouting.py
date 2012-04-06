@@ -10,7 +10,8 @@ import time
 
 WITH_CROSSING_DEBUG=True
 
-MAXIMUM_DECISION_LENGTH=250.0
+MAXIMUM_DECISION_LENGTH=500.0
+MAXIMUM_DECISION_LENGTH_SHORT=50.0
 NORMAL_EDGE_RANGE=30.0
 CLOSE_EDGE_RANGE=20.0
 DECISION_EDGE_RANGE=10.0
@@ -561,10 +562,16 @@ class OSMRouting():
             
         if self.currentEdgeData!=None:
             # final fallback if everything goes wrong
-            if self.crossingPassed==True and self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
-                self.debugPrint(lat, lon, "distance from crossing longer then MAXIMUM_DECISION_LENGTH fallback")
-                return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
-
+            if self.crossingPassed==True:
+                if self.otherNearHeading==True:
+                    if self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
+                        self.debugPrint(lat, lon, "distance from crossing longer then MAXIMUM_DECISION_LENGTH fallback")
+                        return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
+                else:
+                    if self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH_SHORT:
+                        self.debugPrint(lat, lon, "distance from crossing longer then MAXIMUM_DECISION_LENGTH_SHORT fallback")
+                        return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
+            
             if self.approachingRef!=None:
                 distance=self.getDistanceToNextCrossing(lat, lon)
                 self.updateCrossingDistances(lat, lon, distance, speed)

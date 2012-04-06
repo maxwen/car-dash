@@ -9,11 +9,19 @@ import re
 import os
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
 
+class MyTabWidget(QTabWidget):
+    def __init__(self, parent):
+        QTabWidget.__init__(self, parent)
+        self.setTabPosition(QTabWidget.East)
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        
 class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
@@ -162,6 +170,8 @@ class OSMAdressDialog(QDialog):
         self.filteredCityList=self.cityList
         
     def streetNameSort(self, item):
+        if item[5]==None:
+            return ""
         return item[5]
 
     def houseNumberSort(self, item):
@@ -1364,10 +1374,9 @@ class OSMRouteDialog(QDialog):
         self.revertPointsButton.setEnabled(False)
         
 #---------------------
-class OSMPositionValidator(QValidator):
+class FloatValueValidator(QValidator):
     def __init__(self, parent):
         QValidator.__init__(self, parent) 
-#        print(help(QValidator.validate))
         
     def validate(self, input, pos):
         if len(input)==0:
@@ -1408,7 +1417,7 @@ class OSMPositionDialog(QDialog):
         label=QLabel(self)
         label.setText("Latitude:")
         
-        self.validator=OSMPositionValidator(self)
+        self.validator=FloatValueValidator(self)
         self.latField=QLineEdit(self)
         self.latField.setToolTip('Latitude')
         self.latField.textChanged.connect(self._updateEnablement)
@@ -1478,6 +1487,19 @@ class OSMPositionDialog(QDialog):
         self.lon=float(self.lonField.text())
         self.done(QDialog.Accepted)
 
+class IntValueValidator(QValidator):
+    def __init__(self, parent):
+        QValidator.__init__(self, parent) 
+        
+    def validate(self, input, pos):
+        if len(input)==0:
+            return (QValidator.Acceptable, input, pos)
+        try:
+            f=int(input)
+        except ValueError:
+            return (QValidator.Invalid, input, pos)
+        return (QValidator.Acceptable, input, pos)
+    
 class OSMOptionsDialog(QDialog):
     def __init__(self, parent):
         QDialog.__init__(self, parent) 
@@ -1495,48 +1517,99 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotation=parent.getWithMapRotationValue()
         self.withShow3D=parent.getShow3DValue()
         self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
+        self.withShowAreas=parent.getShowAreas()
+        self.withShowPOI=parent.getShowPOI()
+        self.withShowSky=parent.getShowSky()
+        self.XAxisRotation=parent.getXAxisRotation()
         self.initUI()
 
     def initUI(self):
         top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
             
         style=QCommonStyle()
         iconSize=QSize(48, 48)
 
+        self.tabs = MyTabWidget(self)
+        top.addWidget(self.tabs)
+        
+        tab1 = QWidget(self)
+        tab2 = QWidget(self) 
+        tab3 = QWidget(self) 
+        
+        tab1Layout = QVBoxLayout(tab1)
+        tab1Layout.setAlignment(Qt.AlignTop)
+        
+        tab2Layout = QFormLayout(tab2)
+        tab2Layout.setAlignment(Qt.AlignTop)
+
+        tab3Layout = QFormLayout(tab3)
+        tab3Layout.setAlignment(Qt.AlignTop)    
+            
+        self.tabs.addTab(tab1, "Driving Mode") 
+        self.tabs.addTab(tab2, "Display")
+        self.tabs.addTab(tab3, "3D")
+         
         self.followGPSButton=QCheckBox("Follow GPS", self)
         self.followGPSButton.setIcon(self.gpsIcon)
         self.followGPSButton.setIconSize(iconSize) 
         self.followGPSButton.setChecked(self.followGPS)       
-        top.addWidget(self.followGPSButton)
-        
-        self.downloadTilesButton=QCheckBox("Download missing tiles", self)
-        self.downloadTilesButton.setIcon(self.downloadIcon)
-        self.downloadTilesButton.setChecked(self.withDownload)
-        self.downloadTilesButton.setIconSize(iconSize)        
-        top.addWidget(self.downloadTilesButton)
-
-        self.withMapnikButton=QCheckBox("Use Mapnik", self)
-        self.withMapnikButton.setChecked(self.withMapnik)
-        self.withMapnikButton.setIconSize(iconSize)        
-        top.addWidget(self.withMapnikButton)
+        tab1Layout.addWidget(self.followGPSButton)
 
         self.withMapRotationButton=QCheckBox("Map rotation", self)
         self.withMapRotationButton.setChecked(self.withMapRotation)
         self.withMapRotationButton.setIconSize(iconSize)        
-        top.addWidget(self.withMapRotationButton)
+        tab1Layout.addWidget(self.withMapRotationButton)
 
-        self.withShow3DButton=QCheckBox("Use 3D View", self)
-        self.withShow3DButton.setChecked(self.withShow3D)
-        self.withShow3DButton.setIconSize(iconSize)        
-        top.addWidget(self.withShow3DButton)   
+                
+        self.downloadTilesButton=QCheckBox("Download missing tiles", self)
+        self.downloadTilesButton.setIcon(self.downloadIcon)
+        self.downloadTilesButton.setChecked(self.withDownload)
+        self.downloadTilesButton.setIconSize(iconSize)        
+        tab2Layout.addWidget(self.downloadTilesButton)
+
+        self.withMapnikButton=QCheckBox("Use Mapnik", self)
+        self.withMapnikButton.setChecked(self.withMapnik)
+        self.withMapnikButton.setIconSize(iconSize)        
+        tab2Layout.addWidget(self.withMapnikButton)
 
         self.withShowBackgroundTilesButton=QCheckBox("Show Background Tiles", self)
         self.withShowBackgroundTilesButton.setChecked(self.withShowBackgroundTiles)
         self.withShowBackgroundTilesButton.setIconSize(iconSize)        
-        top.addWidget(self.withShowBackgroundTilesButton) 
-                     
+        tab2Layout.addWidget(self.withShowBackgroundTilesButton) 
+
+        self.withShowAreasButton=QCheckBox("Show Environment", self)
+        self.withShowAreasButton.setChecked(self.withShowAreas)
+        self.withShowAreasButton.setIconSize(iconSize)        
+        tab2Layout.addWidget(self.withShowAreasButton) 
+        
+        self.withShowPOIButton=QCheckBox("Show POIs", self)
+        self.withShowPOIButton.setChecked(self.withShowPOI)
+        self.withShowPOIButton.setIconSize(iconSize)        
+        tab2Layout.addWidget(self.withShowPOIButton)     
+ 
+        filler=QLabel(self)
+        self.withShow3DButton=QCheckBox("Use 3D View", self)
+        self.withShow3DButton.setChecked(self.withShow3D)
+        self.withShow3DButton.setIconSize(iconSize)        
+        tab3Layout.addRow(self.withShow3DButton, filler)  
+
+        self.withShowSkyButton=QCheckBox("Show Sky", self)
+        self.withShowSkyButton.setChecked(self.withShowSky)
+        self.withShowSkyButton.setIconSize(iconSize)        
+        tab3Layout.addRow(self.withShowSkyButton, filler)  
+                       
+        label=QLabel(self)
+        label.setText("XAxis Rotation:")
+        
+        self.validator=IntValueValidator(self)
+        self.xAxisRoationField=QLineEdit(self)
+        self.xAxisRoationField.setToolTip('Value in degrees')
+        self.xAxisRoationField.setValidator(self.validator)
+        self.xAxisRoationField.setText("%d"%self.XAxisRotation)
+
+        tab3Layout.addRow(label, self.xAxisRoationField)  
+                                      
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1554,7 +1627,7 @@ class OSMOptionsDialog(QDialog):
         top.addLayout(buttons)
         self.setLayout(top)
         self.setWindowTitle('Settings')
-        self.setGeometry(0, 0, 400, 100)
+        self.setGeometry(0, 0, 400, 500)
 
     @pyqtSlot()
     def _cancel(self):
@@ -1569,6 +1642,10 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotation=self.withMapRotationButton.isChecked()
         self.withShow3D=self.withShow3DButton.isChecked()
         self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
+        self.withShowAreas=self.withShowAreasButton.isChecked()
+        self.withShowPOI=self.withShowPOIButton.isChecked()
+        self.withShowSky=self.withShowSkyButton.isChecked()
+        self.XAxisRotation=int(self.xAxisRoationField.text())
         
         self.done(QDialog.Accepted)
 
