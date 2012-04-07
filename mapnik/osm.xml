@@ -403,118 +403,6 @@
    </Rule>
 </Style>
 
-<Style name="roads-text-name">
-    <Rule>
-      <Filter>[type] = 'trunk' or [type] = 'primary'</Filter>
-      &maxscale_zoom13;
-      &minscale_zoom13;
-      <TextSymbolizer size="8" fill="black" placement="line" fontset-name="book-fonts" halo-radius="0">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'secondary'</Filter>
-      &maxscale_zoom13;
-      &minscale_zoom13;
-      <TextSymbolizer size="8" fill="black" placement="line" fontset-name="book-fonts" halo-radius="1" halo-fill="#fed7a5">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'trunk' or [type] = 'primary'</Filter>
-      &maxscale_zoom14;
-      &minscale_zoom14;
-      <TextSymbolizer size="9" fill="black" placement="line" fontset-name="book-fonts" halo-radius="0">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'trunk' or [type] = 'primary'</Filter>
-      &maxscale_zoom15;
-      &minscale_zoom18;
-      <TextSymbolizer size="10" fill="black" placement="line" fontset-name="book-fonts" halo-radius="0">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'secondary'</Filter>
-      &maxscale_zoom14;
-      &minscale_zoom14;
-      <TextSymbolizer size="9" fill="black" placement="line" fontset-name="book-fonts" halo-radius="1" halo-fill="#fed7a5">[name]</TextSymbolizer>
-    </Rule><Rule>
-      <Filter>[type] = 'secondary'</Filter>
-      &maxscale_zoom15;
-      &minscale_zoom18;
-      <TextSymbolizer size="10" fill="black" placement="line" fontset-name="book-fonts" halo-radius="1" halo-fill="#fed7a5">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'tertiary'</Filter>
-      &maxscale_zoom15;
-      &minscale_zoom16;
-      <TextSymbolizer size="9" fill="#000" placement="line" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'tertiary'</Filter>
-      &maxscale_zoom17;
-      &minscale_zoom18;
-      <TextSymbolizer size="11" fill="#000" placement="line" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'unclassified' or [type] = 'residential'</Filter>
-      &maxscale_zoom15;
-      &minscale_zoom15;
-      <TextSymbolizer size="8" fill="#000" spacing="300" placement="line" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'unclassified' or [type] = 'residential'</Filter>
-      &maxscale_zoom16;
-      &minscale_zoom16;
-      <TextSymbolizer size="9" fill="#000" spacing="300" placement="line" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'unclassified' or [type] = 'residential'</Filter>
-      &maxscale_zoom17;
-      &minscale_zoom18;
-      <TextSymbolizer size="11" fill="#000" spacing="400" placement="line" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
-    </Rule>
-</Style>
-<Style name="roads-text-ref">
-    <Rule>
-      <Filter>[type] = 'motorway'</Filter>
-      &maxscale_zoom10;
-      &minscale_zoom18;
-      <ShieldSymbolizer size="10" fill="#fff" placement="line" file="&symbols;/mot_shield6.png" spacing="750" minimum-distance="30" fontset-name="bold-fonts">[ref]</ShieldSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'trunk'</Filter>
-      &maxscale_zoom11;
-      &minscale_zoom18;
-      <ShieldSymbolizer size="10" fill="#fff" placement="line" file="&symbols;/tru_shield6.png" spacing="750" minimum-distance="30" fontset-name="bold-fonts">[ref]</ShieldSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'primary'</Filter>
-      &maxscale_zoom11;
-      &minscale_zoom18;
-      <ShieldSymbolizer size="10" fill="#fff" placement="line" file="&symbols;/pri_shield6.png" spacing="750" minimum-distance="30" fontset-name="bold-fonts">[ref]</ShieldSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'secondary'</Filter>
-      &maxscale_zoom12;
-      &minscale_zoom18;
-      <ShieldSymbolizer size="10" fill="#fff" placement="line" file="&symbols;/sec_shield6.png" spacing="750" minimum-distance="40" fontset-name="bold-fonts">[ref]</ShieldSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'tertiary'</Filter>
-      &maxscale_zoom13;
-      &minscale_zoom18;
-      <ShieldSymbolizer size="10" fill="#fff" placement="line" file="&symbols;/ter_shield6.png" spacing="750" minimum-distance="40" fontset-name="bold-fonts">[ref]</ShieldSymbolizer>
-    </Rule>
-    <Rule>
-      <Filter>([type] = 'unclassified' or [type]='residential')</Filter>
-      &maxscale_zoom15;
-      <TextSymbolizer size="10" fill="#000" spacing="750" minimum-distance="18" fontset-name="bold-fonts" halo-radius="1">[ref]</TextSymbolizer>
-    </Rule>
-</Style>
-<Style name="buildings">
-    <Rule>
-      &maxscale_zoom16;
-      &minscale_zoom18;
-      <PolygonSymbolizer fill="#bca9a9"/>
-    </Rule>
-</Style>
-
 <Style name="landuse">
     <Rule>
       &maxscale_zoom10;
@@ -525,13 +413,7 @@
     <Rule>
       &maxscale_zoom10;
       &minscale_zoom18;
-      <Filter>[type]='field'</Filter>
-      <PolygonSymbolizer fill-opacity="0.2" fill="#666600"/>
-    </Rule>
-    <Rule>
-      &maxscale_zoom10;
-      &minscale_zoom18;
-      <Filter>[type] = 'meadow' or [type] = 'grass' </Filter>
+      <Filter>[type] = 'meadow' or [type] = 'grass' or [type] = 'grassland'</Filter>
       <PolygonSymbolizer fill="#cfeca8"/>
     </Rule>
     <Rule>
@@ -541,13 +423,7 @@
       <PolygonSymbolizer fill="#8dc56c"/>
     </Rule>
     <Rule>
-      <Filter>[type]='farmyard'</Filter>
-      &maxscale_zoom10;
-      &minscale_zoom18;
-      <PolygonSymbolizer fill="#ddbf92"/>
-    </Rule>
-    <Rule>
-      <Filter>[type] = 'farm' or [type]='farmland'</Filter>
+      <Filter>[type] = 'farm' or [type]='farmland' or [type]='field' or [type]='farmyard'</Filter>
       &maxscale_zoom10;
       &minscale_zoom18;
       <PolygonSymbolizer fill="#ead8bd"/>
@@ -571,22 +447,16 @@
       <PolygonSymbolizer fill="#efc8c8"/>
     </Rule>
     <Rule>
-      <Filter>[type] = 'grassland'</Filter>
-      &maxscale_zoom10;
-      &minscale_zoom18;
-      <PolygonSymbolizer fill="#c6e4b4"/>
-    </Rule>
-    <Rule>
       <Filter>[type] = 'water' or [type]='reservoir'</Filter>
       &maxscale_zoom10;
       &minscale_zoom18;
     <PolygonSymbolizer fill="#b5d0d0"/>
     </Rule>
     <Rule>
-      <Filter>[type] = 'brownfield' or [type]='landfill' or [type] = 'greenfield' or [type]='construction'</Filter>
+      <Filter>[type] = 'brownfield' or [type]='landfill' or [type] = 'greenfield'</Filter>
       &maxscale_zoom10;
       &minscale_zoom18;
-      <PolygonSymbolizer fill-opacity="0.7" fill="#9d9d6c"/>
+      <PolygonSymbolizer fill="#9d9d6c"/>
     </Rule>
     <Rule>
       <ElseFilter/>
@@ -648,30 +518,25 @@
       &maxscale_zoom13;
       &minscale_zoom13;
       <LineSymbolizer stroke-linejoin="round" stroke="#b5d0d0" stroke-width="3" stroke-linecap="round"/>
-      <TextSymbolizer size="9" fill="#6699cc" placement="line" spacing="400" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
     </Rule>
     <Rule>
       &maxscale_zoom14;
       &minscale_zoom14;
       <LineSymbolizer stroke-linejoin="round" stroke="#b5d0d0" stroke-width="5" stroke-linecap="round"/>
-      <TextSymbolizer size="10" fill="#6699cc" placement="line" spacing="400" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
     </Rule><Rule>
       &maxscale_zoom15;
       &minscale_zoom16;
       <LineSymbolizer stroke-linejoin="round" stroke="#b5d0d0" stroke-width="6" stroke-linecap="round"/>
-      <TextSymbolizer size="10" fill="#6699cc" placement="line" spacing="400" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
     </Rule>
     <Rule>
       &maxscale_zoom17;
       &minscale_zoom17;
       <LineSymbolizer stroke-linejoin="round" stroke="#b5d0d0" stroke-width="10" stroke-linecap="round"/>
-      <TextSymbolizer size="10" fill="#6699cc" placement="line" spacing="400" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
     </Rule>
     <Rule>
       &maxscale_zoom18;
       &minscale_zoom18;
       <LineSymbolizer stroke-linejoin="round" stroke="#b5d0d0" stroke-width="12" stroke-linecap="round"/>
-      <TextSymbolizer size="10" fill="#6699cc" placement="line" spacing="400" fontset-name="book-fonts" halo-radius="1">[name]</TextSymbolizer>
     </Rule>
 </Style>
 
@@ -720,21 +585,6 @@
     </Datasource>
 </Layer>
 
-<Layer name="buildings-austria" status="on" srs="&srs4326;">
-    <StyleName>buildings</StyleName>
-    <Datasource>
-      <Parameter name="type">shape</Parameter>
-      <Parameter name="file">/home/maxl/Downloads/geofabrik/austria.shp/buildings.shp</Parameter>
-    </Datasource>
-</Layer>
-<Layer name="buildings-bayern" status="on" srs="&srs4326;">
-    <StyleName>buildings</StyleName>
-    <Datasource>
-      <Parameter name="type">shape</Parameter>
-      <Parameter name="file">/home/maxl/Downloads/geofabrik/bayern.shp/buildings.shp</Parameter>
-    </Datasource>
-</Layer>
-
 <Layer name="streets-austria" status="on" srs="&srs4326;">
     <StyleName>minor-roads-fill</StyleName>
     <StyleName>tertiary-link-fill</StyleName>
@@ -747,7 +597,6 @@
     <StyleName>primary-fill</StyleName>
     <StyleName>trunk-fill</StyleName>
     <StyleName>motorway-fill</StyleName>
-    <!--<StyleName>directions</StyleName>-->
     <Datasource>
       <Parameter name="type">shape</Parameter>
       <Parameter name="file">/home/maxl/Downloads/geofabrik/austria.shp/roads.shp</Parameter>
@@ -774,7 +623,6 @@
     <StyleName>primary-fill</StyleName>
     <StyleName>trunk-fill</StyleName>
     <StyleName>motorway-fill</StyleName>
-    <!--<StyleName>directions</StyleName>-->
     <Datasource>
       <Parameter name="type">shape</Parameter>
       <Parameter name="file">/home/maxl/Downloads/geofabrik/bayern.shp/roads.shp</Parameter>

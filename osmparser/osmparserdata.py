@@ -72,12 +72,16 @@ class Constants():
     AREA_TYPE_BUILDING=3
     AREA_TYPE_HIGHWAY_AREA=4
     AREA_TYPE_RAILWAY=5
+    AREA_TYPE_AEROWAY=6
     
-    LANDUSE_TYPE_SET=set(["forest", "grass", "farm", "farmland", "meadow", "residential", "greenfield", "field", "commercial", "industrial", "railway"])
-    LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "farm", "farmland", "meadow", "greenfield", "field"])
-    NATURAL_TYPE_SET=set(["water", "wood", "tree"])
+    LANDUSE_TYPE_SET=set(["forest", "grass", "grassland", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard"])
+    LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "grassland", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
+    LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
+    
+    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank"])
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain"])
     RAILWAY_TYPE_SET=set(["rail"])
+    AEROWAY_TYPE_SET=set(["runway"])
     HIGHWAY_NODES_TYPE_SET=set(["motorway_junction", "speed_camera"])
     AMENITY_NODES_TYPE_SET=set(["fuel", "parking"])
     BARIER_NODES_TYPE_SET=set(["bollard"])
@@ -1643,6 +1647,9 @@ class OSMParserData():
     def getRailwayTypes(self):
         return Constants.RAILWAY_TYPE_SET
 
+    def getAerowayTypes(self):
+        return Constants.AEROWAY_TYPE_SET
+    
     def isNodeDefined(self, refs, nodeType):
         for ref in refs:
             if ref in self.nodeList.keys():
@@ -1667,6 +1674,7 @@ class OSMParserData():
             isLanduse=False
             isNatural=False
             isRailway=False
+            isAeroway=False
                        
             if "building" in tags:
                 if self.skipAddress==False:
@@ -1717,17 +1725,23 @@ class OSMParserData():
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
+                                                   
+                    if "railway" in tags:
+                        if tags["railway"] in self.getRailwayTypes():
+                            isRailway=True
+                              
+                    if "aeroway" in tags:
+                        if tags["aeroway"] in self.getAerowayTypes():
+                            isAeroway=True
                         
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
                         isNatural=False
-                           
-                    if "railway" in tags:
-                        if tags["railway"] in self.getRailwayTypes():
-                            isRailway=True
-                                         
-                    if isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
+                        isRailway=False
+                        isAeroway=False
+               
+                    if isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
                         continue
                     
                     isPolygon=False
@@ -1761,6 +1775,8 @@ class OSMParserData():
                         areaType=Constants.AREA_TYPE_BUILDING
                     elif isRailway==True:
                         areaType=Constants.AREA_TYPE_RAILWAY
+                    elif isAeroway==True:
+                        areaType=Constants.AREA_TYPE_AEROWAY
                         
                     if areaType!=None:
                         if isPolygon==True:
@@ -1915,6 +1931,7 @@ class OSMParserData():
                     isLanduse=False
                     isNatural=False
                     isAdminBoundary=False
+                    isAeroway=False
                     
                     if "boundary" in tags:
                         if tags["boundary"] in self.getBoundaryTypes():
@@ -1931,14 +1948,19 @@ class OSMParserData():
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
-                            
+                    
+                    if "aeroway" in tags:
+                        if tags["aeroway"] in self.getAerowayTypes():
+                            isAeroway=True
+                              
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
                         isNatural=False
                         isAdminBoundary=False
+                        isAeroway=False
                         
-                    if isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
+                    if isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
                         continue
                     
 #                    print("multipolygon: %s"%(tags))
@@ -2000,7 +2022,9 @@ class OSMParserData():
                                     self.addPolygonToAreaTable(Constants.AREA_TYPE_LANDUSE, osmid, tags, None, polyString)
                                 elif isBuilding==True:  
                                     self.addPolygonToAreaTable(Constants.AREA_TYPE_BUILDING, osmid, tags, None, polyString)
-                
+                                elif isAeroway==True:
+                                    self.addPolygonToAreaTable(Constants.AREA_TYPE_AEROWAY, osmid, tags, None, polyString)
+
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
@@ -4107,7 +4131,7 @@ class OSMParserData():
                 
         self.commitGlobalDB()
     
-    def parseAdresses(self):
+    def parseAddresses(self):
         self.skipWays=False
         self.skipNodes=False
         self.skipRelations=True
@@ -4430,18 +4454,19 @@ class OSMParserData():
             
         return resultList
         
-    def getNearestNodeOfType(self, lat, lon, margin, nodeType):
-        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
-        self.cursorGlobal.execute('SELECT refId, tags, type, AsText(geom) FROM refTable WHERE type IS NOT NULL AND ROWID IN (SELECT rowid FROM idx_refTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+    def getNearestNodeOfType(self, lat, lon, distance, nodeType):
+#        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
+        self.cursorGlobal.execute('SELECT refId, tags, type, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM refTable WHERE type IS NOT NULL AND ROWID IN (SELECT rowid FROM idx_refTable_geom WHERE rowid MATCH RTreeDistWithin(%f, %f, %f))'%(lon, lat, lon, lat, distance))
             
         allentries=self.cursorGlobal.fetchall()
         resultList=list()
 
         for x in allentries:
-            refId, nodeLat, nodeLon, tags, storedNodeList=self.refFromDB(x)                
+            distance=int(x[4])
+            refId, nodeLat, nodeLon, tags, storedNodeList=self.refFromDB(x) 
             if nodeType in storedNodeList:
                 print(tags)
-                print(self.osmutils.distance(lat, lon, nodeLat, nodeLon))
+                print(distance)
                 
 #            resultList.append((refId, lat, lon, tags, storedNodeList))
             
@@ -4840,6 +4865,9 @@ def main(argv):
     p = OSMParserData()
     
     p.initDB()
+#    p.openAdressDB()
+#    p.createAdressTable()
+#    p.closeAdressDB()
     
     p.openAllDB()
 #    p.cursorEdge.execute("SELECT * FROM sqlite_master WHERE type='table'")
@@ -4912,6 +4940,8 @@ def main(argv):
 #    p.createSpatialIndexForAreaTable()
     
 #    p.parseAreas()
+    
+#    p.parseAddresses()
 #    p.resolveAddresses()
     p.parseAreas()
 #    p.parseNodes()

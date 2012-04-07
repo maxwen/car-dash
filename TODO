@@ -49,8 +49,8 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  -split global into way and node db       
  
  TODO geom data
- -store also simple POLYGONS
  -store line features as LINESTRINGS e.g. waterways 
+ DONE
  
  TODO: remove also unneded ways
  -way where all edges are orphaned
@@ -80,3 +80,15 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  
  TODO: draw way tunnels before everything else
  DONE
+ 
+ TODO: aeroway
+ 
+ TODO: virtual zoom
+ DONE
+ 
+ TODO: virtual zoom also for pixmaps
+ -POI
+ -routing points
+ 
+ TODO: parser config file
+ -definition of imported data

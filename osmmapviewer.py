@@ -16,7 +16,7 @@ import time
 import env
 import cProfile
 
-from PyQt4.QtCore import QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QLinearGradient, QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import Constants, OSMParserData, OSMRoutingPoint, OSMRoute
 from osmparser.osmrouting import OSMRouting
@@ -57,6 +57,8 @@ SKY_WIDTH=100
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
+defaultMapnikConfig=os.path.join("mapnik-shape", "osm.xml")
+defaultTileStartZoom=15
 
 idleState="idle"
 runState="run"
@@ -75,20 +77,20 @@ class OSMRoutingPointAction(QAction):
         return self.routingPoint
     
 class OSMDownloadTilesWorker(QThread):
-    def __init__(self, parent): 
+    def __init__(self, parent, tileServer): 
         QThread.__init__(self, parent)
         self.exiting = False
         self.forceDownload=False
         self.downloadQueue=deque()
         self.downloadDoneQueue=deque()
-        self.tileServer=defaultTileServer
+        self.tileServer=tileServer
         
     def setWidget(self, osmWidget):
         self.osmWidget=osmWidget
         
-    def __del__(self):
-        self.exiting = True
-        self.wait()
+#    def __del__(self):
+#        self.exiting = True
+#        self.wait()
         
     def setup(self, forceDownload):
         self.updateStatusLabel("OSM starting download thread")
@@ -144,7 +146,7 @@ class OSMDownloadTilesWorker(QThread):
                     stream=io.open(fileName, "wb")
                     stream.write(data)
                     self.downloadDoneQueue.append(fileName)
-                    self.updateMap()
+#                    self.updateMap()
                 except IOError:
                     self.updateStatusLabel("OSM download IOError write")
                     
@@ -173,7 +175,7 @@ class OSMDownloadTilesWorker(QThread):
         self.forceDownload=False
         self.downloadQueue.clear()
         self.downloadDoneQueue.clear()
-#        self.updateMap()
+        self.updateMap()
 #        self.osmWidget.setForceDownload(False, False)
         self.updateStatusLabel("OSM download thread stopped")
         self.updateDownloadThreadState(stoppedState)
@@ -192,7 +194,7 @@ class OSMMapnikTilesWorker(QThread):
         self.tileDir=tileDir
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
         self.mapnikWrapperCPP=MapnikWrapperCPP(mapFile)
-        self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
+#        self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
         self.workQueue=deque()
         self.tileQueue=deque()
         self.updateMapTrigger=0;
@@ -211,9 +213,9 @@ class OSMMapnikTilesWorker(QThread):
     def setWidget(self, osmWidget):
         self.osmWidget=osmWidget
         
-    def __del__(self):
-        self.exiting = True
-        self.wait()
+#    def __del__(self):
+#        self.exiting = True
+#        self.wait()
         
     def setup(self):
         self.updateStatusLabel("OSM starting mapnik thread")
@@ -259,6 +261,7 @@ class OSMMapnikTilesWorker(QThread):
 #                self.mapnikWrapperCPP.render_tile(self.getTileFullPath(zoom, x, y), x, y, zoom)
 #                print("%f"%(time.time()-start))
                 self.tileQueue.popleft()
+                self.updateMap()
                 
 #                if self.updateMapTrigger==5:
 #                    self.updateMap()
@@ -489,8 +492,6 @@ class QtOSMWidget(QWidget):
         self.map_x=0
         self.map_y=0
         self.map_zoom=9
-        self.min_zoom=MIN_ZOOM
-        self.max_zoom=MAX_ZOOM
         self.center_rlat = 0.0
         self.center_rlon=0.0
         self.gps_rlat=0.0
@@ -526,6 +527,8 @@ class QtOSMWidget(QWidget):
         
         self.tileHome=defaultTileHome
         self.tileServer=defaultTileServer
+        self.mapnikConfig=defaultMapnikConfig
+        self.tileStartZoom=defaultTileStartZoom
         
         self.lastMouseMoveX=0
         self.lastMouseMoveY=0
@@ -573,7 +576,7 @@ class QtOSMWidget(QWidget):
         self.altitude=0
         self.currentDisplayBBox=None
         self.show3D=True
-        self.showBackgroundTiles=True
+#        self.showBackgroundTiles=True
         self.refRing=None
         
         self.setAttribute( Qt.WA_OpaquePaintEvent, True )
@@ -589,7 +592,8 @@ class QtOSMWidget(QWidget):
         
         self.style=OSMStyle()
         self.mapPoint=None
-        self.railwayBridgeLines=list()
+        self.isVirtualZoom=False
+        self.virtualZoomValue=2.0
     
     def getRouteList(self):
         return self.routeList
@@ -598,33 +602,22 @@ class QtOSMWidget(QWidget):
         self.routeList=routeList
         
     def getTileHomeFullPath(self):
-        if os.path.isabs(self.getTileHomeBase()):
-            return self.getTileHomeBase()
+        if os.path.isabs(self.tileHome):
+            return self.tileHome
         else:
-            return os.path.join(env.getTileRoot(), self.getTileHomeBase())
+            return os.path.join(env.getTileRoot(), self.tileHome)
     
+    def getMapnikConfigFullPath(self):
+        if os.path.isabs(self.mapnikConfig):
+            return self.mapnikConfig
+        else:
+            return os.path.join(env.getTileRoot(), self.mapnikConfig)
+        
     def getTileFullPath(self, zoom, x, y):
         home=self.getTileHomeFullPath()
         tilePath=os.path.join(str(zoom), str(x), str(y)+".png")
         fileName=os.path.join(home, tilePath)
         return fileName
-
-    def getTileHomeBase(self):
-        if self.withMapnik==True:
-            return self.getTileHome()+"-shape"
-        return self.getTileHome()
-    
-    def getTileHome(self):
-        return self.tileHome
-    
-    def setTileHome(self, value):
-        self.tileHome=value
-                
-    def getTileServer(self):
-        return self.tileServer
-    
-    def setTileServer(self, value):
-        self.tileServer=value
 
     def minimumSizeHint(self):
         return QSize(minWidth, minHeight)
@@ -641,7 +634,7 @@ class QtOSMWidget(QWidget):
             os.mkdir(tileDirForZoom)
         
     def osm_map_set_zoom (self, zoom):
-        self.map_zoom = self.CLAMP(zoom, self.min_zoom, self.max_zoom)
+        self.map_zoom=zoom
         self.clearPolygonCache()
         self.checkTileDirForZoom()
         
@@ -650,13 +643,6 @@ class QtOSMWidget(QWidget):
     def osm_map_handle_resize (self):
         (self.center_y, self.center_x)=self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon, False)
         self.center_coord_update()
-        
-    def CLAMP(self, x, low, high):
-        if x>high:
-            return high
-        elif x<low:
-            return low
-        return x
 
     def getYOffsetForRotationMap(self):
         return self.height()/3
@@ -811,14 +797,11 @@ class QtOSMWidget(QWidget):
             return pixbuf
         else:
             if self.withMapnik==True:
-#                print(fileName)
-#                print("callMapnikForTile from getTile")
-#                self.callMapnikForTile()
                 self.callMapnikForTile2(zoom, x, y)
-
                 return self.getTilePlaceholder(zoom, x, y)
+            
             elif self.withDownload==True:
-                self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.getTileServer())
+                self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.tileServer)
                 return self.getTilePlaceholder(zoom, x, y)     
                     
             return self.getTilePlaceholder(zoom, x, y)
@@ -838,7 +821,9 @@ class QtOSMWidget(QWidget):
         
         if self.show3D==True:
             transform.rotate(self.XAxisRotation, Qt.XAxis)    
-            transform.scale(1.2, 1.2)    
+        
+        if self.isVirtualZoom==True: 
+            transform.scale(self.virtualZoomValue, self.virtualZoomValue)    
 
         if self.track!=None:
             if self.drivingMode==False or self.withMapRotation==False:
@@ -871,15 +856,14 @@ class QtOSMWidget(QWidget):
         self.painter.resetTransform()
  
     def displayMapPosition(self, mapPoint):
-        imageWidth=IMAGE_WIDTH
-        imageHeight=IMAGE_HEIGHT
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
         
-        y,x=self.getPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1], True)
+        y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])
         
-        xPos=int(x-imageWidth/2)
-        yPos=int(y-imageHeight/2)
+        xPos=int(x-pixmapWidth/2)
+        yPos=int(y-pixmapHeight)
         
-        self.painter.drawPixmap(xPos, yPos, imageWidth, imageHeight, self.style.getStylePixmap("mapPointPixmap"))
+        self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.style.getStylePixmap("mapPointPixmap"))
          
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
@@ -1050,8 +1034,10 @@ class QtOSMWidget(QWidget):
         transform.translate( self.center_x-map_x, self.center_y-map_y )
         
         if self.show3D==True:
-            transform.rotate(self.XAxisRotation, Qt.XAxis)   
-            transform.scale(1.2, 1.2)    
+            transform.rotate(self.XAxisRotation, Qt.XAxis)  
+        
+        if self.isVirtualZoom==True: 
+            transform.scale(self.virtualZoomValue, self.virtualZoomValue)    
         
         if self.drivingMode==True:
             if withMapRotate==True and rotateAngle!=None:
@@ -1090,6 +1076,7 @@ class QtOSMWidget(QWidget):
         self.painter.drawPoint(point0)
         
     def paintEvent(self, event):
+        start=time.time()
         self.painter=QPainter(self)
         self.painter.setClipRect(QRectF(0, 0, self.width(), self.height()))
         font=self.font()
@@ -1098,8 +1085,7 @@ class QtOSMWidget(QWidget):
         self.painter.setRenderHint(QPainter.Antialiasing)
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
                 
-        if self.showBackgroundTiles==False:
-            self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("mapBackgroundColor"))
+        self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("mapBackgroundColor"))
 
         rotateAngle=None
         if self.track!=None:
@@ -1115,12 +1101,20 @@ class QtOSMWidget(QWidget):
 
 #        self.displayVisibleAdminBoundaries(bbox)
 
-        if self.map_zoom>=14:
-            self.getVisibleWays(bbox)
-            self.displayTunneleWays()
+        if self.map_zoom>self.tileStartZoom:
+            self.bridgeWays=list()
+            self.tunnelWays=list()
+            self.otherWays=list()
+            self.railwayBridgeLines=list()
+            self.railwayTunnelLines=list()
+            self.areaList=list()
             
-            if self.showBackgroundTiles==True:
-                self.showTiles()
+            self.getVisibleWays(bbox)
+            self.getVisibleAreas(bbox)
+            
+            self.displayTunnelRailways()
+            if self.withShowAreas==True:
+                self.displayTunneleWays()
             
             if self.withShowAreas==True:
                 self.displayVisibleAreas(bbox)
@@ -1128,7 +1122,7 @@ class QtOSMWidget(QWidget):
             self.displayVisibleWays()
             
             if self.withShowAreas==True:
-                self.displayRailwayBridges()
+                self.displayBridgeRailways()
         else:
             self.showTiles()
                     
@@ -1141,7 +1135,7 @@ class QtOSMWidget(QWidget):
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
             self.displayCoords(self.currentCoords, self.style.getStylePen("edgePen"))
             
-#        self.showRoutingPoints()            
+#        self.displayRoutingPoints()            
                     
         if WITH_CROSSING_DEBUG==True:
             if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
@@ -1159,12 +1153,12 @@ class QtOSMWidget(QWidget):
 #            self.displayTrack(self.osmWidget.trackLogLines)
                     
 #        self.displayTestPoints()
+                    
+        self.painter.resetTransform()
         
         if self.mapPoint!=None:
             self.displayMapPosition(self.mapPoint)
-            
-        self.painter.resetTransform()
-                        
+                
         if self.show3D==True and self.showSky==True:
             skyRect=QRectF(0, 0, self.width(), SKY_WIDTH)
             gradient=QLinearGradient(skyRect.topLeft(), skyRect.bottomLeft())
@@ -1172,15 +1166,13 @@ class QtOSMWidget(QWidget):
             gradient.setColorAt(0, Qt.blue)
             self.painter.fillRect(skyRect, gradient)
             
-        if self.map_zoom>=16 and self.withShowPOI==True:
+        if self.withShowPOI==True:
             self.displayVisibleNodes(bbox)
             
 #        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
-#            osmParserData.getNearestNodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 0.1, Constants.POI_TYPE_GAS_STATION)
-#        else:
-#            osmParserData.getNearestNodeOfType(self.osmutils.rad2deg(self.center_rlat), self.osmutils.rad2deg(self.center_rlon), 0.1, Constants.POI_TYPE_GAS_STATION)
+#            osmParserData.getNearestNodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 0.01, Constants.POI_TYPE_GAS_STATION)
         
-        self.showRoutingPoints2()
+        self.displayRoutingPoints()
         self.displayGPSPosition()
 
         self.showEnforcementInfo()
@@ -1195,15 +1187,16 @@ class QtOSMWidget(QWidget):
         self.showTunnelInfo()
         
         self.painter.end()
+        print("paintEvent:%f"%(time.time()-start))
   
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
         
     def getStreetTypeListForZoom(self):
-        if self.map_zoom in range(16, 19):
+        if self.map_zoom in range(15, 19):
             # all
             return []
-        elif self.map_zoom in range(14, 16):
+        elif self.map_zoom in range(14, 15):
             return [Constants.STREET_TYPE_MOTORWAY,
                 Constants.STREET_TYPE_MOTORWAY_LINK,
                 Constants.STREET_TYPE_TRUNK,
@@ -1260,9 +1253,6 @@ class QtOSMWidget(QWidget):
                 if wayId in self.wayPolygonCache.keys():
                     del self.wayPolygonCache[wayId]
             
-        self.bridgeWays=list()
-        self.tunnelWays=list()
-        self.otherWays=list()
         showBridges=self.map_zoom in range(16, 19)
         showTunnels=self.map_zoom in range(16, 19)
         
@@ -1281,7 +1271,8 @@ class QtOSMWidget(QWidget):
             self.otherWays.append((way, streetTypeId))
 
     def displayVisibleWays(self):
-        showCasing=self.map_zoom in range(14, 19)
+#        showCasing=self.map_zoom in range(15, 19)
+        showCasing=False
         showStreetOverlays=self.map_zoom in range(17, 19)
                     
         otherWays=sorted(self.otherWays, key=self.streetTypeIdSort)
@@ -1327,21 +1318,47 @@ class QtOSMWidget(QWidget):
             self.displayWayCoordsWithCache(way, pen)
 
     def getDisplayNodeTypeList(self):
-        return [Constants.POI_TYPE_ENFORCEMENT, 
-#                Constants.POI_TYPE_BARRIER, 
-                Constants.POI_TYPE_PLACE,
-                Constants.POI_TYPE_GAS_STATION]
-#                Constants.POI_TYPE_PARKING]
-    
+        if self.map_zoom in range(17, 19):
+            return [Constants.POI_TYPE_ENFORCEMENT, 
+                    Constants.POI_TYPE_PLACE,
+                    Constants.POI_TYPE_GAS_STATION]
+        elif self.map_zoom in range(14, 17):
+            return [Constants.POI_TYPE_PLACE]    
+        else:
+            return []
+        
+    def getPlaceTypeList(self):
+        if self.map_zoom in range(14, 19):
+            return Constants.PLACE_NODES_TYPE_SET
+        else:
+            return ["city"]
+        
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
     
+    def getPixmapSizeForZoom(self, baseWidth, baseHeight):
+        if self.isVirtualZoom==True:
+            return (int(baseWidth*self.virtualZoomValue), int(baseHeight*self.virtualZoomValue))
+        
+        if self.map_zoom==18:
+            return (int(baseWidth*1.5), int(baseHeight*1.5))
+        elif self.map_zoom==17:
+            return (baseWidth, baseHeight)
+        elif self.map_zoom==16:
+            return (int(baseWidth*0.8), int(baseHeight*0.8))
+        
+        return (int(baseWidth/2), int(baseHeight/2))
+    
     def displayVisibleNodes(self, bbox):
-        start=time.time()
-        placeTagColor=self.style.getStyleColor("placeTagColor")
-        resultList=osmParserData.getNodesInBBoxWithGeom(bbox, 0.0, self.getDisplayNodeTypeList())        
+        nodeTypeList=self.getDisplayNodeTypeList()
+        if len(nodeTypeList)==0:
+            return
+        
+        resultList=osmParserData.getNodesInBBoxWithGeom(bbox, 0.0, nodeTypeList)        
 
         nodeTyleListSet=set(self.getDisplayNodeTypeList())
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
+        
         for node in resultList:
             _, lat, lon, tags, nodeTypeList=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
@@ -1349,18 +1366,17 @@ class QtOSMWidget(QWidget):
                 for nodeType in nodeTypeList:  
                     if nodeType in nodeTyleListSet: 
                         if nodeType==Constants.POI_TYPE_PLACE:
-                            if "name" in tags:
-                                text=tags["name"]
-                                self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"))
-#                                self.displayPlaceTagAtPos(x, y, text)
+                            placeType=tags["place"]
+                            if placeType in self.getPlaceTypeList():
+                                if "name" in tags:
+                                    text=tags["name"]
+                                    self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"))
                         
                         else:
-                            xPos=int(x-IMAGE_WIDTH_SMALL/2)
-                            yPos=int(y-IMAGE_HEIGHT_SMALL)
-                            self.painter.drawPixmap(xPos, yPos, IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL, self.getPixmapForNodeType(nodeType))
+                            xPos=int(x-pixmapWidth/2)
+                            yPos=int(y-pixmapHeight)
+                            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
                         
-
-        print("displayVisibleNodes: %f"%(time.time()-start))
 
     def displayPlaceTagAtPos(self, x, y, text):
         fm = self.painter.fontMetrics();
@@ -1387,6 +1403,8 @@ class QtOSMWidget(QWidget):
         textBackground=QRect(xPosRect, yPosRect, width, height)
         self.painter.fillRect(textBackground, bgColor)
         textPos=QPoint(xPosRect, y-5)
+        pen=self.style.getStylePen("textPen")
+        self.painter.setPen(pen)
         self.painter.drawText(textPos, text)     
            
     def getDisplayAreaTypeList(self):
@@ -1401,11 +1419,9 @@ class QtOSMWidget(QWidget):
                     Constants.AREA_TYPE_NATURAL,
                     Constants.AREA_TYPE_RAILWAY]
 
-        
-    def displayVisibleAreas(self, bbox):
-        start=time.time()     
+
+    def getVisibleAreas(self, bbox):
         resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(self.getDisplayAreaTypeList(), bbox, 0.0)
-        print("displayVisibleAreas: %f"%(time.time()-start))
         
         if self.lastOsmIdSet==None:
             self.lastOsmIdSet=osmIdSet
@@ -1416,11 +1432,24 @@ class QtOSMWidget(QWidget):
             for osmId in removedAreas:
                 if osmId in self.areaPolygonCache.keys():
                     del self.areaPolygonCache[osmId]
-                 
-        self.railwayBridgeLines.clear()
            
         for area in resultList:
             osmId=area[0]
+            areaType=area[1]
+            tags=area[2]
+                            
+            if areaType==Constants.AREA_TYPE_RAILWAY:
+                if "bridge" in tags and tags["bridge"]=="yes":
+                    self.railwayBridgeLines.append(area)
+                    continue
+                if "tunnel" in tags and tags["tunnel"]=="yes":
+                    self.railwayTunnelLines.append(area)
+                    continue
+                
+            self.areaList.append(area)
+               
+    def displayVisibleAreas(self, bbox):           
+        for area in self.areaList:
             areaType=area[1]
             tags=area[2]
             brush=Qt.NoBrush
@@ -1434,7 +1463,8 @@ class QtOSMWidget(QWidget):
                         pen.setWidth(self.style.getWaterwayPenWidthForZoom(self.map_zoom, tags))                      
                     
                 elif "natural" in tags:
-                    if tags["natural"]=="water":
+                    natural=tags["natural"]
+                    if natural=="water" or natural=="riverbank":
                         brush=self.style.getStyleBrush("water")
                     else:
                         brush=self.style.getStyleBrush("natural")
@@ -1443,8 +1473,23 @@ class QtOSMWidget(QWidget):
                 landuse=tags["landuse"]
                 if landuse=="railway":
                     brush=self.style.getStyleBrush("railwayLanduse")
+                elif landuse=="residential":
+                    brush=self.style.getStyleBrush("residential")
+                elif landuse=="commercial" or landuse=="retail":
+                    brush=self.style.getStyleBrush("commercial")
+                elif landuse=="field" or landuse=="farmland" or landuse=="farm" or landuse=="farmyard":
+                    brush=self.style.getStyleBrush("farm")
+                elif landuse=="grass" or landuse=="meadow" or landuse=="grassland":
+                    brush=self.style.getStyleBrush("grass")
+                elif landuse=="greenfield" or landuse=="brownfield":
+                    brush=self.style.getStyleBrush("greenfield")
+                elif landuse=="industrial":
+                    brush=self.style.getStyleBrush("industrial")
+                    
                 elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
                     brush=self.style.getStyleBrush("natural")
+                elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
+                        brush=self.style.getStyleBrush("water")                    
                 else:
                     brush=self.style.getStyleBrush("landuse")
               
@@ -1457,8 +1502,10 @@ class QtOSMWidget(QWidget):
             elif areaType==Constants.AREA_TYPE_RAILWAY:
                 pen=self.style.getStylePen("railway")
                 pen.setWidth(self.style.getRailwayPenWidthForZoom(self.map_zoom, tags))                      
-                if "bridge" in tags and tags["bridge"]=="yes":
-                    self.railwayBridgeLines.append(area)
+            
+            elif areaType==Constants.AREA_TYPE_AEROWAY:
+                brush=self.style.getStyleBrush("aeroway")
+                
             else:
                 continue
                
@@ -1466,7 +1513,7 @@ class QtOSMWidget(QWidget):
 
         self.painter.setBrush(Qt.NoBrush)
 
-    def displayRailwayBridges(self):
+    def displayBridgeRailways(self):
         if len(self.railwayBridgeLines)!=0:
             brush=Qt.NoBrush
      
@@ -1475,22 +1522,30 @@ class QtOSMWidget(QWidget):
 
                 width=self.style.getRailwayPenWidthForZoom(self.map_zoom, tags)
                 pen=self.style.getStylePen("railwayBridge")
-                pen.setWidth(width+2)                        
+                pen.setWidth(width+4)                        
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
                 
                 pen=self.style.getStylePen("railway")
                 pen.setWidth(width)                        
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
 
-            self.railwayBridgeLines.clear()
+    def displayTunnelRailways(self):
+        if len(self.railwayTunnelLines)!=0:
+            brush=Qt.NoBrush
+     
+            for area in self.railwayTunnelLines:
+                tags=area[2]
+
+                width=self.style.getRailwayPenWidthForZoom(self.map_zoom, tags)
+                pen=self.style.getStylePen("railwayTunnel")
+                pen.setWidth(width+2)                        
+                self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
             
     def getAdminLevelList(self):
         return Constants.ADMIN_LEVEL_SET
     
     def displayVisibleAdminBoundaries(self, bbox):
-        start=time.time()     
         resultList, adminAreaIdSet=osmParserData.getAdminAreasInBboxWithGeom(bbox, 0.0, self.getAdminLevelList())
-        print("displayVisibleAdminBoundaries: %f"%(time.time()-start))
         
         if self.lastAdminAreaIdSet==None:
             self.lastAdminAreaIdSet=adminAreaIdSet
@@ -1630,41 +1685,23 @@ class QtOSMWidget(QWidget):
             
             self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("tunnelPixmap"))
             
-#    def showRoutingPoints(self):
-##        showTrackDetails=self.map_zoom>13
-##        if showTrackDetails==False:
-##            return 
-#
-#        if self.startPoint!=None:
-#            (y, x)=self.getPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon, True)
-#            if self.isPointVisible(x, y):
-#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("startPointImage"))
-#
-#        if self.endPoint!=None:
-#            (y, x)=self.getPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon, True)
-#            if self.isPointVisible(x, y):
-#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("endPointImage"))
-#            
-#        for point in self.wayPoints:
-#            (y, x)=self.getPixelPosForLocationDeg(point.lat, point.lon, True)
-#            if self.isPointVisible(x, y):
-#                self.painter.drawPixmap(int(x-IMAGE_WIDTH/2), int(y-IMAGE_HEIGHT/2), IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("wayPointImage"))
+    def displayRoutingPoints(self):
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
 
-    def showRoutingPoints2(self):
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM, self.style.getStylePixmap("startPixmap"))
+                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("startPixmap"))
 
         if self.endPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM, self.style.getStylePixmap("finishPixmap"))
+                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("finishPixmap"))
             
         for point in self.wayPoints:
             (y, x)=self.getTransformedPixelPosForLocationDeg(point.lat, point.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM, self.style.getStylePixmap("flagPixmap"))
+                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("wayPixmap"))
             
     
     def getPixelPosForLocationDeg(self, lat, lon, relativeToEdge):
@@ -1777,7 +1814,44 @@ class QtOSMWidget(QWidget):
                
         self.painter.setPen(pen)
         self.painter.drawPolyline(displayPolygon)  
-              
+
+    def displayWayCoordsWithCache2(self, way, pen):        
+        polygon=None
+        wayId=way[0]
+        coordsStr=way[8]
+        map_x, map_y=self.getMapZeroPos()
+        
+        if not wayId in self.wayPolygonCache.keys():
+            polygon=QPolygon()
+            coords=osmParserData.createCoordsFromLineString(coordsStr)
+
+            displayCoords=coords
+            fullCoords=self.map_zoom>=15
+            if fullCoords==False:
+                if len(coords)>6:
+                    displayCoords=coords[1:-2:2]
+                    displayCoords[0]=coords[0]
+                    displayCoords[-1]=coords[-1]
+                
+            for point in displayCoords:
+                lat, lon=point 
+                (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                point=QPoint(x, y);
+                polygon.append( point )
+            
+            self.wayPolygonCache[wayId]=polygon
+        
+        else:
+            polygon=self.wayPolygonCache[wayId]
+            
+        displayPolygon=polygon.translated(-map_x, -map_y)
+               
+        self.painter.setPen(pen)
+        firstPoint=displayPolygon[0]
+        for point in displayPolygon[1:]:
+            self.painter.drawLine(firstPoint, point)
+            firstPoint=point
+                      
     def displayPolygon(self, coords, pen):        
         polygon=QPolygon()
         
@@ -1808,13 +1882,12 @@ class QtOSMWidget(QWidget):
         if not osmId in cacheDict.keys():
             polygon=QPolygon()
             if geomType==0:
-                coords=osmParserData.createCoordsFromMultiPolygon(polyStr)[0]
+                coords=osmParserData.createCoordsFromMultiPolygon(polyStr)[0][:-1]
             else:
                 coords=osmParserData.createCoordsFromLineString(polyStr)
                         
             displayCoords=coords
-            fullCoords=self.map_zoom>=15
-            if fullCoords==False:
+            if geomType==1 and self.map_zoom<15:
                 if len(coords)>6:
                     displayCoords=coords[1:-2:2]
                     displayCoords[0]=coords[0]
@@ -2126,15 +2199,23 @@ class QtOSMWidget(QWidget):
     def pointInsideZoomOverlay(self, x, y):
         if self.zoomRect.contains(x, y):
             if self.minusRect.contains(x, y):
-                zoom=self.map_zoom-1
-                if zoom<MIN_ZOOM:
-                    zoom=MIN_ZOOM
+                if self.isVirtualZoom==True:
+                    zoom=MAX_ZOOM
+                    self.isVirtualZoom=False
+                else:
+                    zoom=self.map_zoom-1
+                    if zoom<MIN_ZOOM:
+                        zoom=MIN_ZOOM
                 self.zoom(zoom)
                 
             if self.plusRect.contains(x,y):
                 zoom=self.map_zoom+1
-                if zoom>MAX_ZOOM:
+                if zoom==MAX_ZOOM+1:
+                    self.isVirtualZoom=True
                     zoom=MAX_ZOOM
+                else:
+                    if zoom>MAX_ZOOM:
+                        zoom=MAX_ZOOM
                 self.zoom(zoom)
         
     def showControlOverlay(self):
@@ -2159,22 +2240,23 @@ class QtOSMWidget(QWidget):
                     
     def getRoutingPointForPos(self, mousePos):
         p=QPoint(mousePos[0], mousePos[1])
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
 
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
-            rect=QRect(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+            rect=QRect(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight)
             if rect.contains(p, proper=False):
                 return self.startPoint
 
         if self.endPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon)
-            rect=QRect(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+            rect=QRect(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight)
             if rect.contains(p, proper=False):
                 return self.endPoint
 
         for point in self.wayPoints:
             (y, x)=self.getTransformedPixelPosForLocationDeg(point.lat, point.lon)
-            rect=QRect(int(x-IMAGE_WIDTH_MEDIUM/2), int(y-IMAGE_HEIGHT_MEDIUM), IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+            rect=QRect(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight)
             if rect.contains(p, proper=False):
                 return point
 
@@ -3165,25 +3247,15 @@ class OSMWidget(QWidget):
         vbox.addLayout(buttons)
         
     def initWorkers(self):
-        self.downloadThread=OSMDownloadTilesWorker(self)
+        self.downloadThread=OSMDownloadTilesWorker(self, self.getTileServer())
         self.downloadThread.setWidget(self.mapWidgetQt)
         self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
         self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
-        self.connect(self.mapWidgetQt, SIGNAL("startProgress()"), self.startProgress)
-        self.connect(self.mapWidgetQt, SIGNAL("stopProgress()"), self.stopProgress)
 
-        self.mapnikThread=OSMMapnikTilesWorker(self, self.mapWidgetQt.getTileHomeFullPath(), "/home/maxl/mapnik-shape/osm.xml")
+        self.mapnikThread=OSMMapnikTilesWorker(self, self.mapWidgetQt.getTileHomeFullPath(), self.mapWidgetQt.getMapnikConfigFullPath())
         self.mapnikThread.setWidget(self.mapWidgetQt)
         self.connect(self.mapnikThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateMousePositionDisplay(float, float)"), self.updateMousePositionDisplay)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateZoom(int)"), self.updateZoom)
         self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateMapnikThreadState)
-#        self.connect(self.mapWidgetQt, SIGNAL("updateTrackDisplay(QString)"), self.updateTrackDisplay)
-        self.connect(self.mapnikThread, SIGNAL("startProgress()"), self.startProgress)
-        self.connect(self.mapnikThread, SIGNAL("stopProgress()"), self.stopProgress)
 
         self.trackLogReplayThread=OSMGPSLocationWorker(self, False)
         self.trackLogReplayThread.setWidget(self)
@@ -3218,11 +3290,15 @@ class OSMWidget(QWidget):
             if optionsDialog.withMapnik!=oldMapnikValue:
                 self.mapWidgetQt.cleanImageCache()
             self.setShow3DValue(optionsDialog.withShow3D)
-            self.setShowBackgroundTiles(optionsDialog.withShowBackgroundTiles)
+#            self.setShowBackgroundTiles(optionsDialog.withShowBackgroundTiles)
             self.setShowAreas(optionsDialog.withShowAreas)
             self.setShowPOI(optionsDialog.withShowPOI)
             self.setShowSky(optionsDialog.withShowSky)
             self.setXAxisRotation(optionsDialog.XAxisRotation)
+            self.setTileServer(optionsDialog.tileServer)
+            self.setTileHome(optionsDialog.tileHome)
+            self.setMapnikConfig(optionsDialog.mapnikConfig)
+            self.setTileStartZoom(optionsDialog.tileStartZoom)
             
             self.mapWidgetQt.update()
             
@@ -3372,7 +3448,6 @@ class OSMWidget(QWidget):
 
     def setZoomValue(self, value):
         self.mapWidgetQt.map_zoom=value
-#        self.updateZoom(value)
 
     def getAutocenterGPSValue(self):
         return self.mapWidgetQt.autocenterGPS
@@ -3386,11 +3461,11 @@ class OSMWidget(QWidget):
     def setShow3DValue(self, value):
         self.mapWidgetQt.show3D=value
              
-    def getShowBackgroundTiles(self):
-        return self.mapWidgetQt.showBackgroundTiles
-         
-    def setShowBackgroundTiles(self, value):
-        self.mapWidgetQt.showBackgroundTiles=value
+#    def getShowBackgroundTiles(self):
+#        return self.mapWidgetQt.showBackgroundTiles
+#         
+#    def setShowBackgroundTiles(self, value):
+#        self.mapWidgetQt.showBackgroundTiles=value
          
     def getWithDownloadValue(self):
         return self.mapWidgetQt.withDownload
@@ -3443,16 +3518,34 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.XAxisRotation=value
         
     def getTileHome(self):
-        return self.mapWidgetQt.getTileHome()
+        return self.mapWidgetQt.tileHome
     
     def setTileHome(self, value):
-        self.mapWidgetQt.setTileHome(value)
+        self.mapWidgetQt.tileHome=value
                 
     def getTileServer(self):
-        return self.mapWidgetQt.getTileServer()
+        return self.mapWidgetQt.tileServer
     
     def setTileServer(self, value):
-        self.mapWidgetQt.setTileServer(value)
+        self.mapWidgetQt.tileServer=value
+
+    def getMapnikConfig(self):
+        return self.mapWidgetQt.mapnikConfig
+    
+    def setMapnikConfig(self, value):
+        self.mapWidgetQt.mapnikConfig=value  
+              
+    def getTileStartZoom(self):
+        return self.mapWidgetQt.tileStartZoom
+    
+    def setTileStartZoom(self, value):
+        self.mapWidgetQt.tileStartZoom=value
+        
+    def getVirtualZoom(self):
+        return self.mapWidgetQt.isVirtualZoom
+    
+    def setVirtualZoom(self, value):
+        self.mapWidgetQt.isVirtualZoom=value
         
     def loadConfig(self, config):
         self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
@@ -3465,11 +3558,14 @@ class OSMWidget(QWidget):
         self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
         self.setWithMapRotationValue(config.getDefaultSection().getboolean("withMapRotation", False))
         self.setShow3DValue(config.getDefaultSection().getboolean("with3DView", False))
-        self.setShowBackgroundTiles(config.getDefaultSection().getboolean("showBackgroundTiles", False))
+#        self.setShowBackgroundTiles(config.getDefaultSection().getboolean("showBackgroundTiles", False))
         self.setShowAreas(config.getDefaultSection().getboolean("showAreas", False))
         self.setShowPOI(config.getDefaultSection().getboolean("showPOI", False))
         self.setShowSky(config.getDefaultSection().getboolean("showSky", False))
         self.setXAxisRotation(config.getDefaultSection().getint("XAxisRotation", 60))
+        self.setMapnikConfig(config.getDefaultSection().get("mapnikConfig", defaultMapnikConfig))
+        self.setTileStartZoom(config.getDefaultSection().getint("tileStartZoom", defaultTileStartZoom))
+        self.setVirtualZoom(config.getDefaultSection().getboolean("virtualZoom", False))
         
         section="favorites"
         self.favoriteList=list()
@@ -3489,11 +3585,13 @@ class OSMWidget(QWidget):
         config.getDefaultSection()["withMapnik"]=str(self.getWithMapnikValue())
         config.getDefaultSection()["withMapRotation"]=str(self.getWithMapRotationValue())
         config.getDefaultSection()["with3DView"]=str(self.getShow3DValue())
-        config.getDefaultSection()["showBackgroundTiles"]=str(self.getShowBackgroundTiles())
+#        config.getDefaultSection()["showBackgroundTiles"]=str(self.getShowBackgroundTiles())
         config.getDefaultSection()["showAreas"]=str(self.getShowAreas())
         config.getDefaultSection()["showPOI"]=str(self.getShowPOI())
         config.getDefaultSection()["showSky"]=str(self.getShowSky())
         config.getDefaultSection()["XAxisRotation"]=str(self.getXAxisRotation())
+        config.getDefaultSection()["tileStartZoom"]=str(self.getTileStartZoom())
+        config.getDefaultSection()["virtualZoom"]=str(self.getVirtualZoom())
         
         if self.mapWidgetQt.gps_rlat!=0.0:
             config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
@@ -3507,6 +3605,7 @@ class OSMWidget(QWidget):
             
         config.getDefaultSection()["tileHome"]=self.getTileHome()
         config.getDefaultSection()["tileServer"]=self.getTileServer()
+        config.getDefaultSection()["mapnikConfig"]=self.getMapnikConfig()
         
         section="favorites"
         config.removeSection(section)

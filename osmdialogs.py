@@ -9,7 +9,7 @@ import re
 import os
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
@@ -1508,19 +1508,23 @@ class OSMOptionsDialog(QDialog):
         self.setFont(font)
         
         self.style=OSMStyle()
-        self.downloadIcon=QIcon(self.style.getStylePixmap("downloadPixmap"))
-        self.gpsIcon=QIcon(self.style.getStylePixmap("followGPSPixmap"))
+#        self.downloadIcon=QIcon(self.style.getStylePixmap("downloadPixmap"))
+#        self.gpsIcon=QIcon(self.style.getStylePixmap("followGPSPixmap"))
         
         self.followGPS=parent.getAutocenterGPSValue()
         self.withDownload=parent.getWithDownloadValue()
         self.withMapnik=parent.getWithMapnikValue()
         self.withMapRotation=parent.getWithMapRotationValue()
         self.withShow3D=parent.getShow3DValue()
-        self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
+#        self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
         self.withShowAreas=parent.getShowAreas()
         self.withShowPOI=parent.getShowPOI()
         self.withShowSky=parent.getShowSky()
         self.XAxisRotation=parent.getXAxisRotation()
+        self.tileServer=parent.getTileServer()
+        self.tileHome=parent.getTileHome()
+        self.mapnikConfig=parent.getMapnikConfig()
+        self.tileStartZoom=parent.getTileStartZoom()
         self.initUI()
 
     def initUI(self):
@@ -1549,9 +1553,11 @@ class OSMOptionsDialog(QDialog):
         self.tabs.addTab(tab1, "Driving Mode") 
         self.tabs.addTab(tab2, "Display")
         self.tabs.addTab(tab3, "3D")
-         
+        
+        filler=QLabel(self)
+
         self.followGPSButton=QCheckBox("Follow GPS", self)
-        self.followGPSButton.setIcon(self.gpsIcon)
+#        self.followGPSButton.setIcon(self.gpsIcon)
         self.followGPSButton.setIconSize(iconSize) 
         self.followGPSButton.setChecked(self.followGPS)       
         tab1Layout.addWidget(self.followGPSButton)
@@ -1560,35 +1566,76 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotationButton.setChecked(self.withMapRotation)
         self.withMapRotationButton.setIconSize(iconSize)        
         tab1Layout.addWidget(self.withMapRotationButton)
-
                 
-        self.downloadTilesButton=QCheckBox("Download missing tiles", self)
-        self.downloadTilesButton.setIcon(self.downloadIcon)
+        self.downloadTilesButton=QRadioButton("Download missing tiles", self)
+#        self.downloadTilesButton.setIcon(self.downloadIcon)
         self.downloadTilesButton.setChecked(self.withDownload)
         self.downloadTilesButton.setIconSize(iconSize)        
-        tab2Layout.addWidget(self.downloadTilesButton)
+        tab2Layout.addRow(self.downloadTilesButton, filler)  
 
-        self.withMapnikButton=QCheckBox("Use Mapnik", self)
+        self.withMapnikButton=QRadioButton("Use Mapnik", self)
         self.withMapnikButton.setChecked(self.withMapnik)
-        self.withMapnikButton.setIconSize(iconSize)        
-        tab2Layout.addWidget(self.withMapnikButton)
+        self.withMapnikButton.setIconSize(iconSize)    
+        tab2Layout.addRow(self.withMapnikButton, filler)  
+        
+        label=QLabel(self)
+        label.setText("Tile Server:")
+        
+        self.validator=IntValueValidator(self)
+        self.tileServerField=QLineEdit(self)
+        self.tileServerField.setText("%s"%self.tileServer)
+        self.tileServerField.setMinimumWidth(200)
 
-        self.withShowBackgroundTilesButton=QCheckBox("Show Background Tiles", self)
-        self.withShowBackgroundTilesButton.setChecked(self.withShowBackgroundTiles)
-        self.withShowBackgroundTilesButton.setIconSize(iconSize)        
-        tab2Layout.addWidget(self.withShowBackgroundTilesButton) 
+        tab2Layout.addRow(label, self.tileServerField)  
+
+        label=QLabel(self)
+        label.setText("Tile Dir:")
+        
+        self.validator=IntValueValidator(self)
+        self.tileHomeField=QLineEdit(self)
+        self.tileHomeField.setToolTip("Relative to $HOME or absolute")
+        self.tileHomeField.setText("%s"%self.tileHome)
+        self.tileHomeField.setMinimumWidth(200)
+
+        tab2Layout.addRow(label, self.tileHomeField)   
+        
+        label=QLabel(self)
+        label.setText("Mapnik Config:")
+        
+        self.validator=IntValueValidator(self)
+        self.mapnikConfigField=QLineEdit(self)
+        self.mapnikConfigField.setToolTip("Relative to $HOME or absolute")
+        self.mapnikConfigField.setText("%s"%self.mapnikConfig)
+        self.mapnikConfigField.setMinimumWidth(200)
+
+        tab2Layout.addRow(label, self.mapnikConfigField) 
+        
+        label=QLabel(self)
+        label.setText("Tile Zoom:")
+        
+        self.validator=IntValueValidator(self)
+        self.tileStartZoomField=QLineEdit(self)
+        self.tileStartZoomField.setToolTip('Zoom level until tiles are used')
+        self.tileStartZoomField.setValidator(self.validator)
+        self.tileStartZoomField.setText("%d"%self.tileStartZoom)
+
+        tab2Layout.addRow(label, self.tileStartZoomField)  
+
+#        self.withShowBackgroundTilesButton=QCheckBox("Show Background Tiles", self)
+#        self.withShowBackgroundTilesButton.setChecked(self.withShowBackgroundTiles)
+#        self.withShowBackgroundTilesButton.setIconSize(iconSize)        
+#        tab2Layout.addRow(self.withShowBackgroundTilesButton, filler)  
 
         self.withShowAreasButton=QCheckBox("Show Environment", self)
         self.withShowAreasButton.setChecked(self.withShowAreas)
         self.withShowAreasButton.setIconSize(iconSize)        
-        tab2Layout.addWidget(self.withShowAreasButton) 
+        tab2Layout.addRow(self.withShowAreasButton, filler)  
         
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
         self.withShowPOIButton.setIconSize(iconSize)        
-        tab2Layout.addWidget(self.withShowPOIButton)     
+        tab2Layout.addRow(self.withShowPOIButton, filler)  
  
-        filler=QLabel(self)
         self.withShow3DButton=QCheckBox("Use 3D View", self)
         self.withShow3DButton.setChecked(self.withShow3D)
         self.withShow3DButton.setIconSize(iconSize)        
@@ -1632,7 +1679,6 @@ class OSMOptionsDialog(QDialog):
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-     
         
     @pyqtSlot()
     def _ok(self):
@@ -1641,11 +1687,15 @@ class OSMOptionsDialog(QDialog):
         self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
         self.withShow3D=self.withShow3DButton.isChecked()
-        self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
+#        self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
         self.withShowAreas=self.withShowAreasButton.isChecked()
         self.withShowPOI=self.withShowPOIButton.isChecked()
         self.withShowSky=self.withShowSkyButton.isChecked()
         self.XAxisRotation=int(self.xAxisRoationField.text())
+        self.tileServer=self.tileServerField.text()
+        self.tileHome=self.tileHomeField.text()
+        self.mapnikConfig=self.mapnikConfigField.text()
+        self.tileStartZoom=int(self.tileStartZoomField.text())
         
         self.done(QDialog.Accepted)
 

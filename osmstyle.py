@@ -19,7 +19,7 @@ class OSMStyle():
         self.brushDict=dict()
         
         self.errorImage=QPixmap(os.path.join(env.getImageRoot(), "error.png"))
-        self.errorColor=QColor(255, 0, 0, 254)
+        self.errorColor=QColor(255, 0, 0)
         
         self.pixmapDict["gpsPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "gps-move-1.png"))
         self.pixmapDict["gpsPointImageStop"]=QPixmap(os.path.join(env.getImageRoot(), "gps-stop-big.png"))
@@ -47,7 +47,7 @@ class OSMStyle():
         self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "parking.png"))
         self.pixmapDict["startPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "start.png"))
         self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "finish.png"))
-        self.pixmapDict["flagPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flag.png"))
+        self.pixmapDict["wayPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagWay.png"))
         self.pixmapDict["downloadPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "download.png"))
         self.pixmapDict["followGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
         self.pixmapDict["favoritesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "favorites.png"))
@@ -56,25 +56,32 @@ class OSMStyle():
         self.pixmapDict["centerGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "map-gps.png"))
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
-        self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "mappoint.png"))
+        self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
         self.pixmapDict["placeTagPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "placeTagEmpty.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
-        self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255, 254)
+        self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
         self.colorDict["wayCasingColor"]=QColor(20, 20, 20, 200)
         self.colorDict["accessWaysColor"]=QColor(255, 0, 0, 100)
         self.colorDict["onewayWaysColor"]=QColor(0, 0, 255, 100)
         self.colorDict["livingStreeColor"]=QColor(0, 255, 0, 100)
-        self.colorDict["waterColor"]=QColor(0xb5, 0xd0, 0xd0, 254)
-        self.colorDict["adminAreaColor"]=QColor(0, 0, 0, 254)
+        self.colorDict["waterColor"]=QColor(0xb5, 0xd0, 0xd0)
+        self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
-        self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c, 254)
-        self.colorDict["buildingColor"]=QColor(100, 100, 100, 254)
-        self.colorDict["highwayAreaColor"]=QColor(255, 255, 255, 254)
-        self.colorDict["railwayAreaColor"]=QColor(150, 150, 150, 254)
-        self.colorDict["railwayColor"]=QColor(10, 10, 10, 254)
-        self.colorDict["landuseColor"]=QColor(150, 150, 150, 254)
+        self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
+        self.colorDict["buildingColor"]=QColor(100, 100, 100)
+        self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
+        self.colorDict["railwayAreaColor"]=QColor(150, 150, 150)
+        self.colorDict["railwayColor"]=QColor(10, 10, 10)
+        self.colorDict["landuseColor"]=QColor(150, 150, 150)
         self.colorDict["placeTagColor"]=QColor(0x38, 0x75, 0xd7, 200)
+        self.colorDict["residentialColor"]=QColor(0x50, 0x50, 0x50)
+        self.colorDict["commercialColor"]=QColor(0xef, 0xc8, 0xc8)
+        self.colorDict["farmColor"]=QColor(0xea, 0xd8, 0xbd)
+        self.colorDict["grassColor"]=QColor(0xcf, 0xec, 0xa8)
+        self.colorDict["greenfieldColor"]=QColor(0x9d, 0x9d, 0x6c)
+        self.colorDict["industrialColor"]=QColor(0xdf, 0xd1, 0xd6)
+        self.colorDict["aerowayColor"]=QColor(0xdf, 0xd1, 0xd6)
         
         self.initStreetColors()
         self.initBrush()
@@ -136,11 +143,16 @@ class OSMStyle():
         self.penDict["railway"]=pen        
 
         pen=QPen()
-        pen.setColor(self.getStyleColor("railwayColor"))
+        pen.setColor(self.getStyleColor("railwayAreaColor"))
         pen.setStyle(Qt.SolidLine)
         pen.setCapStyle(Qt.RoundCap)
         self.penDict["railwayBridge"]=pen
-        
+
+        pen=QPen()
+        pen.setColor(self.getStyleColor("railwayColor"))
+        pen.setStyle(Qt.DashLine)
+        self.penDict["railwayTunnel"]=pen
+              
     def getStylePen(self, key):
         if key in self.penDict:
             return self.penDict[key]
@@ -177,11 +189,11 @@ class OSMStyle():
         self.colorDict[Constants.STREET_TYPE_SECONDARY_LINK]=QColor(0xfe, 0xd7, 0xa5)
         self.colorDict[Constants.STREET_TYPE_TERTIARY]=QColor(0xff, 0xff, 0xb3)
         self.colorDict[Constants.STREET_TYPE_TERTIARY_LINK]=QColor(0xff, 0xff, 0xb3)
-        self.colorDict[Constants.STREET_TYPE_RESIDENTIAL]=QColor(0xff, 0xff, 0xff)
-        self.colorDict[Constants.STREET_TYPE_UNCLASSIFIED]=QColor(0xff, 0xff, 0xff)
-        self.colorDict[Constants.STREET_TYPE_ROAD]=QColor(0xff, 0xff, 0xff)
-        self.colorDict[Constants.STREET_TYPE_SERVICE]=QColor(0xff, 0xff, 0xff)
-        self.colorDict[Constants.STREET_TYPE_LIVING_STREET]=QColor(0xff, 0xff, 0xff)
+        self.colorDict[Constants.STREET_TYPE_RESIDENTIAL]=QColor(0xC0, 0xC0, 0xC0)
+        self.colorDict[Constants.STREET_TYPE_UNCLASSIFIED]=QColor(0xC0, 0xC0, 0xC0)
+        self.colorDict[Constants.STREET_TYPE_ROAD]=QColor(0xC0, 0xC0, 0xC0)
+        self.colorDict[Constants.STREET_TYPE_SERVICE]=QColor(0xE0, 0xE0, 0xE0)
+        self.colorDict[Constants.STREET_TYPE_LIVING_STREET]=QColor(0xC0, 0xC0, 0xC0)
 
     def getRelativePenWidthForZoom(self, zoom):
         if zoom==18:
@@ -346,6 +358,13 @@ class OSMStyle():
         self.brushDict["highway"]=QBrush(self.getStyleColor("highwayAreaColor"), Qt.SolidPattern)
         self.brushDict["railwayLanduse"]=QBrush(self.getStyleColor("railwayAreaColor"), Qt.SolidPattern)
         self.brushDict["landuse"]=QBrush(self.getStyleColor("landuseColor"), Qt.SolidPattern)
+        self.brushDict["residential"]=QBrush(self.getStyleColor("residentialColor"), Qt.SolidPattern)
+        self.brushDict["commercial"]=QBrush(self.getStyleColor("commercialColor"), Qt.SolidPattern)
+        self.brushDict["farm"]=QBrush(self.getStyleColor("farmColor"), Qt.SolidPattern)
+        self.brushDict["grass"]=QBrush(self.getStyleColor("grassColor"), Qt.SolidPattern)
+        self.brushDict["greenfield"]=QBrush(self.getStyleColor("greenfieldColor"), Qt.SolidPattern)
+        self.brushDict["industrial"]=QBrush(self.getStyleColor("industrialColor"), Qt.SolidPattern)
+        self.brushDict["aeroway"]=QBrush(self.getStyleColor("aerowayColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType==Constants.POI_TYPE_ENFORCEMENT:
