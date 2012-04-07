@@ -18,9 +18,9 @@ import cProfile
 
 from PyQt4.QtCore import QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QLinearGradient, QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmparserdata import Constants, OSMParserData, OSMRoutingPoint, OSMRoute
-from osmparser.osmrouting import OSMRouting
+from osmparser.osmparserdata import Constants, OSMParserData
 from osmstyle import OSMStyle
+from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from config import Config
 from osmparser.osmutils import OSMUtils

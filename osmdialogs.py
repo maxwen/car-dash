@@ -10,9 +10,10 @@ import os
 
 from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmparserdata import OSMParserData, OSMRoutingPoint, OSMRoute
+from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
+from osmrouting import OSMRoutingPoint, OSMRoute
 
 class MyTabWidget(QTabWidget):
     def __init__(self, parent):

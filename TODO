@@ -81,7 +81,7 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  TODO: draw way tunnels before everything else
  DONE
  
- TODO: aeroway
+ TODO: add aeroway areas
  
  TODO: virtual zoom
  DONE
@@ -89,6 +89,7 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  TODO: virtual zoom also for pixmaps
  -POI
  -routing points
+ DONE
  
  TODO: parser config file
  -definition of imported data
