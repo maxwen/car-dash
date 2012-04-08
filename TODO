@@ -82,6 +82,7 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  DONE
  
  TODO: add aeroway areas
+ DONE
  
  TODO: virtual zoom
  DONE
@@ -93,3 +94,8 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  
  TODO: parser config file
  -definition of imported data
+  
+ TODO: add shop tag
+ 
+ TODO: evalute layer tag for correct drawing
+ 

@@ -146,7 +146,7 @@ class OSMDownloadTilesWorker(QThread):
                     stream=io.open(fileName, "wb")
                     stream.write(data)
                     self.downloadDoneQueue.append(fileName)
-#                    self.updateMap()
+                    self.updateMap()
                 except IOError:
                     self.updateStatusLabel("OSM download IOError write")
                     
@@ -300,7 +300,7 @@ class OSMMapnikTilesWorker(QThread):
 #            if len(self.workQueue)==0:
 #                self.exiting=True
                 
-#        self.updateMap();
+        self.updateMap();
         self.updateStatusLabel("OSM mapnik thread stopped")
         self.updateMapnikThreadState(stoppedState)
 
@@ -579,8 +579,8 @@ class QtOSMWidget(QWidget):
 #        self.showBackgroundTiles=True
         self.refRing=None
         
-        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
-        self.setAttribute( Qt.WA_NoSystemBackground, True )
+#        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
+#        self.setAttribute( Qt.WA_NoSystemBackground, True )
         
         self.lastWayIdSet=None
         self.wayPolygonCache=dict()
@@ -1105,24 +1105,34 @@ class QtOSMWidget(QWidget):
             self.bridgeWays=list()
             self.tunnelWays=list()
             self.otherWays=list()
+            self.railwayLines=list()
             self.railwayBridgeLines=list()
             self.railwayTunnelLines=list()
             self.areaList=list()
+            self.naturalTunnelLines=list()
+            self.buildingList=list()
             
             self.getVisibleWays(bbox)
             self.getVisibleAreas(bbox)
             
-            self.displayTunnelRailways()
             if self.withShowAreas==True:
-                self.displayTunneleWays()
+                self.displayTunnelRailways()
+                self.displayTunnelNatural()            
+                self.displayAreas()
+ 
+            self.displayTunnelWays()
             
             if self.withShowAreas==True:
-                self.displayVisibleAreas(bbox)
-                
-            self.displayVisibleWays()
-            
+                self.displayBuildings()
+
+            self.displayWays()
+
             if self.withShowAreas==True:
+                self.displayRailways()
                 self.displayBridgeRailways()
+                
+            self.displayBridgeWays()
+                
         else:
             self.showTiles()
                     
@@ -1253,8 +1263,8 @@ class QtOSMWidget(QWidget):
                 if wayId in self.wayPolygonCache.keys():
                     del self.wayPolygonCache[wayId]
             
-        showBridges=self.map_zoom in range(16, 19)
-        showTunnels=self.map_zoom in range(16, 19)
+        showBridges=self.map_zoom in range(15, 19)
+        showTunnels=self.map_zoom in range(15, 19)
         
         for way in resultList:
             wayId, _, _, streetInfo, _, _, _, _, _=way
@@ -1270,9 +1280,9 @@ class QtOSMWidget(QWidget):
             
             self.otherWays.append((way, streetTypeId))
 
-    def displayVisibleWays(self):
-#        showCasing=self.map_zoom in range(15, 19)
-        showCasing=False
+    def displayWays(self):
+#        showCasing=self.map_zoom in range(16, 19)
+        showCasing=True
         showStreetOverlays=self.map_zoom in range(17, 19)
                     
         otherWays=sorted(self.otherWays, key=self.streetTypeIdSort)
@@ -1305,27 +1315,54 @@ class QtOSMWidget(QWidget):
                     self.displayWayCoordsWithCache(way, pen)
                 
         # bridges  
-        for way, streetTypeId in self.bridgeWays:
-            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
-            self.displayWayCoordsWithCache(way, pen)
+#        for way, streetTypeId in self.bridgeWays:
+#            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
+#            self.displayWayCoordsWithCache(way, pen)
+#
+#            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
+#            self.displayWayCoordsWithCache(way, pen)
 
-            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
-            self.displayWayCoordsWithCache(way, pen)
-
-    def displayTunneleWays(self):                    
+    def displayBridgeWays(self):                    
+        if len(self.bridgeWays)!=0:
+            # bridges  
+            for way, streetTypeId in self.bridgeWays:
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
+                self.displayWayCoordsWithCache(way, pen)
+    
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
+                self.displayWayCoordsWithCache(way, pen)
+            
+    def displayTunnelWays(self):                    
+#        showCasing=self.map_zoom in range(15, 19)
+        showCasing=True
+        if showCasing==True:
+            for way, streetTypeId in self.tunnelWays:   
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
+                self.displayWayCoordsWithCache(way, pen)
+        
         for way, streetTypeId in self.tunnelWays:   
-            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, 1, 0, False, False)
+            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False)
             self.displayWayCoordsWithCache(way, pen)
 
     def getDisplayNodeTypeList(self):
         if self.map_zoom in range(17, 19):
+            return [Constants.POI_TYPE_ENFORCEMENT,
+                    Constants.POI_TYPE_MOTORWAY_JUNCTION,
+                    Constants.POI_TYPE_BARRIER,
+                    Constants.POI_TYPE_GAS_STATION,
+                    Constants.POI_TYPE_PARKING,
+                    Constants.POI_TYPE_PLACE,
+                    Constants.POI_TYPE_HOSPITAL,
+                    Constants.POI_TYPE_POLICE,
+                    Constants.POI_TYPE_SUPERMARKET]
+        elif self.map_zoom in range(15, 17):
             return [Constants.POI_TYPE_ENFORCEMENT, 
                     Constants.POI_TYPE_PLACE,
                     Constants.POI_TYPE_GAS_STATION]
-        elif self.map_zoom in range(14, 17):
+        elif self.map_zoom in range(12, 16):
             return [Constants.POI_TYPE_PLACE]    
         else:
-            return []
+            return None
         
     def getPlaceTypeList(self):
         if self.map_zoom in range(14, 19):
@@ -1351,12 +1388,12 @@ class QtOSMWidget(QWidget):
     
     def displayVisibleNodes(self, bbox):
         nodeTypeList=self.getDisplayNodeTypeList()
-        if len(nodeTypeList)==0:
+        if nodeTypeList==None:
             return
         
         resultList=osmParserData.getNodesInBBoxWithGeom(bbox, 0.0, nodeTypeList)        
 
-        nodeTyleListSet=set(self.getDisplayNodeTypeList())
+        nodeTypeListSet=set(self.getDisplayNodeTypeList())
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
         
         for node in resultList:
@@ -1364,35 +1401,22 @@ class QtOSMWidget(QWidget):
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
                 for nodeType in nodeTypeList:  
-                    if nodeType in nodeTyleListSet: 
-                        if nodeType==Constants.POI_TYPE_PLACE:
-                            placeType=tags["place"]
-                            if placeType in self.getPlaceTypeList():
-                                if "name" in tags:
-                                    text=tags["name"]
-                                    self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"))
-                        
-                        else:
-                            xPos=int(x-pixmapWidth/2)
-                            yPos=int(y-pixmapHeight)
-                            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
-                        
-
-    def displayPlaceTagAtPos(self, x, y, text):
-        fm = self.painter.fontMetrics();
-        width=fm.width(text)
-        height=fm.height()
+                    if len(nodeTypeListSet)!=0:
+                        if nodeType in nodeTypeListSet: 
+                            self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
+                    
+    def displayNode(self, x, y, pixmapWidth, pixmapHeight, tags, nodeType):
+        if nodeType==Constants.POI_TYPE_PLACE:
+            placeType=tags["place"]
+            if placeType in self.getPlaceTypeList():
+                if "name" in tags:
+                    text=tags["name"]
+                    self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"))
         
-        pixmap=self.getPixmapForNodeType(Constants.POI_TYPE_PLACE)
-        scaledPixmap=pixmap.scaled(width, height)
-        
-        xPos=x-width/2
-        yPos=y-height
-        self.painter.drawPixmap(xPos, yPos, scaledPixmap)
-        
-        pen=self.style.getStylePen("textPen")
-        self.painter.setPen(pen)
-        self.painter.drawText(xPos, y, text)
+        else:
+            xPos=int(x-pixmapWidth/2)
+            yPos=int(y-pixmapHeight)
+            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
 
     def displayTextAtPos(self, x, y, xOffset, text, bgColor):
         fm = self.painter.fontMetrics();
@@ -1408,16 +1432,19 @@ class QtOSMWidget(QWidget):
         self.painter.drawText(textPos, text)     
            
     def getDisplayAreaTypeList(self):
-        if self.map_zoom in range(17, 19):
+        if self.map_zoom in range(16, 19):
             return [Constants.AREA_TYPE_LANDUSE, 
                     Constants.AREA_TYPE_NATURAL,
                     Constants.AREA_TYPE_BUILDING,
                     Constants.AREA_TYPE_HIGHWAY_AREA,
-                    Constants.AREA_TYPE_RAILWAY]
+                    Constants.AREA_TYPE_RAILWAY,
+                    Constants.AREA_TYPE_AEROWAY]
         else:
             return [Constants.AREA_TYPE_LANDUSE, 
+                    Constants.AREA_TYPE_HIGHWAY_AREA,
                     Constants.AREA_TYPE_NATURAL,
-                    Constants.AREA_TYPE_RAILWAY]
+                    Constants.AREA_TYPE_RAILWAY,
+                    Constants.AREA_TYPE_AEROWAY]
 
 
     def getVisibleAreas(self, bbox):
@@ -1433,22 +1460,54 @@ class QtOSMWidget(QWidget):
                 if osmId in self.areaPolygonCache.keys():
                     del self.areaPolygonCache[osmId]
            
+        showBridges=self.map_zoom in range(15, 19)
+        showTunnels=self.map_zoom in range(15, 19)
+
         for area in resultList:
             osmId=area[0]
             areaType=area[1]
             tags=area[2]
-                            
+                
+            bridge="bridge" in tags and tags["bridge"]=="yes"
+            tunnel="tunnel" in tags and tags["tunnel"]=="yes"
+               
             if areaType==Constants.AREA_TYPE_RAILWAY:
-                if "bridge" in tags and tags["bridge"]=="yes":
-                    self.railwayBridgeLines.append(area)
-                    continue
-                if "tunnel" in tags and tags["tunnel"]=="yes":
-                    self.railwayTunnelLines.append(area)
+                if tags["railway"]=="rail":
+                    if showBridges==True and bridge==True:
+                        self.railwayBridgeLines.append(area)
+                        continue
+                    if showTunnels==True and tunnel==True:
+                        self.railwayTunnelLines.append(area)
+                        continue
+                    self.railwayLines.append(area)
                     continue
                 
+            if areaType==Constants.AREA_TYPE_NATURAL:
+                if showTunnels==True and tunnel==True:
+                    self.naturalTunnelLines.append(area)
+                    continue
+                
+            if areaType==Constants.AREA_TYPE_BUILDING:
+                self.buildingList.append(area)
+                continue
+            
             self.areaList.append(area)
                
-    def displayVisibleAreas(self, bbox):           
+    def displayTunnelNatural(self):
+        if len(self.naturalTunnelLines)!=0:   
+            brush=Qt.NoBrush
+        
+            for area in self.naturalTunnelLines:
+                areaType=area[1]
+                tags=area[2]
+                pen=Qt.NoPen
+                if areaType==Constants.AREA_TYPE_NATURAL:
+                    if "waterway" in tags:         
+                        pen=self.style.getStylePen("waterwayTunnelPen")
+                        pen.setWidth(self.style.getWaterwayPenWidthForZoom(self.map_zoom, tags))                      
+                        self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
+        
+    def displayAreas(self):           
         for area in self.areaList:
             areaType=area[1]
             tags=area[2]
@@ -1493,8 +1552,8 @@ class QtOSMWidget(QWidget):
                 else:
                     brush=self.style.getStyleBrush("landuse")
               
-            elif areaType==Constants.AREA_TYPE_BUILDING:
-                brush=self.style.getStyleBrush("building")
+#            elif areaType==Constants.AREA_TYPE_BUILDING:
+#                brush=self.style.getStyleBrush("building")
 
             elif areaType==Constants.AREA_TYPE_HIGHWAY_AREA:
                 brush=self.style.getStyleBrush("highway")
@@ -1504,7 +1563,12 @@ class QtOSMWidget(QWidget):
                 pen.setWidth(self.style.getRailwayPenWidthForZoom(self.map_zoom, tags))                      
             
             elif areaType==Constants.AREA_TYPE_AEROWAY:
-                brush=self.style.getStyleBrush("aeroway")
+                aerowayType=tags["aeroway"]
+                if aerowayType=="runway" or aerowayType=="taxiway":
+                    pen=self.style.getStylePen("aeroway")
+                    pen.setWidth(self.style.getAerowayPenWidthForZoom(self.map_zoom, tags))                      
+                else:
+                    brush=self.style.getStyleBrush("aerowayArea")
                 
             else:
                 continue
@@ -1513,6 +1577,22 @@ class QtOSMWidget(QWidget):
 
         self.painter.setBrush(Qt.NoBrush)
 
+    def displayBuildings(self):  
+        if len(self.buildingList)!=0:    
+            for area in self.buildingList:
+                areaType=area[1]
+                brush=Qt.NoBrush
+                pen=Qt.NoPen
+                  
+                if areaType==Constants.AREA_TYPE_BUILDING:
+                    brush=self.style.getStyleBrush("building")
+                else:
+                    continue
+                   
+                self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
+    
+            self.painter.setBrush(Qt.NoBrush)
+            
     def displayBridgeRailways(self):
         if len(self.railwayBridgeLines)!=0:
             brush=Qt.NoBrush
@@ -1541,6 +1621,18 @@ class QtOSMWidget(QWidget):
                 pen.setWidth(width+2)                        
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
             
+    def displayRailways(self):
+        if len(self.railwayLines)!=0:
+            brush=Qt.NoBrush
+     
+            for area in self.railwayLines:
+                tags=area[2]
+
+                width=self.style.getRailwayPenWidthForZoom(self.map_zoom, tags)
+                pen=self.style.getStylePen("railway")
+                pen.setWidth(width)                        
+                self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
+
     def getAdminLevelList(self):
         return Constants.ADMIN_LEVEL_SET
     

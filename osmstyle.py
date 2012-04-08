@@ -41,7 +41,7 @@ class OSMStyle():
         self.pixmapDict["roundabout4Image"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit4.png"))
         self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(env.getImageRoot(), "trafficcamera.png"))
         self.pixmapDict["tunnelPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "tunnel.png"))
-        self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flag.png"))
+        self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
         self.pixmapDict["gasStationPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "fillingstation.png"))
         self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "barrier.png"))
         self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "parking.png"))
@@ -57,11 +57,15 @@ class OSMStyle():
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
         self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
-        self.pixmapDict["placeTagPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "placeTagEmpty.png"))
+        self.pixmapDict["hospitalPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "hospital.png"))
+        self.pixmapDict["policePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "police.png"))
+        self.pixmapDict["supermarketPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "supermarket.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
-        self.colorDict["wayCasingColor"]=QColor(20, 20, 20, 200)
+        self.colorDict["wayCasingColor"]=QColor(0x99, 0x99, 0x99)
+        self.colorDict["tunnelColor"]=Qt.white
+        self.colorDict["bridgeCasingColor"]=QColor(0x50, 0x50, 0x50)
         self.colorDict["accessWaysColor"]=QColor(255, 0, 0, 100)
         self.colorDict["onewayWaysColor"]=QColor(0, 0, 255, 100)
         self.colorDict["livingStreeColor"]=QColor(0, 255, 0, 100)
@@ -69,19 +73,20 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
-        self.colorDict["buildingColor"]=QColor(100, 100, 100)
+        self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9)
         self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
-        self.colorDict["railwayAreaColor"]=QColor(150, 150, 150)
-        self.colorDict["railwayColor"]=QColor(10, 10, 10)
+        self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
+        self.colorDict["railwayColor"]=QColor(50, 50, 50)
         self.colorDict["landuseColor"]=QColor(150, 150, 150)
         self.colorDict["placeTagColor"]=QColor(0x38, 0x75, 0xd7, 200)
-        self.colorDict["residentialColor"]=QColor(0x50, 0x50, 0x50)
+        self.colorDict["residentialColor"]=QColor(0xdd, 0xdd, 0xdd)
         self.colorDict["commercialColor"]=QColor(0xef, 0xc8, 0xc8)
         self.colorDict["farmColor"]=QColor(0xea, 0xd8, 0xbd)
         self.colorDict["grassColor"]=QColor(0xcf, 0xec, 0xa8)
         self.colorDict["greenfieldColor"]=QColor(0x9d, 0x9d, 0x6c)
         self.colorDict["industrialColor"]=QColor(0xdf, 0xd1, 0xd6)
-        self.colorDict["aerowayColor"]=QColor(0xdf, 0xd1, 0xd6)
+        self.colorDict["aerowayColor"]=QColor(0x50, 0x50, 0x50)
+        self.colorDict["aerowayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
         
         self.initStreetColors()
         self.initBrush()
@@ -126,6 +131,13 @@ class OSMStyle():
         pen.setJoinStyle(Qt.RoundJoin)
         pen.setStyle(Qt.SolidLine)
         self.penDict["waterwayPen"]=pen
+
+        pen=QPen()
+        pen.setColor(self.getStyleColor("waterColor"))
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setStyle(Qt.DotLine)
+        self.penDict["waterwayTunnelPen"]=pen
         
         pen=QPen()
         pen.setColor(Qt.white)
@@ -143,16 +155,21 @@ class OSMStyle():
         self.penDict["railway"]=pen        
 
         pen=QPen()
-        pen.setColor(self.getStyleColor("railwayAreaColor"))
+        pen.setColor(self.getStyleColor("bridgeCasingColor"))
         pen.setStyle(Qt.SolidLine)
-        pen.setCapStyle(Qt.RoundCap)
+        pen.setCapStyle(Qt.FlatCap)
         self.penDict["railwayBridge"]=pen
 
         pen=QPen()
         pen.setColor(self.getStyleColor("railwayColor"))
         pen.setStyle(Qt.DashLine)
         self.penDict["railwayTunnel"]=pen
-              
+
+        pen=QPen()
+        pen.setColor(self.getStyleColor("aerowayColor"))
+        pen.setStyle(Qt.SolidLine)
+        self.penDict["aeroway"]=pen
+                      
     def getStylePen(self, key):
         if key in self.penDict:
             return self.penDict[key]
@@ -189,15 +206,15 @@ class OSMStyle():
         self.colorDict[Constants.STREET_TYPE_SECONDARY_LINK]=QColor(0xfe, 0xd7, 0xa5)
         self.colorDict[Constants.STREET_TYPE_TERTIARY]=QColor(0xff, 0xff, 0xb3)
         self.colorDict[Constants.STREET_TYPE_TERTIARY_LINK]=QColor(0xff, 0xff, 0xb3)
-        self.colorDict[Constants.STREET_TYPE_RESIDENTIAL]=QColor(0xC0, 0xC0, 0xC0)
-        self.colorDict[Constants.STREET_TYPE_UNCLASSIFIED]=QColor(0xC0, 0xC0, 0xC0)
-        self.colorDict[Constants.STREET_TYPE_ROAD]=QColor(0xC0, 0xC0, 0xC0)
-        self.colorDict[Constants.STREET_TYPE_SERVICE]=QColor(0xE0, 0xE0, 0xE0)
-        self.colorDict[Constants.STREET_TYPE_LIVING_STREET]=QColor(0xC0, 0xC0, 0xC0)
+        self.colorDict[Constants.STREET_TYPE_RESIDENTIAL]=QColor(0xff, 0xff, 0xff)
+        self.colorDict[Constants.STREET_TYPE_UNCLASSIFIED]=QColor(0xff, 0xff, 0xff)
+        self.colorDict[Constants.STREET_TYPE_ROAD]=QColor(0xff, 0xff, 0xff)
+        self.colorDict[Constants.STREET_TYPE_SERVICE]=QColor(0xff, 0xff, 0xff)
+        self.colorDict[Constants.STREET_TYPE_LIVING_STREET]=QColor(0xff, 0xff, 0xff)
 
     def getRelativePenWidthForZoom(self, zoom):
         if zoom==18:
-            return 1.2
+            return 1.0
         if zoom==17:
             return 0.8
         if zoom==16:
@@ -206,10 +223,10 @@ class OSMStyle():
             return 0.4
         if zoom==14:
             return 0.2
-        return 0.1
+        return 0
     
     def getStreetWidth(self, streetTypeId, zoom):
-        width=14
+        width=10
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
             width=width*2
         # motorway link
@@ -251,18 +268,45 @@ class OSMStyle():
 
     def getRailwayPenWidthForZoom(self, zoom, tags):
         if zoom==18:
-            return 5
-        if zoom==17:
             return 4
-        if zoom==16:
+        if zoom==17:
             return 3
-        if zoom==15:
+        if zoom==16:
             return 2
+        if zoom==15:
+            return 1
         if zoom==14:
             return 1
         
-        return 1
+        return 0
 
+    def getAerowayPenWidthForZoom(self, zoom, tags):
+        aerowayType=tags["aeroway"]
+        if aerowayType=="runway":
+            if zoom==18:
+                return 20
+            if zoom==17:
+                return 18
+            if zoom==16:
+                return 15
+            if zoom==15:
+                return 10
+            if zoom==14:
+                return 8
+        elif aerowayType=="taxiway":
+            if zoom==18:
+                return 10
+            if zoom==17:
+                return 8
+            if zoom==16:
+                return 5
+            if zoom==15:
+                return 3
+            if zoom==14:
+                return 2
+
+        return 0
+    
     def getWaterwayPenWidthForZoom(self, zoom, tags):
         waterwayType=tags["waterway"]
         if waterwayType=="river":
@@ -334,9 +378,12 @@ class OSMStyle():
 
             else:
                 if tunnel==True:
-                    brush=QBrush(color, Qt.Dense2Pattern)
+                    brush=QBrush(self.getStyleColor("tunnelColor"), Qt.Dense2Pattern)
+                    pen.setWidth(width-2)
                 elif bridge==True:
-                    brush=QBrush(Qt.black, Qt.SolidPattern)
+                    brush=QBrush(self.getStyleColor("bridgeCasingColor"), Qt.SolidPattern)
+                    pen.setCapStyle(Qt.FlatCap)
+                    pen.setWidth(width+2)
                 else:
                     brush=QBrush(color, Qt.SolidPattern)
                     pen.setWidth(width-2)
@@ -364,7 +411,7 @@ class OSMStyle():
         self.brushDict["grass"]=QBrush(self.getStyleColor("grassColor"), Qt.SolidPattern)
         self.brushDict["greenfield"]=QBrush(self.getStyleColor("greenfieldColor"), Qt.SolidPattern)
         self.brushDict["industrial"]=QBrush(self.getStyleColor("industrialColor"), Qt.SolidPattern)
-        self.brushDict["aeroway"]=QBrush(self.getStyleColor("aerowayColor"), Qt.SolidPattern)
+        self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType==Constants.POI_TYPE_ENFORCEMENT:
@@ -375,8 +422,12 @@ class OSMStyle():
             return self.getStylePixmap("barrierPixmap")
         if nodeType==Constants.POI_TYPE_PARKING:
             return self.getStylePixmap("parkingPixmap")
-        if nodeType==Constants.POI_TYPE_PLACE:
-            return self.getStylePixmap("placeTagPixmap")
+        if nodeType==Constants.POI_TYPE_HOSPITAL:
+            return self.getStylePixmap("hospitalPixmap")
+        if nodeType==Constants.POI_TYPE_POLICE:
+            return self.getStylePixmap("policePixmap")
+        if nodeType==Constants.POI_TYPE_SUPERMARKET:
+            return self.getStylePixmap("supermarketPixmap")
             
         return self.getStylePixmap("poiPixmap")
         

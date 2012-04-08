@@ -61,9 +61,11 @@ class Constants():
     POI_TYPE_ENFORCEMENT_WAYREF=4
     POI_TYPE_GAS_STATION=5
     POI_TYPE_ADDRESS=6
-    POI_TYPE_ATM=7
     POI_TYPE_PARKING=7
     POI_TYPE_PLACE=8
+    POI_TYPE_HOSPITAL=9
+    POI_TYPE_POLICE=10
+    POI_TYPE_SUPERMARKET=11
     
     AREA_TYPE_ADMIN=0
     AREA_TYPE_NATURAL=1
@@ -80,13 +82,40 @@ class Constants():
     NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank"])
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain"])
     RAILWAY_TYPE_SET=set(["rail"])
-    AEROWAY_TYPE_SET=set(["runway"])
+    AEROWAY_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
     HIGHWAY_NODES_TYPE_SET=set(["motorway_junction", "speed_camera"])
-    AMENITY_NODES_TYPE_SET=set(["fuel", "parking"])
+    AMENITY_NODES_TYPE_SET=set(["fuel", "parking", "hospital", "police"])
+    SHOP_NODES_TYPE_SET=set(["supermarket"])
     BARIER_NODES_TYPE_SET=set(["bollard"])
     BOUNDARY_TYPE_SET=set(["administrative"])
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb"])
-    REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle"])
+    REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "layer", "lanes"])
+    
+    AMENITY_TYPE_DICT={"fuel": POI_TYPE_GAS_STATION, 
+                       "parking": POI_TYPE_PARKING,
+                       "hospital": POI_TYPE_HOSPITAL, 
+                       "police": POI_TYPE_POLICE}
+    
+    SHOP_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
+    
+    HIGHWAY_TYPE_DICT={"motorway_junction": POI_TYPE_MOTORWAY_JUNCTION, 
+                       "speed_camera": POI_TYPE_ENFORCEMENT}
+    
+    STREET_TYPE_DICT={"road": STREET_TYPE_ROAD,
+        "unclassified": STREET_TYPE_UNCLASSIFIED,
+        "motorway": STREET_TYPE_MOTORWAY,
+        "motorway_link": STREET_TYPE_MOTORWAY_LINK,
+        "trunk":STREET_TYPE_TRUNK,
+        "trunk_link":STREET_TYPE_TRUNK_LINK,
+        "primary":STREET_TYPE_PRIMARY,
+        "primary_link":STREET_TYPE_PRIMARY_LINK,
+        "secondary":STREET_TYPE_SECONDARY,
+        "secondary_link":STREET_TYPE_SECONDARY_LINK,
+        "tertiary":STREET_TYPE_TERTIARY,
+        "tertiary_link":STREET_TYPE_TERTIARY_LINK,
+        "residential":STREET_TYPE_RESIDENTIAL,
+        "service":STREET_TYPE_SERVICE,
+        "living_street":STREET_TYPE_LIVING_STREET}
     
     ONEWAY_OVERLAY_STREET_SET=set([STREET_TYPE_SERVICE,
                 STREET_TYPE_UNCLASSIFIED,
@@ -158,7 +187,7 @@ class OSMParserData():
         self.nodeList=dict()
 
     def createEdgeTables(self):
-        self.createEdgeTable(True)
+        self.createEdgeTable()
         self.createRestrictionTable()
 
     def createAdressTable(self):
@@ -420,24 +449,20 @@ class OSMParserData():
         allentries=self.cursorAdress.fetchall()
         return allentries[0][0]
     
-    def createEdgeTable(self, initSpatia):
+    def createEdgeTable(self):
+        self.cursorEdge.execute("SELECT InitSpatialMetaData()")
         self.cursorEdge.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, wayId INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, streetInfo INTEGER)')
         self.cursorEdge.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
         self.cursorEdge.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
         self.cursorEdge.execute("CREATE INDEX wayId_idx ON edgeTable (wayId)")
         self.cursorEdge.execute("CREATE INDEX source_idx ON edgeTable (source)")
-        self.cursorEdge.execute("CREATE INDEX target_idx ON edgeTable (target)")
-        
-        if initSpatia==True:
-            self.cursorEdge.execute("SELECT InitSpatialMetaData()")
-        
+        self.cursorEdge.execute("CREATE INDEX target_idx ON edgeTable (target)")        
         self.cursorEdge.execute("SELECT AddGeometryColumn('edgeTable', 'geom', 4326, 'LINESTRING', 2)")
 
     def createAreaTable(self):
         self.cursorArea.execute("SELECT InitSpatialMetaData()")
         self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, adminLevel INTEGER)')
         self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
-        
         self.cursorArea.execute('CREATE TABLE areaLineTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, adminLevel INTEGER)')
         self.cursorArea.execute("SELECT AddGeometryColumn('areaLineTable', 'geom', 4326, 'LINESTRING', 2)")
 
@@ -615,15 +640,6 @@ class OSMParserData():
 #        self.cursorArea.execute('SELECT id FROM areaTable WHERE osmId=%d AND type=%d'%(osmId, areaType))
 #        allentries=self.cursorArea.fetchall()
 #        return len(allentries)!=0
-    
-    def clearEdgeTable(self):
-        print("DiscardGeometryColumn")
-        self.cursorEdge.execute('SELECT DiscardGeometryColumn("edgeTable", "geom")')
-        print("DROP edge table")
-        self.cursorEdge.execute('DROP TABLE edgeTable')
-        self.edgeId=1
-        print("CREATE edge table")
-        self.createEdgeTable(False)
     
     def createSpatialIndexForEdgeTable(self):
         self.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
@@ -997,7 +1013,13 @@ class OSMParserData():
             print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, type, tags, adminLevel, AsText(geom) FROM areaTable WHERE osmId=22945329 OR osmId=72268209')
+        self.cursorArea.execute('SELECT osmId, type, tags, adminLevel, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_AEROWAY))
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            osmId, areaType, tags, adminLevel, polyStr=self.areaFromDBWithCoordsString(x)
+            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " adminLevel: "+ str(adminLevel)+" polyStr:"+str(polyStr))
+
+        self.cursorArea.execute('SELECT osmId, type, tags, adminLevel, AsText(geom) FROM areaLineTable WHERE type=%d'%(Constants.AREA_TYPE_AEROWAY))
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, adminLevel, polyStr=self.areaFromDBWithCoordsString(x)
@@ -1178,36 +1200,28 @@ class OSMParserData():
         adminLevel=x[3]
         return (osmId, areaType, tags, adminLevel)
     
-    def isUsableHighwayNode(self):
-        return Constants.HIGHWAY_NODES_TYPE_SET
-    
     def isUsableBarierType(self):
         return Constants.BARIER_NODES_TYPE_SET
-    
-    def isUsableAmenityNodeType(self):
-        return Constants.AMENITY_NODES_TYPE_SET
 
     def isUsablePlaceNodeType(self):
         return Constants.PLACE_NODES_TYPE_SET
         
     def getHighwayNodeTypeId(self, nodeTag):
-        # 0 is a way ref
-        if nodeTag=="speed_camera":
-            return Constants.POI_TYPE_ENFORCEMENT
-        if nodeTag=="motorway_junction":
-            return Constants.POI_TYPE_MOTORWAY_JUNCTION
-            
-        # 6 is address
+        if nodeTag in Constants.HIGHWAY_TYPE_DICT.keys():
+            return Constants.HIGHWAY_TYPE_DICT[nodeTag]
+
         return -1
     
     def getAmenityNodeTypeId(self, nodeTag):
-        # 0 is a way ref
-        if nodeTag=="fuel":
-            return Constants.POI_TYPE_GAS_STATION
-        if nodeTag=="atm":
-            return Constants.POI_TYPE_ATM
-        if nodeTag=="parking":
-            return Constants.POI_TYPE_PARKING
+        if nodeTag in Constants.AMENITY_TYPE_DICT.keys():
+            return Constants.AMENITY_TYPE_DICT[nodeTag]
+        
+        return -1
+
+    def getShopNodeTypeId(self, nodeTag):
+        if nodeTag in Constants.SHOP_TYPE_DICT.keys():
+            return Constants.SHOP_TYPE_DICT[nodeTag]
+        
         return -1
     
     def parse_nodes(self, node):
@@ -1225,26 +1239,30 @@ class OSMParserData():
             
             if self.skipPOINodes==False:
                 if "highway" in tags:
-                    if tags["highway"] in self.isUsableHighwayNode():
-                        nodeType=self.getHighwayNodeTypeId(tags["highway"])
-                        if nodeType!=-1:
-                            self.addToRefTable(ref, lat, lon, tags, nodeType)
+                    nodeType=self.getHighwayNodeTypeId(tags["highway"])
+                    if nodeType!=-1:
+                        self.addToRefTable(ref, lat, lon, tags, nodeType)
                             
                 if "barrier" in tags:
                     if tags["barrier"] in self.isUsableBarierType():
                         self.addToRefTable(ref, lat, lon, tags, Constants.POI_TYPE_BARRIER)
                       
                 if "amenity" in tags:
-                    if tags["amenity"] in self.isUsableAmenityNodeType():
-                        nodeType=self.getAmenityNodeTypeId(tags["amenity"])
-                        if nodeType!=-1:
-                            self.addToRefTable(ref, lat, lon, tags, nodeType)
-                            self.nodeList[ref]=nodeType
+                    nodeType=self.getAmenityNodeTypeId(tags["amenity"])
+                    if nodeType!=-1:
+                        self.addToRefTable(ref, lat, lon, tags, nodeType)
+                        self.nodeList[ref]=nodeType
                 
                 if "place" in tags:
                     if tags["place"] in self.isUsablePlaceNodeType():
                         self.addToRefTable(ref, lat, lon, tags, Constants.POI_TYPE_PLACE)
  
+                if "shop" in tags:
+                    nodeType=self.getShopNodeTypeId(tags["shop"])
+                    if nodeType!=-1:
+                        self.addToRefTable(ref, lat, lon, tags, nodeType)
+                        self.nodeList[ref]=nodeType
+                
             if self.skipAddress==False:
                 if "addr:street" in tags:
                     self.addToRefTable(ref, lat, lon, tags, Constants.POI_TYPE_ADDRESS)
@@ -1334,36 +1352,9 @@ class OSMParserData():
                 or refs[-1]==refs2[-1])
 
     def getStreetTypeId(self, streetType):
-        if streetType=="road":
-            return Constants.STREET_TYPE_ROAD
-        if streetType=="unclassified":
-            return Constants.STREET_TYPE_UNCLASSIFIED
-        if streetType=="motorway":
-            return Constants.STREET_TYPE_MOTORWAY
-        if streetType=="motorway_link":
-            return Constants.STREET_TYPE_MOTORWAY_LINK
-        if streetType=="trunk":
-            return Constants.STREET_TYPE_TRUNK
-        if streetType=="trunk_link":
-            return Constants.STREET_TYPE_TRUNK_LINK
-        if streetType=="primary":
-            return Constants.STREET_TYPE_PRIMARY
-        if streetType=="primary_link":
-            return Constants.STREET_TYPE_PRIMARY_LINK
-        if streetType=="secondary":
-            return Constants.STREET_TYPE_SECONDARY
-        if streetType=="secondary_link":
-            return Constants.STREET_TYPE_SECONDARY_LINK
-        if streetType=="tertiary":
-            return Constants.STREET_TYPE_TERTIARY
-        if streetType=="tertiary_link":
-            return Constants.STREET_TYPE_TERTIARY_LINK
-        if streetType=="residential":
-            return Constants.STREET_TYPE_RESIDENTIAL
-        if streetType=="service":
-            return Constants.STREET_TYPE_SERVICE
-        if streetType=="living_street":
-            return Constants.STREET_TYPE_LIVING_STREET
+        if streetType in Constants.STREET_TYPE_DICT.keys():
+            return Constants.STREET_TYPE_DICT[streetType]
+
         return -1
 
     def getRequiredWayTags(self):
@@ -1448,22 +1439,28 @@ class OSMParserData():
                                     refCountry=self.getCountryOfPos(lat, lon)
                                     if refCountry!=None:
                                         self.parseFullAddress(tags, refs[0], lat, lon, refCountry)
-    #                    else:
-    #                        print("address entry for %d exists"%(wayid))
                         
             if "amenity" in tags:
                 if self.skipPOINodes==False:
-                    if tags["amenity"] in self.isUsableAmenityNodeType():
-                        nodeType=self.getAmenityNodeTypeId(tags["amenity"])
-                        if nodeType!=-1:
-                            if not self.isNodeDefined(refs, nodeType):
-                                # TODO: use first ref as location for amenity?
-                                # may use entrance node
-                                storedRef, lat, lon=self.getCoordsEntry(refs[0])
-                                if storedRef!=None:
-                                    self.addToRefTable(storedRef, lat, lon, tags, nodeType)
-    #                        else:
-    #                            print("amenity entry for %d exists"%(wayid))
+                    nodeType=self.getAmenityNodeTypeId(tags["amenity"])
+                    if nodeType!=-1:
+                        if not self.isNodeDefined(refs, nodeType):
+                            # TODO: use first ref as location for amenity?
+                            # may use entrance node
+                            storedRef, lat, lon=self.getCoordsEntry(refs[0])
+                            if storedRef!=None:
+                                self.addToRefTable(storedRef, lat, lon, tags, nodeType)
+
+            if "shop" in tags:
+                if self.skipPOINodes==False:
+                    nodeType=self.getShopNodeTypeId(tags["shop"])
+                    if nodeType!=-1:
+                        if not self.isNodeDefined(refs, nodeType):
+                            # TODO: use first ref as location for amenity?
+                            # may use entrance node
+                            storedRef, lat, lon=self.getCoordsEntry(refs[0])
+                            if storedRef!=None:
+                                self.addToRefTable(storedRef, lat, lon, tags, nodeType)
 
             if not "highway" in tags:    
                 if self.skipAreas==False:         
@@ -3641,7 +3638,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data1")
+        return os.path.join(env.getDataRoot(), "data2")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -3947,14 +3944,14 @@ class OSMParserData():
 #        osmData["countryCode"]="CH"
 #        osmDataList[1]=osmData
     
-#        osmData=dict()
-#        osmData["country"]="Germany"
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-##        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
-#        osmData["poly"]="germany.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Germany"
-#        osmData["countryCode"]="DE"
-#        osmDataList[2]=osmData
+        osmData=dict()
+        osmData["country"]="Germany"
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
+        osmData["poly"]="germany.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Germany"
+        osmData["countryCode"]="DE"
+        osmDataList[2]=osmData
         
 #        osmData=dict()
 #        osmData["country"]="liechtenstein"
@@ -4002,7 +3999,7 @@ class OSMParserData():
         print("end recreate crossings")
                                 
     def recreateEdges(self):
-        self.clearEdgeTable()
+        self.createEdgeTable()
         print("recreate edges")
         self.createEdgeTableEntries()
         print("end recreate edges")   
