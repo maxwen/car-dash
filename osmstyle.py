@@ -7,7 +7,7 @@ Created on Mar 31, 2012
 import env
 import os
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QPixmap, QColor, QPen, QBrush
+from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
 from osmparser.osmparserdata import Constants
 
 class OSMStyle():
@@ -17,15 +17,14 @@ class OSMStyle():
         self.pixmapDict=dict()
         self.penDict=dict()
         self.brushDict=dict()
+        self.fontDict=dict()
         
         self.errorImage=QPixmap(os.path.join(env.getImageRoot(), "error.png"))
         self.errorColor=QColor(255, 0, 0)
         
-        self.pixmapDict["gpsPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "gps-move-1.png"))
-        self.pixmapDict["gpsPointImageStop"]=QPixmap(os.path.join(env.getImageRoot(), "gps-stop-big.png"))
-        self.pixmapDict["startPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "source.png"))
-        self.pixmapDict["endPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "target.png"))
-        self.pixmapDict["wayPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "waypoint.png"))        
+        self.pixmapDict["gpsPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "gps-move.png"))
+        self.pixmapDict["gpsPointImageStop"]=QPixmap(os.path.join(env.getImageRoot(), "gps-stop.png"))
+      
         self.pixmapDict["turnRightImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/right.png"))
         self.pixmapDict["turnLeftImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/left.png"))
         self.pixmapDict["turnRighHardImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/sharply_right.png"))
@@ -33,21 +32,14 @@ class OSMStyle():
         self.pixmapDict["turnRightEasyImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/slightly_right.png"))
         self.pixmapDict["turnLeftEasyImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/slightly_left.png"))
         self.pixmapDict["straightImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/forward.png"))
-        self.pixmapDict["uturnImage"]=QPixmap(os.path.join(env.getImageRoot(), "u-turn.png"))
+        self.pixmapDict["uturnImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/u-turn.png"))
         self.pixmapDict["roundaboutImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout.png"))
         self.pixmapDict["roundabout1Image"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit1.png"))
         self.pixmapDict["roundabout2Image"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit2.png"))
         self.pixmapDict["roundabout3Image"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit3.png"))
         self.pixmapDict["roundabout4Image"]=QPixmap(os.path.join(env.getImageRoot(), "directions/roundabout_exit4.png"))
-        self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(env.getImageRoot(), "trafficcamera.png"))
+        
         self.pixmapDict["tunnelPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "tunnel.png"))
-        self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
-        self.pixmapDict["gasStationPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "fillingstation.png"))
-        self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "barrier.png"))
-        self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "parking.png"))
-        self.pixmapDict["startPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "start.png"))
-        self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "finish.png"))
-        self.pixmapDict["wayPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagWay.png"))
         self.pixmapDict["downloadPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "download.png"))
         self.pixmapDict["followGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
         self.pixmapDict["favoritesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "favorites.png"))
@@ -57,9 +49,19 @@ class OSMStyle():
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
         self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
-        self.pixmapDict["hospitalPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "hospital.png"))
-        self.pixmapDict["policePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "police.png"))
-        self.pixmapDict["supermarketPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "supermarket.png"))
+        
+        self.pixmapDict["startPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/start.png"))
+        self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/finish.png"))
+        self.pixmapDict["wayPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/way.png"))
+        
+        self.pixmapDict["hospitalPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/hospital.png"))
+        self.pixmapDict["policePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/police.png"))
+        self.pixmapDict["supermarketPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/supermarket.png"))
+        self.pixmapDict["gasStationPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/fillingstation.png"))
+        self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/barrier.png"))
+        self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/parking.png"))
+        self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(env.getImageRoot(), "poi/trafficcamera.png"))
+        self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
@@ -73,12 +75,12 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
-        self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9)
+        self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9, 200)
         self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
         self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
-        self.colorDict["railwayColor"]=QColor(50, 50, 50)
+        self.colorDict["railwayColor"]=QColor(0x90, 0x90, 0x90)
         self.colorDict["landuseColor"]=QColor(150, 150, 150)
-        self.colorDict["placeTagColor"]=QColor(0x38, 0x75, 0xd7, 200)
+        self.colorDict["placeTagColor"]=QColor(0xff, 0xff, 0xff, 150)
         self.colorDict["residentialColor"]=QColor(0xdd, 0xdd, 0xdd)
         self.colorDict["commercialColor"]=QColor(0xef, 0xc8, 0xc8)
         self.colorDict["farmColor"]=QColor(0xea, 0xd8, 0xbd)
@@ -91,6 +93,7 @@ class OSMStyle():
         self.initStreetColors()
         self.initBrush()
         self.initPens()
+        self.initFonts()
         
     def getStyleColor(self, key):
         if key in self.colorDict:
@@ -143,6 +146,10 @@ class OSMStyle():
         pen.setColor(Qt.white)
         self.penDict["textPen"]=pen
 
+        pen=QPen()
+        pen.setColor(Qt.black)
+        self.penDict["placePen"]=pen
+        
         pen=QPen()
         pen.setColor(self.getStyleColor("adminAreaColor"))
         pen.setStyle(Qt.DotLine)
@@ -214,19 +221,20 @@ class OSMStyle():
 
     def getRelativePenWidthForZoom(self, zoom):
         if zoom==18:
-            return 1.0
+            return 1.2
         if zoom==17:
             return 0.8
         if zoom==16:
-            return 0.6
+            return 0.7
         if zoom==15:
-            return 0.4
+            return 0.6
         if zoom==14:
-            return 0.2
-        return 0
+            return 0.5
+
+        return 0.4
     
     def getStreetWidth(self, streetTypeId, zoom):
-        width=10
+        width=12
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
             width=width*2
         # motorway link
@@ -250,7 +258,7 @@ class OSMStyle():
         else:
             width=width*1.0
             
-        return self.getRelativePenWidthForZoom(zoom)*width
+        return int(self.getRelativePenWidthForZoom(zoom)*width)
     
     def getStreetPenWidthForZoom(self, zoom):
         if zoom==18:
@@ -264,7 +272,7 @@ class OSMStyle():
         if zoom==14:
             return 4
         
-        return 0
+        return 2
 
     def getRailwayPenWidthForZoom(self, zoom, tags):
         if zoom==18:
@@ -275,16 +283,14 @@ class OSMStyle():
             return 2
         if zoom==15:
             return 1
-        if zoom==14:
-            return 1
         
-        return 0
+        return 1
 
     def getAerowayPenWidthForZoom(self, zoom, tags):
         aerowayType=tags["aeroway"]
         if aerowayType=="runway":
             if zoom==18:
-                return 20
+                return 25
             if zoom==17:
                 return 18
             if zoom==16:
@@ -305,7 +311,7 @@ class OSMStyle():
             if zoom==14:
                 return 2
 
-        return 0
+        return 2
     
     def getWaterwayPenWidthForZoom(self, zoom, tags):
         waterwayType=tags["waterway"]
@@ -333,7 +339,7 @@ class OSMStyle():
             if zoom==14:
                 return 1
         
-        return 0
+        return 1
     
     def getPenWithForPoints(self, zoom):
         return self.getStreetPenWidthForZoom(zoom)+4
@@ -386,8 +392,11 @@ class OSMStyle():
                     pen.setWidth(width+2)
                 else:
                     brush=QBrush(color, Qt.SolidPattern)
-                    pen.setWidth(width-2)
-        
+                    if width>2:
+                        pen.setWidth(width-2)
+                    else:
+                        pen.setWidth(width)
+                        
         pen.setBrush(brush)
         self.penDict[key]=pen
         return pen
@@ -431,3 +440,44 @@ class OSMStyle():
             
         return self.getStylePixmap("poiPixmap")
         
+    def getFontForTextDisplay(self, tags, zoom):
+        placeType=tags["place"]
+        
+        if zoom in range(15, 19):
+            minFont=12
+        else:
+            minFont=8
+            
+        font=None
+        if placeType=="city":
+            font=self.fontDict["boldFont"]
+            font.setPointSize(minFont+6)
+        elif placeType=="town":
+            if zoom > 16:
+                font=self.fontDict["normalFont"]
+                font.setPointSize(minFont+4)
+        elif placeType=="village":
+            if zoom > 15:
+                font=self.fontDict["normalFont"]
+                font.setPointSize(minFont+2)                    
+        elif placeType=="suburb":
+            if zoom > 14:
+                font=self.fontDict["normalFont"]
+                font.setPointSize(minFont)
+            
+        return font
+    
+    def initFonts(self):
+        font = QFont("Helvetica")
+        font.setBold(True)
+        self.fontDict["boldFont"]=font
+        
+        font = QFont("Helvetica")
+        self.fontDict["normalFont"]=font
+
+    SHOW_CASING_START_ZOOM=14
+    SHOW_BRIDGES_START_ZOOM=16
+    SHOW_STREET_OVERLAY_START_ZOOM=17
+    USE_ANTIALIASING_START_ZOOM=17
+    SHOW_BUILDING_START_ZOOM=17
+    

@@ -96,6 +96,17 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  -definition of imported data
   
  TODO: add shop tag
+ DONE
  
  TODO: evalute layer tag for correct drawing
+ -sort by layer before drawing
  
+ TODO: make size of place tags dependent on 
+ -type -> city larger then suburb etc
+ -zoom
+ DONE
+ 
+ TODO: add place_of_worship to POIs
+
+ TODO: need node type filter in SQL!
+ -maybe enough to not store address poi with others

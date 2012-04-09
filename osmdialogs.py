@@ -140,7 +140,7 @@ class OSMAdressDialog(QDialog):
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
-        self.wayPointIcon=QIcon(self.style.getStylePixmap("flagPixmap"))
+        self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
         self.selectedAddress=None
         self.initUI()
          
@@ -518,7 +518,7 @@ class OSMFavoritesDialog(QDialog):
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
-        self.wayPointIcon=QIcon(self.style.getStylePixmap("flagPixmap"))
+        self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
 
         self.initUI()
          
@@ -1113,7 +1113,7 @@ class OSMRouteTableModel(QAbstractTableModel):
         self.style=OSMStyle()
         self.startPoint=self.style.getStylePixmap("startPixmap")
         self.endPoint=self.style.getStylePixmap("finishPixmap")
-        self.wayPoint=self.style.getStylePixmap("flagPixmap")
+        self.wayPoint=self.style.getStylePixmap("wayPixmap")
         
     def rowCount(self, parent): 
         return len(self.routingPointList)
