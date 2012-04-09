@@ -62,6 +62,8 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  TODO: allow POI type filtering in options
  
  TODO: search for nearest POI type
+ -need a way to calculate rtree index distance in degrees in meters
+ 1 degree at the equator is 111km
  
  TODO: convert map point to routing point
  
@@ -96,10 +98,11 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  -definition of imported data
   
  TODO: add shop tag
- DONE
+ DONEf
  
  TODO: evalute layer tag for correct drawing
  -sort by layer before drawing
+DONE
  
  TODO: make size of place tags dependent on 
  -type -> city larger then suburb etc
@@ -109,4 +112,14 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  TODO: add place_of_worship to POIs
 
  TODO: need node type filter in SQL!
- -maybe enough to not store address poi with others
+DONE
+
+TODO: use lanes tags for street width if available
+-else use usefull defaults
+lanes tag is not consitently used -> ignore for now
+
+TODO: dstances in osmrouting are calculated as straight lines!
+-should actually follow the edge -> time?
+
+TODO: use newer version of geos for spatialite
+-support of Line_Locate_Point

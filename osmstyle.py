@@ -234,7 +234,7 @@ class OSMStyle():
         return 0.4
     
     def getStreetWidth(self, streetTypeId, zoom):
-        width=12
+        width=14
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
             width=width*2
         # motorway link

@@ -24,6 +24,8 @@ PAST_CROSSING_LENGTH_MIN=15.0
 CROSSING_CALC_LENGTH_MIN=NORMAL_EDGE_RANGE*2
 CLOSE_SEARCH_MARGIN=0.0001
 DEFAULT_SEARCH_MARGIN=0.0003
+HEADING_CALC_LENGTH=20.0
+CHECK_TURN_SPEED=10
 
 class OSMRoute():
     def __init__(self, name="", routingPointList=None):
@@ -418,50 +420,60 @@ class OSMRouting():
         return possibleEdges, edgeHeadings
     
     def getBestMatchingNextEdgeForHeading(self, track, possibleEdges, edgeHeadings, lat, lon):
-        otherNearHeading=False
-        nearPossibleEdges=list()
         if len(possibleEdges)==0:
-            return None, None, otherNearHeading, nearPossibleEdges
+            self.otherNearHeading=False
+            self.nearPossibleEdges=list()
+            return None, None
 
         if len(possibleEdges)==1:
+            self.otherNearHeading=False
+            self.nearPossibleEdges=list()
             expectedNextEdge=possibleEdges[0]
             nextEdgeLength=expectedNextEdge[3]
-            return expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges
+            return expectedNextEdge, nextEdgeLength
             
         closestEdge=self.getCurrentBestMatchingEdge(lat, lon, track, possibleEdges, NORMAL_EDGE_RANGE)
         if closestEdge==None:
-            return None, None, None, None
+            return None, None
         
         minHeadingEntry=possibleEdges.index(closestEdge)
         if minHeadingEntry!=None:
+            expectedNextEdge=possibleEdges[minHeadingEntry]
+            nextEdgeLength=expectedNextEdge[3]
+
+            # no change - no need to calc rest
+            if expectedNextEdge==self.expectedNextEdge:
+                return expectedNextEdge, nextEdgeLength
+
+            self.nearPossibleEdges=list()
+            self.otherNearHeading=False
             i=0
             for heading in edgeHeadings:
                 if heading!=None and heading!=edgeHeadings[minHeadingEntry]:
                     headingDiff=self.osmutils.headingDiffAbsolute(edgeHeadings[minHeadingEntry], heading)
-#                    print(headingDiff)
                     if headingDiff<CLOSE_HEADING_RANGE:
                         # next best heading is near to best matching
                         self.debugPrint(lat, lon, "heading diff < %d %f"%(CLOSE_HEADING_RANGE, headingDiff))
-                        nearPossibleEdges.append(possibleEdges[i])
-                        otherNearHeading=True
+                        self.nearPossibleEdges.append(possibleEdges[i])
+                        self.otherNearHeading=True
                 i=i+1
-            expectedNextEdge=possibleEdges[minHeadingEntry]
-            nextEdgeLength=expectedNextEdge[3]
-            return expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges
+            return expectedNextEdge, nextEdgeLength
 
-        return None, None, None, None
+        return None, None
     
     # in routing mode we always set the nextEdgeIdOnRoute as the expected
     def setNextEdgeOnRouteAsExpected(self, track, possibleEdges, edgeHeadings, lat, lon, nextEdgeIdOnRoute):
-        otherNearHeading=False
-        nearPossibleEdges=list()
         if len(possibleEdges)==0:
-            return None, None, otherNearHeading, nearPossibleEdges
+            self.otherNearHeading=False
+            self.nearPossibleEdges=list()
+            return None, None
 
         if len(possibleEdges)==1:
+            self.otherNearHeading=False
+            self.nearPossibleEdges=list()
             expectedNextEdge=possibleEdges[0]
             nextEdgeLength=expectedNextEdge[3]
-            return expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges
+            return expectedNextEdge, nextEdgeLength
             
         nextEdgeHeadingEntry=None
         i=0
@@ -472,22 +484,27 @@ class OSMRouting():
             i=i+1
             
         if nextEdgeHeadingEntry!=None:
+            expectedNextEdge=possibleEdges[nextEdgeHeadingEntry]
+            nextEdgeLength=expectedNextEdge[3]
+            # no change - no need to calc rest
+            if expectedNextEdge==self.expectedNextEdge:
+                return expectedNextEdge, nextEdgeLength
+
+            self.nearPossibleEdges=list()
+            self.otherNearHeading=False
             i=0
             for heading in edgeHeadings:
                 if heading!=None and heading!=edgeHeadings[nextEdgeHeadingEntry]:
                     headingDiff=self.osmutils.headingDiffAbsolute(edgeHeadings[nextEdgeHeadingEntry], heading)
-#                    print(headingDiff)
                     if headingDiff<CLOSE_HEADING_RANGE:
                         # next best heading is near to best matching
                         self.debugPrint(lat, lon, "heading diff < %d %f"%(CLOSE_HEADING_RANGE, headingDiff))
-                        nearPossibleEdges.append(possibleEdges[i])
-                        otherNearHeading=True
+                        self.nearPossibleEdges.append(possibleEdges[i])
+                        self.otherNearHeading=True
                 i=i+1
-            expectedNextEdge=possibleEdges[nextEdgeHeadingEntry]
-            nextEdgeLength=expectedNextEdge[3]
-            return expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges
+            return expectedNextEdge, nextEdgeLength
 
-        return None, None, None, None
+        return None, None
     
     def checkEdgeDataForPos(self, lat, lon, edge, maxDistance):
         coords=edge[10]
@@ -624,6 +641,7 @@ class OSMRouting():
         # before we reached the crossing
         self.distanceFromCrossing=distance
         self.crossingReached=True     
+        self.debugPrint(lat, lon, "crossing reached %d"%self.distanceFromCrossing)
         
         # past crossing
         crossingRange=self.getFromCrossingCheckDistance(speed)
@@ -738,9 +756,9 @@ class OSMRouting():
         if self.expectedNextEdgeId!=None or self.nearCrossing==True: 
             self.debugPrint(lat, lon, "check possible edges")   
             if nextEdgeOnRoute!=None:
-                expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges=self.setNextEdgeOnRouteAsExpected(track, self.possibleEdges, self.edgeHeadings, lat, lon, nextEdgeOnRoute)
+                expectedNextEdge, nextEdgeLength=self.setNextEdgeOnRouteAsExpected(track, self.possibleEdges, self.edgeHeadings, lat, lon, nextEdgeOnRoute)
             else:    
-                expectedNextEdge, nextEdgeLength, otherNearHeading, nearPossibleEdges=self.getBestMatchingNextEdgeForHeading(track, self.possibleEdges, self.edgeHeadings, lat, lon)
+                expectedNextEdge, nextEdgeLength=self.getBestMatchingNextEdgeForHeading(track, self.possibleEdges, self.edgeHeadings, lat, lon)
             
             if expectedNextEdge!=None:
                 self.debugPrint(lat, lon, "expected next edge %d %d"%(expectedNextEdge[0], nextEdgeLength))   
@@ -753,10 +771,7 @@ class OSMRouting():
                 self.expectedNextEdgeId=None
                 self.expectedNextEdge=None
                 self.nextEdgeLength=None
-            
-            self.otherNearHeading=otherNearHeading
-            self.nearPossibleEdges=nearPossibleEdges                
-       
+                   
     def checkEdge(self, lat, lon, track, speed, edge, fromMouse, margin):
         # use a large maxDistance to make sure we match the
         # epected edge in most cases
@@ -779,8 +794,10 @@ class OSMRouting():
         # no decision possible
         return None, None
     
+    # TODO: this is the straight distance and does NOT follow the edge
     def getDistanceToNextCrossing(self, lat, lon):
 #        distance1=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
+#            distance=length-self.osmParserData.getLengthOnEdge(lat, lon, coords1)
 
         _, startRef, endRef, _, _, _, _, _, _, _, coords=self.currentEdgeData
         if self.approachingRef==startRef:
@@ -819,7 +836,7 @@ class OSMRouting():
                 self.updateCrossingDistances(lat, lon, distance, speed)
             
             # check if we turned on the edge
-            if (self.nearCrossing==False and speed<15) or self.approachingRef==None:
+            if (self.nearCrossing==False and speed<CHECK_TURN_SPEED) or self.approachingRef==None:
                 changed, newApproachingRef=self.isChangedApproachingRef(lat, lon, track)
                 if changed==True:
                     # can still be None
@@ -983,24 +1000,36 @@ class OSMRouting():
         
         crossingRef=self.approachingRef
         for edge in possibleEdges:
-            _, startRef, endRef, _, _, _, _, _, _, streetInfo, coords=edge            
+            edgeId, _, endRef, _, _, _, _, _, _, _, coords=edge            
             headingCoords=coords
             if crossingRef==endRef:
                 headingCoords=list()
                 headingCoords.extend(coords)
                 headingCoords.reverse()
-             
+            
+            checkLength=0 
             lat1, lon1=headingCoords[0]
             for lat2, lon2 in headingCoords[1:]:
-                onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+                checkLength=checkLength+self.osmutils.distance(lat1, lon1, lat2, lon2)
+                    
+                onLine, distance, _=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
                 if onLine==True:
                     heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
                     headingDiff=self.osmutils.headingDiffAbsolute(track, heading)
+#                    print("%d %d"%(edgeId, headingDiff))
                     if headingDiff<DECISION_HEADING_RANGE and headingDiff < minHeadingDiff:
                         if distance<minDistance:
                             minHeadingDiff=headingDiff
                             minDistance=distance
                             closestEdge=edge
+
+#                print(checkLength)
+#                print(self.otherNearHeading)
+                # dont check further the a specific distance from the crossing
+                # if the heading diff are clear
+                if self.otherNearHeading==False:
+                    if checkLength>HEADING_CALC_LENGTH:
+                        break
 
                 lat1=lat2
                 lon1=lon2
