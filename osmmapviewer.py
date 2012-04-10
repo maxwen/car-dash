@@ -1184,7 +1184,7 @@ class QtOSMWidget(QWidget):
             self.displayVisibleNodes(bbox)
             
 #        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
-#            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 10, Constants.POI_TYPE_GAS_STATION)
+#            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
         self.displayRoutingPoints()
         self.displayGPSPosition()
@@ -1306,7 +1306,7 @@ class QtOSMWidget(QWidget):
                     self.displayWayCoordsWithCache(way, pen)
             
                 # TODO: mark oneway direction
-                elif oneway!=0 and streetTypeId in self.getStreetTypeListForOneway():
+                elif (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False)
                     self.displayWayCoordsWithCache(way, pen)
                 
@@ -1334,38 +1334,33 @@ class QtOSMWidget(QWidget):
         showCasing=True
         if showCasing==True:
             for way in self.tunnelWays:   
-                _, tags, _, streetInfo, _, _, _, _, _,  _=way
+                _, _, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
                 self.displayWayCoordsWithCache(way, pen)
         
         for way in self.tunnelWays:   
-            _, tags, _, streetInfo, _, _, _, _, _,  _=way
+            _, _, _, streetInfo, _, _, _, _, _,  _=way
             streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
             pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False)
             self.displayWayCoordsWithCache(way, pen)
 
     def getDisplayNodeTypeList(self):
         if self.map_zoom in range(16, 19):
-            return [Constants.POI_TYPE_ENFORCEMENT,
-                    Constants.POI_TYPE_MOTORWAY_JUNCTION,
-#                    Constants.POI_TYPE_BARRIER,
-                    Constants.POI_TYPE_GAS_STATION,
-#                    Constants.POI_TYPE_PARKING,
+            # [] would be all
+            return [Constants.POI_TYPE_BARRIER,
                     Constants.POI_TYPE_PLACE,
+                    Constants.POI_TYPE_ENFORCEMENT,
+                    Constants.POI_TYPE_GAS_STATION,
                     Constants.POI_TYPE_HOSPITAL,
+                    Constants.POI_TYPE_MOTORWAY_JUNCTION,
                     Constants.POI_TYPE_POLICE,
                     Constants.POI_TYPE_SUPERMARKET]
-        elif self.map_zoom in range(self.tileStartZoom+1, 16):
-            return [Constants.POI_TYPE_PLACE]    
+        elif self.map_zoom in range(self.tileStartZoom+1, 17):
+            return [Constants.POI_TYPE_BARRIER,
+                    Constants.POI_TYPE_PLACE]    
         else:
             return None
-        
-#    def getPlaceTypeList(self):
-#        if self.map_zoom in range(self.tileStartZoom, 19):
-#            return Constants.PLACE_NODES_TYPE_SET
-#        else:
-#            return []
         
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
@@ -1394,17 +1389,13 @@ class QtOSMWidget(QWidget):
         resultList=osmParserData.getPOINodesInBBoxWithGeom(bbox, 0.0, nodeTypeList)        
         print("getPOINodesInBBoxWithGeom: %f"%(time.time()-start))
 
-        nodeTypeListSet=set(self.getDisplayNodeTypeList())
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
         
         for node in resultList:
-            _, lat, lon, tags, nodeTypeList, layer=node
+            _, lat, lon, tags, nodeType=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
-                for nodeType in nodeTypeList:  
-                    if len(nodeTypeListSet)!=0:
-                        if nodeType in nodeTypeListSet: 
-                            self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
+                self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
                  
         self.painter.setFont(oldFont)
            
@@ -1412,14 +1403,16 @@ class QtOSMWidget(QWidget):
         if nodeType==Constants.POI_TYPE_PLACE:
             if "name" in tags:
                 text=tags["name"]
-                font=self.style.getFontForTextDisplay(tags, self.map_zoom)
+                font=self.style.getFontForTextDisplay(tags, self.map_zoom, self.isVirtualZoom)
                 if font!=None:
                     self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"), font)
         
         else:
-            xPos=int(x-pixmapWidth/2)
-            yPos=int(y-pixmapHeight)
-            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
+            pixmap=self.getPixmapForNodeType(nodeType)
+            if pixmap!=None:
+                xPos=int(x-pixmapWidth/2)
+                yPos=int(y-pixmapHeight)
+                self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
 
     def displayTextAtPos(self, x, y, xOffset, text, bgColor, font):
         fm = QFontMetrics(font)
@@ -1436,14 +1429,11 @@ class QtOSMWidget(QWidget):
         self.painter.drawText(textPos, text)     
            
     def getDisplayAreaTypeList(self):
+        
         if self.map_zoom in range(OSMStyle.SHOW_BUILDING_START_ZOOM, 19):
-            return [Constants.AREA_TYPE_LANDUSE, 
-                    Constants.AREA_TYPE_NATURAL,
-                    Constants.AREA_TYPE_BUILDING,
-                    Constants.AREA_TYPE_HIGHWAY_AREA,
-                    Constants.AREA_TYPE_RAILWAY,
-                    Constants.AREA_TYPE_AEROWAY]
-        else:
+            # all
+            return []
+        elif self.map_zoom in range(self.tileStartZoom+1, 16):
             return [Constants.AREA_TYPE_LANDUSE, 
                     Constants.AREA_TYPE_HIGHWAY_AREA,
                     Constants.AREA_TYPE_NATURAL,
@@ -2514,7 +2504,7 @@ class QtOSMWidget(QWidget):
                         self.osm_map_set_zoom(zoom)
                     
                     if self.withMapRotation==True:
-                        y,x=self.getPixelPosForLocationDeg(centerLat, centerLon, False)
+                        y,_=self.getPixelPosForLocationDeg(centerLat, centerLon, False)
                         y=y+self.getYOffsetForRotationMap()
                         centerLat=self.osmutils.rad2deg(self.osmutils.pixel2lat(zoom, y))
 
@@ -2856,7 +2846,7 @@ class QtOSMWidget(QWidget):
 #                            self.refRing=refRingEntry["refs"]
 #                            print(wayIdList)
                     
-#                osmParserData.printCrossingsForWayId(wayId)
+                osmParserData.printCrossingsForWayId(wayId)
                 self.wayInfo=self.getDefaultPositionTagWithCountry(name, nameRef, country)  
                 self.speedInfo=maxspeed
                 self.wayPOIList=osmParserData.getPOIListOnWay(wayId)

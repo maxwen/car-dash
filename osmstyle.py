@@ -6,11 +6,30 @@ Created on Mar 31, 2012
 
 import env
 import os
+import math
+
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
 from osmparser.osmparserdata import Constants
 
 class OSMStyle():
+    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier"},
+                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera"},
+                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station"},
+                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking"},
+                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital"},
+                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place"},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit"},
+                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police"},
+                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket"}}
+    
+    AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways"},
+                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings"},
+                    Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas"},
+                    Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse"},
+                    Constants.AREA_TYPE_NATURAL:{"desc":"Natural"},
+                    Constants.AREA_TYPE_RAILWAY:{"desc":"Railways"}}  
+          
     def __init__(self):
         self.styleDict=dict()
         self.colorDict=dict()
@@ -61,6 +80,7 @@ class OSMStyle():
         self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/barrier.png"))
         self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/parking.png"))
         self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(env.getImageRoot(), "poi/trafficcamera.png"))
+        self.pixmapDict["highwayExitImage"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
         self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
@@ -196,7 +216,7 @@ class OSMStyle():
         elif crossingType==Constants.CROSSING_TYPE_ROUNDABOUT_EXIT:
             # roundabout exit
             return self.getStylePen("yellowCrossingPen")
-        elif crossingType==Constants.CROSSING_TYPE_FORBIDDEN:
+        elif crossingType==Constants.CROSSING_TYPE_FORBIDDEN or crossingType==Constants.CROSSING_TYPE_BARRIER:
             # no enter oneway
             return self.getStylePen("blackCrossingPen")
            
@@ -352,7 +372,7 @@ class OSMStyle():
         
         if key in self.penDict:
             return self.penDict[key]
-        
+                
         color=self.getStyleColor(streetTypeId)
         width=self.getStreetWidth(streetTypeId, zoom)
         brush=Qt.NoBrush
@@ -423,31 +443,31 @@ class OSMStyle():
         self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
-        if nodeType==Constants.POI_TYPE_ENFORCEMENT:
-            return self.getStylePixmap("speedCameraImage")
-        if nodeType==Constants.POI_TYPE_GAS_STATION:
-            return self.getStylePixmap("gasStationPixmap")
-        if nodeType==Constants.POI_TYPE_BARRIER:
-            return self.getStylePixmap("barrierPixmap")
-        if nodeType==Constants.POI_TYPE_PARKING:
-            return self.getStylePixmap("parkingPixmap")
-        if nodeType==Constants.POI_TYPE_HOSPITAL:
-            return self.getStylePixmap("hospitalPixmap")
-        if nodeType==Constants.POI_TYPE_POLICE:
-            return self.getStylePixmap("policePixmap")
-        if nodeType==Constants.POI_TYPE_SUPERMARKET:
-            return self.getStylePixmap("supermarketPixmap")
+        if nodeType in self.POI_INFO_DICT.keys():
+            pixmapName=self.POI_INFO_DICT[nodeType]["pixmap"]
+            if pixmapName!=None:
+                return self.getStylePixmap(pixmapName)
+            return None
             
         return self.getStylePixmap("poiPixmap")
         
-    def getFontForTextDisplay(self, tags, zoom):
+    def getFontForTextDisplay(self, tags, zoom, virtualZoom):
         placeType=tags["place"]
         
-        if zoom in range(15, 19):
+        if zoom==18:
+            minFont=16
+        elif zoom==17:
+            minFont=14
+        elif zoom==16:
             minFont=12
+        elif zoom==15:
+            minFont=10
         else:
             minFont=8
-            
+        
+        if virtualZoom==True:
+            minFont=minFont*2
+                
         font=None
         if placeType=="city":
             font=self.fontDict["boldFont"]
@@ -481,3 +501,8 @@ class OSMStyle():
     USE_ANTIALIASING_START_ZOOM=17
     SHOW_BUILDING_START_ZOOM=17
     
+#    def getLaneWith(self, zoom):
+#        print(zoom)
+#        S=6371000*math.cos(0)/math.pow(2, zoom+8)
+#        return S
+        

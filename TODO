@@ -1,11 +1,11 @@
 TODO: support for barriers
  nodeTag=="barrier" + "bollard"
- -can split ways
- 	-what to do if way is not splitted at barrier
- -must inhibit creating edges for routing over it
- 	-create turn restrictions?
- -render
- 
+-create a crossing
+-create turn restrictions from ->to and to->from
+-remove barriers that are on ways not in db
+-remove barriers at end of ways
+ DONE 
+
  TODO: use admin boundaries for addresses
  -tag addresses with biundary info
  -use in address dialog for filtering
