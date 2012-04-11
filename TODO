@@ -123,3 +123,6 @@ TODO: dstances in osmrouting are calculated as straight lines!
 
 TODO: use newer version of geos for spatialite
 -support of Line_Locate_Point
+
+TODO: support of more then one POI type for a way
+-e.g. barrier and enforcement

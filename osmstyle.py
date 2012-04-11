@@ -458,12 +458,8 @@ class OSMStyle():
             minFont=16
         elif zoom==17:
             minFont=14
-        elif zoom==16:
-            minFont=12
-        elif zoom==15:
-            minFont=10
         else:
-            minFont=8
+            minFont=12
         
         if virtualZoom==True:
             minFont=minFont*2
@@ -472,20 +468,25 @@ class OSMStyle():
         if placeType=="city":
             font=self.fontDict["boldFont"]
             font.setPointSize(minFont+6)
-        elif placeType=="town":
-            if zoom > 16:
-                font=self.fontDict["normalFont"]
+        else:
+            if zoom <15:
+                return None
+            
+            font=self.fontDict["normalFont"]
+            if placeType=="town":
                 font.setPointSize(minFont+4)
-        elif placeType=="village":
-            if zoom > 15:
-                font=self.fontDict["normalFont"]
+            elif placeType=="village":
                 font.setPointSize(minFont+2)                    
-        elif placeType=="suburb":
-            if zoom > 14:
-                font=self.fontDict["normalFont"]
+            elif placeType=="suburb":
                 font.setPointSize(minFont)
             
         return font
+    
+    def getStyleFont(self, key):
+        if key in self.fontDict.keys():
+            return self.fontDict[key]
+        
+        return self.fontDict["defaultFont"]
     
     def initFonts(self):
         font = QFont("Helvetica")
@@ -495,6 +496,14 @@ class OSMStyle():
         font = QFont("Helvetica")
         self.fontDict["normalFont"]=font
 
+        font = QFont("Helvetica")
+        font.setPointSize(20)
+        self.fontDict["wayInfoFont"]=font
+        
+        font = QFont("Helvetica")
+        font.setPointSize(16)
+        self.fontDict["defaultFont"]=font
+        
     SHOW_CASING_START_ZOOM=14
     SHOW_BRIDGES_START_ZOOM=16
     SHOW_STREET_OVERLAY_START_ZOOM=17

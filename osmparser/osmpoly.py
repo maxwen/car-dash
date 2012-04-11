@@ -39,16 +39,16 @@ class OSMPoly():
         bbox=None
         for lon, lat in polyData:
             if bbox==None:
-                self.bbox=[lon, lat, lon, lat]
+                bbox=[lon, lat, lon, lat]
             else:
-                if lat>self.bbox[3]:
-                    self.bbox[3]=lat
-                if lat<self.bbox[1]:
-                    self.bbox[1]=lat
-                if lon>self.bbox[2]:
-                    self.bbox[2]=lon
-                if lon<self.bbox[0]:
-                    self.bbox[0]=lon
+                if lat>bbox[3]:
+                    bbox[3]=lat
+                if lat<bbox[1]:
+                    bbox[1]=lat
+                if lon>bbox[2]:
+                    bbox[2]=lon
+                if lon<bbox[0]:
+                    bbox[0]=lon
                     
         return bbox
         
@@ -70,22 +70,19 @@ class OSMPoly():
             return None
         
         i=0
-        for i in range(0, len(self.polyData), 1):
+        for i in range(0, len(self.polyList), 1):
             tags=self.tags[i]
-            polygons=self.polyList[i]
+            polygon=self.polyList[i]
             bbox=self.bbox[i]
             cPolygonDataList=self.cData[i]
 
             if self.pointInsideBBox(bbox, lat, lon):
-#                print("in bbox of %s"%(name))
-                i=0
-                for polygon in polygons:
-#                    if self.pointInPoly(lon, lat, polygon):
-#                        return name
+#                print("in bbox of %s"%(tags))
+#                if self.pointInPoly(lon, lat, polygon):
+#                    return tags
             
-                    if self.callC(lon, lat, polygon, cPolygonDataList[i]):
-                        return tags
-                    i=i+1
+                if self.callC(lon, lat, polygon, cPolygonDataList):
+                    return tags
         return None
     
     def pointInPoly(self, x, y, poly):
