@@ -1,5 +1,5 @@
 TODO: support for barriers
- nodeTag=="barrier" + "bollard"
+ nodeTag=="barrier"
 -create a crossing
 -create turn restrictions from ->to and to->from
 -remove barriers that are on ways not in db
@@ -11,8 +11,109 @@ TODO: support for barriers
  -use in address dialog for filtering
 DONE
 
- TODO: turn restrications for "viaWay"
- relation with via type way {'to': 30031793, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 215852, 'from': 4408193}
+ TODO geom data
+ -store line features as LINESTRINGS e.g. waterways 
+ DONE
+ 
+ TODO: remove also unneded ways
+ -way where all edges are orphaned
+ DONE
+ 
+ TODO: fix zoom to root with moved map zero pos
+ DONE
+
+ TODO: place tags
+ e.g. village 240093479
+ add name display tag
+ DONE
+ 
+ TODO: railways
+ add railway station
+ DONE
+ 
+ TODO: railway bridges and correct order with other area types
+ DONE
+ 
+ TODO: draw way tunnels before everything else
+ DONE
+ 
+ TODO: add aeroway areas
+ add airport POI
+ DONE
+ 
+ TODO: virtual zoom
+ DONE
+ 
+ TODO: virtual zoom also for pixmaps
+ -POI
+ -routing points
+ DONE
+  
+ TODO: add shop tag
+ DONE
+ 
+ TODO: evalute layer tag for correct drawing
+ -sort by layer before drawing
+DONE
+ 
+ TODO: make size of place tags dependent on 
+ -type -> city larger then suburb etc
+ -zoom
+ DONE
+ 
+TODO: need node type filter in SQL!
+DONE
+
+ TODO: allow POI type filtering in options
+ DONE
+ 
+------------------------------------------------------------------
+ 
+ TODO: search for nearest POI type
+ -need a way to calculate rtree index distance in degrees in meters
+ 1 degree at the equator is 111km
+ 
+ TODO: convert map point to routing point
+ 
+ TODO: pois
+ -add leisure park
+ -place_of_worship
+ 
+ TODO: parser config file
+ -definition of imported data
+ 
+TODO: use lanes tags for street width if available
+-else use usefull defaults
+lanes tag is not consitently used -> ignore for now
+
+TODO: dstances in osmrouting are calculated as straight lines!
+-should actually follow the edge -> time?
+
+TODO: use newer version of geos for spatialite
+-support of Line_Locate_Point
+
+TODO: support of more then one POI type for a way
+-e.g. barrier and enforcement
+
+TODO: create faster create edge table nodes
+-do it in memory
+
+ TODO: recalc route from next crossing to avoid u-turns
+ 
+ TODO: fix distance display during routing
+ can be negative numbers until next edge is selected
+ 
+ TODO: fix tunnel mode
+ 
+ TODO parser
+ -pbf parser
+ -add filters   
+ 
+ TODO split DBs
+ -split global into way and node db      
+ 
+TODO: turn restrications for "viaWay"
+relation with via type way {'to': 30031793, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 215852, 'from': 4408193}
 relation with via type way {'to': 40954792, 'viaWay': [40954793], 'type': 'no_u_turn', 'id': 253142, 'from': 23409578}
 relation with via type way {'to': 40954866, 'viaWay': [42938957], 'type': 'no_u_turn', 'id': 253143, 'from': 40954791}
 relation with via type way {'to': 19895081, 'viaWay': [19895082, 41319701, 19894771], 'type': 'no_u_turn', 'id': 271013, 'from': 4415310}
@@ -32,97 +133,8 @@ relation with via type way {'to': 144096445, 'viaWay': [144096443], 'type': 'no_
 relation with via type way {'to': 144986762, 'viaWay': [144986748], 'type': 'no_u_turn', 'id': 1963421, 'from': 152310750}
 relation with via type way {'to': 54858215, 'viaWay': [127061650], 'type': 'no_u_turn', 'id': 2065288, 'from': 4789250}
 relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_left_turn', 'id': 2079173, 'from': 154613298}
-relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463}
+relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
  
- TODO: recalc route from next crossing to avoid u-turns
+TODO: support barriers that have more then two edges
  
- TODO: fix distance display during routing
- can be negative numbers until next edge is selected
- 
- TODO: fix tunnel mode
- 
- TODO parser
- -pbf parser
- -add filters   
- 
- TODO split DBs
- -split global into way and node db       
- 
- TODO geom data
- -store line features as LINESTRINGS e.g. waterways 
- DONE
- 
- TODO: remove also unneded ways
- -way where all edges are orphaned
- DONE
- 
- TODO: fix zoom to root with moved map zero pos
- DONE
- 
- TODO: allow POI type filtering in options
- 
- TODO: search for nearest POI type
- -need a way to calculate rtree index distance in degrees in meters
- 1 degree at the equator is 111km
- 
- TODO: convert map point to routing point
- 
- TODO: add leisure park
- 
- TODO: place tags
- e.g. village 240093479
- add name display tag
- DONE
- 
- TODO: railways
- DONE
- 
- TODO: railway bridges and correct order with other area types
- DONE
- 
- TODO: draw way tunnels before everything else
- DONE
- 
- TODO: add aeroway areas
- DONE
- 
- TODO: virtual zoom
- DONE
- 
- TODO: virtual zoom also for pixmaps
- -POI
- -routing points
- DONE
- 
- TODO: parser config file
- -definition of imported data
-  
- TODO: add shop tag
- DONEf
- 
- TODO: evalute layer tag for correct drawing
- -sort by layer before drawing
-DONE
- 
- TODO: make size of place tags dependent on 
- -type -> city larger then suburb etc
- -zoom
- DONE
- 
- TODO: add place_of_worship to POIs
-
- TODO: need node type filter in SQL!
-DONE
-
-TODO: use lanes tags for street width if available
--else use usefull defaults
-lanes tag is not consitently used -> ignore for now
-
-TODO: dstances in osmrouting are calculated as straight lines!
--should actually follow the edge -> time?
-
-TODO: use newer version of geos for spatialite
--support of Line_Locate_Point
-
-TODO: support of more then one POI type for a way
--e.g. barrier and enforcement
+ TODO: add zoom setting for poi and area settings

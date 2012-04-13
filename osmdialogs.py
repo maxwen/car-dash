@@ -8,7 +8,7 @@ import fnmatch
 import re
 import os
 
-from PyQt4.QtCore import QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QVariant, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
@@ -1526,6 +1526,8 @@ class OSMOptionsDialog(QDialog):
         self.tileHome=parent.getTileHome()
         self.mapnikConfig=parent.getMapnikConfig()
         self.tileStartZoom=parent.getTileStartZoom()
+        self.displayPOITypeList=list(parent.getDisplayPOITypeList())
+        self.displayAreaTypeList=list(parent.getDisplayAreaTypeList())
         self.initUI()
 
     def initUI(self):
@@ -1627,15 +1629,21 @@ class OSMOptionsDialog(QDialog):
 #        self.withShowBackgroundTilesButton.setIconSize(iconSize)        
 #        tab2Layout.addRow(self.withShowBackgroundTilesButton, filler)  
 
+        self.configureAreaButton=QPushButton("Configure...", self)
+        self.configureAreaButton.clicked.connect(self._configureAreaDisplay)
+
         self.withShowAreasButton=QCheckBox("Show Environment", self)
         self.withShowAreasButton.setChecked(self.withShowAreas)
         self.withShowAreasButton.setIconSize(iconSize)        
-        tab2Layout.addRow(self.withShowAreasButton, filler)  
+        tab2Layout.addRow(self.withShowAreasButton, self.configureAreaButton)  
+        
+        self.configurePOIButton=QPushButton("Configure...", self)
+        self.configurePOIButton.clicked.connect(self._configurePOIDisplay)
         
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
         self.withShowPOIButton.setIconSize(iconSize)        
-        tab2Layout.addRow(self.withShowPOIButton, filler)  
+        tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)  
  
         self.withShow3DButton=QCheckBox("Use 3D View", self)
         self.withShow3DButton.setChecked(self.withShow3D)
@@ -1677,6 +1685,16 @@ class OSMOptionsDialog(QDialog):
         self.setWindowTitle('Settings')
         self.setGeometry(0, 0, 400, 500)
 
+    @pyqtSlot()
+    def _configurePOIDisplay(self):
+        dialog=OSMPOIDisplayDialog(self, self.displayPOITypeList)
+        result=dialog.exec()
+
+    @pyqtSlot()
+    def _configureAreaDisplay(self):
+        dialog=OSMAreaDisplayDialog(self, self.displayAreaTypeList)
+        result=dialog.exec()
+                        
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -1812,3 +1830,260 @@ class OSMInputDialog(QDialog):
     def _ok(self):
         self.text=self.textField.text()
         self.done(QDialog.Accepted)
+        
+        
+#----------------------------
+class OSMPOITableModel(QAbstractTableModel):
+    def __init__(self, parent, displayPOITypeList):
+        QAbstractTableModel.__init__(self, parent)
+        self.style=OSMStyle()
+        self.poiList=self.style.getPOIDictAsList()
+        self.displayPOITypeList=displayPOITypeList
+        
+    def rowCount(self, parent): 
+        return len(self.poiList)
+    
+    def columnCount(self, parent): 
+        return 1
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role == Qt.DecorationRole:
+            if index.row() >= len(self.poiList):
+                return None
+            
+            pixmapName=self.poiList[index.row()][2]
+            if pixmapName!=None:
+                return self.style.getStylePixmap(pixmapName)
+            
+            return None
+        elif role==Qt.CheckStateRole:
+            if index.row() >= len(self.poiList):
+                return None
+            
+            poiType=self.poiList[index.row()][1]
+            if poiType in self.displayPOITypeList:
+                return Qt.Checked
+            return Qt.Unchecked
+            
+        elif role == Qt.DisplayRole:
+            if index.row() >= len(self.poiList):
+                return ""
+            desc=self.poiList[index.row()][3]
+            
+            if index.column()==0:
+                return desc
+        
+        return None
+       
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "POI"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+    def flags (self, index ):
+        return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
+        
+    def setData(self, index, value, role):
+        if index.isValid() and role == Qt.CheckStateRole:
+            if value==Qt.Unchecked:
+                self.displayPOITypeList.remove(self.poiList[index.row()][1])
+            elif value==Qt.Checked:
+                self.displayPOITypeList.append(self.poiList[index.row()][1])
+            self.emit(SIGNAL("dataChanged(const &QModelIndex index, const &QModelIndex index)"), index, index)
+            return True
+     
+        return False
+
+class OSMPOIDisplayDialog(QDialog):
+    def __init__(self, parent, poiTypeList):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        self.displayPOITypeList=poiTypeList
+        self.initUI()
+      
+    def getResult(self):
+        return None
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(2)
+                
+        self.poiView=QTableView(self)
+        top.addWidget(self.poiView)
+        
+        self.poiViewModel=OSMPOITableModel(self, self.displayPOITypeList)
+        self.poiView.setModel(self.poiViewModel)
+        header=QHeaderView(Qt.Horizontal, self.poiView)
+        header.setStretchLastSection(True)
+        self.poiView.setHorizontalHeader(header)
+        self.poiView.setColumnWidth(0, 300)
+
+        style=QCommonStyle()
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+#        self.cancelButton=QPushButton("Cancel", self)
+#        self.cancelButton.clicked.connect(self._cancel)
+#        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+#        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+        top.addLayout(buttons)
+
+        self.setLayout(top)
+        self.setWindowTitle('POI Display Selection')
+        self.setGeometry(0, 0, 400, 500)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+
+#----------------------------
+class OSMAreaTableModel(QAbstractTableModel):
+    def __init__(self, parent, displayAreaTypeList):
+        QAbstractTableModel.__init__(self, parent)
+        self.style=OSMStyle()
+        self.areaList=self.style.getAreaDictAsList()
+        self.displayAreaTypeList=displayAreaTypeList
+        
+    def rowCount(self, parent): 
+        return len(self.areaList)
+    
+    def columnCount(self, parent): 
+        return 2
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+#        elif role == Qt.DecorationRole:
+#            if index.row() >= len(self.poiList):
+#                return None
+#            
+#            pixmapName=self.poiList[index.row()][2]
+#            if pixmapName!=None:
+#                return self.style.getStylePixmap(pixmapName)
+#            
+#            return None
+        elif role==Qt.CheckStateRole:
+            if index.row() >= len(self.areaList):
+                return None
+            
+            if index.column()==0:
+                areaType=self.areaList[index.row()][1]
+                if areaType in self.displayAreaTypeList:
+                    return Qt.Checked
+                return Qt.Unchecked
+            
+            return None
+            
+        elif role == Qt.DisplayRole:
+            if index.row() >= len(self.areaList):
+                return ""
+            desc=self.areaList[index.row()][2]
+            zoom=self.areaList[index.row()][3]
+            if index.column()==0:
+                return desc
+            if index.column()==1:
+                return zoom
+        
+        return None
+       
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Areas"
+                if col==1:
+                    return "Zoom"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+    def flags (self, index ):
+        return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
+
+        
+    def setData(self, index, value, role):
+        if index.isValid() and role == Qt.CheckStateRole:
+            if value==Qt.Unchecked:
+                self.displayAreaTypeList.remove(self.areaList[index.row()][1])
+            elif value==Qt.Checked:
+                self.displayAreaTypeList.append(self.areaList[index.row()][1])
+            self.emit(SIGNAL("dataChanged(const &QModelIndex index, const &QModelIndex index)"), index, index)
+            return True
+     
+        return False
+
+class OSMAreaDisplayDialog(QDialog):
+    def __init__(self, parent, areaTypeList):
+        QDialog.__init__(self, parent) 
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        self.displayAreaTypeList=areaTypeList
+        self.initUI()
+      
+    def getResult(self):
+        return None
+    
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(2)
+                
+        self.areaView=QTableView(self)
+        top.addWidget(self.areaView)
+        
+        self.areaViewModel=OSMAreaTableModel(self, self.displayAreaTypeList)
+        self.areaView.setModel(self.areaViewModel)
+        header=QHeaderView(Qt.Horizontal, self.areaView)
+        header.setStretchLastSection(True)
+        self.areaView.setHorizontalHeader(header)
+        self.areaView.setColumnWidth(0, 200)
+
+        style=QCommonStyle()
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+#        self.cancelButton=QPushButton("Cancel", self)
+#        self.cancelButton.clicked.connect(self._cancel)
+#        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
+#        buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        buttons.addWidget(self.okButton)
+        top.addLayout(buttons)
+
+        self.setLayout(top)
+        self.setWindowTitle('POI Display Selection')
+        self.setGeometry(0, 0, 400, 500)
+        
+    @pyqtSlot()
+    def _ok(self):
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)

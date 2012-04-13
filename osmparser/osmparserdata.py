@@ -67,6 +67,8 @@ class Constants():
     POI_TYPE_HOSPITAL=9
     POI_TYPE_POLICE=10
     POI_TYPE_SUPERMARKET=11
+    POI_TYPE_AIRPORT=12
+    POI_TYPE_RAILWAYSTATION=13
     
     AREA_TYPE_ADMIN=0
     AREA_TYPE_NATURAL=1
@@ -84,23 +86,27 @@ class Constants():
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain"])
     RAILWAY_TYPE_SET=set(["rail"])
     AEROWAY_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
-    HIGHWAY_NODES_TYPE_SET=set(["motorway_junction", "speed_camera"])
-    AMENITY_NODES_TYPE_SET=set(["fuel", "parking", "hospital", "police"])
-    SHOP_NODES_TYPE_SET=set(["supermarket"])
     BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
     BOUNDARY_TYPE_SET=set(["administrative"])
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb"])
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
     
-    AMENITY_TYPE_DICT={"fuel": POI_TYPE_GAS_STATION, 
-                       "parking": POI_TYPE_PARKING,
-                       "hospital": POI_TYPE_HOSPITAL, 
-                       "police": POI_TYPE_POLICE}
+    PARKING_LIMITATIONS_DICT={"access":"yes",
+                              "fee":"no"}
     
-    SHOP_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
+    AMENITY_POI_TYPE_DICT={"fuel": (POI_TYPE_GAS_STATION, None),
+                       "parking": (POI_TYPE_PARKING, PARKING_LIMITATIONS_DICT),
+                       "hospital": (POI_TYPE_HOSPITAL, None),
+                       "police": (POI_TYPE_POLICE, None)}
     
-    HIGHWAY_TYPE_DICT={"motorway_junction": POI_TYPE_MOTORWAY_JUNCTION, 
+    SHOP_POI_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
+    
+    HIGHWAY_POI_TYPE_DICT={"motorway_junction": POI_TYPE_MOTORWAY_JUNCTION, 
                        "speed_camera": POI_TYPE_ENFORCEMENT}
+    
+    AEROWAY_POI_TYPE_DICT={"aerodrome": POI_TYPE_AIRPORT}
+    
+    RAILWAY_POI_TYPE_DICT={"station": POI_TYPE_RAILWAYSTATION}
     
     STREET_TYPE_DICT={"road": STREET_TYPE_ROAD,
         "unclassified": STREET_TYPE_UNCLASSIFIED,
@@ -624,25 +630,25 @@ class OSMParserData():
         return allentries[0][0]
 
     def updateSourceOfEdge(self, edgeId, sourceId):
-        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-        if existingEdgeId==None:
-            print("no edge with id %d"%(edgeId))
-            return
-        self.cursorEdge.execute('UPDATE edgeTable SET source=%d WHERE id=%d'%(sourceId, edgeId))
+#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+#        if existingEdgeId==None:
+#            print("no edge with id %d"%(edgeId))
+#            return
+        self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET source=%d WHERE id=%d'%(sourceId, edgeId))
 
     def updateTargetOfEdge(self, edgeId, targetId):
-        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-        if existingEdgeId==None:
-            print("no edge with id %d"%(edgeId))
-            return
-        self.cursorEdge.execute('UPDATE edgeTable SET target=%d WHERE id=%d'%(targetId, edgeId))
+#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+#        if existingEdgeId==None:
+#            print("no edge with id %d"%(edgeId))
+#            return
+        self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET target=%d WHERE id=%d'%(targetId, edgeId))
         
     def updateCostsOfEdge(self, edgeId, cost, reverseCost):
-        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-        if existingEdgeId==None:
-            print("no edge with id %d"%(edgeId))
-            return
-        self.cursorEdge.execute('UPDATE edgeTable SET cost=%d, reverseCost=%d WHERE id=%d'%(cost, reverseCost, edgeId))
+#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+#        if existingEdgeId==None:
+#            print("no edge with id %d"%(edgeId))
+#            return
+        self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET cost=%d, reverseCost=%d WHERE id=%d'%(cost, reverseCost, edgeId))
 
 #    def clearSourceAndTargetOfEdges(self):
 #        self.cursorEdge.execute('SELECT id FROM edgeTable')
@@ -789,6 +795,41 @@ class OSMParserData():
             return self.poiRefFromDB(allentries[0])
 
         return None, None, None, None, None, None
+
+    def getPOIRefEntrysDictForId(self, refId, nodeTypeList):
+        filterString='('
+        for nodeType in nodeTypeList:
+            filterString=filterString+str(nodeType)+','
+        filterString=filterString[:-1]
+        filterString=filterString+')'
+
+        self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable where refId=%d AND type IN %s'%(refId, filterString))
+        allentries=self.cursorGlobal.fetchall()
+        resultDict=dict()
+        for x in allentries:
+            poi=self.poiRefFromDB(x)
+            resultDict[poi[4]]=poi
+
+        return resultDict
+    
+    def getAllPOIRefEntrysDict(self, nodeTypeList):
+        filterString='('
+        for nodeType in nodeTypeList:
+            filterString=filterString+str(nodeType)+','
+        filterString=filterString[:-1]
+        filterString=filterString+')'
+
+        self.cursorGlobal.execute('SELECT refId, tags, type FROM poiRefTable WHERE type IN %s'%(filterString))
+        allentries=self.cursorGlobal.fetchall()
+        resultDict=dict()
+        for x in allentries:
+            refId=int(x[0])
+            if x[1]!=None:
+                tags=pickle.loads(x[1])
+            nodeType=int(x[2])
+            resultDict["%d:%d"%(refId, nodeType)]=tags
+
+        return resultDict
     
 #    def getWayEntryForId(self, wayId):
 #        self.cursorGlobal.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
@@ -1141,20 +1182,40 @@ class OSMParserData():
         return Constants.PLACE_NODES_TYPE_SET
         
     def getHighwayNodeTypeId(self, nodeTag):
-        if nodeTag in Constants.HIGHWAY_TYPE_DICT.keys():
-            return Constants.HIGHWAY_TYPE_DICT[nodeTag]
+        if nodeTag in Constants.HIGHWAY_POI_TYPE_DICT.keys():
+            return Constants.HIGHWAY_POI_TYPE_DICT[nodeTag]
 
         return -1
     
-    def getAmenityNodeTypeId(self, nodeTag):
-        if nodeTag in Constants.AMENITY_TYPE_DICT.keys():
-            return Constants.AMENITY_TYPE_DICT[nodeTag]
+    def getAmenityNodeTypeId(self, nodeTag, tags):
+        if nodeTag in Constants.AMENITY_POI_TYPE_DICT.keys():
+            entry=Constants.AMENITY_POI_TYPE_DICT[nodeTag]
+            nodeType=entry[0]
+            limitationDict=entry[1]
+            if limitationDict!=None:
+                for key, value in limitationDict.items():
+                    if key in tags.keys():
+                        if value!=tags[key]:
+                            return -1
+            return nodeType
         
         return -1
 
     def getShopNodeTypeId(self, nodeTag):
-        if nodeTag in Constants.SHOP_TYPE_DICT.keys():
-            return Constants.SHOP_TYPE_DICT[nodeTag]
+        if nodeTag in Constants.SHOP_POI_TYPE_DICT.keys():
+            return Constants.SHOP_POI_TYPE_DICT[nodeTag]
+        
+        return -1
+
+    def getAerowayNodeTypeId(self, nodeTag):
+        if nodeTag in Constants.AEROWAY_POI_TYPE_DICT.keys():
+            return Constants.AEROWAY_POI_TYPE_DICT[nodeTag]
+        
+        return -1
+
+    def getRailwayNodeTypeId(self, nodeTag):
+        if nodeTag in Constants.RAILWAY_POI_TYPE_DICT.keys():
+            return Constants.RAILWAY_POI_TYPE_DICT[nodeTag]
         
         return -1
     
@@ -1184,7 +1245,7 @@ class OSMParserData():
                         self.addToPOIRefTable(ref, lat, lon, tags, Constants.POI_TYPE_BARRIER, layer)
                       
                 if "amenity" in tags:
-                    nodeType=self.getAmenityNodeTypeId(tags["amenity"])
+                    nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
                         self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
                         self.nodeList[ref]=nodeType
@@ -1198,6 +1259,17 @@ class OSMParserData():
                     if nodeType!=-1:
                         self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
                         self.nodeList[ref]=nodeType
+
+                if "aeroway" in tags:
+                    nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
+                    if nodeType!=-1:
+                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.nodeList[ref]=nodeType
+
+                if "railway" in tags:
+                    nodeType=self.getRailwayNodeTypeId(tags["railway"])
+                    if nodeType!=-1:
+                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
                 
             if self.skipAddress==False:
                 if "addr:street" in tags:
@@ -1353,6 +1425,19 @@ class OSMParserData():
                 
         return layer
     
+    def getCenterOfPolygon(self, refs):
+        coords, _=self.createRefsCoords(refs)
+        
+        # lat = Sum(lat_1..lat_n)/n , lon=Sum(lon_1, lon_n)/n 
+        n=len(coords)
+        sumLat=0
+        sumLon=0
+        for lat, lon in coords:
+            sumLat=sumLat+lat
+            sumLon=sumLon+lon
+            
+        return sumLat/n, sumLon/n
+    
     def parse_ways(self, way):
         if self.skipWays==True:
             return 
@@ -1378,25 +1463,21 @@ class OSMParserData():
                 if self.skipAddress==False:
                     if "addr:street" in tags:
                         if not self.isNodeDefined(refs, Constants.POI_TYPE_ADDRESS):
-                            # TODO: use first ref as location for addr?
-                            # may use entrance node
-                            storedRef, lat, lon=self.getCoordsEntry(refs[0])
+                            storedRef, _, _=self.getCoordsEntry(refs[0])
                             if storedRef!=None:
-                                if lat!=None and lon!=None:
-                                    self.addToRefTable(refs[0], lat, lon, layer)
-                                    refCountry=self.getCountryOfPos(lat, lon)
-                                    if refCountry!=None:
-                                        self.parseFullAddress(tags, refs[0], lat, lon, refCountry)
+                                lat, lon=self.getCenterOfPolygon(refs)
+                                refCountry=self.getCountryOfPos(lat, lon)
+                                if refCountry!=None:
+                                    self.parseFullAddress(tags, storedRef, lat, lon, refCountry)
                         
             if "amenity" in tags:
                 if self.skipPOINodes==False:
-                    nodeType=self.getAmenityNodeTypeId(tags["amenity"])
+                    nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
                         if not self.isNodeDefined(refs, nodeType):
-                            # TODO: use first ref as location for amenity?
-                            # may use entrance node
-                            storedRef, lat, lon=self.getCoordsEntry(refs[0])
+                            storedRef, _, _=self.getCoordsEntry(refs[0])
                             if storedRef!=None:
+                                lat, lon=self.getCenterOfPolygon(refs)
                                 self.addToPOIRefTable(storedRef, lat, lon, tags, nodeType, layer)
 
             if "shop" in tags:
@@ -1404,10 +1485,19 @@ class OSMParserData():
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
                         if not self.isNodeDefined(refs, nodeType):
-                            # TODO: use first ref as location for amenity?
-                            # may use entrance node
-                            storedRef, lat, lon=self.getCoordsEntry(refs[0])
+                            storedRef, _, _=self.getCoordsEntry(refs[0])
                             if storedRef!=None:
+                                lat, lon=self.getCenterOfPolygon(refs)
+                                self.addToPOIRefTable(storedRef, lat, lon, tags, nodeType, layer)
+
+            if "aeroway" in tags and "name" in tags:
+                if self.skipPOINodes==False:
+                    nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
+                    if nodeType!=-1:
+                        if not self.isNodeDefined(refs, nodeType):
+                            storedRef, _, _=self.getCoordsEntry(refs[0])
+                            if storedRef!=None:
+                                lat, lon=self.getCenterOfPolygon(refs)
                                 self.addToPOIRefTable(storedRef, lat, lon, tags, nodeType, layer)
 
             if not "highway" in tags:    
@@ -2875,7 +2965,7 @@ class OSMParserData():
             print(prog, end="\r")
             allEdgesCount=allEdgesCount+1
              
-            edgeId=edgeEntryId[0]
+            edgeId=int(edgeEntryId[0])
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSameStartEnriesFor(edge)
             
@@ -2885,7 +2975,9 @@ class OSMParserData():
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSourceEnriesFor(edge)
 
-        self.cursorEdge.execute('SELECT id FROM edgeTable WHERE source==0 OR target==0')
+        print("")
+        
+        self.cursorEdge.execute('SELECT id FROM edgeTable WHERE source=0 OR target=0')
         allEdges=self.cursorEdge.fetchall()
         
         allEdgesLength=len(allEdges)
@@ -2996,7 +3088,7 @@ class OSMParserData():
                         self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                         self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
                 else:
-                    print("more then 2 edges at barrier crossing")
+                    print("more then 2 edges at barrier crossing %s"%(str(barrierRestrictionEntry)))
                     continue
             else:
                 # barrier in the middle of the way
@@ -3465,6 +3557,12 @@ class OSMParserData():
         allWaysCount=0
 
         prog = ProgressBar(0, allWaysLength, 77)
+        nodeTypeList=list()
+        nodeTypeList.append(Constants.POI_TYPE_BARRIER)
+        nodeTypeList.append(Constants.POI_TYPE_MOTORWAY_JUNCTION)
+        
+        poiDict=self.getAllPOIRefEntrysDict(nodeTypeList)
+        
         for way in allWays:
             wayid, _, refs, streetInfo, name, _, _, _=self.wayFromDB(way)
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
@@ -3480,8 +3578,8 @@ class OSMParserData():
                 nextWays=self.findWayWithRefInAllWays(ref, wayid)  
                 if len(nextWays)==0:
                     if ref!=refs[0] and ref!=refs[-1]:
-                        storedRefId, _, _, nodeTags, _, _=self.getPOIRefEntryForId(ref, Constants.POI_TYPE_BARRIER)
-                        if storedRefId!=None:
+                        poiKey="%d:%d"%(ref,Constants.POI_TYPE_BARRIER)                    
+                        if poiKey in poiDict.keys():
                             # barrier on a way - need to split 
                             # create a crossing with the same ways                           
                             barrierRestrictionEntry=dict()
@@ -3495,21 +3593,23 @@ class OSMParserData():
                             self.addToCrossingsTable(wayid, ref, wayList)
                             continue
 
-                if len(nextWays)!=0:                   
-                    storedRefId, _, _, nodeTags, _, _=self.getPOIRefEntryForId(ref, Constants.POI_TYPE_MOTORWAY_JUNCTION)
-                    if storedRefId!=None:
+                if len(nextWays)!=0:  
+                    poiKey="%d:%d"%(ref,Constants.CROSSING_TYPE_MOTORWAY_EXIT)
+                    if poiKey in poiDict.keys():                 
+                        nodeTags=poiDict[poiKey]
                         majorCrossingType=Constants.CROSSING_TYPE_MOTORWAY_EXIT
                         highwayExitRef=None
                         highwayExitName=None
-                        if "ref" in nodeTags:
-                            highwayExitRef=nodeTags["ref"]
-                        if "name" in nodeTags:
-                            highwayExitName=nodeTags["name"]
+                        if nodeTags!=None:
+                            if "ref" in nodeTags:
+                                highwayExitRef=nodeTags["ref"]
+                            if "name" in nodeTags:
+                                highwayExitName=nodeTags["name"]
                         majorCrossingInfo="%s:%s"%(highwayExitName, highwayExitRef)                             
                                 
                     # Constants.POI_TYPE_BARRIER
-                    storedRefId, _, _, nodeTags, _, _=self.getPOIRefEntryForId(ref, Constants.POI_TYPE_BARRIER)
-                    if storedRefId!=None:
+                    poiKey="%d:%d"%(ref,Constants.POI_TYPE_BARRIER)
+                    if poiKey in poiDict.keys():
                         majorCrossingType=Constants.CROSSING_TYPE_BARRIER
                         
                         barrierRestrictionEntry=dict()
@@ -3714,7 +3814,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data2.save")
+        return os.path.join(env.getDataRoot(), "data1")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -3857,9 +3957,6 @@ class OSMParserData():
 #            print("merge ways")
 #            self.mergeWayEntries()
 #            print("end merge ways")
-                                                     
-#            print("create POI entries")
-#            self.createPOIEntriesForWays()
                         
             print("create crossings")
             self.createCrossingEntries()
@@ -3915,7 +4012,7 @@ class OSMParserData():
             print("end create spatial index for edge table")
 
 #        if createAdressDB==True:
-#            self.resolveAddresses()
+#            self.resolveAddresses2()
 #            self.commitAdressDB()
 #            self.vacuumAddressDB()
 
@@ -4943,13 +5040,14 @@ def main(argv):
 #    p.parseAreas()
     
 #    p.parseAddresses()
-    p.resolveAddresses2()
+#    p.resolveAddresses2()
 #    p.parseAreas()
 #    p.parseNodes()
 #    p.testAddressTable()
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
+#    p.testPOIRefTable()
 
 #    p.mergeEqualWayEntries()
     

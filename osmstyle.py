@@ -13,22 +13,24 @@ from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
 from osmparser.osmparserdata import Constants
 
 class OSMStyle():
-    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier"},
-                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera"},
-                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station"},
-                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking"},
-                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital"},
-                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place"},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit"},
-                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police"},
-                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket"}}
+    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":None},
+                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":None},
+                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":None},
+                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":None},
+                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":None},
+                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":None},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit", "zoom":None},
+                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":None},
+                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":None},
+                   Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":None},
+                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":None}}
     
-    AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways"},
-                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings"},
-                    Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas"},
-                    Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse"},
-                    Constants.AREA_TYPE_NATURAL:{"desc":"Natural"},
-                    Constants.AREA_TYPE_RAILWAY:{"desc":"Railways"}}  
+    AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
+                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":17},
+                    Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
+                    Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
+                    Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
+                    Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None}}  
           
     def __init__(self):
         self.styleDict=dict()
@@ -82,6 +84,8 @@ class OSMStyle():
         self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(env.getImageRoot(), "poi/trafficcamera.png"))
         self.pixmapDict["highwayExitImage"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
         self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
+        self.pixmapDict["airportPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/airport.png"))
+        self.pixmapDict["railwaystationtPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/train.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
@@ -241,7 +245,7 @@ class OSMStyle():
 
     def getRelativePenWidthForZoom(self, zoom):
         if zoom==18:
-            return 1.2
+            return 1.0
         if zoom==17:
             return 0.8
         if zoom==16:
@@ -256,7 +260,7 @@ class OSMStyle():
     def getStreetWidth(self, streetTypeId, zoom):
         width=14
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
-            width=width*2
+            width=width*1.6
         # motorway link
         elif streetTypeId==Constants.STREET_TYPE_MOTORWAY_LINK:
             width=width*1.2
@@ -275,8 +279,12 @@ class OSMStyle():
         # tertiary
         elif streetTypeId==Constants.STREET_TYPE_TERTIARY or streetTypeId==Constants.STREET_TYPE_TERTIARY_LINK:
             width=width*1.0
+        # 
+        elif streetTypeId==Constants.STREET_TYPE_LIVING_STREET or streetTypeId==Constants.STREET_TYPE_RESIDENTIAL or streetTypeId==Constants.STREET_TYPE_ROAD or streetTypeId==Constants.STREET_TYPE_UNCLASSIFIED:
+            width=width*0.8
+        # service
         else:
-            width=width*1.0
+            width=width*0.6
             
         return int(self.getRelativePenWidthForZoom(zoom)*width)
     
@@ -451,6 +459,46 @@ class OSMStyle():
             
         return self.getStylePixmap("poiPixmap")
         
+    def getPOIDictAsList(self):
+        poiTypeList=list()
+        i=0
+        for key, value in self.POI_INFO_DICT.items():
+            poiTypeList.append((i, key, value["pixmap"], value["desc"], value["zoom"]))
+            i=i+1
+        return poiTypeList
+
+    def getDisplayPOIListForZoom(self, displayPOIList, zoom):
+        poiTypeList=list()
+        for poiType in displayPOIList:
+            tags=self.POI_INFO_DICT[poiType]
+            zoomValue=tags["zoom"]
+            if zoomValue!=None:
+                if zoomValue<=zoom:
+                    poiTypeList.append(poiType)
+            else:
+                poiTypeList.append(poiType)
+        return poiTypeList
+                                 
+    def getAreaDictAsList(self):
+        areaTypeList=list()
+        i=0
+        for key, value in self.AREA_INFO_DICT.items():
+            areaTypeList.append((i, key, value["desc"], value["zoom"]))
+            i=i+1
+        return areaTypeList
+    
+    def getDisplayAreaListForZoom(self, displayAreaList, zoom):
+        areaTypeList=list()
+        for areaType in displayAreaList:
+            tags=self.AREA_INFO_DICT[areaType]
+            zoomValue=tags["zoom"]
+            if zoomValue!=None:
+                if zoomValue<=zoom:
+                    areaTypeList.append(areaType)
+            else:
+                areaTypeList.append(areaType)
+        return areaTypeList
+
     def getFontForTextDisplay(self, tags, zoom, virtualZoom):
         placeType=tags["place"]
         

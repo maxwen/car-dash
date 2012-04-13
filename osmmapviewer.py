@@ -594,6 +594,8 @@ class QtOSMWidget(QWidget):
         self.mapPoint=None
         self.isVirtualZoom=False
         self.virtualZoomValue=2.0
+        self.displayPOITypeList=list(self.style.POI_INFO_DICT.keys())
+        self.displayAreaTypeList=list(self.style.AREA_INFO_DICT.keys())
     
     def getRouteList(self):
         return self.routeList
@@ -1342,21 +1344,15 @@ class QtOSMWidget(QWidget):
             self.displayWayCoordsWithCache(way, pen)
 
     def getDisplayNodeTypeList(self):
-        if self.map_zoom in range(16, 19):
+        if self.map_zoom in range(self.tileStartZoom+1, 19):
             # [] would be all
-            return [Constants.POI_TYPE_BARRIER,
-                    Constants.POI_TYPE_PLACE,
-                    Constants.POI_TYPE_ENFORCEMENT,
-                    Constants.POI_TYPE_GAS_STATION,
-                    Constants.POI_TYPE_HOSPITAL,
-                    Constants.POI_TYPE_MOTORWAY_JUNCTION,
-                    Constants.POI_TYPE_POLICE,
-                    Constants.POI_TYPE_SUPERMARKET]
-        elif self.map_zoom in range(self.tileStartZoom+1, 17):
-            return [Constants.POI_TYPE_PLACE]    
-        else:
-            return None
-        
+            return self.style.getDisplayPOIListForZoom(self.displayPOITypeList, self.map_zoom)
+
+#        elif self.map_zoom in range(self.tileStartZoom+1, 17):
+#            return [Constants.POI_TYPE_PLACE]    
+#        else:
+        return None
+    
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
     
@@ -1399,6 +1395,9 @@ class QtOSMWidget(QWidget):
                     self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"), font)
         
         else:
+            if nodeType==Constants.POI_TYPE_PARKING:
+                print(tags)
+                
             pixmap=self.getPixmapForNodeType(nodeType)
             if pixmap!=None:
                 xPos=int(x-pixmapWidth/2)
@@ -1420,17 +1419,16 @@ class QtOSMWidget(QWidget):
         self.painter.drawText(textPos, text)     
            
     def getDisplayAreaTypeList(self):
-        
-        if self.map_zoom in range(OSMStyle.SHOW_BUILDING_START_ZOOM, 19):
+        if self.map_zoom in range(self.tileStartZoom+1, 19):
             # all
-            return []
-        elif self.map_zoom in range(self.tileStartZoom+1, 16):
-            return [Constants.AREA_TYPE_LANDUSE, 
-                    Constants.AREA_TYPE_HIGHWAY_AREA,
-                    Constants.AREA_TYPE_NATURAL,
-                    Constants.AREA_TYPE_RAILWAY,
-                    Constants.AREA_TYPE_AEROWAY]
-
+            return self.style.getDisplayAreaListForZoom(self.displayAreaTypeList, self.map_zoom)
+#        elif self.map_zoom in range(self.tileStartZoom+1, 16):
+#            return [Constants.AREA_TYPE_LANDUSE, 
+#                    Constants.AREA_TYPE_HIGHWAY_AREA,
+#                    Constants.AREA_TYPE_NATURAL,
+#                    Constants.AREA_TYPE_RAILWAY,
+#                    Constants.AREA_TYPE_AEROWAY]
+        return None
 
     def getVisibleAreas(self, bbox):
         start=time.time()
@@ -3330,7 +3328,8 @@ class OSMWidget(QWidget):
             self.setTileHome(optionsDialog.tileHome)
             self.setMapnikConfig(optionsDialog.mapnikConfig)
             self.setTileStartZoom(optionsDialog.tileStartZoom)
-            
+            self.setDisplayPOITypeList(optionsDialog.displayPOITypeList)
+            self.setDisplayAreaTypeList(optionsDialog.displayAreaTypeList)
             self.mapWidgetQt.update()
             
             
@@ -3579,6 +3578,18 @@ class OSMWidget(QWidget):
     def setVirtualZoom(self, value):
         self.mapWidgetQt.isVirtualZoom=value
         
+    def getDisplayPOITypeList(self):
+        return self.mapWidgetQt.displayPOITypeList
+    
+    def setDisplayPOITypeList(self, poiTypeList):
+        self.mapWidgetQt.displayPOITypeList=poiTypeList
+        
+    def getDisplayAreaTypeList(self):
+        return self.mapWidgetQt.displayAreaTypeList
+    
+    def setDisplayAreaTypeList(self, areaTypeList):
+        self.mapWidgetQt.displayAreaTypeList=areaTypeList
+        
     def loadConfig(self, config):
         self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
         self.setAutocenterGPSValue(config.getDefaultSection().getboolean("autocenterGPS", False))
@@ -3598,6 +3609,22 @@ class OSMWidget(QWidget):
         self.setMapnikConfig(config.getDefaultSection().get("mapnikConfig", defaultMapnikConfig))
         self.setTileStartZoom(config.getDefaultSection().getint("tileStartZoom", defaultTileStartZoom))
         self.setVirtualZoom(config.getDefaultSection().getboolean("virtualZoom", False))
+        
+        section="poi"
+        if config.hasSection(section):
+            poiTypeList=list()
+            for name, value in config.items(section):
+                if name[:7]=="poitype":
+                    poiTypeList.append(int(value))
+            self.setDisplayPOITypeList(poiTypeList)
+                    
+        section="area"
+        if config.hasSection(section):
+            areaTypeList=list()
+            for name, value in config.items(section):
+                if name[:8]=="areatype":
+                    areaTypeList.append(int(value))
+            self.setDisplayAreaTypeList(areaTypeList)
         
         section="favorites"
         self.favoriteList=list()
@@ -3639,6 +3666,22 @@ class OSMWidget(QWidget):
         config.getDefaultSection()["tileServer"]=self.getTileServer()
         config.getDefaultSection()["mapnikConfig"]=self.getMapnikConfig()
         
+        section="poi"
+        config.removeSection(section)
+        config.addSection(section)
+        i=0
+        for poiType in self.getDisplayPOITypeList():
+            config.set(section, "poiType%d"%(i), str(poiType))
+            i=i+1
+
+        section="area"
+        config.removeSection(section)
+        config.addSection(section)
+        i=0
+        for areaType in self.getDisplayAreaTypeList():
+            config.set(section, "areaType%d"%(i), str(areaType))
+            i=i+1
+            
         section="favorites"
         config.removeSection(section)
         config.addSection(section)
