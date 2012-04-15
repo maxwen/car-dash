@@ -17,7 +17,7 @@ import env
 import cProfile
 
 from PyQt4.QtCore import QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QFontMetrics, QLinearGradient, QFileDialog, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import Constants, OSMParserData
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
@@ -31,6 +31,8 @@ from mapnik.mapnikwrapper import MapnikWrapper
 from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
 from datetime import datetime
+
+import Polygon
 
 TILESIZE=256
 minWidth=640
@@ -186,10 +188,10 @@ class OSMMapnikTilesWorker(QThread):
         QThread.__init__(self, parent)
         self.exiting = False
         self.currentBBox=None
-        self.lastBBox=None
+        self.prefetchBBox=None
         self.currentZoom=None
         self.lastZoom=None
-        self.lastBBox=None
+        self.prefetchBBox=None
         self.lastZoom=None
         self.tileDir=tileDir
         self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
@@ -286,7 +288,7 @@ class OSMMapnikTilesWorker(QThread):
 #                self.mapnikWrapper.render_tiles2(self.currentBBox, self.currentZoom)
 ##                print("%f"%(time.time()-start))
 #                self.lastZoom=self.currentZoom
-#                self.lastBBox=self.currentBBox
+#                self.prefetchBBox=self.currentBBox
 #                self.currentBBox=None
 #                self.currentZoom=None
 #                self.workQueue.popleft()
@@ -594,9 +596,22 @@ class QtOSMWidget(QWidget):
         self.mapPoint=None
         self.isVirtualZoom=False
         self.virtualZoomValue=2.0
-        self.displayPOITypeList=list(self.style.POI_INFO_DICT.keys())
-        self.displayAreaTypeList=list(self.style.AREA_INFO_DICT.keys())
+        self.prefetchBBox=None
+        self.visiblePolygon=None
+        self.visibleCPolygon=None
     
+    def getDisplayPOITypeList(self):
+        return self.style.getDisplayPOITypeList()
+    
+    def setDisplayPOITypeList(self, displayPOITypeList):
+        self.style.setDisplayPOITypeList(displayPOITypeList)
+        
+    def getDisplayAreaTypeList(self):
+        return self.style.getDisplayAreaTypeList()
+    
+    def setDisplayAreaTypeList(self, displayAreaTypeList):
+        self.style.setDisplayAreaTypeList(displayAreaTypeList)
+        
     def getRouteList(self):
         return self.routeList
     
@@ -821,7 +836,7 @@ class QtOSMWidget(QWidget):
         
         transform.translate(x, y)      
         
-        if self.show3D==True:
+        if self.show3D==True and self.map_zoom>=17:
             transform.rotate(self.XAxisRotation, Qt.XAxis)    
         
 #        if self.isVirtualZoom==True: 
@@ -1026,6 +1041,7 @@ class QtOSMWidget(QWidget):
         self.update()
        
     def resizeEvent(self, event):
+        self.clearPolygonCache()
         self.osm_map_handle_resize()
     
     def getTransform(self, withMapRotate, rotateAngle):
@@ -1034,7 +1050,7 @@ class QtOSMWidget(QWidget):
         map_x, map_y=self.getMapZeroPos()
         transform.translate( self.center_x-map_x, self.center_y-map_y )
         
-        if self.show3D==True:
+        if self.show3D==True and self.map_zoom>=17:
             transform.rotate(self.XAxisRotation, Qt.XAxis)  
         
         if self.isVirtualZoom==True: 
@@ -1075,19 +1091,53 @@ class QtOSMWidget(QWidget):
         invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)
         self.painter.drawPoint(point0)
-        
+    
+    def isBBoxInsideLastBBox(self, bbox):
+        if self.prefetchBBox[0]<=bbox[0] and self.prefetchBBox[1]<=bbox[1] and self.prefetchBBox[2]>=bbox[2] and self.prefetchBBox[3]>=bbox[3]:
+            return True
+        return False
+    
+    def getPrefetchBoxMargin(self):
+        return 0.005
+    
+    def calcVisiblePolygon(self):
+        if self.visibleCPolygon==None:
+            print("recalc self.visibleCPolygon")
+            skyMargin=0
+            if self.show3D==True and self.showSky==True:
+                skyMargin=SKY_WIDTH
+                
+            invertedTransform=self.transformHeading.inverted()
+            self.visiblePolygon=QPolygon()
+            point=QPoint(0, 0+skyMargin);
+            point0=invertedTransform[0].map(point)
+            self.visiblePolygon.append( point0 )
+            point=QPoint(self.width(), 0+skyMargin);
+            point1=invertedTransform[0].map(point)
+            self.visiblePolygon.append( point1 )
+            point=QPoint(self.width(), self.height());
+            point2=invertedTransform[0].map(point)
+            self.visiblePolygon.append( point2 )
+            point=QPoint(0, self.height());
+            point3=invertedTransform[0].map(point)
+            self.visiblePolygon.append( point3 )
+            
+            cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
+            self.visibleCPolygon = Polygon.Polygon(cont)
+         
+    def setAntialiasing(self, value):
+        if self.map_zoom in range(OSMStyle.USE_ANTIALIASING_START_ZOOM, 19):
+            self.painter.setRenderHint(QPainter.Antialiasing, value)
+  
     def paintEvent(self, event):
         start=time.time()
         self.painter=QPainter(self)
         self.painter.setClipRect(QRectF(0, 0, self.width(), self.height()))
-
-        if self.map_zoom in range(OSMStyle.USE_ANTIALIASING_START_ZOOM, 19):
-            self.painter.setRenderHint(QPainter.Antialiasing)
             
         self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
-#        self.painter.setRenderHint(QPainter.TextAntialiasing)
+        self.setAntialiasing(True)
                 
-        self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("mapBackgroundColor"))
+#        self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("mapBackgroundColor"))
 
         rotateAngle=None
         if self.track!=None:
@@ -1100,41 +1150,71 @@ class QtOSMWidget(QWidget):
 #        print(self.map_zoom)
 
         bbox=self.getVisibleBBoxDeg()        
+        self.prefetchBBox=bbox
+        newBBox=True
+        
+#        if self.prefetchBBox==None:
+#            self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
+#            newBBox=True
+#        else:
+#            newBBox=not self.isBBoxInsideLastBBox(bbox)
+#            if newBBox==True:
+#                self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
 
+        self.calcVisiblePolygon()
+        self.hiddenPolygons=0
+        self.visiblePolygons=0
+        
         if self.map_zoom>self.tileStartZoom:
-            self.bridgeWays=list()
-            self.tunnelWays=list()
-            self.otherWays=list()
-            self.railwayLines=list()
-            self.railwayBridgeLines=list()
-            self.railwayTunnelLines=list()
-            self.areaList=list()
-            self.naturalTunnelLines=list()
-            self.buildingList=list()
-            self.aerowayLines=list()
-            
-            self.getVisibleWays(bbox)
+            if newBBox==True:
+                self.bridgeWays=list()
+                self.tunnelWays=list()
+                self.otherWays=list()
+                self.railwayLines=list()
+                self.railwayBridgeLines=list()
+                self.railwayTunnelLines=list()
+                self.areaList=list()
+                self.naturalTunnelLines=list()
+                self.buildingList=list()
+                self.aerowayLines=list()
+                
+                fetchStart=time.time()
+
+                self.getVisibleWays(self.prefetchBBox)
             
             if self.withShowAreas==True:
-                self.getVisibleAreas(bbox)            
+                if newBBox==True:
+                    self.getVisibleAreas(self.prefetchBBox)
+                
+                print("paintEvent fetch polygons:%f"%(time.time()-fetchStart))
+
+                drawStart=time.time()
+            
+                self.setAntialiasing(False)
                 self.displayTunnelRailways()
                 self.displayTunnelNatural()            
                 self.displayAreas()
  
+            self.setAntialiasing(True)
             self.displayTunnelWays()
             
             if self.withShowAreas==True:
+                self.setAntialiasing(False)
                 self.displayBuildings()
 
+            self.setAntialiasing(True)
             self.displayWays()
 
             if self.withShowAreas==True:
+                self.setAntialiasing(False)
                 self.displayAeroways()
                 self.displayRailways()
                 self.displayBridgeRailways()
                 
+            self.setAntialiasing(True)
             self.displayBridgeWays()
-                
+            print("paintEvent draw polygons:%f"%(time.time()-drawStart))
+
         else:
             self.showTiles()
                     
@@ -1199,6 +1279,7 @@ class QtOSMWidget(QWidget):
         self.showTunnelInfo()
         
         self.painter.end()
+        print("displayedPolgons: %d hiddenPolygons: %d"%(self.visiblePolygons, self.hiddenPolygons))
         print("paintEvent:%f"%(time.time()-start))
   
     def getStreetTypeListForOneway(self):
@@ -1208,7 +1289,8 @@ class QtOSMWidget(QWidget):
         if self.map_zoom in range(15, 19):
             # all
             return []
-        elif self.map_zoom in range(14, 15):
+        
+        elif self.map_zoom in range(14, 16):
             return [Constants.STREET_TYPE_MOTORWAY,
                 Constants.STREET_TYPE_MOTORWAY_LINK,
                 Constants.STREET_TYPE_TRUNK,
@@ -1219,8 +1301,11 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_SECONDARY_LINK,
                 Constants.STREET_TYPE_TERTIARY,
                 Constants.STREET_TYPE_TERTIARY_LINK,
-                Constants.STREET_TYPE_RESIDENTIAL]
-        if self.map_zoom in range(10, 15):
+                Constants.STREET_TYPE_RESIDENTIAL,
+                Constants.STREET_TYPE_ROAD,
+                Constants.STREET_TYPE_UNCLASSIFIED]
+            
+        elif self.map_zoom in range(self.tileStartZoom, 15):
             return [Constants.STREET_TYPE_MOTORWAY,
                 Constants.STREET_TYPE_MOTORWAY_LINK,
                 Constants.STREET_TYPE_TRUNK,
@@ -1231,6 +1316,7 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_SECONDARY_LINK,
                 Constants.STREET_TYPE_TERTIARY,
                 Constants.STREET_TYPE_TERTIARY_LINK]
+        
         return None
     
     def getStreetProperties(self, streetTypeId):
@@ -1239,10 +1325,12 @@ class QtOSMWidget(QWidget):
         return width, color
                    
     def clearPolygonCache(self):
+        self.prefetchBBox=None
         self.wayPolygonCache=dict()
         self.currentRoutePolygon=None
         self.areaPolygonCache=dict()
         self.adminAreaPolygonCache=dict()
+        self.visibleCPolygon=None
     
     def getVisibleWays(self, bbox):
         streetTypeList=self.getStreetTypeListForZoom()
@@ -1289,28 +1377,28 @@ class QtOSMWidget(QWidget):
                 _, tags, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
-                self.displayWayCoordsWithCache(way, pen)
+                self.displayWayWithCache(way, pen)
 
         # fill
         for way in self.otherWays:   
             _, tags, _, streetInfo, _, _, _, _, _,  _=way
             streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
             pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
-            self.displayWayCoordsWithCache(way, pen)
+            self.displayWayWithCache(way, pen)
             
             if showStreetOverlays==True: 
                 if osmParserData.isAccessRestricted(tags):
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False)
-                    self.displayWayCoordsWithCache(way, pen)
+                    self.displayWayWithCache(way, pen)
             
                 # TODO: mark oneway direction
                 elif (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False)
-                    self.displayWayCoordsWithCache(way, pen)
+                    self.displayWayWithCache(way, pen)
                 
                 elif streetTypeId==Constants.STREET_TYPE_LIVING_STREET:
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, True)
-                    self.displayWayCoordsWithCache(way, pen)
+                    self.displayWayWithCache(way, pen)
  
     def displayBridgeWays(self):                    
         if len(self.bridgeWays)!=0:
@@ -1322,10 +1410,10 @@ class QtOSMWidget(QWidget):
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 if showBridges==True:
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
-                    self.displayWayCoordsWithCache(way, pen)
+                    self.displayWayWithCache(way, pen)
     
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
-                self.displayWayCoordsWithCache(way, pen)
+                self.displayWayWithCache(way, pen)
             
     def displayTunnelWays(self):                    
 #        showCasing=self.map_zoom in range(15, 19)
@@ -1335,22 +1423,18 @@ class QtOSMWidget(QWidget):
                 _, _, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
-                self.displayWayCoordsWithCache(way, pen)
+                self.displayWayWithCache(way, pen)
         
         for way in self.tunnelWays:   
             _, _, _, streetInfo, _, _, _, _, _,  _=way
             streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
             pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False)
-            self.displayWayCoordsWithCache(way, pen)
+            self.displayWayWithCache(way, pen)
 
-    def getDisplayNodeTypeList(self):
+    def getDisplayPOITypeListForZoom(self):
         if self.map_zoom in range(self.tileStartZoom+1, 19):
-            # [] would be all
-            return self.style.getDisplayPOIListForZoom(self.displayPOITypeList, self.map_zoom)
+            return self.style.getDisplayPOIListForZoom(self.map_zoom)
 
-#        elif self.map_zoom in range(self.tileStartZoom+1, 17):
-#            return [Constants.POI_TYPE_PLACE]    
-#        else:
         return None
     
     def getPixmapForNodeType(self, nodeType):
@@ -1370,8 +1454,8 @@ class QtOSMWidget(QWidget):
         return (int(baseWidth/2), int(baseHeight/2))
     
     def displayVisibleNodes(self, bbox):        
-        nodeTypeList=self.getDisplayNodeTypeList()
-        if nodeTypeList==None:
+        nodeTypeList=self.getDisplayPOITypeListForZoom()
+        if nodeTypeList==None or len(nodeTypeList)==0:
             return
         
         start=time.time()
@@ -1395,8 +1479,8 @@ class QtOSMWidget(QWidget):
                     self.displayTextAtPos(x, y, 0, text, self.style.getStyleColor("placeTagColor"), font)
         
         else:
-            if nodeType==Constants.POI_TYPE_PARKING:
-                print(tags)
+#            if nodeType==Constants.POI_TYPE_HOSPITAL:
+#            print(tags)
                 
             pixmap=self.getPixmapForNodeType(nodeType)
             if pixmap!=None:
@@ -1418,21 +1502,20 @@ class QtOSMWidget(QWidget):
         self.painter.setFont(font)
         self.painter.drawText(textPos, text)     
            
-    def getDisplayAreaTypeList(self):
+    def getDisplayAreaTypeListForZoom(self):
         if self.map_zoom in range(self.tileStartZoom+1, 19):
-            # all
-            return self.style.getDisplayAreaListForZoom(self.displayAreaTypeList, self.map_zoom)
-#        elif self.map_zoom in range(self.tileStartZoom+1, 16):
-#            return [Constants.AREA_TYPE_LANDUSE, 
-#                    Constants.AREA_TYPE_HIGHWAY_AREA,
-#                    Constants.AREA_TYPE_NATURAL,
-#                    Constants.AREA_TYPE_RAILWAY,
-#                    Constants.AREA_TYPE_AEROWAY]
+            return self.style.getDisplayAreaListForZoom(self.map_zoom)
+
         return None
 
     def getVisibleAreas(self, bbox):
+        areaTypeList=self.getDisplayAreaTypeListForZoom()
+        if areaTypeList==None or len(areaTypeList)==0:
+            return
+        
         start=time.time()
-        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(self.getDisplayAreaTypeList(), bbox, 0.0)
+        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
+#        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(None, bbox, 0.0)
         print("getAreasInBboxWithGeom: %f"%(time.time()-start))
 
         if self.lastOsmIdSet==None:
@@ -1446,7 +1529,7 @@ class QtOSMWidget(QWidget):
                     del self.areaPolygonCache[osmId]
            
         for area in resultList:
-            osmId, areaType, tags, _, _, _, _=area
+            osmId, areaType, tags, _, _, _=area
                 
             bridge="bridge" in tags and tags["bridge"]=="yes"
             tunnel="tunnel" in tags and tags["tunnel"]=="yes"
@@ -1622,7 +1705,7 @@ class QtOSMWidget(QWidget):
         resultList.reverse()
 
         for area in resultList:
-            tags=area[2]
+            tags=area[1]
             print(tags)
 
     def showTextInfoBackground(self):
@@ -1816,12 +1899,12 @@ class QtOSMWidget(QWidget):
         
         map_x, map_y=self.getMapZeroPos()
         displayCoords=coords
-        fullCoords=self.map_zoom>=16
-        if fullCoords==False:
-            if len(coords)>6:
-                displayCoords=coords[1:-2:2]
-                displayCoords[0]=coords[0]
-                displayCoords[-1]=coords[-1]
+
+#        if self.map_zoom<15:
+#            if len(coords)>6:
+#                displayCoords=coords[1:-2:2]
+#                displayCoords[0]=coords[0]
+#                displayCoords[-1]=coords[-1]
             
         for point in displayCoords:
             lat, lon=point 
@@ -1834,48 +1917,74 @@ class QtOSMWidget(QWidget):
         self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
 
-    def displayWayCoordsWithCache(self, way, pen):        
+    def displayWayWithCache(self, way, pen):        
         polygon=None
+        cPolygon=None
         wayId=way[0]
         coordsStr=way[9]
         map_x, map_y=self.getMapZeroPos()
         
         if not wayId in self.wayPolygonCache.keys():
-            polygon=QPolygon()
+            polygon=QPolygonF()
+            cont=[]
+
             coords=osmParserData.createCoordsFromLineString(coordsStr)
 
             displayCoords=coords
-            if self.map_zoom<15:
-                if len(coords)>6:
-                    displayCoords=coords[1:-2:2]
+            if self.map_zoom<16:
+                if len(coords)>=4:
+                    displayCoords=coords[1::2]
                     displayCoords[0]=coords[0]
                     displayCoords[-1]=coords[-1]
                 
             for point in displayCoords:
                 lat, lon=point 
                 (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
-                point=QPoint(x, y);
+                point=QPointF(x, y);
                 polygon.append( point )
+                cont.append((point.x(), point.y()))
             
-            self.wayPolygonCache[wayId]=polygon
+            if len(cont)>2:
+                cPolygon=Polygon.Polygon(cont)
+            self.wayPolygonCache[wayId]=(polygon, cPolygon)
         
         else:
-            polygon=self.wayPolygonCache[wayId]
+            polygon, cPolygon=self.wayPolygonCache[wayId]
+                    
+        if cPolygon!=None:
+            p=Polygon.Polygon(cPolygon)
+            p.shift(-map_x, -map_y)
+#            z=self.visibleCPolygon & p
+#            if len(z)==0:
+            if not self.visibleCPolygon.overlaps(p):
+                self.hiddenPolygons=self.hiddenPolygons+1
+                return 
             
         displayPolygon=polygon.translated(-map_x, -map_y)
-               
+            
+#        intersected=displayPolygon.intersected(self.visiblePolygon)
+#        if intersected.isEmpty():
+#            self.hiddenPolygons=self.hiddenPolygons+1
+#            return
+        
+        self.visiblePolygons=self.visiblePolygons+1
+        
         self.painter.setPen(pen)
-        self.painter.drawPolyline(displayPolygon)  
+            
+        if displayPolygon.count()==2:
+            self.painter.drawLine(displayPolygon.first(), displayPolygon.last())
+        else:
+            self.painter.drawPolyline(displayPolygon)  
                       
     def displayPolygon(self, coords, pen):        
         polygon=QPolygon()
         
         displayCoords=coords
-        if self.map_zoom<15:
-            if len(coords)>6:
-                displayCoords=coords[1:-2:2]
-                displayCoords[0]=coords[0]
-                displayCoords[-1]=coords[-1]
+#        if self.map_zoom<15:
+#            if len(coords)>6:
+#                displayCoords=coords[1:-2:2]
+#                displayCoords[0]=coords[0]
+#                displayCoords[-1]=coords[-1]
             
         for point in displayCoords:
             lat, lon=point 
@@ -1888,45 +1997,69 @@ class QtOSMWidget(QWidget):
 
     def displayPolygonWithCache(self, cacheDict, area, pen, brush):        
         polygon=None
+        cPolygon=None
         osmId=area[0]
-        polyStr=area[5]
-        geomType=area[6]
+        polyStr=area[4]
+        geomType=area[5]
         map_x, map_y=self.getMapZeroPos()
         
         if not osmId in cacheDict.keys():
-            polygon=QPolygon()
+            polygon=QPolygonF()
+            cont=[]
             if geomType==0:
-                coords=osmParserData.createCoordsFromMultiPolygon(polyStr)[0][:-1]
+                coords=osmParserData.createCoordsFromPolygon(polyStr)[:-1]
             else:
                 coords=osmParserData.createCoordsFromLineString(polyStr)
                         
             displayCoords=coords
-            if geomType==1 and self.map_zoom<15:
-                if len(coords)>6:
-                    displayCoords=coords[1:-2:2]
+            if geomType==1 and self.map_zoom<16:
+                if len(coords)>=4:
+                    displayCoords=coords[1::2]
                     displayCoords[0]=coords[0]
                     displayCoords[-1]=coords[-1]
             
             for point in displayCoords:
                 lat, lon=point 
                 (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
-                point=QPoint(x, y);
+                point=QPointF(x, y);
                 polygon.append( point )
-               
-            cacheDict[osmId]=polygon
+                cont.append((point.x(), point.y()))
+
+            if len(cont)>2:
+                cPolygon=Polygon.Polygon(cont)
+            cacheDict[osmId]=(polygon, cPolygon)
         
         else:
-            polygon=cacheDict[osmId]
-
+            polygon, cPolygon=cacheDict[osmId]
+        
+        if cPolygon!=None:
+            p=Polygon.Polygon(cPolygon)
+            p.shift(-map_x, -map_y)
+#            z=self.visibleCPolygon & p
+#            if len(z)==0:
+            if not self.visibleCPolygon.overlaps(p):
+                self.hiddenPolygons=self.hiddenPolygons+1
+                return 
+        
         displayPolygon=polygon.translated(-map_x, -map_y)
-                
+
+#        intersected=displayPolygon.intersected(self.visiblePolygon)
+#        if intersected.isEmpty():
+#            self.hiddenPolygons=self.hiddenPolygons+1
+#            return
+        
+        self.visiblePolygons=self.visiblePolygons+1
+        
         self.painter.setBrush(brush)
         self.painter.setPen(pen)
             
         if geomType==0:
             self.painter.drawPolygon(displayPolygon)  
         else:
-            self.painter.drawPolyline(displayPolygon)  
+            if displayPolygon.count()==2:
+                self.painter.drawLine(displayPolygon.first(), displayPolygon.last())
+            else:
+                self.painter.drawPolyline(displayPolygon)  
         
     def displayRefs(self, refList, pen):        
         polygon=QPolygon()
@@ -2773,9 +2906,9 @@ class QtOSMWidget(QWidget):
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                wayId, _, _, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+                wayId, tags, _, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
 #                print(wayId)
-                
+#                print(tags)
 #                refRings=osmParserData.mergeEqualWayEntries(wayId)
 ##                print(refRings)
 #                if refRings!=None:
@@ -3330,6 +3463,8 @@ class OSMWidget(QWidget):
             self.setTileStartZoom(optionsDialog.tileStartZoom)
             self.setDisplayPOITypeList(optionsDialog.displayPOITypeList)
             self.setDisplayAreaTypeList(optionsDialog.displayAreaTypeList)
+            
+            self.mapWidgetQt.clearPolygonCache()
             self.mapWidgetQt.update()
             
             
@@ -3579,16 +3714,16 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.isVirtualZoom=value
         
     def getDisplayPOITypeList(self):
-        return self.mapWidgetQt.displayPOITypeList
+        return self.mapWidgetQt.getDisplayPOITypeList()
     
     def setDisplayPOITypeList(self, poiTypeList):
-        self.mapWidgetQt.displayPOITypeList=poiTypeList
+        self.mapWidgetQt.setDisplayPOITypeList(poiTypeList)
         
     def getDisplayAreaTypeList(self):
-        return self.mapWidgetQt.displayAreaTypeList
+        return self.mapWidgetQt.getDisplayAreaTypeList()
     
     def setDisplayAreaTypeList(self, areaTypeList):
-        self.mapWidgetQt.displayAreaTypeList=areaTypeList
+        self.mapWidgetQt.setDisplayAreaTypeList(areaTypeList)
         
     def loadConfig(self, config):
         self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
@@ -3670,6 +3805,7 @@ class OSMWidget(QWidget):
         config.removeSection(section)
         config.addSection(section)
         i=0
+        self.getDisplayPOITypeList().sort()
         for poiType in self.getDisplayPOITypeList():
             config.set(section, "poiType%d"%(i), str(poiType))
             i=i+1
@@ -3678,6 +3814,7 @@ class OSMWidget(QWidget):
         config.removeSection(section)
         config.addSection(section)
         i=0
+        self.getDisplayAreaTypeList().sort()
         for areaType in self.getDisplayAreaTypeList():
             config.set(section, "areaType%d"%(i), str(areaType))
             i=i+1
@@ -3999,3 +4136,37 @@ def main(argv):
 if __name__ == "__main__":
 #    cProfile.run('main(sys.argv)')
     main(sys.argv)
+#    cont=[(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)]
+#    visibleCPolygon = Polygon.Polygon(cont)
+#    t = Polygon.Polygon(((1.0, 1.0), (3.0, 1.0), (2.0, 3.0)))
+#    start=time.time()
+#    for i in range(0, 100000):
+#        visibleCPolygon.shift(0, 0)
+#        visibleCPolygon.overlaps(t)
+#    print("%f"%(time.time()-start))
+    
+#    polygon1=QPolygonF()
+#    point1=QPointF(0.0, 0.0)
+#    point2=QPointF(10.0, 0.0)
+#    point3=QPointF(10.0, 5.0)
+#    point4=QPointF(0.0, 5.0)
+#    polygon1.append(point1)
+#    polygon1.append(point2)
+#    polygon1.append(point3)
+#    polygon1.append(point4)
+#    
+#    polygon2=QPolygonF()
+#    point1=QPointF(1.0, 1.0)
+#    point2=QPointF(3.0, 1.0)
+#    point3=QPointF(2.0, 3.0)
+#    polygon2.append(point1)
+#    polygon2.append(point2)
+#    polygon2.append(point3)
+#    
+#    start=time.time()
+#    for i in range(0, 100000):
+#        polygon1.translated(0, 0)
+#        polygon1.intersected(polygon2)
+#    print("%f"%(time.time()-start))
+    
+#    print(visibleCPolygon & t)

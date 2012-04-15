@@ -138,3 +138,16 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
 TODO: support barriers that have more then two edges
  
  TODO: add zoom setting for poi and area settings
+ 
+ TODO:
+ solve cases where build and node exists for same POI
+ -actually OSM says alterantivly node or way
+ 
+ TODO
+ solve cases for addr nodes and way for same street and housenumber
+ -actualle we can remove duplicate entries only after admin areas
+ have been resolved
+ -maybe just compare lat,lon + margin
+ 
+ TODO: solve problem with multipolygon saved as polygons
+ -change back to multipolygon -> drawing must be changed

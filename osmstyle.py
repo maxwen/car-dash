@@ -13,20 +13,20 @@ from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
 from osmparser.osmparserdata import Constants
 
 class OSMStyle():
-    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":None},
-                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":None},
-                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":None},
-                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":None},
-                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":None},
-                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":None},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit", "zoom":None},
-                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":None},
-                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":None},
-                   Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":None},
-                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":None}}
+    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":15},
+                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":15},
+                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":15},
+                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":15},
+                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":15},
+                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":13},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit", "zoom":15},
+                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":15},
+                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":15},
+                   Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":15},
+                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":15}}
     
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
-                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":17},
+                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":16},
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
                     Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
@@ -118,6 +118,21 @@ class OSMStyle():
         self.initBrush()
         self.initPens()
         self.initFonts()
+        
+        self.displayPOITypeList=list(self.POI_INFO_DICT.keys())
+        self.displayAreaTypeList=list(self.AREA_INFO_DICT.keys())
+
+    def getDisplayPOITypeList(self):
+        return self.displayPOITypeList
+        
+    def setDisplayPOITypeList(self, displayPOITypeList):
+        self.displayPOITypeList=displayPOITypeList
+        
+    def getDisplayAreaTypeList(self):
+        return self.displayAreaTypeList
+    
+    def setDisplayAreaTypeList(self, displayAreaTypeList):
+        self.displayAreaTypeList=displayAreaTypeList
         
     def getStyleColor(self, key):
         if key in self.colorDict:
@@ -467,9 +482,9 @@ class OSMStyle():
             i=i+1
         return poiTypeList
 
-    def getDisplayPOIListForZoom(self, displayPOIList, zoom):
+    def getDisplayPOIListForZoom(self, zoom):
         poiTypeList=list()
-        for poiType in displayPOIList:
+        for poiType in self.displayPOITypeList:
             tags=self.POI_INFO_DICT[poiType]
             zoomValue=tags["zoom"]
             if zoomValue!=None:
@@ -487,9 +502,9 @@ class OSMStyle():
             i=i+1
         return areaTypeList
     
-    def getDisplayAreaListForZoom(self, displayAreaList, zoom):
+    def getDisplayAreaListForZoom(self, zoom):
         areaTypeList=list()
-        for areaType in displayAreaList:
+        for areaType in self.displayAreaTypeList:
             tags=self.AREA_INFO_DICT[areaType]
             zoomValue=tags["zoom"]
             if zoomValue!=None:
