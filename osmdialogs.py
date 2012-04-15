@@ -141,6 +141,8 @@ class OSMAdressDialog(QDialog):
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
         self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
+        self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
+
         self.selectedAddress=None
         self.initUI()
          
@@ -254,6 +256,7 @@ class OSMAdressDialog(QDialog):
         
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
+        self.showPoinBtutton.setIcon(self.mapPointIcon)
         self.showPointButton.setEnabled(False)
         actionButtons.addWidget(self.showPointButton)
 
@@ -519,6 +522,7 @@ class OSMFavoritesDialog(QDialog):
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
         self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
+        self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
 
         self.initUI()
          
@@ -568,6 +572,7 @@ class OSMFavoritesDialog(QDialog):
         
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
+        self.showPointButton.setIcon(self.mapPointIcon)
         self.showPointButton.setEnabled(False)
         actionButtons2.addWidget(self.showPointButton)
 
@@ -1528,6 +1533,7 @@ class OSMOptionsDialog(QDialog):
         self.tileStartZoom=parent.getTileStartZoom()
         self.displayPOITypeList=list(parent.getDisplayPOITypeList())
         self.displayAreaTypeList=list(parent.getDisplayAreaTypeList())
+        self.startZoom3D=parent.getStartZoom3DView()
         self.initUI()
 
     def initUI(self):
@@ -1666,6 +1672,16 @@ class OSMOptionsDialog(QDialog):
 
         tab3Layout.addRow(label, self.xAxisRoationField)  
                                       
+        label=QLabel(self)
+        label.setText("Start Zoom:")
+        
+        self.validator=IntValueValidator(self)
+        self.startZoom3DField=QLineEdit(self)
+        self.startZoom3DField.setValidator(self.validator)
+        self.startZoom3DField.setText("%d"%self.startZoom3D)
+
+        tab3Layout.addRow(label, self.startZoom3DField)  
+        
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -1715,6 +1731,7 @@ class OSMOptionsDialog(QDialog):
         self.tileHome=self.tileHomeField.text()
         self.mapnikConfig=self.mapnikConfigField.text()
         self.tileStartZoom=int(self.tileStartZoomField.text())
+        self.startZoom3D=int(self.startZoom3DField.text())
         
         self.done(QDialog.Accepted)
 

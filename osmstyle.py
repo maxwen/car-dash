@@ -18,15 +18,15 @@ class OSMStyle():
                    Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":15},
                    Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":15},
                    Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":15},
-                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":13},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"highwayExitImage", "desc":"Highway Exit", "zoom":15},
+                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":10},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Highway Exit", "zoom":15},
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":15},
                    Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":15},
                    Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":15},
                    Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":15}}
     
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
-                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":16},
+                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":18},
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
                     Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
@@ -104,7 +104,7 @@ class OSMStyle():
         self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
         self.colorDict["railwayColor"]=QColor(0x90, 0x90, 0x90)
         self.colorDict["landuseColor"]=QColor(150, 150, 150)
-        self.colorDict["placeTagColor"]=QColor(0xff, 0xff, 0xff, 150)
+        self.colorDict["placeTagColor"]=QColor(78, 167, 255, 150)
         self.colorDict["residentialColor"]=QColor(0xdd, 0xdd, 0xdd)
         self.colorDict["commercialColor"]=QColor(0xef, 0xc8, 0xc8)
         self.colorDict["farmColor"]=QColor(0xea, 0xd8, 0xbd)
@@ -464,6 +464,7 @@ class OSMStyle():
         self.brushDict["greenfield"]=QBrush(self.getStyleColor("greenfieldColor"), Qt.SolidPattern)
         self.brushDict["industrial"]=QBrush(self.getStyleColor("industrialColor"), Qt.SolidPattern)
         self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
+        self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -514,31 +515,52 @@ class OSMStyle():
                 areaTypeList.append(areaType)
         return areaTypeList
 
-    def getFontForTextDisplay(self, tags, zoom, virtualZoom):
+    def getFontForTextDisplay(self, zoom, virtualZoom):        
+        if virtualZoom==True:
+            minFont=14
+        else:    
+            if zoom==18:
+                minFont=12
+            elif zoom==17:
+                minFont=10
+            elif zoom==16:
+                minFont=8
+            else:
+                minFont=6
+                
+        font=self.fontDict["normalFont"]
+        font.setPointSize(minFont)
+        return font
+    
+    def getFontForPlaceTagDisplay(self, tags, zoom, virtualZoom):
         placeType=tags["place"]
         
-        if zoom==18:
-            minFont=16
-        elif zoom==17:
-            minFont=14
-        else:
-            minFont=12
-        
         if virtualZoom==True:
-            minFont=minFont*2
-                
+            minFont=18
+        else:    
+            if zoom==18:
+                minFont=16
+            elif zoom==17:
+                minFont=14
+            elif zoom==16:
+                minFont=12
+            elif zoom==15:
+                minFont=10
+            elif zoom==14:
+                minFont=10
+            else:
+                minFont=6
+            
         font=None
         if placeType=="city":
             font=self.fontDict["boldFont"]
             font.setPointSize(minFont+6)
+        elif placeType=="town":
+            font=self.fontDict["boldFont"]
+            font.setPointSize(minFont+4)
         else:
-            if zoom <15:
-                return None
-            
             font=self.fontDict["normalFont"]
-            if placeType=="town":
-                font.setPointSize(minFont+4)
-            elif placeType=="village":
+            if placeType=="village":
                 font.setPointSize(minFont+2)                    
             elif placeType=="suburb":
                 font.setPointSize(minFont)

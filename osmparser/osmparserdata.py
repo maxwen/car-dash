@@ -3847,7 +3847,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data3")
+        return os.path.join(env.getDataRoot(), "data2")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -4049,7 +4049,7 @@ class OSMParserData():
             print("end create spatial index for edge table")
 
         if createAdressDB==True:
-            self.resolveAddresses()
+            self.resolveAddresses2()
             self.commitAdressDB()
             self.vacuumAddressDB()
 
@@ -4150,8 +4150,8 @@ class OSMParserData():
         osmDataList=dict()
         osmData=dict()
         osmData["country"]="Austria"
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmData["countryCode"]="AT"
@@ -4165,14 +4165,14 @@ class OSMParserData():
 #        osmData["countryCode"]="CH"
 #        osmDataList[1]=osmData
     
-#        osmData=dict()
-#        osmData["country"]="Germany"
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-##        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
-#        osmData["poly"]="germany.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Germany"
-#        osmData["countryCode"]="DE"
-#        osmDataList[2]=osmData
+        osmData=dict()
+        osmData["country"]="Germany"
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
+        osmData["poly"]="germany.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Germany"
+        osmData["countryCode"]="DE"
+        osmDataList[2]=osmData
         
 #        osmData=dict()
 #        osmData["country"]="liechtenstein"
@@ -4243,81 +4243,81 @@ class OSMParserData():
     def getStreetTypeIdForAddesses(self):
         return Constants.ADDRESS_STREET_SET
     
-    def resolveAddresses(self):
-        print("resolve addresses from admin boundaries")
-        self.addressId=self.getLenOfAddressTable()
-        adminLevelList=[6, 8]
-        self.cursorAdress.execute('SELECT * FROM addressTable')
-        allentries=self.cursorAdress.fetchall()
-        
-        allAddressLength=len(allentries)
-        allAddressCount=0
-
-        prog = ProgressBar(0, allAddressLength, 77)
-        
-        for x in allentries:
-            addressId, refId, country, storedCity, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
-            
-            prog.updateAmount(allAddressCount)
-            print(prog, end="\r")
-            allAddressCount=allAddressCount+1
-            
-            if storedCity!=None:
-                continue
-            
-            resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, True)
-            resultList.reverse()
-            for area in resultList:
-                tags=area[1]
-                if "name" in tags:
-                    adminCity=tags["name"]
-                    self.replaceInAddressTable(addressId, refId, country, adminCity, postCode, streetName, houseNumber, lat, lon)
-                    break
-            
-        print("")
-        
-        print("add all ways to address DB")
-        self.cursorGlobal.execute('SELECT * FROM wayTable')
-        allWays=self.cursorGlobal.fetchall()
-        
-        allWaysLength=len(allWays)
-        allWaysCount=0
-
-        prog = ProgressBar(0, allWaysLength, 77)
-        
-        addressSet=set()
-        for way in allWays:
-            _, tags, refs, streetInfo, name, _, _, _=self.wayFromDB(way)
-            streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
-            
-            prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
-            allWaysCount=allWaysCount+1
-            
-            if name==None:
-                continue
-            
-            if not streetTypeId in self.getStreetTypeIdForAddesses():
-                continue
-            
-            # TODO: which ref to use for way address
-            # could be somewhere in the middle 
-            refId, lat, lon=self.getCoordsEntry(refs[0])
-
-            if refId!=None:
-                refCountry=self.getCountryOfPos(lat, lon)
-                resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, False)
-                resultList.reverse()
-                for area in resultList:
-                    tags=area[1]
-                    if "name" in tags:
-                        adminCity=tags["name"]
-                        if not "%s-%s"%(name, adminCity) in addressSet:
-                            self.addToAddressTable(refId, refCountry, adminCity, None, name, None, lat, lon)
-                            addressSet.add("%s-%s"%(name, adminCity))
-                            break
-                    
-        print("")
+#    def resolveAddresses(self):
+#        print("resolve addresses from admin boundaries")
+#        self.addressId=self.getLenOfAddressTable()
+#        adminLevelList=[6, 8]
+#        self.cursorAdress.execute('SELECT * FROM addressTable')
+#        allentries=self.cursorAdress.fetchall()
+#        
+#        allAddressLength=len(allentries)
+#        allAddressCount=0
+#
+#        prog = ProgressBar(0, allAddressLength, 77)
+#        
+#        for x in allentries:
+#            addressId, refId, country, storedCity, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
+#            
+#            prog.updateAmount(allAddressCount)
+#            print(prog, end="\r")
+#            allAddressCount=allAddressCount+1
+#            
+#            if storedCity!=None:
+#                continue
+#            
+#            resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, True)
+#            resultList.reverse()
+#            for area in resultList:
+#                tags=area[1]
+#                if "name" in tags:
+#                    adminCity=tags["name"]
+#                    self.replaceInAddressTable(addressId, refId, country, adminCity, postCode, streetName, houseNumber, lat, lon)
+#                    break
+#            
+#        print("")
+#        
+#        print("add all ways to address DB")
+#        self.cursorGlobal.execute('SELECT * FROM wayTable')
+#        allWays=self.cursorGlobal.fetchall()
+#        
+#        allWaysLength=len(allWays)
+#        allWaysCount=0
+#
+#        prog = ProgressBar(0, allWaysLength, 77)
+#        
+#        addressSet=set()
+#        for way in allWays:
+#            _, tags, refs, streetInfo, name, _, _, _=self.wayFromDB(way)
+#            streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
+#            
+#            prog.updateAmount(allWaysCount)
+#            print(prog, end="\r")
+#            allWaysCount=allWaysCount+1
+#            
+#            if name==None:
+#                continue
+#            
+#            if not streetTypeId in self.getStreetTypeIdForAddesses():
+#                continue
+#            
+#            # TODO: which ref to use for way address
+#            # could be somewhere in the middle 
+#            refId, lat, lon=self.getCoordsEntry(refs[0])
+#
+#            if refId!=None:
+#                refCountry=self.getCountryOfPos(lat, lon)
+#                resultList=self.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, False)
+#                resultList.reverse()
+#                for area in resultList:
+#                    tags=area[1]
+#                    if "name" in tags:
+#                        adminCity=tags["name"]
+#                        if not "%s-%s"%(name, adminCity) in addressSet:
+#                            self.addToAddressTable(refId, refCountry, adminCity, None, name, None, lat, lon)
+#                            addressSet.add("%s-%s"%(name, adminCity))
+#                            break
+#                    
+#        print("")
 
     def resolveAddresses2(self):
         print("resolve addresses from admin boundaries")
