@@ -17,7 +17,7 @@ import env
 import cProfile
 
 from PyQt4.QtCore import QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import Constants, OSMParserData
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
@@ -49,7 +49,8 @@ IMAGE_WIDTH_SMALL=32
 IMAGE_HEIGHT_SMALL=32
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
-WITH_CROSSING_DEBUG=True
+WITH_CROSSING_DEBUG=False
+WITH_TIMING_DEBUG=False
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -562,7 +563,8 @@ class QtOSMWidget(QWidget):
         
         self.lastWayIdSet=None
         self.wayPolygonCache=dict()
-        self.currentRoutePolygon=None
+        self.currentRoutePath=None
+        self.currentRouteOverlayPath=None
         self.areaPolygonCache=dict()
         self.lastOsmIdSet=None
         self.adminAreaPolygonCache=dict()
@@ -1111,6 +1113,7 @@ class QtOSMWidget(QWidget):
         return self.show3D==True and self.map_zoom>=self.startZoom3DView
     
     def paintEvent(self, event):
+        self.setCursor(Qt.WaitCursor)
         start=time.time()
         self.painter=QPainter(self)
         self.painter.setClipRect(QRectF(0, 0, self.width(), self.height()))
@@ -1170,7 +1173,8 @@ class QtOSMWidget(QWidget):
                 if newBBox==True:
                     self.getVisibleAreas(self.prefetchBBox)
                 
-                print("paintEvent fetch polygons:%f"%(time.time()-fetchStart))
+                if WITH_TIMING_DEBUG==True:
+                    print("paintEvent fetch polygons:%f"%(time.time()-fetchStart))
 
                 drawStart=time.time()
             
@@ -1197,7 +1201,9 @@ class QtOSMWidget(QWidget):
                 
             self.setAntialiasing(True)
             self.displayBridgeWays()
-            print("paintEvent draw polygons:%f"%(time.time()-drawStart))
+            
+            if WITH_TIMING_DEBUG==True:
+                print("paintEvent draw polygons:%f"%(time.time()-drawStart))
 
         else:
             self.showTiles()
@@ -1205,7 +1211,7 @@ class QtOSMWidget(QWidget):
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
             if self.currentEdgeIndexList!=None:
-                self.displayEdgeOfRoute(self.currentTrackList, self.currentEdgeIndexList)
+                self.displayRouteOverlay(self.currentTrackList, self.currentEdgeIndexList)
         
         if self.currentCoords!=None:
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
@@ -1263,8 +1269,11 @@ class QtOSMWidget(QWidget):
         self.showTunnelInfo()
         
         self.painter.end()
-        print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
-        print("paintEvent:%f"%(time.time()-start))
+
+        self.unsetCursor()
+        if WITH_TIMING_DEBUG==True:
+            print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
+            print("paintEvent:%f"%(time.time()-start))
   
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -1311,7 +1320,7 @@ class QtOSMWidget(QWidget):
     def clearPolygonCache(self):
         self.prefetchBBox=None
         self.wayPolygonCache=dict()
-        self.currentRoutePolygon=None
+        self.currentRoutePath=None
         self.areaPolygonCache=dict()
         self.adminAreaPolygonCache=dict()
     
@@ -1322,7 +1331,9 @@ class QtOSMWidget(QWidget):
         
         start=time.time()
         resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
-        print("getWaysInBboxWithGeom: %f"%(time.time()-start))
+        
+        if WITH_TIMING_DEBUG==True:
+            print("getWaysInBboxWithGeom: %f"%(time.time()-start))
         
         if self.lastWayIdSet==None:
             self.lastWayIdSet=wayIdSet
@@ -1441,7 +1452,9 @@ class QtOSMWidget(QWidget):
         
         start=time.time()
         resultList=osmParserData.getPOINodesInBBoxWithGeom(bbox, 0.0, nodeTypeList)        
-        print("getPOINodesInBBoxWithGeom: %f"%(time.time()-start))
+        
+        if WITH_TIMING_DEBUG==True:
+            print("getPOINodesInBBoxWithGeom: %f"%(time.time()-start))
 
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
         
@@ -1526,8 +1539,9 @@ class QtOSMWidget(QWidget):
         
         start=time.time()
         resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
-#        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(None, bbox, 0.0)
-        print("getAreasInBboxWithGeom: %f"%(time.time()-start))
+        
+        if WITH_TIMING_DEBUG==True:
+            print("getAreasInBboxWithGeom: %f"%(time.time()-start))
 
         if self.lastOsmIdSet==None:
             self.lastOsmIdSet=osmIdSet
@@ -1649,6 +1663,7 @@ class QtOSMWidget(QWidget):
             pen=Qt.NoPen
             
             for area in self.buildingList:      
+#                print(area)
                 brush=self.style.getStyleBrush("building")
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
     
@@ -1929,15 +1944,15 @@ class QtOSMWidget(QWidget):
         self.painter.drawPolyline(polygon)
 
     def displayWayWithCache(self, way, pen):        
-        polygon=None
         cPolygon=None
+        painterPath=None
         wayId=way[0]
         coordsStr=way[9]
         map_x, map_y=self.getMapZeroPos()
         
         if not wayId in self.wayPolygonCache.keys():
-            polygon=QPolygonF()
             cont=[]
+            painterPath=QPainterPath()
 
             coords=osmParserData.createCoordsFromLineString(coordsStr)
 
@@ -1948,73 +1963,51 @@ class QtOSMWidget(QWidget):
 #                    displayCoords[0]=coords[0]
 #                    displayCoords[-1]=coords[-1]
                 
+            i=0
             for point in displayCoords:
                 lat, lon=point 
                 (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
                 point=QPointF(x, y);
-                polygon.append( point )
+                if i==0:
+                    painterPath.moveTo(point)
+                else:
+                    painterPath.lineTo(point)
+                    
                 cont.append((point.x(), point.y()))
-            
+                i=i+1
+                
             if len(cont)>2:
                 cPolygon=Polygon.Polygon(cont)
-            self.wayPolygonCache[wayId]=(polygon, cPolygon)
+            self.wayPolygonCache[wayId]=(cPolygon, painterPath)
         
         else:
-            polygon, cPolygon=self.wayPolygonCache[wayId]
+            cPolygon, painterPath=self.wayPolygonCache[wayId]
                     
         if cPolygon!=None:
+            # must create a copy cause shift changes alues intern
             p=Polygon.Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
                 return 
                     
-        displayPolygon=polygon.translated(-map_x, -map_y)
-            
-#        intersected=displayPolygon.intersected(self.visiblePolygon)
-#        if intersected.isEmpty():
-#            self.numHiddenPolygons=self.numHiddenPolygons+1
-#            return
-        
+        painterPath=painterPath.translated(-map_x, -map_y)
+                    
         self.numVisiblePolygons=self.numVisiblePolygons+1
         
-        self.painter.setPen(pen)
-            
-        if displayPolygon.count()==2:
-            self.painter.drawLine(displayPolygon.first(), displayPolygon.last())
-        else:
-            self.painter.drawPolyline(displayPolygon)  
-                      
-    def displayPolygon(self, coords, pen):        
-        polygon=QPolygon()
-        
-        displayCoords=coords
-#        if self.map_zoom<15:
-#            if len(coords)>6:
-#                displayCoords=coords[1:-2:2]
-#                displayCoords[0]=coords[0]
-#                displayCoords[-1]=coords[-1]
-            
-        for point in displayCoords:
-            lat, lon=point 
-            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-            point=QPoint(x, y);
-            polygon.append( point )
-               
-        self.painter.setPen(pen)
-        self.painter.drawPolygon(polygon)    
-
+        self.painter.strokePath(painterPath, pen)
+                              
     def displayPolygonWithCache(self, cacheDict, area, pen, brush):        
-        polygon=None
         cPolygon=None
+        painterPath=None
         osmId=area[0]
         polyStr=area[4]
         geomType=area[5]
         map_x, map_y=self.getMapZeroPos()
         
         if not osmId in cacheDict.keys():
-            polygon=QPolygonF()
             cont=[]
+            painterPath=QPainterPath()
             if geomType==0:
                 coords=osmParserData.createCoordsFromPolygon(polyStr)[:-1]
             else:
@@ -2027,47 +2020,50 @@ class QtOSMWidget(QWidget):
 #                    displayCoords[0]=coords[0]
 #                    displayCoords[-1]=coords[-1]
             
+            i=0
             for point in displayCoords:
                 lat, lon=point 
                 (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
                 point=QPointF(x, y);
-                polygon.append( point )
+                if i==0:
+                    painterPath.moveTo(point)
+                else:
+                    painterPath.lineTo(point)
+                    
                 cont.append((point.x(), point.y()))
+                i=i+1
 
+            if geomType==0:
+                painterPath.closeSubpath()
+                
             if len(cont)>2:
                 cPolygon=Polygon.Polygon(cont)
-            cacheDict[osmId]=(polygon, cPolygon)
+            cacheDict[osmId]=(cPolygon, painterPath)
         
         else:
-            polygon, cPolygon=cacheDict[osmId]
+            cPolygon, painterPath=cacheDict[osmId]
         
         if cPolygon!=None:
+            # must create a copy cause shift changes alues intern
             p=Polygon.Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
                 return 
         
-        displayPolygon=polygon.translated(-map_x, -map_y)
-
-#        intersected=displayPolygon.intersected(self.visiblePolygon)
-#        if intersected.isEmpty():
-#            self.numHiddenPolygons=self.numHiddenPolygons+1
-#            return
+        painterPath=painterPath.translated(-map_x, -map_y)
         
         self.numVisiblePolygons=self.numVisiblePolygons+1
         
-        
         self.painter.setBrush(brush)
         self.painter.setPen(pen)
-            
+        
         if geomType==0:
-            self.painter.drawPolygon(displayPolygon)  
+            self.painter.drawPath(painterPath)
         else:
-            if displayPolygon.count()==2:
-                self.painter.drawLine(displayPolygon.first(), displayPolygon.last())
-            else:
-                self.painter.drawPolyline(displayPolygon)  
+            # TODO: building as linestring 100155254
+            if pen!=Qt.NoPen:
+                self.painter.strokePath(painterPath, pen)
         
     def displayRefs(self, refList, pen):        
         polygon=QPolygon()
@@ -2081,7 +2077,7 @@ class QtOSMWidget(QWidget):
         self.painter.setPen(pen)
         self.painter.drawPolyline(polygon)
         
-    def displayEdgeOfRoute(self, remainingTrackList, edgeIndexList):
+    def displayRouteOverlay(self, remainingTrackList, edgeIndexList):
         if remainingTrackList!=None:                        
             polygon=QPolygon()
 
@@ -2109,26 +2105,30 @@ class QtOSMWidget(QWidget):
             
             showTrackDetails=self.map_zoom>13
             
-            if self.currentRoutePolygon==None:
-                polygon=QPolygon()
+            if self.currentRoutePath==None:
+                painterPath=QPainterPath()
                
+                i=0
                 for item in trackList:                
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]
                             
                         (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
-                        point=QPoint(x, y);
-                        polygon.append( point )
-        
-                self.currentRoutePolygon=polygon
+                        point=QPointF(x, y);
+                        if i==0:
+                            painterPath.moveTo(point)
+                        else:
+                            painterPath.lineTo(point)
+                    i=i+1
+                    
+                self.currentRoutePath=painterPath
             
             map_x, map_y=self.getMapZeroPos()
-            displayPolygon=self.currentRoutePolygon.translated(-map_x, -map_y)   
+            displayPolygon=self.currentRoutePath.translated(-map_x, -map_y)   
             
             pen=self.style.getStylePen("routePen")
             pen.setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
-            self.painter.setPen(pen)
-            self.painter.drawPolyline(displayPolygon)
+            self.painter.strokePath(displayPolygon, pen)
                     
             if showTrackDetails==True:                                    
                 for item in trackList:
@@ -3107,7 +3107,7 @@ class QtOSMWidget(QWidget):
             self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
             self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
             self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
-            self.currentRoutePolygon=None
+            self.currentRoutePath=None
             self.update()       
 
     def switchToNextRoutePart(self):
@@ -3602,9 +3602,7 @@ class OSMWidget(QWidget):
         altitude=gpsData.getAltitude()
         speed=gpsData.getSpeed()
         
-        start=time.time()
         self.mapWidgetQt.updateGPSLocation(gpsData, debug)
-        #print("updateGPSLocation %f"%(time.time()-start))
         
         self.gpsPosValueLat.setText("%.5f"%(lat))
         self.gpsPosValueLon.setText("%.5f"%(lon))   
@@ -3957,9 +3955,7 @@ class OSMWidget(QWidget):
                 self.incTrack=0
 #            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
         
-        print("%.0f meter"%(self.mapWidgetQt.osmutils.distance(self.startLat, self.startLon, self.incLat, self.incLon)))
         gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 0, 42)
-        print(gpsData)
         self.updateGPSDataDisplay(gpsData, True) 
     
 #    @pyqtSlot()
