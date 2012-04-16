@@ -50,7 +50,7 @@ IMAGE_HEIGHT_SMALL=32
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=False
-WITH_TIMING_DEBUG=False
+WITH_TIMING_DEBUG=True
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -568,7 +568,8 @@ class QtOSMWidget(QWidget):
         self.areaPolygonCache=dict()
         self.lastOsmIdSet=None
         self.adminAreaPolygonCache=dict()
-        self.lastAdminAreaIdSet=None       
+        self.lastAdminAreaIdSet=None      
+        self.tagLabelWays=None
         
         self.style=OSMStyle()
         self.mapPoint=None
@@ -1074,8 +1075,9 @@ class QtOSMWidget(QWidget):
         return False
     
     def getPrefetchBoxMargin(self):
-        # approx 2km
-        if self.map_zoom in range(14, 19):
+        if self.map_zoom in range(17, 19):
+            return 0.005
+        if self.map_zoom in range(14, 17):
             return 0.02
         
         #approx 10km
@@ -1113,7 +1115,7 @@ class QtOSMWidget(QWidget):
         return self.show3D==True and self.map_zoom>=self.startZoom3DView
     
     def paintEvent(self, event):
-        self.setCursor(Qt.WaitCursor)
+#        self.setCursor(Qt.WaitCursor)
         start=time.time()
         self.painter=QPainter(self)
         self.painter.setClipRect(QRectF(0, 0, self.width(), self.height()))
@@ -1133,6 +1135,7 @@ class QtOSMWidget(QWidget):
 
 #        print(self.map_zoom)
 
+        self.drawnRectlList=list()
         self.calcVisiblePolygon()
         bbox=self.getVisibleBBoxDeg()        
         newBBox=True
@@ -1164,6 +1167,7 @@ class QtOSMWidget(QWidget):
                 self.naturalTunnelLines=list()
                 self.buildingList=list()
                 self.aerowayLines=list()
+                self.tagLabelWays=list()
                 
                 fetchStart=time.time()
 
@@ -1201,7 +1205,7 @@ class QtOSMWidget(QWidget):
                 
             self.setAntialiasing(True)
             self.displayBridgeWays()
-            
+                        
             if WITH_TIMING_DEBUG==True:
                 print("paintEvent draw polygons:%f"%(time.time()-drawStart))
 
@@ -1226,10 +1230,10 @@ class QtOSMWidget(QWidget):
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())
 
-        if self.refRing!=None:   
-            pen=self.style.getStylePen("trackPen")
-            pen.setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))   
-            self.displayRefs(self.refRing, pen)
+#        if self.refRing!=None:   
+#            pen=self.style.getStylePen("trackPen")
+#            pen.setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))   
+#            self.displayRefs(self.refRing, pen)
 
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
@@ -1248,9 +1252,22 @@ class QtOSMWidget(QWidget):
             gradient.setColorAt(0, Qt.blue)
             self.painter.fillRect(skyRect, gradient)
             
+        self.painter.setRenderHint(QPainter.Antialiasing)
+        
         if self.withShowPOI==True:
+            # not prefetch box!
+            nodeStart=time.time()
             self.displayVisibleNodes(bbox)
-            
+            if WITH_TIMING_DEBUG==True:
+                print("paintEvent displayNodes:%f"%(time.time()-nodeStart))
+        
+        if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
+            tagStart=time.time()
+            self.displayWayTags()
+            if WITH_TIMING_DEBUG==True:
+                print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
+
+
 #        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
 #            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
@@ -1270,7 +1287,8 @@ class QtOSMWidget(QWidget):
         
         self.painter.end()
 
-        self.unsetCursor()
+#        self.unsetCursor()
+
         if WITH_TIMING_DEBUG==True:
             print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
             print("paintEvent:%f"%(time.time()-start))
@@ -1348,7 +1366,7 @@ class QtOSMWidget(QWidget):
         
         for way in resultList:
             wayId, _, _, streetInfo, _, _, _, _, _, _=way
-            _, _, _, tunnel, bridge=osmParserData.decodeStreetInfo2(streetInfo)
+            streetTypeId, _, _, tunnel, bridge=osmParserData.decodeStreetInfo2(streetInfo)
             
             if bridge==1:
                 self.bridgeWays.append(way)
@@ -1358,8 +1376,56 @@ class QtOSMWidget(QWidget):
                 self.tunnelWays.append(way)
                 continue
             
+            if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
+                if streetTypeId in Constants.REF_LABEL_WAY_SET:
+                    self.tagLabelWays.append(way)
+
             self.otherWays.append(way)
 
+    def displayWayTags(self):
+        if self.tagLabelWays!=None and len(self.tagLabelWays)!=0:
+            font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
+            if font==None:
+                return
+    
+            numVisibleTags=0
+            numHiddenTags=0
+            
+            map_x, map_y=self.getMapZeroPos()
+            brush=self.style.getStyleBrush("placeTag")
+            pen=self.style.getStylePen("placePen")
+            painterPathDict=dict()
+            for way in self.tagLabelWays:
+                wayId, tags, _, _, name, nameRef, _, _, _, _=way 
+                if wayId in self.wayPolygonCache.keys():
+                    cPolygon, painterPath=self.wayPolygonCache[wayId]
+                    if nameRef!=None:
+                        painterPath=painterPath.translated(-map_x, -map_y)
+                        point=painterPath.pointAtPercent(0.5)
+
+                        if self.visibleCPolygon.isInside(point.x(), point.y()):
+                            numVisibleTags=numVisibleTags+1
+                            point0=self.transformHeading.map(point)
+                            painterPath, painterPathText=self.createTextLabelAtPos(point0.x(), point0.y(), nameRef, font)
+                            rect=painterPath.boundingRect().adjusted(-200, -200, 200, 200)
+                            painterPathDict[wayId]=(painterPath, painterPathText, point0, rect)
+
+                        else:
+                            numHiddenTags=numHiddenTags+1
+                            
+            for wayId, (painterPath, painterPathText, point, rect) in painterPathDict.items():
+                nearOtherTag=False
+                for drawnRect in self.drawnRectlList:
+                    if drawnRect.contains(point):
+                        nearOtherTag=True
+                        break
+                
+                if nearOtherTag==False:
+                    self.displayTextLabel(painterPath, painterPathText, brush, pen)
+                    self.drawnRectlList.append(rect)
+
+            print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
+            
     def displayWays(self):
         showCasing=self.map_zoom in range(OSMStyle.SHOW_CASING_START_ZOOM, 19)
 #        showCasing=True
@@ -1396,11 +1462,12 @@ class QtOSMWidget(QWidget):
  
     def displayBridgeWays(self):                    
         if len(self.bridgeWays)!=0:
+            showStreetOverlays=self.map_zoom in range(OSMStyle.SHOW_STREET_OVERLAY_START_ZOOM, 19)
             showBridges=self.map_zoom in range(OSMStyle.SHOW_BRIDGES_START_ZOOM, 19)
 
             # bridges  
             for way in self.bridgeWays:
-                _, _, _, streetInfo, _, _, _, _, _,  _=way
+                _, tags, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 if showBridges==True:
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
@@ -1408,6 +1475,11 @@ class QtOSMWidget(QWidget):
     
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
                 self.displayWayWithCache(way, pen)
+                
+                if showStreetOverlays==True: 
+                    if osmParserData.isAccessRestricted(tags):
+                        pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False)
+                        self.displayWayWithCache(way, pen)
             
     def displayTunnelWays(self):                    
 #        showCasing=self.map_zoom in range(15, 19)
@@ -1458,21 +1530,34 @@ class QtOSMWidget(QWidget):
 
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
         
+        numVisibleNodes=0
+        numHiddenNodes=0
+        
         for node in resultList:
             _, lat, lon, tags, nodeType=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
+                numVisibleNodes=numVisibleNodes+1
                 self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
-                            
+            else:
+                numHiddenNodes=numHiddenNodes+1
+                
+        print("visible nodes: %d hidden nodes:%d"%(numVisibleNodes, numHiddenNodes))
+            
     def displayNode(self, x, y, pixmapWidth, pixmapHeight, tags, nodeType):
         if nodeType==Constants.POI_TYPE_PLACE:
             if "name" in tags:
-#                print(tags)
                 text=tags["name"]
+                
                 font=self.style.getFontForPlaceTagDisplay(tags, self.map_zoom, self.isVirtualZoom)
                 if font!=None:
-                    self.displayTextAtPos(x, y, text, font, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
-        elif nodeType==Constants.POI_TYPE_MOTORWAY_JUNCTION:
+                    painterPath, painterPathText=self.createTextLabelAtPos(x, y, text, font)
+                    rect=painterPath.boundingRect().adjusted(-50, -50, 50, 50)
+                    self.drawnRectlList.append(rect)
+                    self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
+                    return
+                
+        if nodeType==Constants.POI_TYPE_MOTORWAY_JUNCTION:
             if "name" in tags:
                 text=tags["name"]
                 if "ref" in tags:
@@ -1481,22 +1566,21 @@ class QtOSMWidget(QWidget):
                                     
                 font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
                 if font!=None:
-                    self.displayTextAtPos(x, y, text, font, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
-            else:
-                pixmap=self.getPixmapForNodeType(nodeType)
-                if pixmap!=None:
-                    xPos=int(x-pixmapWidth/2)
-                    yPos=int(y-pixmapHeight)
-                    self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
-                
-        else:
-            pixmap=self.getPixmapForNodeType(nodeType)
-            if pixmap!=None:
-                xPos=int(x-pixmapWidth/2)
-                yPos=int(y-pixmapHeight)
-                self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
+                    painterPath, painterPathText=self.createTextLabelAtPos(x, y, text, font)
+                    rect=painterPath.boundingRect().adjusted(-50, -50, 50, 50)
+                    self.drawnRectlList.append(rect)
+                    self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
+                    return
 
-    def displayTextAtPos(self, x, y, text, font, brush, pen):
+        pixmap=self.getPixmapForNodeType(nodeType)
+        if pixmap!=None:
+            xPos=int(x-pixmapWidth/2)
+            yPos=int(y-pixmapHeight)
+#            rect=QRectF(xPos-100, yPos-100, pixmapWidth+100, pixmapHeight+100)
+#            self.drawnRectlList.append(rect)
+            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
+
+    def createTextLabelAtPos(self, x, y, text, font):
         fm = QFontMetrics(font)
         width=fm.width(text)+10
         height=fm.height()
@@ -1504,27 +1588,37 @@ class QtOSMWidget(QWidget):
         arrowWidth=5
         xPosRect=x-width/2
         yPosRect=y-height-arrowHeight
-        labelPolygon=QPolygon()
-        labelPolygon.append(QPoint(xPosRect, yPosRect))
-        labelPolygon.append(QPoint(xPosRect+width, yPosRect))
-        labelPolygon.append(QPoint(xPosRect+width, yPosRect+height))
-        labelPolygon.append(QPoint(xPosRect+width-width/2+arrowWidth, yPosRect+height))
-        labelPolygon.append(QPoint(xPosRect+width-width/2, yPosRect+height+arrowHeight))
-        labelPolygon.append(QPoint(xPosRect+width-width/2-arrowWidth, yPosRect+height))
-        labelPolygon.append(QPoint(xPosRect, yPosRect+height))
+        
+        painterPath=QPainterPath()
+        
+        painterPath.moveTo(QPointF(0, 0))
+        painterPath.lineTo(QPointF(width, 0))
+        painterPath.lineTo(QPointF(width, height))
+        painterPath.lineTo(QPointF(width-width/2+arrowWidth, height))
+        painterPath.lineTo(QPointF(width-width/2, height+arrowHeight))
+        painterPath.lineTo(QPointF(width-width/2-arrowWidth, height))
+        painterPath.lineTo(QPointF(0, height))
+        painterPath.closeSubpath()
+                
+        painterPathText=QPainterPath()
+        textPos=QPointF(5, height-fm.descent())
+        painterPathText.addText(textPos, font, text)
 
+        painterPath=painterPath.translated(xPosRect, yPosRect)
+        painterPathText=painterPathText.translated(xPosRect, yPosRect)
+        
+        return painterPath, painterPathText
+
+    # need to do it in two steps
+    # not possible to get filled text else - only outlined
+    def displayTextLabel(self, painterPath, painterPathText, brush, pen):
         self.painter.setPen(pen)
         self.painter.setBrush(brush)
-        self.painter.drawPolygon(labelPolygon)
-        
-        textPos=QPoint(xPosRect+5, y-arrowHeight-fm.descent())
-        self.painter.setFont(font)
-        self.painter.drawText(textPos, text)    
-        
-#        pen=QPen(Qt.red)
-#        pen.setWidth(5)
-#        self.painter.setPen(pen)
-#        self.painter.drawPoint(x, y) 
+        self.painter.drawPath(painterPath)
+
+        self.painter.setPen(Qt.NoPen)
+        self.painter.setBrush(QBrush(Qt.black))
+        self.painter.drawPath(painterPathText)
            
     def getDisplayAreaTypeListForZoom(self):
         if self.map_zoom in range(self.tileStartZoom+1, 19):
@@ -1921,7 +2015,7 @@ class QtOSMWidget(QWidget):
         return (y, x)
     
     def displayCoords(self, coords, pen):        
-        polygon=QPolygon()
+        polygon=QPolygonF()
         
         map_x, map_y=self.getMapZeroPos()
         displayCoords=coords
@@ -1935,7 +2029,7 @@ class QtOSMWidget(QWidget):
         for point in displayCoords:
             lat, lon=point 
             (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
-            point=QPoint(x, y);
+            point=QPointF(x, y);
             polygon.append( point )
             
         polygon.translate(-map_x, -map_y)
@@ -1991,10 +2085,9 @@ class QtOSMWidget(QWidget):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
                 return 
                     
-        painterPath=painterPath.translated(-map_x, -map_y)
-                    
         self.numVisiblePolygons=self.numVisiblePolygons+1
-        
+
+        painterPath=painterPath.translated(-map_x, -map_y)
         self.painter.strokePath(painterPath, pen)
                               
     def displayPolygonWithCache(self, cacheDict, area, pen, brush):        
@@ -2051,10 +2144,9 @@ class QtOSMWidget(QWidget):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
                 return 
         
-        painterPath=painterPath.translated(-map_x, -map_y)
-        
         self.numVisiblePolygons=self.numVisiblePolygons+1
         
+        painterPath=painterPath.translated(-map_x, -map_y)
         self.painter.setBrush(brush)
         self.painter.setPen(pen)
         
@@ -2079,7 +2171,7 @@ class QtOSMWidget(QWidget):
         
     def displayRouteOverlay(self, remainingTrackList, edgeIndexList):
         if remainingTrackList!=None:                        
-            polygon=QPolygon()
+            polygon=QPolygonF()
 
             for index in edgeIndexList:
                 if index<len(remainingTrackList):
@@ -2088,7 +2180,7 @@ class QtOSMWidget(QWidget):
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]   
                         (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                        point=QPoint(x, y);
+                        point=QPointF(x, y);
                         polygon.append( point )
 
             pen=self.style.getStylePen("routeOverlayPen")
@@ -2939,7 +3031,7 @@ class QtOSMWidget(QWidget):
                 self.lastWayId=wayId
                 wayId, tags, _, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
 #                print(wayId)
-#                print(tags)
+                print(tags)
 #                refRings=osmParserData.mergeEqualWayEntries(wayId)
 ##                print(refRings)
 #                if refRings!=None:

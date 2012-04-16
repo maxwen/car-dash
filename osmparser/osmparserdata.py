@@ -141,6 +141,9 @@ class Constants():
                 STREET_TYPE_RESIDENTIAL])
     
     ADMIN_LEVEL_SET=[2, 4, 6, 8]
+    
+    REF_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY, STREET_TYPE_TRUNK, STREET_TYPE_MOTORWAY])
+
             
 class OSMParserData():
     def __init__(self):
@@ -3847,7 +3850,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data2")
+        return os.path.join(env.getDataRoot(), "data3")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -4157,13 +4160,13 @@ class OSMParserData():
         osmData["countryCode"]="AT"
         osmDataList[0]=osmData
         
-#        osmData=dict()
-#        osmData["country"]="switzerland"
-#        osmData["osmFile"]='/home/maxl/Downloads/switzerland.osm.bz2'
-#        osmData["poly"]="switzerland.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-#        osmData["countryCode"]="CH"
-#        osmDataList[1]=osmData
+        osmData=dict()
+        osmData["country"]="switzerland"
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
+        osmData["poly"]="switzerland.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
+        osmData["countryCode"]="CH"
+        osmDataList[1]=osmData
     
         osmData=dict()
         osmData["country"]="Germany"
@@ -4174,13 +4177,13 @@ class OSMParserData():
         osmData["countryCode"]="DE"
         osmDataList[2]=osmData
         
-#        osmData=dict()
-#        osmData["country"]="liechtenstein"
-#        osmData["osmFile"]='/home/maxl/Downloads/liechtenstein.osm.bz2'
-#        osmData["poly"]="liechtenstein.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
-#        osmData["countryCode"]="LI"
-#        osmDataList[3]=osmData
+        osmData=dict()
+        osmData["country"]="liechtenstein"
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
+        osmData["poly"]="liechtenstein.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
+        osmData["countryCode"]="LI"
+        osmDataList[3]=osmData
 
         return osmDataList
 

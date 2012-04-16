@@ -523,10 +523,8 @@ class OSMStyle():
                 minFont=12
             elif zoom==17:
                 minFont=10
-            elif zoom==16:
-                minFont=8
             else:
-                minFont=6
+                minFont=8
                 
         font=self.fontDict["normalFont"]
         font.setPointSize(minFont)
@@ -549,14 +547,14 @@ class OSMStyle():
             elif zoom==14:
                 minFont=10
             else:
-                minFont=6
+                minFont=8
             
         font=None
         if placeType=="city":
-            font=self.fontDict["boldFont"]
+            font=self.fontDict["cityFont"]
             font.setPointSize(minFont+6)
         elif placeType=="town":
-            font=self.fontDict["boldFont"]
+            font=self.fontDict["cityFont"]
             font.setPointSize(minFont+4)
         else:
             font=self.fontDict["normalFont"]
@@ -574,18 +572,23 @@ class OSMStyle():
         return self.fontDict["defaultFont"]
     
     def initFonts(self):
-        font = QFont("Helvetica")
+        font = QFont("Sans")
+        font.setBold(True)
+        font.setUnderline(True)
+        self.fontDict["cityFont"]=font
+        
+        font = QFont("Sans")
         font.setBold(True)
         self.fontDict["boldFont"]=font
         
-        font = QFont("Helvetica")
+        font = QFont("Sans")
         self.fontDict["normalFont"]=font
 
-        font = QFont("Helvetica")
+        font = QFont("Sans")
         font.setPointSize(20)
         self.fontDict["wayInfoFont"]=font
         
-        font = QFont("Helvetica")
+        font = QFont("Sans")
         font.setPointSize(16)
         self.fontDict["defaultFont"]=font
         
@@ -594,7 +597,8 @@ class OSMStyle():
     SHOW_STREET_OVERLAY_START_ZOOM=17
     USE_ANTIALIASING_START_ZOOM=17
     SHOW_BUILDING_START_ZOOM=17
-    
+    SHOW_REF_LABEL_WAYS_START_ZOOM=15
+        
 #    def getLaneWith(self, zoom):
 #        print(zoom)
 #        S=6371000*math.cos(0)/math.pow(2, zoom+8)
