@@ -23,4 +23,9 @@ def getImageRoot():
 def getTileRoot():
     return os.environ['HOME']
 
+def getPolyDataRootSimple():
+    return os.path.join(getRoot(), "poly-simple")
+
+def getPolyDataRoot():
+    return os.path.join(getRoot(), "poly")
         

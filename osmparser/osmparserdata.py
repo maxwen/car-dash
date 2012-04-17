@@ -551,7 +551,7 @@ class OSMParserData():
             print("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
     
     def getCountryOfPos(self, lat, lon):
-        polyCountry=self.countryNameOfPointDeep(lat, lon)
+        polyCountry=self.countryNameOfPoint(lat, lon)
         return self.getCountryForPolyCountry(polyCountry)
 
     # nodeType of 0 will NOT be stored
@@ -4135,14 +4135,13 @@ class OSMParserData():
         self.commitAdressDB()
         
     def initBoarders(self):
-        self.bu=OSMBoarderUtils(self.getDataDir())
+        self.bu=OSMBoarderUtils(env.getPolyDataRoot())
         self.bu.initData()
-        
+
+        self.buSimple=OSMBoarderUtils(env.getPolyDataRootSimple())
+        self.buSimple.initData()
+            
     def countryNameOfPoint(self, lat, lon):
-        country=self.bu.countryNameOfPoint(lat, lon)
-        return country
-    
-    def countryNameOfPointDeep(self, lat, lon):
         country=self.bu.countryNameOfPoint(lat, lon)
         if country==None:
             # HACK if the point is exactly on the border:(
@@ -4170,8 +4169,8 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/germany.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
         osmData["countryCode"]="DE"

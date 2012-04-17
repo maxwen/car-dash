@@ -1069,11 +1069,6 @@ class QtOSMWidget(QWidget):
         point0=invertedTransform[0].map(point)
         self.painter.drawPoint(point0)
     
-    def isBBoxInsideLastBBox(self, prefetchBBox, bbox):
-        if prefetchBBox[0]<=bbox[0] and prefetchBBox[1]<=bbox[1] and prefetchBBox[2]>=bbox[2] and prefetchBBox[3]>=bbox[3]:
-            return True
-        return False
-    
     def getPrefetchBoxMargin(self):
         if self.map_zoom in range(17, 19):
             return 0.005
@@ -1101,10 +1096,24 @@ class QtOSMWidget(QWidget):
         
         cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
         self.visibleCPolygon = Polygon.Polygon(cont)
-         
+        
     def calcPrefetchBox(self, bbox):
         self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
-
+        self.prefetchBBoxCPolygon=Polygon.Polygon([(self.prefetchBBox[0], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[1]), (self.prefetchBBox[0], self.prefetchBBox[1])])
+        
+    def isNewBBox(self, bbox):
+        bboxCPolyon=Polygon.Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])    
+        if self.prefetchBBox==None:
+            self.calcPrefetchBox(bbox)
+            return True
+        else:
+            newBBox=not self.prefetchBBoxCPolygon.covers(bboxCPolyon)
+            if newBBox==True:
+                self.calcPrefetchBox(bbox)
+                return True
+            
+        return False
+    
     def setAntialiasing(self, value):
         if self.show3DView()==True:
             self.painter.setRenderHint(QPainter.Antialiasing, value)
@@ -1137,18 +1146,13 @@ class QtOSMWidget(QWidget):
 
         self.drawnRectlList=list()
         self.calcVisiblePolygon()
-        bbox=self.getVisibleBBoxDeg()        
-        newBBox=True
-        
-        # geom data prefetch box lat, lon around bbox
-        if self.prefetchBBox==None:
-            self.calcPrefetchBox(bbox)
-            newBBox=True
-        else:
-            newBBox=not self.isBBoxInsideLastBBox(self.prefetchBBox, bbox)
-            if newBBox==True:
-                self.calcPrefetchBox(bbox)
+        bbox=self.getVisibleBBoxDeg()    
+        newBBox=self.isNewBBox(bbox)
 
+#        countryStart=time.time()
+#        countryList=osmParserData.buSimple.countryNameListOfBBox(self.prefetchBBox)
+#        print("%s %f"%(countryList, time.time()-countryStart))
+              
         self.numHiddenPolygons=0
         self.numVisiblePolygons=0
         
@@ -1220,9 +1224,7 @@ class QtOSMWidget(QWidget):
         if self.currentCoords!=None:
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
             self.displayCoords(self.currentCoords, self.style.getStylePen("edgePen"))
-            
-#        self.displayRoutingPoints()            
-                    
+                                
         if WITH_CROSSING_DEBUG==True:
             if len(osmRouting.getCurrentSearchEdgeList())!=0 or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
                 self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
