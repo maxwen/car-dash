@@ -23,7 +23,8 @@ class OSMStyle():
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":15},
                    Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":15},
                    Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":15},
-                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":15}}
+                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":15},
+                   Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":15}}
     
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
                     Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":18},
@@ -86,6 +87,7 @@ class OSMStyle():
         self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/flag.png"))
         self.pixmapDict["airportPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/airport.png"))
         self.pixmapDict["railwaystationtPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/train.png"))
+        self.pixmapDict["veterinaryPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/veterinary.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
@@ -598,6 +600,7 @@ class OSMStyle():
     USE_ANTIALIASING_START_ZOOM=17
     SHOW_BUILDING_START_ZOOM=17
     SHOW_REF_LABEL_WAYS_START_ZOOM=15
+    SHOW_NAME_LABEL_WAYS_START_ZOOM=18
         
 #    def getLaneWith(self, zoom):
 #        print(zoom)

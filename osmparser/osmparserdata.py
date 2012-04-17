@@ -70,6 +70,7 @@ class Constants():
     POI_TYPE_SUPERMARKET=11
     POI_TYPE_AIRPORT=12
     POI_TYPE_RAILWAYSTATION=13
+    POI_TYPE_VETERIANERY=15
     
     AREA_TYPE_NATURAL=1
     AREA_TYPE_LANDUSE=2
@@ -97,7 +98,8 @@ class Constants():
     AMENITY_POI_TYPE_DICT={"fuel": (POI_TYPE_GAS_STATION, None),
                        "parking": (POI_TYPE_PARKING, PARKING_LIMITATIONS_DICT),
                        "hospital": (POI_TYPE_HOSPITAL, None),
-                       "police": (POI_TYPE_POLICE, None)}
+                       "police": (POI_TYPE_POLICE, None),
+                       "veterinary":(POI_TYPE_VETERIANERY, None)}
     
     SHOP_POI_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
     
@@ -142,7 +144,18 @@ class Constants():
     
     ADMIN_LEVEL_SET=[2, 4, 6, 8]
     
-    REF_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY, STREET_TYPE_TRUNK, STREET_TYPE_MOTORWAY])
+    REF_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY, 
+                           STREET_TYPE_TRUNK, 
+                           STREET_TYPE_MOTORWAY, 
+                           STREET_TYPE_SECONDARY,
+                           STREET_TYPE_TERTIARY])
+
+    NAME_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY, 
+                           STREET_TYPE_TRUNK, 
+                           STREET_TYPE_MOTORWAY, 
+                           STREET_TYPE_SECONDARY,
+                           STREET_TYPE_TERTIARY,
+                           STREET_TYPE_RESIDENTIAL])
 
             
 class OSMParserData():

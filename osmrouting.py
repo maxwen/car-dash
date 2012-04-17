@@ -272,7 +272,6 @@ class OSMRouting():
     def __init__(self, osmParserData):
         self.osmParserData=osmParserData
         self.osmutils=OSMUtils()
-        self.currentPossibleEdgeList=list()
         self.expectedNextEdgeId=None
         self.expectedNextEdge=None
         self.expectedHeading=None
@@ -295,11 +294,14 @@ class OSMRouting():
         self.longestPossibleEdge=None
         
     def getCurrentSearchEdgeList(self):
-        return self.currentPossibleEdgeList
+        return self.possibleEdges
     
     def getExpectedNextEdge(self):
-        return self.expectedNextEdgeId
-    
+        return self.expectedNextEdge
+
+    def getCurrentEdge(self):
+        return self.currentEdgeData
+        
     def calcApproachingRef(self, lat, lon, startRef, endRef, coords, track, useLastValue):
         # find the ref we are aproaching based on track
         # since we ony check when coming to a crossing 
@@ -401,8 +403,6 @@ class OSMRouting():
 #                if "access" in tags:
 #                    continue
                 
-                self.currentPossibleEdgeList.append(edgeId)
-
                 headingCoords=coords
                 if crossingRef==endRef:
                     headingCoords=list()
@@ -550,7 +550,6 @@ class OSMRouting():
             self.lastApproachingRef=None
             
         self.approachingRef=None
-        self.currentPossibleEdgeList.clear()
         self.expectedNextEdgeId=None
         self.expectedNextEdge=None
         self.possibleEdges=None
@@ -671,7 +670,6 @@ class OSMRouting():
         # check if approaching ref is valid
         if self.approachingRef!=None:
             self.debugPrint(lat, lon, "calc next crossing edges at %d"%self.approachingRef)
-            self.currentPossibleEdgeList.clear()
             self.possibleEdges, self.edgeHeadings=self.calcNextPossibleEdgesOnCrossing(self.approachingRef, lat, lon)
         
     def calcNextEdgeValues(self, lat, lon, track, speed):
