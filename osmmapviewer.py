@@ -31,8 +31,7 @@ from mapnik.mapnikwrapper import MapnikWrapper
 from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
 from datetime import datetime
-
-import Polygon
+from Polygon import Polygon
 
 TILESIZE=256
 minWidth=640
@@ -200,8 +199,7 @@ class OSMMapnikTilesWorker(QThread):
         QThread.__init__(self, parent)
         self.exiting = False
         self.tileDir=tileDir
-        self.mapnikWrapper=MapnikWrapper(tileDir, mapFile)
-        self.mapnikWrapperCPP=MapnikWrapperCPP(mapFile)
+        self.mapFile=mapFile
 #        self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
         self.tileQueue=deque()
         self.updateMapTrigger=0;
@@ -226,6 +224,8 @@ class OSMMapnikTilesWorker(QThread):
         
     def setup(self):
         self.updateStatusLabel("OSM starting mapnik thread")
+        self.mapnikWrapper=MapnikWrapper(self.tileDir, self.mapFile)
+#        self.mapnikWrapperCPP=MapnikWrapperCPP(self.mapFile)
         self.exiting = False
         self.start()
             
@@ -570,7 +570,6 @@ class QtOSMWidget(QWidget):
         self.adminAreaPolygonCache=dict()
         self.lastAdminAreaIdSet=None      
         self.tagLabelWays=None
-#        self.visibleWayTags=set()
         
         self.style=OSMStyle()
         self.mapPoint=None
@@ -940,7 +939,7 @@ class QtOSMWidget(QWidget):
         self.painter.drawPolyline(polygon)
 
     # only use if transform is active
-    def displayRoutingEdges(self, edgeList, expectedNextEdge, approachingRef):
+    def displayRoutingEdges(self, edgeList, expectedNextEdge):
 #        print(edgeList)
         pen=QPen()
         pen.setWidth(3)
@@ -953,13 +952,12 @@ class QtOSMWidget(QWidget):
                     pen.setColor(Qt.red)
     
                 self.displayCoords(coords, pen)
-        
-        elif expectedNextEdge!=None:
-            _, _, _, _, _, _, _, _, _, _, coords=expectedNextEdge
-            pen.setColor(Qt.green)
-            self.displayCoords(coords, pen)
-        
+
+    # only use if transform is active
+    def displayApproachingRef(self, approachingRef):
         if approachingRef!=None:
+            pen=QPen()
+            pen.setWidth(3)
             lat, lon=osmParserData.getCoordsWithRef(approachingRef)
             y,x=self.getPixelPosForLocationDeg(lat, lon, True)
             if self.isPointVisible(x, y):
@@ -968,6 +966,9 @@ class QtOSMWidget(QWidget):
                 pen.setCapStyle(Qt.RoundCap)
                 self.painter.setPen(pen)
                 self.painter.drawPoint(x, y)
+                return True
+            
+        return False
 
     def getVisibleBBoxDeg(self):
         invertedTransform=self.transformHeading.inverted()
@@ -1096,14 +1097,14 @@ class QtOSMWidget(QWidget):
         point3=invertedTransform[0].map(point)
         
         cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
-        self.visibleCPolygon = Polygon.Polygon(cont)
+        self.visibleCPolygon = Polygon(cont)
         
     def calcPrefetchBox(self, bbox):
         self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
-        self.prefetchBBoxCPolygon=Polygon.Polygon([(self.prefetchBBox[0], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[1]), (self.prefetchBBox[0], self.prefetchBBox[1])])
+        self.prefetchBBoxCPolygon=Polygon([(self.prefetchBBox[0], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[1]), (self.prefetchBBox[0], self.prefetchBBox[1])])
         
     def isNewBBox(self, bbox):
-        bboxCPolyon=Polygon.Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])    
+        bboxCPolyon=Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])    
         if self.prefetchBBox==None:
             self.calcPrefetchBox(bbox)
             return True
@@ -1145,7 +1146,6 @@ class QtOSMWidget(QWidget):
 
 #        print(self.map_zoom)
 
-#        self.drawnRectlList=list()
         self.calcVisiblePolygon()
         bbox=self.getVisibleBBoxDeg()    
         newBBox=self.isNewBBox(bbox)
@@ -1225,10 +1225,13 @@ class QtOSMWidget(QWidget):
         if self.currentCoords!=None:
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
             self.displayCoords(self.currentCoords, self.style.getStylePen("edgePen"))
-                                
+                        
+        approachingRef=osmRouting.getApproachingRef()
+        nextCrossingVisible=self.displayApproachingRef(approachingRef)
+                
         if WITH_CROSSING_DEBUG==True:
-            if osmRouting.getCurrentSearchEdgeList()!=None or osmRouting.getExpectedNextEdge()!=None or osmRouting.getApproachingRef()!=None:
-                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge(), osmRouting.getApproachingRef())
+            if osmRouting.getCurrentSearchEdgeList()!=None:
+                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
     
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())
@@ -1266,29 +1269,45 @@ class QtOSMWidget(QWidget):
         
         if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
             if self.tagLabelWays!=None and len(self.tagLabelWays)!=0:
+                tagStart=time.time()
                 if self.drivingMode==False:
-                    tagStart=time.time()
                     self.displayWayTags(self.tagLabelWays)
-                    if WITH_TIMING_DEBUG==True:
-                        print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
                 else:
-                    edgeList=osmRouting.getCurrentSearchEdgeList()
-                    if edgeList!=None and len(edgeList)>1:
+                    if nextCrossingVisible==True:
+                        edgeList=osmRouting.getCurrentSearchEdgeList()
                         currentEdge=osmRouting.getCurrentEdge()
-                        newTagLabelWays=dict()
-                        for edge in edgeList:
-                            if currentEdge==edge:
-                                continue
-                            
-                            _, _, _, _, wayId, _, _, _, _, _, _=edge
-                                   
+                        if edgeList!=None and len(edgeList)>1 and currentEdge!=None:
+                            currentTagText=None
+                            _, _, _, _, wayId, _, _, _, _, _, _=currentEdge
                             if wayId in self.tagLabelWays.keys():
-                                newTagLabelWays[wayId]=self.tagLabelWays[wayId]
-                        
-                        tagStart=time.time()
-                        self.displayWayTags(newTagLabelWays)
-                        if WITH_TIMING_DEBUG==True:
-                            print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
+                                wayId, _, _, _, name, nameRef, _, _, _, _=self.tagLabelWays[wayId] 
+                                currentTagText=self.getWayTagText(name, nameRef)
+    
+                            newTagLabelWays=dict()
+                            for edge in edgeList:
+                                _, _, endRef, _, wayId, _, _, _, _, _, _=edge
+
+                                if edge==currentEdge:
+                                    continue
+                                
+                                reverseRefs=False
+                                if approachingRef==endRef:
+                                    reverseRefs=True
+                                    
+                                if wayId in self.tagLabelWays.keys():
+                                    wayId, _, _, _, name, nameRef, _, _, _, _=self.tagLabelWays[wayId] 
+    
+                                    tagText=self.getWayTagText(name, nameRef)
+                                    if tagText!=None:    
+                                        if currentTagText!=None and tagText==currentTagText:
+                                            continue
+                                        
+                                        newTagLabelWays[wayId]=(self.tagLabelWays[wayId], reverseRefs)
+                            
+                            self.displayWayTagsForRouting(newTagLabelWays)
+                
+                if WITH_TIMING_DEBUG==True:
+                    print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
 
 #        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
 #            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
@@ -1409,30 +1428,35 @@ class QtOSMWidget(QWidget):
 
             self.otherWays.append(way)
 
-    # TODO: should show at beginning but direction of way is 
-    # variable
-    def getVisibleNodeForTag(self, painterPath):
-        if self.drivingMode==True:
-            point=painterPath.pointAtPercent(0.1)
-            if self.visibleCPolygon.isInside(point.x(), point.y()):
-                return point
-            
-        point=painterPath.pointAtPercent(0.5)
+    def getVisibleNodeForWayTag(self, painterPath, tagLabelPoint):
+        point=painterPath.pointAtPercent(tagLabelPoint)
         if self.visibleCPolygon.isInside(point.x(), point.y()):
             return point
             
         return None
+    
+    def getWayTagText(self, name, nameRef):
+        onlyRefs=False
+        if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM and self.map_zoom<self.style.SHOW_NAME_LABEL_WAYS_START_ZOOM:
+            onlyRefs=True
+
+        tagText=None
+        if onlyRefs==True:
+            if nameRef!=None:
+                tagText=nameRef
+        else:
+            if name!=None:
+                tagText=name
+                if nameRef!=None:
+                    tagText=tagText+":"+nameRef
+        return tagText
     
     def displayWayTags(self, tagLabelWays):
         if tagLabelWays!=None and len(tagLabelWays)!=0:
             font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
             if font==None:
                 return
-            
-            onlyRefs=False
-            if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM and self.map_zoom<self.style.SHOW_NAME_LABEL_WAYS_START_ZOOM:
-                onlyRefs=True
-                    
+                                
             numVisibleTags=0
             numHiddenTags=0
             
@@ -1441,51 +1465,112 @@ class QtOSMWidget(QWidget):
             pen=self.style.getStylePen("placePen")
             
             painterPathDict=dict()
-            visibleTags=set()
+            visibleWayTagStrings=set()
             for way in tagLabelWays.values():
                 wayId, _, _, _, name, nameRef, _, _, _, _=way 
                 
                 if wayId in self.wayPolygonCache.keys():
                     _, painterPath=self.wayPolygonCache[wayId]
                     
-                    tagText=None
-                    if onlyRefs==True:
-                        if nameRef!=None:
-                            tagText=nameRef
-                    else:
-                        if name!=None:
-                            tagText=name
-                            if nameRef!=None:
-                                tagText=tagText+":"+nameRef
+                    tagText=self.getWayTagText(name, nameRef)
                     
                     if tagText!=None:
                         painterPath=painterPath.translated(-map_x, -map_y)
-                        point=self.getVisibleNodeForTag(painterPath)
+                        
+                        tagLabelPoint=0.5
+                            
+                        point=self.getVisibleNodeForWayTag(painterPath, tagLabelPoint)
 
                         if point!=None:
                             numVisibleTags=numVisibleTags+1
-#                            if wayId in self.visibleWayTags:
-#                                continue
 
-                            if not tagText in visibleTags:
-                                visibleTags.add(tagText)
-#                                self.visibleWayTags.add(wayId)
+                            if not tagText in visibleWayTagStrings:
+                                visibleWayTagStrings.add(tagText)
                                 point0=self.transformHeading.map(point)
-                                painterPath, painterPathText=self.createTextLabelAtPos(point0.x(), point0.y(), tagText, font)
+                                painterPath, painterPathText=self.createTextLabel(tagText, font)
+                                painterPath, painterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), painterPath, painterPathText)
                                 rect=painterPath.boundingRect()
                            
                                 painterPathDict[wayId]=(painterPath, painterPathText, point0, rect)
                         else:
                             numHiddenTags=numHiddenTags+1
-#                            if wayId in self.visibleWayTags:
-#                                self.visibleWayTags.remove(wayId)
-                                                       
+
+
             for wayId, (painterPath, painterPathText, point, rect) in painterPathDict.items():
                 self.displayTextLabel(painterPath, painterPathText, brush, pen)
-#                self.drawnRectlList.append(rect)
                     
             print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
+
+    # find position of tag
+    # should be as near as possible to the crossing but 
+    # should not overlap with others
+    def calcWayTagPlacement(self, wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList):
+        if reverseRefs==False:
+            for tagLabelPoint in range(1, 9, 1):
+                point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
+                if self.visibleCPolygon.isInside(point.x(), point.y()): 
+                    point0=self.transformHeading.map(point)
+                    newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
+                    rect=newTagPainterPath.boundingRect()
+                    placeFound=True
+                    for visibleRect in rectList:
+                        if visibleRect.intersects(rect):
+                            placeFound=False
+                        
+                    if placeFound==True:
+                        rectList.append(rect)
+                        return newTagPainterPath, newTagPainterPathText
+        else:
+            for tagLabelPoint in range(9, 1, -1):
+                point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
+                if self.visibleCPolygon.isInside(point.x(), point.y()):
+                    point0=self.transformHeading.map(point)
+                    newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
+                    rect=newTagPainterPath.boundingRect()
+                    placeFound=True
+                    for visibleRect in rectList:
+                        if visibleRect.intersects(rect):
+                            placeFound=False
+                        
+                    if placeFound==True:
+                        rectList.append(rect)
+                        return newTagPainterPath, newTagPainterPathText
+
             
+        return None, None
+
+    def displayWayTagsForRouting(self, tagLabelWays):
+        if tagLabelWays!=None and len(tagLabelWays)!=0:
+            font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
+            if font==None:
+                return
+                                            
+            map_x, map_y=self.getMapZeroPos()
+            brush=self.style.getStyleBrush("placeTag")
+            pen=self.style.getStylePen("placePen")
+            
+            painterPathDict=dict()
+            rectList=list()
+            for way, reverseRefs in tagLabelWays.values():
+                wayId, _, _, _, name, nameRef, _, _, _, _=way 
+                
+                if wayId in self.wayPolygonCache.keys():
+                    _, wayPainterPath=self.wayPolygonCache[wayId]
+                    
+                    tagText=self.getWayTagText(name, nameRef)
+                    
+                    if tagText!=None:
+                        wayPainterPath=wayPainterPath.translated(-map_x, -map_y)
+                        tagPainterPath, tagPainterPathText=self.createTextLabel(tagText, font)
+            
+                        newTagPainterPath, newTagPainterPathText=self.calcWayTagPlacement(wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList)
+
+                        if newTagPainterPath!=None:
+                            painterPathDict[wayId]=(newTagPainterPath, newTagPainterPathText)
+
+            for wayId, (tagPainterPath, tagPainterPathText) in painterPathDict.items():
+                self.displayTextLabel(tagPainterPath, tagPainterPathText, brush, pen)
+                                
     def displayWays(self):
         showCasing=self.map_zoom in range(OSMStyle.SHOW_CASING_START_ZOOM, 19)
 #        showCasing=True
@@ -1576,7 +1661,11 @@ class QtOSMWidget(QWidget):
             return (baseWidth, baseHeight)
 
         return (int(baseWidth*0.8), int(baseHeight*0.8))
-            
+    
+    # sort by y value        
+    def nodeSortByYCoordinate(self, item):
+        return item[1]
+    
     def displayVisibleNodes(self, bbox):        
         nodeTypeList=self.getDisplayPOITypeListForZoom()
         if nodeTypeList==None or len(nodeTypeList)==0:
@@ -1593,16 +1682,27 @@ class QtOSMWidget(QWidget):
         numVisibleNodes=0
         numHiddenNodes=0
         
+        nodeList=list()
         for node in resultList:
             _, lat, lon, tags, nodeType=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
+                nodeList.append((x, y, pixmapWidth, pixmapHeight, tags, nodeType))
                 numVisibleNodes=numVisibleNodes+1
-                self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
             else:
                 numHiddenNodes=numHiddenNodes+1
-                
+        
+        # sort by y voordinate
+        # farthest nodes (smaller y coordinate) are drawn first
+        if self.show3D==True:
+            nodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
+
+        self.displayNodes(nodeList)
         print("visible nodes: %d hidden nodes:%d"%(numVisibleNodes, numHiddenNodes))
+          
+    def displayNodes(self, nodeList):
+        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType in nodeList:
+            self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
             
     def displayNode(self, x, y, pixmapWidth, pixmapHeight, tags, nodeType):
         if nodeType==Constants.POI_TYPE_PLACE:
@@ -1611,14 +1711,8 @@ class QtOSMWidget(QWidget):
                 
                 font=self.style.getFontForPlaceTagDisplay(tags, self.map_zoom, self.isVirtualZoom)
                 if font!=None:
-                    painterPath, painterPathText=self.createTextLabelAtPos(x, y, text, font)
-#                    rect=painterPath.boundingRect().adjusted(-20, -20, 20, 20)
-#                    pen=QPen(Qt.black)
-#                    pen.setWidth(2)
-#                    self.painter.setPen(pen)
-#                    self.painter.setBrush(Qt.NoBrush)
-#                    self.painter.drawRect(rect)
-#                    self.drawnRectlList.append(rect)
+                    painterPath, painterPathText=self.createTextLabel(text, font)
+                    painterPath, painterPathText=self.moveTextLabelToPos(x, y, painterPath, painterPathText)
                     self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
                     return
                 
@@ -1631,14 +1725,8 @@ class QtOSMWidget(QWidget):
                                     
                 font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
                 if font!=None:
-                    painterPath, painterPathText=self.createTextLabelAtPos(x, y, text, font)
-#                    rect=painterPath.boundingRect().adjusted(-20, -20, 20, 20)
-#                    pen=QPen(Qt.black)
-#                    pen.setWidth(2)
-#                    self.painter.setPen(pen)
-#                    self.painter.setBrush(Qt.NoBrush)
-#                    self.painter.drawRect(rect)
-#                    self.drawnRectlList.append(rect)
+                    painterPath, painterPathText=self.createTextLabel(text, font)
+                    painterPath, painterPathText=self.moveTextLabelToPos(x, y, painterPath, painterPathText)
                     self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
                     return
 
@@ -1648,14 +1736,21 @@ class QtOSMWidget(QWidget):
             yPos=int(y-pixmapHeight)
             self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.getPixmapForNodeType(nodeType))
 
-    def createTextLabelAtPos(self, x, y, text, font):
+    def moveTextLabelToPos(self, x, y, painterPath, painterPathText):
+        xPosRect=x-painterPath.boundingRect().width()/2
+        yPosRect=y-painterPath.boundingRect().height()
+
+        painterPath=painterPath.translated(xPosRect, yPosRect)
+        painterPathText=painterPathText.translated(xPosRect, yPosRect)
+        
+        return painterPath, painterPathText
+
+    def createTextLabel(self, text, font):
         fm = QFontMetrics(font)
         width=fm.width(text)+10
         height=fm.height()
         arrowHeight=10
         arrowWidth=5
-        xPosRect=x-width/2
-        yPosRect=y-height-arrowHeight
         
         painterPath=QPainterPath()
         
@@ -1671,12 +1766,9 @@ class QtOSMWidget(QWidget):
         painterPathText=QPainterPath()
         textPos=QPointF(5, height-fm.descent())
         painterPathText.addText(textPos, font, text)
-
-        painterPath=painterPath.translated(xPosRect, yPosRect)
-        painterPathText=painterPathText.translated(xPosRect, yPosRect)
         
         return painterPath, painterPathText
-
+    
     # need to do it in two steps
     # not possible to get filled text else - only outlined
     def displayTextLabel(self, painterPath, painterPathText, brush, pen):
@@ -2139,7 +2231,7 @@ class QtOSMWidget(QWidget):
                 i=i+1
                 
             if len(cont)>2:
-                cPolygon=Polygon.Polygon(cont)
+                cPolygon=Polygon(cont)
             self.wayPolygonCache[wayId]=(cPolygon, painterPath)
         
         else:
@@ -2147,7 +2239,7 @@ class QtOSMWidget(QWidget):
                     
         if cPolygon!=None:
             # must create a copy cause shift changes alues intern
-            p=Polygon.Polygon(cPolygon)
+            p=Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
@@ -2198,7 +2290,7 @@ class QtOSMWidget(QWidget):
                 painterPath.closeSubpath()
                 
             if len(cont)>2:
-                cPolygon=Polygon.Polygon(cont)
+                cPolygon=Polygon(cont)
             cacheDict[osmId]=(cPolygon, painterPath)
         
         else:
@@ -2206,7 +2298,7 @@ class QtOSMWidget(QWidget):
         
         if cPolygon!=None:
             # must create a copy cause shift changes alues intern
-            p=Polygon.Polygon(cPolygon)
+            p=Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
                 self.numHiddenPolygons=self.numHiddenPolygons+1
@@ -2942,6 +3034,8 @@ class QtOSMWidget(QWidget):
 
     def getDefaultPositionTag(self, name, nameRef):
         if nameRef!=None and name!=None:
+            if nameRef==name:
+                return "%s"%(name)
             return "%s %s"%(name, nameRef)
         elif nameRef==None and name!=None:
             return "%s"%(name)
@@ -3097,7 +3191,8 @@ class QtOSMWidget(QWidget):
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                wayId, tags, _, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+                wayId, tags, refs, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+                print(osmParserData.getCenterOfPolygon(refs))
 #                print(wayId)
 #                print(tags)
 #                refRings=osmParserData.mergeEqualWayEntries(wayId)
@@ -4332,37 +4427,3 @@ def main(argv):
 if __name__ == "__main__":
 #    cProfile.run('main(sys.argv)')
     main(sys.argv)
-#    cont=[(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)]
-#    visibleCPolygon = Polygon.Polygon(cont)
-#    t = Polygon.Polygon(((1.0, 1.0), (3.0, 1.0), (2.0, 3.0)))
-#    start=time.time()
-#    for i in range(0, 100000):
-#        visibleCPolygon.shift(0, 0)
-#        visibleCPolygon.overlaps(t)
-#    print("%f"%(time.time()-start))
-    
-#    polygon1=QPolygonF()
-#    point1=QPointF(0.0, 0.0)
-#    point2=QPointF(10.0, 0.0)
-#    point3=QPointF(10.0, 5.0)
-#    point4=QPointF(0.0, 5.0)
-#    polygon1.append(point1)
-#    polygon1.append(point2)
-#    polygon1.append(point3)
-#    polygon1.append(point4)
-#    
-#    polygon2=QPolygonF()
-#    point1=QPointF(1.0, 1.0)
-#    point2=QPointF(3.0, 1.0)
-#    point3=QPointF(2.0, 3.0)
-#    polygon2.append(point1)
-#    polygon2.append(point2)
-#    polygon2.append(point3)
-#    
-#    start=time.time()
-#    for i in range(0, 100000):
-#        polygon1.translated(0, 0)
-#        polygon1.intersected(polygon2)
-#    print("%f"%(time.time()-start))
-    
-#    print(visibleCPolygon & t)

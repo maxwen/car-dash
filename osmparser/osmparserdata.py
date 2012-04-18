@@ -23,7 +23,7 @@ from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 from trsp.trspwrapper import TrspWrapper
 from osmparser.osmpoly import OSMPoly
-import Polygon
+from Polygon import Polygon
 
 HEADING_CALC_LENGTH=20.0
 
@@ -1478,8 +1478,12 @@ class OSMParserData():
         return layer
     
     def getCenterOfPolygon(self, refs):
-        coords, _=self.createRefsCoords(refs)
-        
+        coords, _=self.createPolygonRefsCoords(refs)
+        if len(coords)>2:
+            cPolygon=Polygon(coords)
+            lon, lat=cPolygon.center()
+            return lat, lon
+    
         # lat = Sum(lat_1..lat_n)/n , lon=Sum(lon_1, lon_n)/n 
         n=len(coords)
         sumLat=0
@@ -3497,6 +3501,7 @@ class OSMParserData():
 #                else:
 #                    print("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
 
+    # lat, lon
     def createRefsCoords(self, refList):
         coords=list()
         newRefList=list()
@@ -3504,6 +3509,22 @@ class OSMParserData():
             storedRef, lat, lon=self.getCoordsEntry(ref)
             if storedRef!=None:
                 coords.append((lat, lon))
+                newRefList.append(ref)
+            else:
+                # it is possible that we dont have these coords
+                # TODO: skip complete way if coords are missing?
+                continue
+            
+        return coords, newRefList
+
+    # lon, lat
+    def createPolygonRefsCoords(self, refList):
+        coords=list()
+        newRefList=list()
+        for ref in refList:
+            storedRef, lat, lon=self.getCoordsEntry(ref)
+            if storedRef!=None:
+                coords.append((lon, lat))
                 newRefList.append(ref)
             else:
                 # it is possible that we dont have these coords
@@ -4182,8 +4203,8 @@ class OSMParserData():
     
         osmData=dict()
         osmData["country"]="Germany"
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
         osmData["countryCode"]="DE"
@@ -4356,7 +4377,7 @@ class OSMParserData():
             
             coordsList=self.createCoordsFromMultiPolygon(polyStr)
             for coords in coordsList:
-                cPolygon=Polygon.Polygon(coords)
+                cPolygon=Polygon(coords)
                 polyList.append((cPolygon, tags))
         
         for x in allentries:
@@ -4643,7 +4664,7 @@ class OSMParserData():
     def getWaysInBboxWithGeom(self, bbox, margin, streetTypeList):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
-        # streetTypeList [] means all
+        # streetTypeId an layer sorting
         if streetTypeList==None or len(streetTypeList)==0:    
             self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
@@ -4679,10 +4700,11 @@ class OSMParserData():
             filterString=filterString[:-1]
             filterString=filterString+')'
             
+        # TODO: no layer sorting
         if filterString==None:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s ORDER BY layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
         
         allentries=self.cursorArea.fetchall()
         
@@ -4691,6 +4713,7 @@ class OSMParserData():
             resultList.append((osmId, areaType, tags, layer, polyStr, 0))
             areaIdSet.add(int(x[0]))
                 
+        # use layer sorting
         if filterString==None:
             self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:

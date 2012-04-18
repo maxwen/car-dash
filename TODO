@@ -53,7 +53,9 @@ DONE
  DONE
  
  TODO: evalute layer tag for correct drawing
- -sort by layer before drawing
+ -sort ways by layer before drawing
+ -sort area lines by layer (e.g. railways)
+ -> for area polygons layer is IMHO not useful -> see below
 DONE
  
  TODO: make size of place tags dependent on 
@@ -152,3 +154,7 @@ TODO: support barriers that have more then two edges
  -ensure the id the polygon is saved does not clash with other areas
  
  TODO: try QGraphicsView
+ 
+ TODO: correct drawing of overlapping areaes
+ -no sense for layer tag
+ -but e.g. residential or natural should be drawn before the rest
