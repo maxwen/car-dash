@@ -274,7 +274,19 @@ class OSMStyle():
 
         return 0.4
     
-    def getStreetWidth(self, streetTypeId, zoom):
+    def getStreetWidth(self, streetTypeId, zoom, tags):
+#        laneWidth=self.meterToPixel(5, zoom)
+#        width=laneWidth*2
+#        
+#        if "lanes" in tags:
+#            try:
+#                numberLanes=int(tags["lanes"])
+#                print(numberLanes)
+#                if numberLanes>2:
+#                    width=laneWidth*numberLanes
+#                
+#            except TypeError:
+#                None
         width=14
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
             width=width*1.6
@@ -333,6 +345,13 @@ class OSMStyle():
 
     def getAerowayPenWidthForZoom(self, zoom, tags):
         aerowayType=tags["aeroway"]
+        if "width" in tags:
+            try:
+                value=int(tags["width"])
+                return self.meterToPixel(value, zoom)
+            except TypeError:
+                None
+                
         if aerowayType=="runway":
             if zoom==18:
                 return 25
@@ -360,6 +379,13 @@ class OSMStyle():
     
     def getWaterwayPenWidthForZoom(self, zoom, tags):
         waterwayType=tags["waterway"]
+        if "width" in tags:
+            try:
+                value=int(tags["width"])
+                return self.meterToPixel(value, zoom)
+            except TypeError:
+                None
+        
         if waterwayType=="river":
             if zoom==18:
                 return 12
@@ -392,14 +418,14 @@ class OSMStyle():
     def getRoadPenKey(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet):
         return "%s-%s-%s-%s-%s-%s-%s-%s"%(str(streetTypeId), str(zoom), str(casing), str(oneway), str(tunnel), str(bridge), str(access), str(livingStreet))
     
-    def getRoadPen(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet):
+    def getRoadPen(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet, tags):
         key=self.getRoadPenKey(streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet)
         
         if key in self.penDict:
             return self.penDict[key]
                 
         color=self.getStyleColor(streetTypeId)
-        width=self.getStreetWidth(streetTypeId, zoom)
+        width=self.getStreetWidth(streetTypeId, zoom, tags)
         brush=Qt.NoBrush
         pen=QPen()
         pen.setStyle(Qt.SolidLine)
@@ -602,6 +628,32 @@ class OSMStyle():
     SHOW_REF_LABEL_WAYS_START_ZOOM=15
     SHOW_NAME_LABEL_WAYS_START_ZOOM=18
         
+    # TODO: values for lat 45 dec north
+    # http://wiki.openstreetmap.org/wiki/FAQ#What_is_the_map_scale_for_a_particular_zoom_level_of_the_map.3F
+    # * cos(lat)
+    def meterToPixel(self, value, zoom):
+        mpp=None
+        if zoom==18: 
+            mpp=0.844525     
+        elif zoom==17:
+            mpp=1.689051
+        elif zoom==16:
+            mpp=3.378103
+        elif zoom==15:
+            mpp=6.756207
+        elif zoom==14:
+            mpp=13.512415   
+        elif zoom==13:
+            mpp=27.024829    
+        
+        pixel=1
+        if mpp!=None:
+            pixel=value/mpp
+            if pixel < 1:
+                pixel=1
+            
+        return int(pixel)
+    
 #    def getLaneWith(self, zoom):
 #        print(zoom)
 #        S=6371000*math.cos(0)/math.pow(2, zoom+8)

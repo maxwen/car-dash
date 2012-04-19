@@ -851,12 +851,8 @@ class QtOSMWidget(QWidget):
     def displayMapPosition(self, mapPoint):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
         
-        y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])
-        
-        xPos=int(x-pixmapWidth/2)
-        yPos=int(y-pixmapHeight)
-        
-        self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.style.getStylePixmap("mapPointPixmap"))
+        y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])        
+        self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("mapPointPixmap")))
          
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
@@ -1157,6 +1153,8 @@ class QtOSMWidget(QWidget):
         self.numHiddenPolygons=0
         self.numVisiblePolygons=0
         
+        self.orderedNodeList=list()
+        
         fetchStart=time.time()
         drawStart=time.time()
         
@@ -1248,8 +1246,6 @@ class QtOSMWidget(QWidget):
                     
         self.painter.resetTransform()
         
-        if self.mapPoint!=None:
-            self.displayMapPosition(self.mapPoint)
                 
         if self.show3D==True and self.showSky==True:
             skyRect=QRectF(0, 0, self.width(), SKY_WIDTH)
@@ -1262,11 +1258,21 @@ class QtOSMWidget(QWidget):
         
         if self.withShowPOI==True:
             # not prefetch box!
-            nodeStart=time.time()
             self.displayVisibleNodes(bbox)
-            if WITH_TIMING_DEBUG==True:
-                print("paintEvent displayNodes:%f"%(time.time()-nodeStart))
         
+        if self.mapPoint!=None:
+            self.displayMapPosition(self.mapPoint)
+
+        self.displayRoutingPoints()
+
+        # sort by y voordinate
+        # farthest nodes (smaller y coordinate) are drawn first
+        if self.show3D==True:
+            self.orderedNodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
+
+        print(self.orderedNodeList)
+        self.displayNodes()
+
         if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
             if self.tagLabelWays!=None and len(self.tagLabelWays)!=0:
                 tagStart=time.time()
@@ -1312,7 +1318,6 @@ class QtOSMWidget(QWidget):
 #        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
 #            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
-        self.displayRoutingPoints()
         self.displayGPSPosition()
 
         self.showEnforcementInfo()
@@ -1370,12 +1375,7 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_TERTIARY_LINK]
         
         return None
-    
-    def getStreetProperties(self, streetTypeId):
-        color=self.style.getStyleColor(streetTypeId)
-        width=self.style.getStreetWidth(streetTypeId, self.map_zoom)
-        return width, color
-                   
+                       
     def clearPolygonCache(self):
         self.prefetchBBox=None
         self.wayPolygonCache=dict()
@@ -1581,28 +1581,28 @@ class QtOSMWidget(QWidget):
             for way in self.otherWays:   
                 _, tags, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
-                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False, tags)
                 self.displayWayWithCache(way, pen)
 
         # fill
         for way in self.otherWays:   
             _, tags, _, streetInfo, _, _, _, _, _,  _=way
             streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
-            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
+            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False, tags)
             self.displayWayWithCache(way, pen)
             
             if showStreetOverlays==True: 
                 if osmParserData.isAccessRestricted(tags):
-                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False)
+                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False, tags)
                     self.displayWayWithCache(way, pen)
             
                 # TODO: mark oneway direction
                 elif (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
-                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False)
+                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False, tags)
                     self.displayWayWithCache(way, pen)
                 
                 elif streetTypeId==Constants.STREET_TYPE_LIVING_STREET:
-                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, True)
+                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, True, tags)
                     self.displayWayWithCache(way, pen)
  
     def displayBridgeWays(self):                    
@@ -1615,15 +1615,15 @@ class QtOSMWidget(QWidget):
                 _, tags, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 if showBridges==True:
-                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False)
+                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False, tags)
                     self.displayWayWithCache(way, pen)
     
-                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False)
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, False, tags)
                 self.displayWayWithCache(way, pen)
                 
                 if showStreetOverlays==True: 
                     if osmParserData.isAccessRestricted(tags):
-                        pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False)
+                        pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False, tags)
                         self.displayWayWithCache(way, pen)
             
     def displayTunnelWays(self):                    
@@ -1631,15 +1631,15 @@ class QtOSMWidget(QWidget):
         showCasing=True
         if showCasing==True:
             for way in self.tunnelWays:   
-                _, _, _, streetInfo, _, _, _, _, _,  _=way
+                _, tags, _, streetInfo, _, _, _, _, _,  _=way
                 streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
-                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False)
+                pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False, tags)
                 self.displayWayWithCache(way, pen)
         
         for way in self.tunnelWays:   
-            _, _, _, streetInfo, _, _, _, _, _,  _=way
+            _, tags, _, streetInfo, _, _, _, _, _,  _=way
             streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
-            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False)
+            pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False, tags)
             self.displayWayWithCache(way, pen)
 
     def getDisplayPOITypeListForZoom(self):
@@ -1682,27 +1682,28 @@ class QtOSMWidget(QWidget):
         numVisibleNodes=0
         numHiddenNodes=0
         
-        nodeList=list()
         for node in resultList:
             _, lat, lon, tags, nodeType=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
-                nodeList.append((x, y, pixmapWidth, pixmapHeight, tags, nodeType))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, tags, nodeType, None))
                 numVisibleNodes=numVisibleNodes+1
             else:
                 numHiddenNodes=numHiddenNodes+1
         
-        # sort by y voordinate
-        # farthest nodes (smaller y coordinate) are drawn first
-        if self.show3D==True:
-            nodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
-
-        self.displayNodes(nodeList)
         print("visible nodes: %d hidden nodes:%d"%(numVisibleNodes, numHiddenNodes))
           
-    def displayNodes(self, nodeList):
-        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType in nodeList:
-            self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
+    def displayNodes(self):
+        start=time.time()
+        
+        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType, pixmap in self.orderedNodeList:
+            if pixmap==None:
+                self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
+            else:
+                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, pixmap)
+
+        if WITH_TIMING_DEBUG==True:
+            print("displayNodes: %f"%(time.time()-start))
             
     def displayNode(self, x, y, pixmapWidth, pixmapHeight, tags, nodeType):
         if nodeType==Constants.POI_TYPE_PLACE:
@@ -2107,17 +2108,17 @@ class QtOSMWidget(QWidget):
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("startPixmap"))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("startPixmap")))
 
         if self.endPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("finishPixmap"))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("finishPixmap")))
             
         for point in self.wayPoints:
             (y, x)=self.getTransformedPixelPosForLocationDeg(point.lat, point.lon)
             if self.isPointVisibleTransformed(x, y):
-                self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, self.style.getStylePixmap("wayPixmap"))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("wayPixmap")))
             
     
     def getPixelPosForLocationDeg(self, lat, lon, relativeToEdge):
