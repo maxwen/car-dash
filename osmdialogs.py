@@ -9,7 +9,7 @@ import re
 import os
 
 from PyQt4.QtCore import QVariant, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
@@ -24,8 +24,10 @@ class MyTabWidget(QTabWidget):
         self.setFont(font)
         
 class OSMAdressTableModel(QAbstractTableModel):
-    def __init__(self, parent):
+    def __init__(self, adminAreaDict, reverseAdminAreaDict, parent):
         QAbstractTableModel.__init__(self, parent)
+        self.adminAreaDict=adminAreaDict
+        self.reverseAdminAreaDict=reverseAdminAreaDict
         
     def rowCount(self, parent): 
         return len(self.streetList)
@@ -41,7 +43,8 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (_, _, _, city, _, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (_, _, _, cityId, _, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        city=self.adminAreaDict[cityId]
 
         if index.column()==0:
             return streetName
@@ -87,6 +90,9 @@ class OSMAdressTableModelCity(QAbstractTableModel):
     def columnCount(self, parent): 
         return 1
       
+    def parent(self, index):
+        return None
+    
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
@@ -95,10 +101,9 @@ class OSMAdressTableModelCity(QAbstractTableModel):
         
         if index.row() >= len(self.cityList):
             return ""
-        city, _=self.cityList[index.row()]
-
+        cityId, cityName=self.cityList[index.row()]
         if index.column()==0:
-            return city
+            return cityName
 #        elif index.column()==1:
 #            return postCode
 
@@ -127,14 +132,20 @@ class OSMAdressDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
-        self.countryList=sorted(self.osmParserData.getAdressCountryList())
+        self.adminAreaDict, self.reverseAdminAreaDict=osmParserData.getAdminAreaConversion()
+
+        self.countryDict=osmParserData.getAdminCountryList()
+        self.reverseCountryDict=dict()
+        for osmId, countryName in self.countryDict.items():
+            self.reverseCountryDict[countryName]=osmId
+            
         self.cityList=list()
         self.filteredCityList=list()
         self.filteredStreetList=list()
         self.streetList=list()
         
-        self.currentCountry=-1
-        self.currentCity=None
+        self.currentCountryId=None
+        self.currentCityId=None
         
         self.pointType=-1
         self.style=OSMStyle()
@@ -149,8 +160,8 @@ class OSMAdressDialog(QDialog):
         self.initUI()
          
     def updateAdressListForCity(self):
-        if self.currentCity!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.houseNumberSort)
+        if self.currentCityId!=None:
+            self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
@@ -158,18 +169,19 @@ class OSMAdressDialog(QDialog):
         self.filteredStreetList=self.streetList
 
     def updateAddressListForCountry(self):
-        if self.currentCountry!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountry), key=self.houseNumberSort)
+        if self.currentCountryId!=None:
+            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountryId), key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
         
         self.filteredStreetList=self.streetList
-
+    
     def updateCityListForCountry(self):
-        if self.currentCountry!=-1:
-            self.cityList=self.osmParserData.getAdressCityList(self.currentCountry)
-            self.cityList=sorted(self.cityList, key=self.citySort)
+        if self.currentCountryId!=None:
+            self.cityList=list()
+            self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
+            self.cityList.sort(key=self.citySort)
 
         else:
             self.cityList=list()
@@ -196,7 +208,7 @@ class OSMAdressDialog(QDialog):
         return 0
    
     def citySort(self, item):
-        return item[0]
+        return item[1]
     
     def getResult(self):
         return (self.selectedAddress, self.pointType)
@@ -207,14 +219,15 @@ class OSMAdressDialog(QDialog):
         top.setSpacing(2)
         
         self.countryCombo=QComboBox(self)
-        for country in self.countryList:
-            countryName=self.osmParserData.getCountryNameForId(country)
+        
+        countryList=sorted(self.reverseCountryDict.keys())
+        for countryName in countryList:
             self.countryCombo.addItem(countryName)
+            
         self.countryCombo.activated.connect(self._countryChanged)
         top.addWidget(self.countryCombo)
         
-        self.currentCountry=self.countryList[0]
-        self.updateCityListForCountry()
+        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
 
         hbox=QHBoxLayout()
         self.cityFilterEdit=QLineEdit(self)
@@ -246,7 +259,7 @@ class OSMAdressDialog(QDialog):
         self.streetView=QTableView(self)
         top.addWidget(self.streetView)
         
-        self.streetViewModel=OSMAdressTableModel(self)
+        self.streetViewModel=OSMAdressTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self)
         self.streetViewModel.update(self.filteredStreetList)
         self.streetView.setModel(self.streetViewModel)
         header=QHeaderView(Qt.Horizontal, self.streetView)
@@ -312,6 +325,8 @@ class OSMAdressDialog(QDialog):
         self.setLayout(top)
         self.setWindowTitle('Addresses')
         self.setGeometry(0, 0, 700, 500)
+        
+        self._countryChanged()
                 
     @pyqtSlot()
     def _ignoreCity(self):
@@ -335,12 +350,12 @@ class OSMAdressDialog(QDialog):
         self._clearCityTableSelection()
         self._clearStreetTableSelection()
 
-        country=self.countryCombo.currentText()
-        self.currentCountry=self.osmParserData.getCountryIdForName(country)
+        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
+        
         self.updateCityListForCountry()
         self.cityViewModel.update(self.cityList)
         
-        self.currentCity=None
+        self.currentCityId=None
         self.updateAdressListForCity()
         self._applyFilterStreet()
         self._applyFilterCity()
@@ -352,7 +367,7 @@ class OSMAdressDialog(QDialog):
         selmodel = self.cityView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
-            self.currentCity, postCode=self.filteredCityList[current.row()]
+            self.currentCityId, _=self.filteredCityList[current.row()]            
             self.updateAdressListForCity()
             self._applyFilterStreet()
         
@@ -428,7 +443,7 @@ class OSMAdressDialog(QDialog):
     @pyqtSlot()
     def _clearCityTableSelection(self):
         self.cityView.clearSelection()
-        self.currentCity=-1
+        self.currentCityId=None
         
     @pyqtSlot()
     def _applyFilterStreet(self):
@@ -477,10 +492,10 @@ class OSMAdressDialog(QDialog):
             self.filteredCityList=list()
             filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (city, postCode) in self.cityList:
-                if not fnmatch.fnmatch(city.upper(), filterValue.upper()) and not fnmatch.fnmatch(city.upper(), filterValueMod.upper()):
+            for (cityId, cityName) in self.cityList:
+                if not fnmatch.fnmatch(cityName.upper(), filterValue.upper()) and not fnmatch.fnmatch(cityName.upper(), filterValueMod.upper()):
                     continue
-                self.filteredCityList.append((city, postCode))
+                self.filteredCityList.append((cityId, cityName))
         else:
             self.filteredCityList=self.cityList
         

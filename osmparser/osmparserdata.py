@@ -348,20 +348,20 @@ class OSMParserData():
 #        self.closeTmpDB(False)
         self.closeCoordsDB(False)
       
-    def getCountryForPolyCountry(self, polyCountry):
-        for country, osmData in self.osmList.items():
-            if osmData["polyCountry"]==polyCountry:
-                return country
-        return None
+#    def getCountryForPolyCountry(self, polyCountry):
+#        for country, osmData in self.osmList.items():
+#            if osmData["polyCountry"]==polyCountry:
+#                return country
+#        return None
     
-    def getCountryNameForId(self, country):
-        return self.osmList[country]["country"]
+#    def getCountryNameForId(self, country):
+#        return self.osmList[country]["country"]
     
-    def getCountryIdForName(self, countryName):
-        for country, osmData in self.osmList.items():
-            if osmData["country"]==countryName:
-                return country
-        return -1   
+#    def getCountryIdForName(self, countryName):
+#        for country, osmData in self.osmList.items():
+#            if osmData["country"]==countryName:
+#                return country
+#        return -1   
 
     def createCoordsTable(self):
         self.cursorCoords.execute('CREATE TABLE coordsTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL)')
@@ -536,6 +536,7 @@ class OSMParserData():
 
         self.cursorArea.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags BLOB, adminLevel INTEGER, parent INTEGER)')
         self.cursorArea.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
+        self.cursorArea.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
         self.cursorArea.execute("SELECT AddGeometryColumn('adminAreaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
 
     def createRestrictionTable(self):
@@ -568,9 +569,9 @@ class OSMParserData():
             restrictionId, target, viaPath, toCost=self.restrictionFromDB(x)
             print("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
     
-    def getCountryOfPos(self, lat, lon):
-        polyCountry=self.countryNameOfPoint(lat, lon)
-        return self.getCountryForPolyCountry(polyCountry)
+#    def getCountryOfPos(self, lat, lon):
+#        polyCountry=self.countryNameOfPoint(lat, lon)
+#        return self.getCountryForPolyCountry(polyCountry)
 
     def addToRefTable(self, refid, lat, lon, layer):   
         # make complete point
@@ -2185,55 +2186,60 @@ class OSMParserData():
     def getAdressCountryList(self):
         return self.osmList.keys()
     
-    def getAdressCityList(self, country):
-        adminAreaDict, _=self.getAdminAreaConversion()
-        self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d'%(country))
+    def getAdressCityList(self, countryId):
+        self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d'%(countryId))
         allentries=self.cursorAdress.fetchall()
         cityList=list()
         for x in allentries:
             if x[0]!=None:
-                cityId=int(x[0])
-                if cityId in adminAreaDict.keys():
-                    cityList.append((adminAreaDict[cityId], x[1]))
+                cityList.append((int(x[0]), x[1]))
         return cityList
 
-    def getAdressListForCity(self, country, city):
+    def getAdressListForCity(self, countryId, cityId):
         streetList=list()
-        adminAreaDict, reverseAdminAreaDict=self.getAdminAreaConversion()
-        if city in reverseAdminAreaDict.keys():
-            cityId=reverseAdminAreaDict[city]
-            self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city=%d'%(country, cityId))
-            allentries=self.cursorAdress.fetchall()
-            for x in allentries:
-                (addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon)=self.addressFromDB(x)
-                if cityId in adminAreaDict:
-                    city=adminAreaDict[cityId]
-                    streetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city=%d'%(countryId, cityId))
+        allentries=self.cursorAdress.fetchall()
+        for x in allentries:
+            streetList.append(self.addressFromDB(x))
+
         return streetList
-                        
-    def getAdressListForCountry(self, country):
-        adminAreaDict, _=self.getAdminAreaConversion()
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d'%(country))
+
+    def getAdressListForCityRecursive(self, countryId, osmId):
+        streetList=list()
+        cityList=list()
+        self.getAdminChildsForIdRecursive(osmId, cityList)
+        
+        # add self
+        cityList.append((osmId, None))
+        filterString='('
+        for cityId, cityName in cityList:
+            filterString=filterString+str(cityId)+','
+        filterString=filterString[:-1]
+        filterString=filterString+')'
+        
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city IN %s'%(countryId, filterString))
+        allentries=self.cursorAdress.fetchall()
+        for x in allentries:
+            streetList.append(self.addressFromDB(x))
+
+        return streetList         
+                   
+    def getAdressListForCountry(self, countryId):
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d'%(countryId))
         allentries=self.cursorAdress.fetchall()
         streetList=list()
         for x in allentries:
-            (addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon)=self.addressFromDB(x)
-            if cityId in adminAreaDict:
-                city=adminAreaDict[cityId]
-                streetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+            streetList.append(self.addressFromDB(x))
+
         return streetList
     
     def getAdressListForStreetAndNumber(self, streetName, houseNumber):
-        adminAreaDict, _=self.getAdminAreaConversion()
         streetList=list()
         
         self.cursorAdress.execute('SELECT * FROM addressTable WHERE streetName="%s" AND houseNumber="%s"'%(streetName, houseNumber))
         allentries=self.cursorAdress.fetchall()
         for x in allentries:
-            (addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon)=self.addressFromDB(x)
-            if cityId in adminAreaDict:
-                city=adminAreaDict[cityId]
-                streetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+            streetList.append(self.addressFromDB(x))
             
         return streetList
         
@@ -3164,7 +3170,16 @@ class OSMParserData():
                 self.updateTargetOfEdge(edgeId, source1)
     
     def createBarrierRestrictions(self):
+        allRestricitionLength=len(self.barrierRestrictionList)
+        allRestrictionCount=0
+
+        prog = ProgressBar(0, allRestricitionLength, 77)
+
         for barrierRestrictionEntry in self.barrierRestrictionList:
+            prog.updateAmount(allRestrictionCount)
+            print(prog, end="\r")
+            allRestrictionCount=allRestrictionCount+1
+            
             wayId=barrierRestrictionEntry["wayId"]
             ref=barrierRestrictionEntry["ref"]
             
@@ -3214,11 +3229,20 @@ class OSMParserData():
                     self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                     self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
         
-#        print("used: %s"%(str(self.usedBarrierList)))
+        print("")
         
     def createWayRestrictionsDB(self):
+        allRestricitionLength=len(self.wayRestricitionList)
+        allRestrictionCount=0
+
+        prog = ProgressBar(0, allRestricitionLength, 77)
+
         toAddRules=list()
         for wayRestrictionEntry in self.wayRestricitionList:
+            prog.updateAmount(allRestrictionCount)
+            print(prog, end="\r")
+            allRestrictionCount=allRestrictionCount+1
+
             fromWayId=int(wayRestrictionEntry["from"])
             toWayId=int(wayRestrictionEntry["to"])
             restrictionType=wayRestrictionEntry["type"]
@@ -3265,6 +3289,8 @@ class OSMParserData():
             
         for toEdgeId, fromEdgeId in toAddRules:
             self.addToRestrictionTable(toEdgeId, str(fromEdgeId), 10000)
+        
+        print("")
             
     def getStreetTypeFactor(self, streetTypeId):
         # motorway
@@ -4079,7 +4105,6 @@ class OSMParserData():
 
             print("create way restrictions")
             self.createWayRestrictionsDB()              
-            print("end create way restrictions")
 
             print("remove orphaned edges")
             self.removeOrphanedEdges()
@@ -4091,30 +4116,24 @@ class OSMParserData():
             
             print("vacuum global DB")
             self.vacuumGlobalDB()
-            print("end vacuum global DB")
 
             print("vacuum edge DB")
             self.vacuumEdgeDB()
-            print("end vacuum edge DB")
             
             print("vacuum area DB")
             self.vacuumAreaDB()
-            print("end vacuum area DB")
             
         if createGlobalDB==True:
             print("create spatial index for global table")
             self.createSpatialIndexForGlobalTables()
-            print("end create spatial index for global table")
 
         if createAreaDB==True:
             print("create spatial index for area table")
             self.createSpatialIndexForAreaTable()
-            print("end create spatial index for area table")
 
         if createEdgeDB==True:
             print("create spatial index for edge table")
             self.createSpatialIndexForEdgeTable()
-            print("end create spatial index for edge table")
 
         if createAreaDB==True:
             self.resolveAdminAreas()
@@ -4210,50 +4229,42 @@ class OSMParserData():
         self.buSimple=OSMBoarderUtils(env.getPolyDataRootSimple())
         self.buSimple.initData()
             
-    def countryNameOfPoint(self, lat, lon):
-        country=self.bu.countryNameOfPoint(lat, lon)
-        if country==None:
-            # HACK if the point is exactly on the border:(
-            country=self.bu.countryNameOfPoint(lat+0.0001, lon+0.0001)
-        return country
+#    def countryNameOfPoint(self, lat, lon):
+#        country=self.bu.countryNameOfPoint(lat, lon)
+#        if country==None:
+#            # HACK if the point is exactly on the border:(
+#            country=self.bu.countryNameOfPoint(lat+0.0001, lon+0.0001)
+#        return country
     
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-        osmData["country"]="Austria"
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
         osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
-#        osmData["countryCode"]="AT"
         osmDataList[0]=osmData
         
         osmData=dict()
-        osmData["country"]="Switzerland"
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
         osmData["osmFile"]=None
         osmData["poly"]="switzerland.poly"
         osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-#        osmData["countryCode"]="CH"
         osmDataList[1]=osmData
     
         osmData=dict()
-        osmData["country"]="Germany"
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
         osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
-#        osmData["countryCode"]="DE"
         osmDataList[2]=osmData
         
         osmData=dict()
-        osmData["country"]="Liechtenstein"
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
         osmData["osmFile"]=None
         osmData["poly"]="liechtenstein.poly"
         osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
-#        osmData["countryCode"]="LI"
         osmDataList[3]=osmData
 
         return osmDataList
@@ -4320,6 +4331,8 @@ class OSMParserData():
     def resolveAddresses(self):
         print("resolve addresses from admin boundaries")
         adminLevelList=[4, 6, 8]
+        self.addressId=self.getLenOfAddressTable()
+        
         self.cursorAdress.execute('SELECT * FROM addressTable')
         allentries=self.cursorAdress.fetchall()
         
@@ -4343,6 +4356,7 @@ class OSMParserData():
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
         
+        countryCache=dict()
         for x in allentries:
             addressId, _, _, storedCity, _, streetName, _, lat, lon=self.addressFromDB(x)
             
@@ -4350,17 +4364,26 @@ class OSMParserData():
             print(prog, end="\r")
             allAddressCount=allAddressCount+1
             
-            if storedCity!=None:
-                continue
-            
-            country=self.getCountryOfPos(lat, lon)
-            if country==None:
-                continue
+#            if storedCity!=None:
+#                continue
             
             resolved=False
             for osmId, cPolygon in polyList:
-                if cPolygon.isInside(lat, lon):    
-                    self.updateAddressEntry(addressId, country, osmId)
+                if cPolygon.isInside(lat, lon): 
+                    country=None
+                    if not osmId in countryCache.keys():
+                        adminDict=dict() 
+                        self.getAdminListForId(osmId, adminDict)
+                        if 2 in adminDict.keys():
+                            country=adminDict[2]
+                            countryCache[osmId]=country
+                    else:
+                        country=countryCache[osmId]
+                        
+                    if country!=None:
+                        self.updateAddressEntry(addressId, country, osmId)
+#                    else:
+#                        print("unknown country for %d"%(osmId))
                     resolved=True
                     break
                     
@@ -4398,15 +4421,24 @@ class OSMParserData():
             refId, lat, lon=self.getCoordsEntry(refs[0])
 
             if refId!=None:
-                country=self.getCountryOfPos(lat, lon)
-                if country==None:
-                    continue
-                
                 resolved=False
                 for osmId, cPolygon in polyList:
                     if cPolygon.isInside(lat, lon):    
                         if not "%s-%d"%(streetName, osmId) in addressSet:
-                            self.addToAddressTable2(refId, country, osmId, streetName, None, lat, lon)
+                            country=None
+                            if not osmId in countryCache.keys():
+                                adminDict=dict() 
+                                self.getAdminListForId(osmId, adminDict)
+                                if 2 in adminDict.keys():
+                                    country=adminDict[2]
+                                    countryCache[osmId]=country
+                            else:
+                                country=countryCache[osmId]
+                            
+                            if country!=None:
+                                self.addToAddressTable2(refId, country, osmId, streetName, None, lat, lon)
+#                            else:
+#                                print("unknown country for %d"%(osmId))
                             addressSet.add("%s-%s"%(streetName, osmId))
                         
                         resolved=True
@@ -4443,6 +4475,7 @@ class OSMParserData():
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
         
+        countryCache=dict()
         for x in allentries:
             (poiId, _, lat, lon, _, _, _, _, city)=self.poiRefFromDB2(x)
                         
@@ -4450,16 +4483,26 @@ class OSMParserData():
             print(prog, end="\r")
             allPOIRefCount=allPOIRefCount+1
             
-            if city!=None:
-                continue
-            
-            country=self.getCountryOfPos(lat, lon)
-            if country==None:
-                continue
+#            if city!=None:
+#                continue
             
             for osmId, cPolygon in polyList:
-                if cPolygon.isInside(lat, lon):    
-                    self.updatePOIRefEntry(poiId, country, osmId)
+                if cPolygon.isInside(lat, lon):  
+                    country=None
+                    if not osmId in countryCache.keys():
+                        adminDict=dict() 
+                        self.getAdminListForId(osmId, adminDict)
+                        if 2 in adminDict.keys():
+                            country=adminDict[2]
+                            countryCache[osmId]=country
+                    else:
+                        country=countryCache[osmId]
+                    
+                    if country!=None:
+                        self.updatePOIRefEntry(poiId, country, osmId)
+#                    else:
+#                        print("unknown country for %d"%(osmId))
+  
                     break
                 
         print("")        
@@ -4493,33 +4536,57 @@ class OSMParserData():
             for osmId, cPolygon, tags in polyList[adminLevel]:
                 for osmId2, cPolygon2, tags2 in polyList[adminLevelList[i+1]]:
                     if cPolygon2.covers(cPolygon):
-#                        print("%s %d is contained in %s %d"%(tags["name"], osmId, tags2["name"], osmId2))
                         self.updateAdminAreaParent(osmId, osmId2)
             i=i+1
 
         print("") 
         
-#        adminList=list()
-#        self.resolveAdminListFor(86381, adminList)
-#        print(adminList)
-        
-    def resolveAdminListFor(self, osmId, adminList):
-        self.cursorArea.execute('SELECT osmId, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
+    def getAdminListForId(self, osmId, adminDict):
+        self.cursorArea.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
         if len(allentries)==1:
             x=allentries[0]
-            parent=x[1]
+            osmId=int(x[0])
+            adminLevel=int(x[1])
+            parent=x[2]
             if parent==None or parent==0:
+                adminDict[adminLevel]=osmId
                 return
             else:
                 parent=int(parent)
-                adminList.append(parent)
-                return self.resolveAdminListFor(parent, adminList)
+                adminDict[adminLevel]=osmId
+                return self.getAdminListForId(parent, adminDict)
  
-    def getAllAdminCountrys(self):
+    def getAdminChildsForId(self, osmId):
+        childList=list()
+        
+        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            childId=int(x[0])
+            if x[1]!=None:
+                tags=pickle.loads(x[1])
+                if "name" in tags:
+                    childList.append((childId, tags["name"]))
+                    
+        return childList
+
+    def getAdminChildsForIdRecursive(self, osmId, childList):        
+        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            childId=int(x[0])
+            if x[1]!=None:
+                tags=pickle.loads(x[1])
+                if "name" in tags:
+                    childList.append((childId, tags["name"]))
+                    self.getAdminChildsForIdRecursive(childId, childList)
+                    
+    
+    def getAdminCountryList(self):
         adminLevelList=[2]
         countryDict=dict()
-        adminList=self.getAllAdminAreas(adminLevelList, True)
+        adminList=self.getAllAdminAreas(adminLevelList, False)
             
         for area in adminList:
             osmId=area[0]
@@ -5256,7 +5323,6 @@ def main(argv):
 #    p.testAdminAreaTable()
 #    print(p.getAdminAreaConversion())
 #    p.getPOIEntriesWithAddress()
-    print(p.getAllAdminCountrys())
     p.closeAllDB()
 
 

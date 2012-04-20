@@ -192,7 +192,6 @@ class OSMRoutingPoint():
             return
 
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
-#        country=osmParserData.getCountryOfPos(self.lat, self.lon)
         wayId, _, refs, _, _, _, _, _=osmParserData.getWayEntryForId(wayId)
         if wayId==None:
             return

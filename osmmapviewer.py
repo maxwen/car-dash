@@ -2948,11 +2948,7 @@ class QtOSMWidget(QWidget):
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return 
-        
-#        country=osmParserData.getCountryOfPos(lat, lon)
-#        if country==None:
-#            return
-        
+                
         wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
         defaultPointTag=self.getDefaultPositionTag(name, nameRef)
         if defaultPointTag==None:
@@ -2970,10 +2966,6 @@ class QtOSMWidget(QWidget):
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return
-        
-#        country=osmParserData.getCountryOfPos(lat, lon)
-#        if country==None:
-#            return
 
         wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
         defaultPointTag=self.getDefaultPositionTag(name, nameRef)
