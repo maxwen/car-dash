@@ -182,7 +182,7 @@ class OSMRoutingPoint():
         self.edgeId=None
         self.name=name
         self.usedRefId=0
-        self.country=None                
+#        self.country=None                
         self.posOnEdge=0.0
     
     def resolveFromPos(self, osmParserData):
@@ -192,7 +192,7 @@ class OSMRoutingPoint():
             return
 
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
-        country=osmParserData.getCountryOfPos(self.lat, self.lon)
+#        country=osmParserData.getCountryOfPos(self.lat, self.lon)
         wayId, _, refs, _, _, _, _, _=osmParserData.getWayEntryForId(wayId)
         if wayId==None:
             return
@@ -207,7 +207,7 @@ class OSMRoutingPoint():
         self.source=source
         self.usedRefId=ref
         self.wayId=wayId
-        self.country=country
+#        self.country=country
         
         self.posOnEdge=osmParserData.getPosOnOnEdge(self.lat, self.lon, coords, length)
 
@@ -252,8 +252,8 @@ class OSMRoutingPoint():
     def getTarget(self):
         return self.target
     
-    def getCountry(self):
-        return self.country
+#    def getCountry(self):
+#        return self.country
     
     def changeType(self, newType):
         self.type=newType

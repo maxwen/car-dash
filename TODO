@@ -142,9 +142,7 @@ relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_
 relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
  
 TODO: support barriers that have more then two edges
- 
- TODO: add zoom setting for poi and area settings
- 
+  
  TODO:
  solve cases where build and node exists for same POI
  -actually OSM says alterantivly node or way
@@ -158,3 +156,7 @@ TODO: support barriers that have more then two edges
  TODO: correct drawing of overlapping areaes
  -no sense for layer tag
  -but e.g. residential or natural should be drawn before the rest
+ 
+ TODO: add POI based searching
+
+ TODO: use admin area hierarchy in search dialogs

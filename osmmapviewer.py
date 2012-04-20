@@ -1270,7 +1270,6 @@ class QtOSMWidget(QWidget):
         if self.show3D==True:
             self.orderedNodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
 
-        print(self.orderedNodeList)
         self.displayNodes()
 
         if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
@@ -2950,12 +2949,12 @@ class QtOSMWidget(QWidget):
         if edgeId==None:
             return 
         
-        country=osmParserData.getCountryOfPos(lat, lon)
-        if country==None:
-            return
+#        country=osmParserData.getCountryOfPos(lat, lon)
+#        if country==None:
+#            return
         
         wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-        defaultPointTag=self.getDefaultPositionTagWithCountry(name, nameRef, country)
+        defaultPointTag=self.getDefaultPositionTag(name, nameRef)
         if defaultPointTag==None:
             defaultPointTag=""
             
@@ -2972,12 +2971,12 @@ class QtOSMWidget(QWidget):
         if edgeId==None:
             return
         
-        country=osmParserData.getCountryOfPos(lat, lon)
-        if country==None:
-            return
+#        country=osmParserData.getCountryOfPos(lat, lon)
+#        if country==None:
+#            return
 
         wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-        defaultPointTag=self.getDefaultPositionTagWithCountry(name, nameRef, country)
+        defaultPointTag=self.getDefaultPositionTag(name, nameRef)
 
         if pointType==0:
             if defaultPointTag!=None:
@@ -3044,17 +3043,6 @@ class QtOSMWidget(QWidget):
             return "%s"%(nameRef)
         else:
             return "No name"
-        return None
-
-    def getDefaultPositionTagWithCountry(self, name, nameRef, country):
-        if nameRef!=None and name!=None:
-            return "%s %s - %s"%(name, nameRef, osmParserData.getCountryNameForId(country))
-        elif nameRef==None and name!=None:
-            return "%s - %s"%(name, osmParserData.getCountryNameForId(country))
-        elif nameRef!=None and name==None:
-            return "%s - %s"%(nameRef, osmParserData.getCountryNameForId(country))
-        else:
-            return "No name - %s"%(osmParserData.getCountryNameForId(country))
         return None
     
     def recalcRoute(self, lat, lon, edgeId):
@@ -4140,9 +4128,9 @@ class OSMWidget(QWidget):
             (_, refId, country, _, _, streetName, houseNumber, lat, lon)=address
             print(refId)
             if houseNumber!=None:
-                name=streetName+" "+houseNumber+" - "+osmParserData.getCountryNameForId(country)
+                name=streetName+" "+houseNumber
             else:
-                name=streetName+" - "+osmParserData.getCountryNameForId(country)
+                name=streetName
             if pointType==OSMRoutingPoint.TYPE_START:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 self.mapWidgetQt.setStartPoint(routingPoint) 

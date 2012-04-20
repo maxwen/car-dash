@@ -31,7 +31,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         return len(self.streetList)
     
     def columnCount(self, parent): 
-        return 4
+        return 3
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -41,7 +41,7 @@ class OSMAdressTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.streetList):
             return ""
-        (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
+        (_, _, _, city, _, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
 
         if index.column()==0:
             return streetName
@@ -53,10 +53,10 @@ class OSMAdressTableModel(QAbstractTableModel):
             if city!=None:
                 return city
             return ""
-        elif index.column()==3:
-            if postCode!=None:
-                return postCode
-            return ""
+#        elif index.column()==3:
+#            if postCode!=None:
+#                return postCode
+#            return ""
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -66,8 +66,8 @@ class OSMAdressTableModel(QAbstractTableModel):
                     return "Number"
                 elif col==2:
                     return "City"
-                elif col==3:
-                    return "Post Code"
+#                elif col==3:
+#                    return "Post Code"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -85,7 +85,7 @@ class OSMAdressTableModelCity(QAbstractTableModel):
         return len(self.cityList)
     
     def columnCount(self, parent): 
-        return 2
+        return 1
       
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -95,20 +95,20 @@ class OSMAdressTableModelCity(QAbstractTableModel):
         
         if index.row() >= len(self.cityList):
             return ""
-        city, postCode=self.cityList[index.row()]
+        city, _=self.cityList[index.row()]
 
         if index.column()==0:
             return city
-        elif index.column()==1:
-            return postCode
+#        elif index.column()==1:
+#            return postCode
 
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
                 if col==0:
                     return "City"
-                elif col==1:
-                    return "Post Code"
+#                elif col==1:
+#                    return "Post Code"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -144,12 +144,14 @@ class OSMAdressDialog(QDialog):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
 
         self.selectedAddress=None
+        self.lastFilterValue=None
+        self.lastFilteredStreetList=None
         self.initUI()
          
     def updateAdressListForCity(self):
         if self.currentCity!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.streetNameSort)
-            self.streetList=sorted(self.streetList, key=self.houseNumberSort)
+            self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountry, self.currentCity), key=self.houseNumberSort)
+            self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
         
@@ -157,8 +159,8 @@ class OSMAdressDialog(QDialog):
 
     def updateAddressListForCountry(self):
         if self.currentCountry!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountry), key=self.streetNameSort)
-            self.streetList=sorted(self.streetList, key=self.houseNumberSort)
+            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountry), key=self.houseNumberSort)
+            self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
         
@@ -167,6 +169,8 @@ class OSMAdressDialog(QDialog):
     def updateCityListForCountry(self):
         if self.currentCountry!=-1:
             self.cityList=self.osmParserData.getAdressCityList(self.currentCountry)
+            self.cityList=sorted(self.cityList, key=self.citySort)
+
         else:
             self.cityList=list()
         
@@ -256,7 +260,7 @@ class OSMAdressDialog(QDialog):
         
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
-        self.showPoinBtutton.setIcon(self.mapPointIcon)
+        self.showPointButton.setIcon(self.mapPointIcon)
         self.showPointButton.setEnabled(False)
         actionButtons.addWidget(self.showPointButton)
 
@@ -433,18 +437,36 @@ class OSMAdressDialog(QDialog):
         if len(filterValue)!=0:
             if filterValue[-1]!="*":
                 filterValue=filterValue+"*"
+            filterValueMod=None
+            if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
+                filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+
+            newFilterList=True
+            if self.lastFilterValue!=None and self.lastFilteredStreetList!=None:
+                if filterValue[:len(self.lastFilterValue)-1]==self.lastFilterValue:
+                    newFilterList=False
+                    
+            if newFilterList==True:
+                currentStreetList=self.streetList
+            else:
+                currentStreetList=self.lastFilteredStreetList
             self.filteredStreetList=list()
-            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
-            for (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon) in self.streetList:
-                if not fnmatch.fnmatch(streetName.upper(), filterValue.upper()) and not fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredStreetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
+            for (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon) in currentStreetList:
+                match=False
+                if fnmatch.fnmatch(streetName.upper(), filterValue.upper()):
+                    match=True
+                if match==False and filterValueMod!=None and fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
+                    match=True
+                
+                if match==True:
+                    self.filteredStreetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
-        
+                
         self.streetViewModel.update(self.filteredStreetList)
-    
+        self.lastFilterValue=filterValue
+        self.lastFilteredStreetList=self.filteredStreetList
+
     @pyqtSlot()
     def _applyFilterCity(self):
         self._clearCityTableSelection()
