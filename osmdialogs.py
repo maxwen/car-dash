@@ -8,7 +8,7 @@ import fnmatch
 import re
 import os
 
-from PyQt4.QtCore import QVariant, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
@@ -89,9 +89,6 @@ class OSMAdressTableModelCity(QAbstractTableModel):
     
     def columnCount(self, parent): 
         return 1
-      
-    def parent(self, index):
-        return None
     
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
@@ -119,10 +116,170 @@ class OSMAdressTableModelCity(QAbstractTableModel):
         return None
     
    
-    def update(self, cityList):
+    def update(self, cityList, cityModel):
         self.cityList=cityList
+        self.cityModel=cityModel
         self.reset()
         
+class OSMCityModel():
+    def __init__(self, osmParserData, countryId):
+        self.root=dict()
+        self.countryId=countryId
+        self.osmParserData=osmParserData
+        self.buildModel(self.countryId, self.root)
+    
+    def buildModel(self, currentCityId, data):
+        cityList=self.osmParserData.getAdminChildsForId(currentCityId)
+        for cityId, cityName in cityList:
+            childs=dict()
+            data[cityId]=(cityId, cityName, currentCityId, childs)
+            self.buildModel(cityId, childs)
+            
+    def getRootNodes(self):
+        return self.root.values()
+        
+    def getParent(self, currentCityId):
+        parentId, childs=self.getCityData(currentCityId, self.root)
+        if parentId!=None:
+            return parentId
+        return None
+    
+    def getChilds(self, currentCityId):
+        parentId, childs=self.getCityData(currentCityId, self.root)
+        if parentId!=None:
+            return list(childs.values())
+        return None
+    
+    def getCityData(self, currentCityId, data):
+        for (cityId, cityName, parentId, childs) in data.values():
+            if cityId==currentCityId:
+                return parentId, childs
+            
+            foundParent, foundChilds=self.getCityData(currentCityId, childs)
+            if foundParent!=None:
+                return foundParent, foundChilds
+    
+        return None, None
+    
+class OSMTreeItem(object):
+    def __init__(self, osmId, areaName, parentItem):
+        self.osmId=osmId
+        self.areaName=areaName
+        self.parentItem=parentItem
+        self.childItems=[]
+        
+    def appendChild(self, item):
+        self.childItems.append(item)
+
+    def child(self, row):
+        return self.childItems[row]
+
+    def childCount(self):
+        return len(self.childItems)
+
+    def columnCount(self):
+        return 1
+    
+    def data(self, column):
+        if column == 0:
+            return self.areaName
+        return None
+
+    def parent(self):
+        return self.parentItem
+    
+    def row(self):
+        if self.parentItem!=None:
+            return self.parentItem.childItems.index(self)
+        return 0
+        
+    def __repr__(self):
+        return "%d:%s"%(self.osmId, self.areaName)
+    
+class OSMAdressTreeModelCity(QAbstractItemModel):
+    def __init__(self, parent):
+        QAbstractItemModel.__init__(self, parent)
+        self.rootItem=OSMTreeItem(-1, "ALL", None)
+        
+    def update(self, filteredCityList, treeModel):
+        rootNodes=treeModel.getRootNodes()
+        for cityId, cityName, parentId, childs in rootNodes:
+            treeItem=OSMTreeItem(cityId, cityName, self.rootItem)
+            self.rootItem.appendChild(treeItem)
+            self.addChilds(filteredCityList, treeItem, treeModel)
+            
+#        print(self.rootItem)
+        self.reset()
+    
+    def addChilds(self, filteredCityList, parentTreeItem, treeModel):
+        childNodes=treeModel.getChilds(parentTreeItem.osmId)
+        for cityId, cityName, parentId, childs in childNodes:
+            treeItem=OSMTreeItem(cityId, cityName, parentTreeItem)
+            parentTreeItem.appendChild(treeItem)
+            self.addChilds(treeItem, treeModel)
+
+    def columnCount(self, parent=None):
+        return 1
+
+    def data(self, index, role):
+        if not index.isValid():
+            return None
+
+        item = index.internalPointer()
+        if role == Qt.DisplayRole:
+            return item.data(index.column())
+        if role == Qt.UserRole:
+            return item.osmId
+        return None
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "City"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+    def index(self, row, column, parent):
+        if not self.hasIndex(row, column, parent):
+            return QModelIndex()
+
+        if not parent.isValid():
+            parentItem = self.rootItem
+        else:
+            parentItem = parent.internalPointer()
+
+        childItem = parentItem.child(row)
+        if childItem:
+            return self.createIndex(row, column, childItem)
+        else:
+            return QModelIndex()
+
+    def parent(self, index):
+        if not index.isValid():
+            return QModelIndex()
+
+        childItem = index.internalPointer()
+        if not childItem:
+            return QModelIndex()
+        
+        parentItem = childItem.parent()
+
+        if parentItem == self.rootItem:
+            return QModelIndex()
+
+        return self.createIndex(parentItem.row(), 0, parentItem)
+
+    def rowCount(self, parent=QModelIndex()):
+        if parent.column() > 0:
+            return 0
+        if not parent.isValid():
+            p_Item = self.rootItem
+        else:
+            p_Item = parent.internalPointer()
+        return p_Item.childCount()
+    
 class OSMAdressDialog(QDialog):
     def __init__(self, parent, osmParserData):
         QDialog.__init__(self, parent) 
@@ -181,6 +338,7 @@ class OSMAdressDialog(QDialog):
         if self.currentCountryId!=None:
             self.cityList=list()
             self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
+#            self.cityList=self.osmParserData.getAdminChildsForId(self.currentCountryId)
             self.cityList.sort(key=self.citySort)
 
         else:
@@ -227,7 +385,7 @@ class OSMAdressDialog(QDialog):
         self.countryCombo.activated.connect(self._countryChanged)
         top.addWidget(self.countryCombo)
         
-        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
+        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]        
 
         hbox=QHBoxLayout()
         self.cityFilterEdit=QLineEdit(self)
@@ -239,18 +397,18 @@ class OSMAdressDialog(QDialog):
         hbox.addWidget(self.ignoreCityButton)
         top.addLayout(hbox)
 
-        self.cityView=QTableView(self)
+        self.cityView=QTreeView(self)
         top.addWidget(self.cityView)
         
-        self.cityViewModel=OSMAdressTableModelCity(self)
-        self.cityViewModel.update(self.filteredCityList)
+        self.cityViewModel=OSMAdressTreeModelCity(self)
+#        self.cityViewModel.update(self.filteredCityList, None)
         self.cityView.setModel(self.cityViewModel)
-        header=QHeaderView(Qt.Horizontal, self.cityView)
-        header.setStretchLastSection(True)
-        self.cityView.setHorizontalHeader(header)
-        self.cityView.setColumnWidth(0, 300)
-        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.cityView.setFixedHeight(150)
+#        header=QHeaderView(Qt.Horizontal, self.cityView)
+#        header.setStretchLastSection(True)
+#        self.cityView.setHorizontalHeader(header)
+#        self.cityView.setColumnWidth(0, 300)
+#        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
+#        self.cityView.setFixedHeight(150)
 
         self.streetFilterEdit=QLineEdit(self)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
@@ -353,7 +511,8 @@ class OSMAdressDialog(QDialog):
         self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
         
         self.updateCityListForCountry()
-        self.cityViewModel.update(self.cityList)
+        self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
+        self.cityViewModel.update(self.filteredCityList, self.cityModel)
         
         self.currentCityId=None
         self.updateAdressListForCity()
@@ -362,15 +521,14 @@ class OSMAdressDialog(QDialog):
         
     @pyqtSlot()
     def _cityChanged(self):
-        self._clearStreetTableSelection(
-                                        )
+        self._clearStreetTableSelection()
         selmodel = self.cityView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
-            self.currentCityId, _=self.filteredCityList[current.row()]            
+            self.currentCityId=self.cityViewModel.data(current, Qt.UserRole)
             self.updateAdressListForCity()
             self._applyFilterStreet()
-        
+                    
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.streetView.selectionModel()
@@ -499,7 +657,7 @@ class OSMAdressDialog(QDialog):
         else:
             self.filteredCityList=self.cityList
         
-        self.cityViewModel.update(self.filteredCityList)
+        self.cityViewModel.update(self.filteredCityList, self.cityModel)
 
 #----------------------------
 class OSMFavoriteTableModel(QAbstractTableModel):

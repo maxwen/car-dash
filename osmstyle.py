@@ -351,7 +351,7 @@ class OSMStyle():
             try:
                 value=int(tags["width"])
                 return self.meterToPixel(value, zoom)
-            except TypeError:
+            except ValueError:
                 None
                 
         if aerowayType=="runway":
@@ -385,7 +385,7 @@ class OSMStyle():
             try:
                 value=int(tags["width"])
                 return self.meterToPixel(value, zoom)
-            except TypeError:
+            except ValueError:
                 None
         
         if waterwayType=="river":
