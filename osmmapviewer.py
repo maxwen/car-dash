@@ -38,7 +38,7 @@ minWidth=640
 minHeight=480
 MIN_ZOOM=5
 MAX_ZOOM=18
-MAP_SCROLL_STEP=10
+MAP_SCROLL_STEP=20
 M_LN2=0.69314718055994530942    #log_e 2
 IMAGE_WIDTH=64
 IMAGE_HEIGHT=64
@@ -46,6 +46,8 @@ IMAGE_WIDTH_MEDIUM=48
 IMAGE_HEIGHT_MEDIUM=48
 IMAGE_WIDTH_SMALL=32
 IMAGE_HEIGHT_SMALL=32
+IMAGE_WIDTH_LARGE=80
+IMAGE_HEIGHT_LARGE=80
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
@@ -481,21 +483,21 @@ class QtOSMWidget(QWidget):
         self.osmutils=OSMUtils()
         self.tileCache=OrderedDict()
         self.withMapnik=False
-        self.withDownload=False
+        self.withDownload=True
         self.autocenterGPS=False
         self.forceDownload=False
         
-        self.osmControlImage=QPixmap(os.path.join(env.getImageRoot(), "osm-control.png"))
-        self.controlWidgetRect=QRect(0, 0, self.osmControlImage.width(), self.osmControlImage.height())
-        self.zoomRect=QRect(0, 105, 95, 45)
-        self.minusRect=QRect(7, 110, 35, 35)
-        self.plusRect=QRect(53, 110, 35, 35)
+#        self.osmControlImage=QPixmap(os.path.join(env.getImageRoot(), "osm-control.png"))
+#        self.controlWidgetRect=QRect(0, 0, self.osmControlImage.width(), self.osmControlImage.height())
+#        self.zoomRect=QRect(0, 105, 95, 45)
+#        self.minusRect=QRect(7, 110, 35, 35)
+#        self.plusRect=QRect(53, 110, 35, 35)
         
-        self.moveRect=QRect(0, 0, 95, 95)
-        self.leftRect=QRect(5, 35, 25, 25)
-        self.rightRect=QRect(65, 35, 25, 25)
-        self.upRect=QRect(35, 5, 25, 25)
-        self.downRect=QRect(35, 65, 25, 25)
+#        self.moveRect=QRect(0, 0, 95, 95)
+#        self.leftRect=QRect(5, 35, 25, 25)
+#        self.rightRect=QRect(65, 35, 25, 25)
+#        self.upRect=QRect(35, 5, 25, 25)
+#        self.downRect=QRect(35, 65, 25, 25)
         
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
         self.moving=False
@@ -629,6 +631,9 @@ class QtOSMWidget(QWidget):
         
     def osm_map_set_zoom (self, zoom):
         self.map_zoom=zoom
+        if self.isVirtualZoom==True and zoom!=MAX_ZOOM:
+            self.isVirtualZoom=False
+            
         self.clearPolygonCache()
         self.checkTileDirForZoom()
         
@@ -1318,9 +1323,10 @@ class QtOSMWidget(QWidget):
 #            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
         self.displayGPSPosition()
+#        self.displayControlOverlay()
+        self.displayControlOverlay2()
 
         self.showEnforcementInfo()
-        self.showControlOverlay()
         self.showTextInfoBackground()
         
         if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
@@ -1500,7 +1506,7 @@ class QtOSMWidget(QWidget):
                     
             print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
 
-    # find position of tag
+    # find position of tag for driving mode
     # should be as near as possible to the crossing but 
     # should not overlap with others
     def calcWayTagPlacement(self, wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList):
@@ -1993,7 +1999,7 @@ class QtOSMWidget(QWidget):
         self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
         
         if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
-            routeInfoBackground=QRect(self.width()-80, self.height()-210, 80, 160)
+            routeInfoBackground=QRect(self.width()-100, self.height()-50-200, 100, 200)
             self.painter.fillRect(routeInfoBackground, self.style.getStyleColor("backgroundColor"))
             
     def showTextInfo(self):
@@ -2010,28 +2016,38 @@ class QtOSMWidget(QWidget):
         pen=self.style.getStylePen("textPen")
         self.painter.setPen(pen)
 
-        font=self.style.getStyleFont("wayInfoFont")
+        font=self.style.getStyleFont("routeDistanceFont")
         self.painter.setFont(font)
         fm = self.painter.fontMetrics();
 
         if self.distanceToEnd!=0:
-            distanceToEndPos=QPoint(self.width()-70, self.height()-180)
             
-            if self.distanceToEnd>500:
-                distanceToEndStr="%.1f km"%(self.distanceToEnd/1000)
+            if self.distanceToEnd>10000:
+                distanceToEndStr="%dkm"%(int(self.distanceToEnd/1000))
+            elif self.distanceToEnd>500:
+                distanceToEndStr="%.1fkm"%(self.distanceToEnd/1000)
             else:
-                distanceToEndStr="%d m"%self.distanceToEnd
+                distanceToEndStr="%dm"%self.distanceToEnd
                 
+            distanceToEndPos=QPoint(self.width()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
             self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
 
         if self.distanceToCrossing!=0:
-            routeInfoPos=QPoint(self.width()-70, self.height()-60)
-            if self.distanceToCrossing>500:
-                crossingLengthStr="%.1f km"%(self.distanceToCrossing/1000)
+            crossingDistancePos=QPoint(self.width()-90, self.height()-60)
+            if self.distanceToCrossing>10000:
+                crossingLengthStr="%dkm"%(int(self.distanceToCrossing/1000))
+            elif self.distanceToCrossing>500:
+                crossingLengthStr="%.1fkm"%(self.distanceToCrossing/1000)
             else:
-                crossingLengthStr="%d m"%self.distanceToCrossing
-            self.painter.drawText(routeInfoPos, "%s"%crossingLengthStr)
+                crossingLengthStr="%dm"%self.distanceToCrossing
+            
+            crossingDistancePos=QPoint(self.width()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
+            self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
 
+        font=self.style.getStyleFont("wayInfoFont")
+        self.painter.setFont(font)
+        fm = self.painter.fontMetrics();
+        
         if self.routeInfo[0]!=None:
             (direction, crossingInfo, _, _)=self.routeInfo
             crossingInfoStr=crossingInfo
@@ -2044,9 +2060,9 @@ class QtOSMWidget(QWidget):
                     exitNumber=int(crossingInfo[len("roundabout:enter:"):])
 
             if "stay:" in crossingInfo:
-                crossingInfoStr="Continue on "+crossingInfoStr[len("stay:"):]
+                crossingInfoStr="Continue "+crossingInfoStr[len("stay:"):]
             elif "change:" in crossingInfo:
-                crossingInfoStr="Change to "+crossingInfoStr[len("change:"):]
+                crossingInfoStr="Change "+crossingInfoStr[len("change:"):]
             elif "roundabout:enter:" in crossingInfo:
                 crossingInfoStr="Enter roundabout. Take exit %d"%(exitNumber)
             elif "roundabout:exit:" in crossingInfo:
@@ -2059,27 +2075,27 @@ class QtOSMWidget(QWidget):
             routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-10, self.height()-15)
             self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
                             
-            x=self.width()-72
-            y=self.height()-150
-            self.drawDirectionImage(direction, exitNumber, IMAGE_WIDTH, IMAGE_HEIGHT, x, y) 
+            x=self.width()-92
+            y=self.height()-50-100+10
+            self.displayRouteDirectionImage(direction, exitNumber, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, x, y) 
      
      
     def showEnforcementInfo(self):   
         if self.wayPOIList!=None and len(self.wayPOIList)>=1:  
             nodeType=self.wayPOIList[0]
                    
-            wayPOIBackground=QRect(0, self.height()-210, 80, 80)
+            wayPOIBackground=QRect(0, self.height()-50-100-100, 100, 100)
             self.painter.fillRect(wayPOIBackground, self.style.getStyleColor("warningBackgroundColor"))
             x=8
-            y=self.height()-202
-            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getPixmapForNodeType(nodeType))
+            y=self.height()-50-100-100+10
+            self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, self.style.getPixmapForNodeType(nodeType))
 
     def showSpeedInfo(self):   
         if self.speedInfo!=None and self.speedInfo!=0:
             x=8
-            y=self.height()-122
+            y=self.height()-50-100+10
             
-            speedBackground=QRect(0, self.height()-130, 80, 80)
+            speedBackground=QRect(0, self.height()-50-100, 100, 100)
             # show if speed is larger then maxspeed + 10%
             if self.speed>self.speedInfo*1.1:
                 self.painter.fillRect(speedBackground, self.style.getStyleColor("warningBackgroundColor"))
@@ -2089,7 +2105,7 @@ class QtOSMWidget(QWidget):
             imagePath=os.path.join(env.getImageRoot(), "speedsigns", "%d.png"%(self.speedInfo))
             if os.path.exists(imagePath):
                 speedPixmap=QPixmap(imagePath)
-                self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, speedPixmap)
+                self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, speedPixmap)
                 
     def showTunnelInfo(self):
         if self.isInTunnel==True:
@@ -2404,7 +2420,7 @@ class QtOSMWidget(QWidget):
                                 self.painter.drawPoint(x, y)
                             
             
-    def drawDirectionImage(self, direction, exitNumber, width, height, x, y):
+    def displayRouteDirectionImage(self, direction, exitNumber, width, height, x, y):
         if direction==1:
             self.painter.drawPixmap(x, y, width, height, self.style.getStylePixmap("turnRightEasyImage"))
         elif direction==2:
@@ -2439,7 +2455,7 @@ class QtOSMWidget(QWidget):
         elif direction==98:
             self.painter.drawPixmap(x, y, width, height, self.style.getStylePixmap("uturnImage"))
         elif direction==99:
-            self.painter.drawPixmap(x, y, width, height, self.style.getStylePixmap("endPointImage"))
+            self.painter.drawPixmap(x, y, width, height, self.style.getStylePixmap("finishPixmap"))
             
 #    def minimumSizeHint(self):
 #        return QSize(minWidth, minHeight)
@@ -2553,11 +2569,6 @@ class QtOSMWidget(QWidget):
 
     def callMapnikForTile2(self, zoom, x, y):   
         self.osmWidget.mapnikThread.addTile(zoom, x, y)
-        
-    def setDownloadTiles(self, value):
-        self.withDownload=value
-        if value==True:
-            self.update()
 
     def setForceDownload(self, value, update):
         self.forceDownload=value
@@ -2580,13 +2591,13 @@ class QtOSMWidget(QWidget):
         self.mousePressed=False
 
         if not self.moving:
-            if not self.controlWidgetRect.contains(event.x(), event.y()):
+            if not self.minusRect.contains(event.x(), event.y()) and not self.plusRect.contains(event.x(), event.y()):
                 self.lastMouseMoveX=event.x()
                 self.lastMouseMoveY=event.y()
                 self.showTrackOnMousePos(event.x(), event.y())
 
             else:
-                self.pointInsideMoveOverlay(event.x(), event.y())
+#                self.pointInsideMoveOverlay(event.x(), event.y())
                 self.pointInsideZoomOverlay(event.x(), event.y())
                 
         else:
@@ -2598,19 +2609,19 @@ class QtOSMWidget(QWidget):
             self.moving=False
 
 
-    def pointInsideMoveOverlay(self, x, y):
-        if self.moveRect.contains(x, y):
-            if self.leftRect.contains(x, y):
-                self.stepLeft(MAP_SCROLL_STEP)
-            if self.rightRect.contains(x, y):
-                self.stepRight(MAP_SCROLL_STEP)
-            if self.upRect.contains(x, y):
-                self.stepUp(MAP_SCROLL_STEP)
-            if self.downRect.contains(x, y):
-                self.stepDown(MAP_SCROLL_STEP)
+#    def pointInsideMoveOverlay(self, x, y):
+#        if self.moveRect.contains(x, y):
+#            if self.leftRect.contains(x, y):
+#                self.stepLeft(MAP_SCROLL_STEP)
+#            if self.rightRect.contains(x, y):
+#                self.stepRight(MAP_SCROLL_STEP)
+#            if self.upRect.contains(x, y):
+#                self.stepUp(MAP_SCROLL_STEP)
+#            if self.downRect.contains(x, y):
+#                self.stepDown(MAP_SCROLL_STEP)
         
     def pointInsideZoomOverlay(self, x, y):
-        if self.zoomRect.contains(x, y):
+#        if self.zoomRect.contains(x, y):
             if self.minusRect.contains(x, y):
                 if self.isVirtualZoom==True:
                     zoom=MAX_ZOOM
@@ -2631,8 +2642,20 @@ class QtOSMWidget(QWidget):
                         zoom=MAX_ZOOM
                 self.zoom(zoom)
         
-    def showControlOverlay(self):
-        self.painter.drawPixmap(0, 0, self.osmControlImage)
+#    def displayControlOverlay(self):
+#        self.painter.drawPixmap(0, 0, self.osmControlImage)
+
+    def displayControlOverlay2(self):
+        minusBackground=QRect(0, 0, 80, 80)
+        diff=80-IMAGE_WIDTH
+        self.painter.fillRect(minusBackground, self.style.getStyleColor("backgroundColor"))
+        self.minusRect=minusBackground
+        self.painter.drawPixmap(diff/2, 5, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
+
+        plusBackground=QRect(self.width()-80, 0, 80, 80)
+        self.painter.fillRect(plusBackground, self.style.getStyleColor("backgroundColor"))
+        self.plusRect=plusBackground
+        self.painter.drawPixmap(self.width()-80+diff/2, 5, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("plusPixmap"))
 
     def mousePressEvent(self, event):
         self.mousePressed=True
@@ -4000,7 +4023,7 @@ class OSMWidget(QWidget):
     def loadConfig(self, config):
         self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
         self.setAutocenterGPSValue(config.getDefaultSection().getboolean("autocenterGPS", False))
-        self.setWithDownloadValue(config.getDefaultSection().getboolean("withDownload", False))
+        self.setWithDownloadValue(config.getDefaultSection().getboolean("withDownload", True))
         self.setStartLatitude(config.getDefaultSection().getfloat("lat", self.startLat))
         self.setStartLongitude(config.getDefaultSection().getfloat("lon", self.startLon))
         self.setTileHome(config.getDefaultSection().get("tileHome", defaultTileHome))
@@ -4046,6 +4069,7 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.loadConfig(config)
         
     def saveConfig(self, config):
+        print("withDownload: %s"%(self.getWithDownloadValue()))
         config.getDefaultSection()["zoom"]=str(self.getZoomValue())
         config.getDefaultSection()["autocenterGPS"]=str(self.getAutocenterGPSValue())
         config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())

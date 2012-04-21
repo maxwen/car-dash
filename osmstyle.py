@@ -47,6 +47,8 @@ class OSMStyle():
         
         self.pixmapDict["gpsPointImage"]=QPixmap(os.path.join(env.getImageRoot(), "gps-move.png"))
         self.pixmapDict["gpsPointImageStop"]=QPixmap(os.path.join(env.getImageRoot(), "gps-stop.png"))
+        self.pixmapDict["minusPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "minus.png"))
+        self.pixmapDict["plusPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "plus.png"))
       
         self.pixmapDict["turnRightImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/right.png"))
         self.pixmapDict["turnLeftImage"]=QPixmap(os.path.join(env.getImageRoot(), "directions/left.png"))
@@ -615,13 +617,16 @@ class OSMStyle():
         self.fontDict["normalFont"]=font
 
         font = QFont("Sans")
-        font.setPointSize(20)
+        font.setPointSize(18)
         self.fontDict["wayInfoFont"]=font
         
         font = QFont("Sans")
         font.setPointSize(16)
         self.fontDict["defaultFont"]=font
-        
+
+        font = QFont("Sans")
+        font.setPointSize(16)
+        self.fontDict["routeDistanceFont"]=font        
     SHOW_CASING_START_ZOOM=14
     SHOW_BRIDGES_START_ZOOM=16
     SHOW_STREET_OVERLAY_START_ZOOM=17

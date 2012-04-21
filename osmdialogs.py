@@ -9,7 +9,7 @@ import re
 import os
 
 from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
@@ -136,16 +136,16 @@ class OSMCityModel():
             self.buildModel(cityId, childs)
             
     def getRootNodes(self):
-        return self.root.values()
+        return list(self.root.values())
         
     def getParent(self, currentCityId):
-        parentId, childs=self.getCityData(currentCityId, self.root)
+        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return parentId
         return None
     
     def getChilds(self, currentCityId):
-        parentId, childs=self.getCityData(currentCityId, self.root)
+        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return list(childs.values())
         return None
@@ -153,14 +153,27 @@ class OSMCityModel():
     def getCityData(self, currentCityId, data):
         for (cityId, cityName, parentId, childs) in data.values():
             if cityId==currentCityId:
-                return parentId, childs
+                return (cityId, cityName, parentId, childs)
             
-            foundParent, foundChilds=self.getCityData(currentCityId, childs)
-            if foundParent!=None:
-                return foundParent, foundChilds
+            foundCityId, foundCityName, foundParent, foundChilds=self.getCityData(currentCityId, childs)
+            if foundCityId!=None:
+                return foundCityId, foundCityName, foundParent, foundChilds
     
-        return None, None
+        return None, None, None, None
     
+    def hasMatchingChilds(self, currentCityId, filteredCityList):
+        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
+
+        if cityId in filteredCityList:
+            return True
+            
+        for (cityId, cityName, parentId, childs) in childs.values():            
+            matching=self.hasMatchingChilds(cityId, filteredCityList)
+            if matching==True:
+                return matching
+    
+        return False
+
 class OSMTreeItem(object):
     def __init__(self, osmId, areaName, parentItem):
         self.osmId=osmId
@@ -201,23 +214,37 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         QAbstractItemModel.__init__(self, parent)
         self.rootItem=OSMTreeItem(-1, "ALL", None)
         
+    def citySort(self, item):
+        return item[1]
+    
     def update(self, filteredCityList, treeModel):
-        rootNodes=treeModel.getRootNodes()
-        for cityId, cityName, parentId, childs in rootNodes:
-            treeItem=OSMTreeItem(cityId, cityName, self.rootItem)
-            self.rootItem.appendChild(treeItem)
-            self.addChilds(filteredCityList, treeItem, treeModel)
+        self.rootItem=OSMTreeItem(-1, "ALL", None)
+        
+        filterdCitySet=set()
+        for cityId, cityName in filteredCityList:
+            filterdCitySet.add(cityId)
             
-#        print(self.rootItem)
+        rootNodes=treeModel.getRootNodes()
+        rootNodes.sort(key=self.citySort)
+        for cityId, cityName, parentId, childs in rootNodes:
+            if treeModel.hasMatchingChilds(cityId, filterdCitySet):
+                treeItem=OSMTreeItem(cityId, cityName, self.rootItem)
+                self.rootItem.appendChild(treeItem)
+                self.addChilds(filterdCitySet, treeItem, treeModel)
+        
+#        self.emit(SIGNAL("dataChanged(const QModelIndex & topLeft, const QModelIndex & bottomRight)"), self.index(0, 0), self.index(0, 0))
+     
         self.reset()
     
-    def addChilds(self, filteredCityList, parentTreeItem, treeModel):
+    def addChilds(self, filterdCitySet, parentTreeItem, treeModel):
         childNodes=treeModel.getChilds(parentTreeItem.osmId)
+        childNodes.sort(key=self.citySort)
         for cityId, cityName, parentId, childs in childNodes:
-            treeItem=OSMTreeItem(cityId, cityName, parentTreeItem)
-            parentTreeItem.appendChild(treeItem)
-            self.addChilds(treeItem, treeModel)
-
+            if treeModel.hasMatchingChilds(cityId, filterdCitySet):
+                treeItem=OSMTreeItem(cityId, cityName, parentTreeItem)
+                parentTreeItem.appendChild(treeItem)
+                self.addChilds(filterdCitySet, treeItem, treeModel)
+            
     def columnCount(self, parent=None):
         return 1
 
@@ -241,7 +268,7 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 return Qt.AlignLeft
         return None
     
-    def index(self, row, column, parent):
+    def index(self, row, column, parent=QModelIndex()):
         if not self.hasIndex(row, column, parent):
             return QModelIndex()
 
@@ -265,7 +292,10 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
             return QModelIndex()
         
         parentItem = childItem.parent()
-
+        
+        if not parentItem:
+            return QModelIndex()
+            
         if parentItem == self.rootItem:
             return QModelIndex()
 
@@ -401,8 +431,13 @@ class OSMAdressDialog(QDialog):
         top.addWidget(self.cityView)
         
         self.cityViewModel=OSMAdressTreeModelCity(self)
-#        self.cityViewModel.update(self.filteredCityList, None)
         self.cityView.setModel(self.cityViewModel)
+#        self.cityViewModel.update(self.filteredCityList, None)
+#        self.proxyModel = QSortFilterProxyModel(self)
+#        self.proxyModel.setSourceModel(self.cityViewModel)
+#        self.cityView.setModel(self.proxyModel)
+#        self.cityView.setSortingEnabled(True)
+        
 #        header=QHeaderView(Qt.Horizontal, self.cityView)
 #        header.setStretchLastSection(True)
 #        self.cityView.setHorizontalHeader(header)
