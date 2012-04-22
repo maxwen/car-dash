@@ -209,6 +209,11 @@ class OSMTreeItem(object):
     def __repr__(self):
         return "%d:%s"%(self.osmId, self.areaName)
     
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.osmId==other.osmId        
+    
 class OSMAdressTreeModelCity(QAbstractItemModel):
     def __init__(self, parent):
         QAbstractItemModel.__init__(self, parent)
@@ -218,6 +223,14 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         return item[1]
     
     def update(self, filteredCityList, treeModel):
+        
+        self.layoutAboutToBeChanged.emit()
+        
+        itemList=list()
+        for index in self.persistentIndexList():
+            if index.isValid():
+                itemList.append((index.row(), index.column(), index.internalPointer()))
+
         self.rootItem=OSMTreeItem(-1, "ALL", None)
         
         filterdCitySet=set()
@@ -231,11 +244,15 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 treeItem=OSMTreeItem(cityId, cityName, self.rootItem)
                 self.rootItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
-        
-#        self.emit(SIGNAL("dataChanged(const QModelIndex & topLeft, const QModelIndex & bottomRight)"), self.index(0, 0), self.index(0, 0))
-     
-        self.reset()
+             
     
+        for row, column, item in itemList:
+            toIndex=self.searchModel(item.osmId)
+            if toIndex!=None:
+                self.changePersistentIndex(self.createIndex(row, column, item), toIndex)
+        
+        self.layoutChanged.emit()
+        
     def addChilds(self, filterdCitySet, parentTreeItem, treeModel):
         childNodes=treeModel.getChilds(parentTreeItem.osmId)
         childNodes.sort(key=self.citySort)
@@ -309,6 +326,19 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         else:
             p_Item = parent.internalPointer()
         return p_Item.childCount()
+    
+    def searchModel(self, osmId):
+        def searchNode(node):
+            for child in node.childItems:
+                if osmId == child.osmId:
+                    return self.createIndex(child.row(), 0, child)
+                    
+                if child.childCount() > 0:
+                    result = searchNode(child)
+                    if result:
+                        return result
+        
+        return searchNode(self.rootItem)
     
 class OSMAdressDialog(QDialog):
     def __init__(self, parent, osmParserData):

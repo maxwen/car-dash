@@ -3193,24 +3193,30 @@ class OSMParserData():
             
             if ref==refs[0] or ref==refs[-1]:
                 # barrier at start or end of way
-                # need to find the edge that continues there
                 resultList=self.getEdgeEntryForStartOrEndPoint(ref)
-                if len(resultList)==2:
+                
+                # find first edge with the barrier
+                for edge in resultList:
+                    _, startRef, endRef, _, edgeWayId, _, _, _, _=edge
+                    if edgeWayId==wayId:
+                        fromEdge=edge
+                        break
+                
+                if fromEdge!=None:
+                    # add restriction from and to all others
                     for edge in resultList:
                         _, startRef, endRef, _, edgeWayId, _, _, _, _=edge
-                        if edgeWayId==wayId:
-                            fromEdge=edge
-                        else:
-                            toEdge=edge
-                    
-                    if fromEdge!=None and toEdge!=None:
+                        if edge==fromEdge:
+                            continue
+                        
+                        toEdge=edge
+                        
                         self.usedBarrierList.append(ref)
-
+    
                         self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                         self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
                 else:
-                    print("more then 2 edges at barrier crossing %s"%(str(barrierRestrictionEntry)))
-                    continue
+                    print("createBarrierRestrictions: failed to resolve fromEdge for %s"%(barrierRestrictionEntry))
             else:
                 # barrier in the middle of the way
                 resultList=self.getEdgeEntryForWayId(wayId)
@@ -3228,7 +3234,9 @@ class OSMParserData():
                     
                     self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                     self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
-        
+                else:
+                    print("createBarrierRestrictions: failed to resolve %s"%(barrierRestrictionEntry))
+   
         print("")
         
     def createWayRestrictionsDB(self):

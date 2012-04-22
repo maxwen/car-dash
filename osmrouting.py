@@ -209,6 +209,7 @@ class OSMRoutingPoint():
 #        self.country=country
         
         self.posOnEdge=osmParserData.getPosOnOnEdge(self.lat, self.lon, coords, length)
+        print(self.posOnEdge)
 
     def getPosOnEdge(self):
         return self.posOnEdge

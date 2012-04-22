@@ -160,3 +160,8 @@ TODO: support barriers that have more then two edges
  TODO: add POI based searching
 
  TODO: use admin area hierarchy in search dialogs
+ 
+ TODO: show POI info on map
+ -tooltip
+ DONE
+  -what to show = - cirrently tags["name"]

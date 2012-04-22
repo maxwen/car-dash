@@ -16,8 +16,8 @@ import time
 import env
 import cProfile
 
-from PyQt4.QtCore import QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtCore import QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtGui import QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmparserdata import Constants, OSMParserData
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
@@ -1671,6 +1671,32 @@ class QtOSMWidget(QWidget):
     def nodeSortByYCoordinate(self, item):
         return item[1]
     
+    def getNodeTagsForPos(self, pos):
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
+
+        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType, pixmap in self.orderedNodeList:
+            rect=QRect(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight)
+            if rect.contains(pos, proper=False):
+                return tags
+        
+        return None
+    
+    def event(self, event):
+        if event.type()==QEvent.ToolTip:
+            mousePos=QPoint(event.x(), event.y())
+            tags=self.getNodeTagsForPos(mousePos)
+            if tags!=None:
+                if "name" in tags:
+                    QToolTip.showText(event.globalPos(), tags["name"])
+            else:
+                QToolTip.hideText()
+                event.ignore()
+                
+            return True
+        
+        return super(QtOSMWidget, self).event(event)
+
+    
     def displayVisibleNodes(self, bbox):        
         nodeTypeList=self.getDisplayPOITypeListForZoom()
         if nodeTypeList==None or len(nodeTypeList)==0:
@@ -2376,18 +2402,18 @@ class QtOSMWidget(QWidget):
             if self.currentRoutePath==None:
                 painterPath=QPainterPath()
                
-                i=0
+                firstCoord=True
                 for item in trackList:                
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]
                             
                         (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
                         point=QPointF(x, y);
-                        if i==0:
+                        if firstCoord==True:
                             painterPath.moveTo(point)
+                            firstCoord=False
                         else:
                             painterPath.lineTo(point)
-                    i=i+1
                     
                 self.currentRoutePath=painterPath
             
@@ -3110,6 +3136,7 @@ class QtOSMWidget(QWidget):
         if edge==None:
             self.clearLastEdgeInfo()
         else:   
+            print(edge)
             edgeId=edge[0]
             wayId=edge[4]
             coords=edge[10]
@@ -3196,7 +3223,6 @@ class QtOSMWidget(QWidget):
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
                 wayId, tags, refs, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
-                print(osmParserData.getCenterOfPolygon(refs))
 #                print(wayId)
 #                print(tags)
 #                refRings=osmParserData.mergeEqualWayEntries(wayId)
@@ -3367,6 +3393,8 @@ class QtOSMWidget(QWidget):
             self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
             self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
             self.currentRoutePath=None
+            print(self.currentEdgeList)
+            print(self.currentTrackList)
             self.update()       
 
     def switchToNextRoutePart(self):
