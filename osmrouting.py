@@ -45,7 +45,7 @@ class OSMRoute():
     
     def calcRoute(self, osmParserData):
         if self.routeInfo==None:
-            print(self.routingPointList)
+#            print(self.routingPointList)
             self.routeInfo=osmParserData.calcRoute(self)
             self.routeFinished=False
             
@@ -99,6 +99,16 @@ class OSMRoute():
                 if "trackList" in self.routeInfo[index]:
                     return self.routeInfo[index]["trackList"]
         return None
+    
+    def complete(self):
+        if self.routeInfo==None:
+            return False
+        
+        for entry in self.routeInfo:
+            if not "trackList" in entry:
+                return False
+        
+        return True
     
     def printRoute(self, osmParserData):
         if self.routeInfo!=None:
@@ -209,7 +219,7 @@ class OSMRoutingPoint():
 #        self.country=country
         
         self.posOnEdge=osmParserData.getPosOnOnEdge(self.lat, self.lon, coords, length)
-        print(self.posOnEdge)
+#        print(self.posOnEdge)
 
     def getPosOnEdge(self):
         return self.posOnEdge

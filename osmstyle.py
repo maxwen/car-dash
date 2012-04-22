@@ -80,6 +80,7 @@ class OSMStyle():
         self.pixmapDict["startPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/start.png"))
         self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/finish.png"))
         self.pixmapDict["wayPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "routing/way.png"))
+        self.pixmapDict["crossingPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "crossing.png"))
         
         self.pixmapDict["hospitalPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/hospital.png"))
         self.pixmapDict["policePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "poi/police.png"))
@@ -641,7 +642,7 @@ class OSMStyle():
     USE_ANTIALIASING_START_ZOOM=17
     SHOW_BUILDING_START_ZOOM=17
     SHOW_REF_LABEL_WAYS_START_ZOOM=15
-    SHOW_NAME_LABEL_WAYS_START_ZOOM=18
+    SHOW_NAME_LABEL_WAYS_START_ZOOM=17
         
     # TODO: values for lat 45 dec north
     # http://wiki.openstreetmap.org/wiki/FAQ#What_is_the_map_scale_for_a_particular_zoom_level_of_the_map.3F

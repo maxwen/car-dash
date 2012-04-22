@@ -48,10 +48,13 @@ IMAGE_WIDTH_SMALL=32
 IMAGE_HEIGHT_SMALL=32
 IMAGE_WIDTH_LARGE=80
 IMAGE_HEIGHT_LARGE=80
+IMAGE_WIDTH_TINY=24
+IMAGE_HEIGHT_TINY=24
+
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
-WITH_TIMING_DEBUG=True
+WITH_TIMING_DEBUG=False
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
 
@@ -567,7 +570,6 @@ class QtOSMWidget(QWidget):
         
         self.lastWayIdSet=None
         self.wayPolygonCache=dict()
-        self.currentRoutePath=None
         self.currentRouteOverlayPath=None
         self.areaPolygonCache=dict()
         self.lastOsmIdSet=None
@@ -1107,6 +1109,23 @@ class QtOSMWidget(QWidget):
         
         cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
         self.visibleCPolygon = Polygon(cont)
+
+    # smaler one without control elements
+    # e.g. for way tag positions so that they are not too 
+    # near to the border and not hidden behind
+    def calcVisiblePolygon2(self):            
+        invertedTransform=self.transformHeading.inverted()
+        point=QPoint(CONTROL_WIDTH, 0+CONTROL_WIDTH);
+        point0=invertedTransform[0].map(point)
+        point=QPoint(self.width()-CONTROL_WIDTH, 0+CONTROL_WIDTH);
+        point1=invertedTransform[0].map(point)
+        point=QPoint(self.width()-CONTROL_WIDTH, self.height()-CONTROL_WIDTH);
+        point2=invertedTransform[0].map(point)
+        point=QPoint(CONTROL_WIDTH, self.height()-CONTROL_WIDTH);
+        point3=invertedTransform[0].map(point)
+        
+        cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
+        self.visibleCPolygon2 = Polygon(cont)
         
     def calcPrefetchBox(self, bbox):
         self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
@@ -1156,6 +1175,7 @@ class QtOSMWidget(QWidget):
 #        print(self.map_zoom)
 
         self.calcVisiblePolygon()
+        self.calcVisiblePolygon2()
         bbox=self.getVisibleBBoxDeg()    
         newBBox=self.isNewBBox(bbox)
 
@@ -1342,7 +1362,7 @@ class QtOSMWidget(QWidget):
         self.showTextInfoBackground()
         
         if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
-            self.showRouteInfo()
+            self.displayRouteInfo()
             
         self.showTextInfo()
         self.showSpeedInfo()
@@ -1446,7 +1466,6 @@ class QtOSMWidget(QWidget):
     def clearPolygonCache(self):
         self.prefetchBBox=None
         self.wayPolygonCache=dict()
-        self.currentRoutePath=None
         self.areaPolygonCache=dict()
         self.adminAreaPolygonCache=dict()
     
@@ -1495,11 +1514,12 @@ class QtOSMWidget(QWidget):
 
             self.otherWays.append(way)
 
-    def getVisibleNodeForWayTag(self, painterPath, tagLabelPoint):
-        point=painterPath.pointAtPercent(tagLabelPoint)
-        if self.visibleCPolygon.isInside(point.x(), point.y()):
-            return point
-            
+    def getVisibleNodeForWayTag(self, wayPainterPath):
+        for tagLabelPoint in range(1, 9, 1):
+            point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
+            if self.visibleCPolygon2.isInside(point.x(), point.y()): 
+                return point
+                        
         return None
     
     def getWayTagText(self, name, nameRef):
@@ -1537,16 +1557,13 @@ class QtOSMWidget(QWidget):
                 wayId, _, _, _, name, nameRef, _, _, _, _=way 
                 
                 if wayId in self.wayPolygonCache.keys():
-                    _, painterPath=self.wayPolygonCache[wayId]
+                    _, wayPainterPath=self.wayPolygonCache[wayId]
                     
                     tagText=self.getWayTagText(name, nameRef)
                     
                     if tagText!=None:
-                        painterPath=painterPath.translated(-map_x, -map_y)
-                        
-                        tagLabelPoint=0.5
-                            
-                        point=self.getVisibleNodeForWayTag(painterPath, tagLabelPoint)
+                        wayPainterPath=wayPainterPath.translated(-map_x, -map_y)                           
+                        point=self.getVisibleNodeForWayTag(wayPainterPath)
 
                         if point!=None:
                             numVisibleTags=numVisibleTags+1
@@ -1565,8 +1582,9 @@ class QtOSMWidget(QWidget):
 
             for wayId, (painterPath, painterPathText, point, rect) in painterPathDict.items():
                 self.displayTextLabel(painterPath, painterPathText, brush, pen)
-                    
-            print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
+            
+            if WITH_TIMING_DEBUG==True:
+                print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
 
     # find position of tag for driving mode
     # should be as near as possible to the crossing but 
@@ -1575,7 +1593,7 @@ class QtOSMWidget(QWidget):
         if reverseRefs==False:
             for tagLabelPoint in range(1, 9, 1):
                 point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
-                if self.visibleCPolygon.isInside(point.x(), point.y()): 
+                if self.visibleCPolygon2.isInside(point.x(), point.y()): 
                     point0=self.transformHeading.map(point)
                     newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
                     rect=newTagPainterPath.boundingRect()
@@ -1590,7 +1608,7 @@ class QtOSMWidget(QWidget):
         else:
             for tagLabelPoint in range(9, 1, -1):
                 point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
-                if self.visibleCPolygon.isInside(point.x(), point.y()):
+                if self.visibleCPolygon2.isInside(point.x(), point.y()):
                     point0=self.transformHeading.map(point)
                     newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
                     rect=newTagPainterPath.boundingRect()
@@ -1820,7 +1838,8 @@ class QtOSMWidget(QWidget):
             else:
                 numHiddenNodes=numHiddenNodes+1
         
-        print("visible nodes: %d hidden nodes:%d"%(numVisibleNodes, numHiddenNodes))
+        if WITH_TIMING_DEBUG==True:
+            print("visible nodes: %d hidden nodes:%d"%(numVisibleNodes, numHiddenNodes))
           
     def displayNodes(self):
         start=time.time()
@@ -2136,16 +2155,15 @@ class QtOSMWidget(QWidget):
             wayPos=QPoint(5, self.height()-15)
             self.painter.drawText(wayPos, self.wayInfo)
                     
-    def showRouteInfo(self):
+    def displayRouteInfo(self):
         pen=self.style.getStylePen("textPen")
         self.painter.setPen(pen)
 
-        font=self.style.getStyleFont("routeDistanceFont")
+        font=self.style.getStyleFont("monoFont")
         self.painter.setFont(font)
         fm = self.painter.fontMetrics();
 
         if self.distanceToEnd!=0:
-            
             if self.distanceToEnd>10000:
                 distanceToEndStr="%dkm"%(int(self.distanceToEnd/1000))
             elif self.distanceToEnd>500:
@@ -2155,6 +2173,7 @@ class QtOSMWidget(QWidget):
                 
             distanceToEndPos=QPoint(self.width()-self.getSidebarWidth()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
             self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
+            self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("finishPixmap"))
 
         if self.distanceToCrossing!=0:
             if self.distanceToCrossing>10000:
@@ -2166,6 +2185,7 @@ class QtOSMWidget(QWidget):
             
             crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
             self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
+            self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2+fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("crossingPixmap"))
 
         font=self.style.getStyleFont("wayInfoFont")
         self.painter.setFont(font)
@@ -2194,6 +2214,8 @@ class QtOSMWidget(QWidget):
                 crossingInfoStr="Take motorway exit "+crossingInfoStr[len("motorway:exit:info:"):]
             elif "motorway:exit" in crossingInfo:
                 crossingInfoStr="Take motorway exit"
+            elif crossingInfo=="end":
+                crossingInfoStr=""
             
             routeInfoPos1=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingInfoStr)-10, self.height()-15)
             self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
@@ -2489,58 +2511,56 @@ class QtOSMWidget(QWidget):
         
     def displayRoute(self, route):
         if route!=None:
-            # before calculation is done
-            trackList=route.getTrackList(self.currentRoutePart)
-            if trackList==None:
-                return
+            # before calculation is done                        
+            if not route.complete():
+                return 
             
             showTrackDetails=self.map_zoom>13
-            
-            if self.currentRoutePath==None:
-                painterPath=QPainterPath()
-               
-                firstCoord=True
+
+            polygon=QPolygonF()
+            routeInfo=route.getRouteInfo()
+            for routeInfoEntry in routeInfo:
+                if not "trackList" in routeInfoEntry:
+                    return
+                
+                trackList=routeInfoEntry["trackList"]
+                                                   
                 for item in trackList:                
                     for itemRef in item["refs"]:
                         lat, lon=itemRef["coords"]
                             
-                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                        (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
                         point=QPointF(x, y);
-                        if firstCoord==True:
-                            painterPath.moveTo(point)
-                            firstCoord=False
-                        else:
-                            painterPath.lineTo(point)
-                    
-                self.currentRoutePath=painterPath
-            
-            map_x, map_y=self.getMapZeroPos()
-            displayPolygon=self.currentRoutePath.translated(-map_x, -map_y)   
-            
+                        polygon.append(point)
+                                
             pen=self.style.getStylePen("routePen")
             pen.setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
-            self.painter.strokePath(displayPolygon, pen)
+            self.painter.setPen(pen)
+            self.painter.drawPolyline(polygon)
+                        
+            if showTrackDetails==True:       
+                for routeInfoEntry in routeInfo:                    
+                    trackList=routeInfoEntry["trackList"]
                     
-            if showTrackDetails==True:                                    
-                for item in trackList:
-                    for itemRef in item["refs"]:
-                        lat, lon=itemRef["coords"]
-                            
-                        crossing=False
-                        
-                        if "crossingType" in itemRef:
-                            crossing=True
-                            crossingType=itemRef["crossingType"]
-                            
-                        if crossing==True:
-                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-                        
-                            if self.isPointVisible(x, y):
-                                pen=self.style.getPenForCrossingType(crossingType)
-                                pen.setWidth(self.style.getPenWithForPoints(self.map_zoom))
+                    for item in trackList:
+                        for itemRef in item["refs"]:
+                            lat, lon=itemRef["coords"]
                                 
-                                self.painter.setPen(pen)
-                                self.painter.drawPoint(x, y)
+                            crossing=False
+                            
+                            if "crossingType" in itemRef:
+                                crossing=True
+                                crossingType=itemRef["crossingType"]
+                                
+                            if crossing==True:
+                                (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
+                            
+                                if self.isPointVisible(x, y):
+                                    pen=self.style.getPenForCrossingType(crossingType)
+                                    pen.setWidth(self.style.getPenWithForPoints(self.map_zoom))
+                                    
+                                    self.painter.setPen(pen)
+                                    self.painter.drawPoint(x, y)
                             
             
     def displayRouteDirectionImage(self, direction, exitNumber, width, height, x, y):
@@ -3001,7 +3021,7 @@ class QtOSMWidget(QWidget):
         
             if pixel_x1>0 and pixel_x2>0 and pixel_y1>0 and pixel_y2>0:
                 if pixel_x1<width and pixel_x2<width and pixel_y1<height and pixel_y2<height:
-                    print(zoom)
+#                    print(zoom)
                     if zoom!=self.map_zoom:
                         self.osm_map_set_zoom(zoom)
                     
@@ -3252,7 +3272,7 @@ class QtOSMWidget(QWidget):
         if edge==None:
             self.clearLastEdgeInfo()
         else:   
-            print(edge)
+#            print(edge)
             edgeId=edge[0]
             wayId=edge[4]
             coords=edge[10]
@@ -3324,7 +3344,7 @@ class QtOSMWidget(QWidget):
                     if self.currentTargetPointReached(lat, lon):
                         self.currentRoute.targetPointReached(self.currentRoutePart)
                         self.switchToNextRoutePart()     
-                        print(self.currentRoute.isRouteFinished())
+#                        print(self.currentRoute.isRouteFinished())
                         if self.currentRoute.isRouteFinished():
                             self.clearLastEdgeInfo()
             else:
@@ -3499,7 +3519,7 @@ class QtOSMWidget(QWidget):
     def routeCalculationDone(self):
         if self.currentRoute.getRouteInfo()!=None:
             self.currentRoute.printRoute(osmParserData)
-            self.printRouteDescription(self.currentRoute)
+#            self.printRouteDescription(self.currentRoute)
             
             self.clearLastEdgeInfo()
 
@@ -3508,9 +3528,8 @@ class QtOSMWidget(QWidget):
             self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
             self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
             self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
-            self.currentRoutePath=None
-            print(self.currentEdgeList)
-            print(self.currentTrackList)
+#            print(self.currentEdgeList)
+#            print(self.currentTrackList)
             self.update()       
 
     def switchToNextRoutePart(self):
@@ -3521,10 +3540,11 @@ class QtOSMWidget(QWidget):
             self.currentTrackList=self.currentRoute.getTrackList(self.currentRoutePart)
             self.currentStartPoint=self.currentRoute.getStartPoint(self.currentRoutePart)
             self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
-        
+#            print(self.currentEdgeList)
+            
     def currentTargetPointReached(self, lat, lon):
         targetLat, targetLon=self.currentTargetPoint.getPos()
-        if self.osmutils.distance(lat, lon, targetLat, targetLon)<10:
+        if self.osmutils.distance(lat, lon, targetLat, targetLon)<30:
             return True
         return False
     
@@ -4220,7 +4240,7 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.loadConfig(config)
         
     def saveConfig(self, config):
-        print("withDownload: %s"%(self.getWithDownloadValue()))
+#        print("withDownload: %s"%(self.getWithDownloadValue()))
         config.getDefaultSection()["zoom"]=str(self.getZoomValue())
         config.getDefaultSection()["autocenterGPS"]=str(self.getAutocenterGPSValue())
         config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())
