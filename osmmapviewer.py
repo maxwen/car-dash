@@ -1381,7 +1381,7 @@ class QtOSMWidget(QWidget):
         if self.sidebarVisible==True:
             textBackground=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.height())
             self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 0+diff/2, IMAGE_WIDTH, 32, self.style.getStylePixmap("hideSidebarPixmap"))
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 0+diff/2, 32, 32, self.style.getStylePixmap("hideSidebarPixmap"))
             self.sidebarControlRect=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, 40)
             self.sidebarRect=QRect(self.width()-SIDEBAR_WIDTH, self.sidebarControlRect.height(), SIDEBAR_WIDTH, self.height()-self.sidebarControlRect.height())
         
@@ -1407,7 +1407,7 @@ class QtOSMWidget(QWidget):
             self.sidebarRect=None
             textBackground=QRect(self.width()-SIDEBAR_WIDTH, CONTROL_WIDTH, SIDEBAR_WIDTH, 40)
             self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, CONTROL_WIDTH+diff/2, IMAGE_WIDTH, 32, self.style.getStylePixmap("showSidebarPixmap"))
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, CONTROL_WIDTH+diff/2, 32, 32, self.style.getStylePixmap("showSidebarPixmap"))
             self.sidebarControlRect=textBackground
             
     def displayTopbar(self):
