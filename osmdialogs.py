@@ -223,7 +223,6 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         return item[1]
     
     def update(self, filteredCityList, treeModel):
-        
         self.layoutAboutToBeChanged.emit()
         
         itemList=list()
@@ -245,7 +244,6 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 self.rootItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
              
-    
         for row, column, item in itemList:
             toIndex=self.searchModel(item.osmId)
             if toIndex!=None:
@@ -719,10 +717,15 @@ class OSMAdressDialog(QDialog):
                 if not fnmatch.fnmatch(cityName.upper(), filterValue.upper()) and not fnmatch.fnmatch(cityName.upper(), filterValueMod.upper()):
                     continue
                 self.filteredCityList.append((cityId, cityName))
+        
+            self.cityViewModel.update(self.filteredCityList, self.cityModel)
+            self.cityView.expandAll()
+        
         else:
             self.filteredCityList=self.cityList
+            self.cityViewModel.update(self.filteredCityList, self.cityModel)
         
-        self.cityViewModel.update(self.filteredCityList, self.cityModel)
+
 
 #----------------------------
 class OSMFavoriteTableModel(QAbstractTableModel):

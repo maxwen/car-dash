@@ -73,6 +73,14 @@ DONE
  solve cases for addr nodes and way for same street and housenumber
  -just compare lat,lon + margin
  DONE
+ 
+ TODO: support barriers that have more then two edges
+DONE
+
+ TODO: when searching for inital way should not select way behind a
+  crossing
+  -dont add start and endpoints for initial matching
+  DONE 
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -81,8 +89,8 @@ DONE
  
  TODO: convert map point to routing point
  
- TODO: pois
- -add leisure park
+ TODO: POIs to add
+ -leisure park
  -place_of_worship
  
  TODO: parser config file
@@ -140,9 +148,7 @@ relation with via type way {'to': 144986762, 'viaWay': [144986748], 'type': 'no_
 relation with via type way {'to': 54858215, 'viaWay': [127061650], 'type': 'no_u_turn', 'id': 2065288, 'from': 4789250}
 relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_left_turn', 'id': 2079173, 'from': 154613298}
 relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
- 
-TODO: support barriers that have more then two edges
-  
+
  TODO:
  solve cases where build and node exists for same POI
  -actually OSM says alterantivly node or way
@@ -160,8 +166,12 @@ TODO: support barriers that have more then two edges
  TODO: add POI based searching
 
  TODO: use admin area hierarchy in search dialogs
+ DONE
  
  TODO: show POI info on map
  -tooltip
  DONE
-  -what to show = - cirrently tags["name"]
+  -what to show = - currently tags["name"]
+
+  TODO: place POIs could be schown in adress search
+  

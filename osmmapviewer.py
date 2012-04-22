@@ -52,6 +52,8 @@ MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
 WITH_TIMING_DEBUG=True
+SIDEBAR_WIDTH=80
+CONTROL_WIDTH=80
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -578,6 +580,12 @@ class QtOSMWidget(QWidget):
         self.isVirtualZoom=False
         self.virtualZoomValue=2.0
         self.prefetchBBox=None
+        self.sidebarVisible=True
+    
+    def getSidebarWidth(self):
+        if self.sidebarVisible==True:
+            return SIDEBAR_WIDTH
+        return 0
     
     def getDisplayPOITypeList(self):
         return self.style.getDisplayPOITypeList()
@@ -893,7 +901,7 @@ class QtOSMWidget(QWidget):
     def isPointVisible(self, x, y):
         point=QPoint(x, y)
         skyMargin=0
-        if self.show3D==True and self.showSky==True:
+        if self.show3DView()==True and self.showSky==True:
             skyMargin=SKY_WIDTH
 
         point0=self.transformHeading.map(point)        
@@ -904,7 +912,7 @@ class QtOSMWidget(QWidget):
     def isPointVisibleTransformed(self, x, y):
         point=QPoint(x, y)
         skyMargin=0
-        if self.show3D==True and self.showSky==True:
+        if self.show3DView()==True and self.showSky==True:
             skyMargin=SKY_WIDTH
             
         rect=QRect(0, 0+skyMargin, self.width(), self.height())
@@ -976,7 +984,7 @@ class QtOSMWidget(QWidget):
         map_x, map_y=self.getMapZeroPos()
         
         skyMargin=0
-        if self.show3D==True and self.showSky==True:
+        if self.show3DView()==True and self.showSky==True:
             skyMargin=SKY_WIDTH
             
         point=QPointF(0, 0+skyMargin)            
@@ -1084,7 +1092,7 @@ class QtOSMWidget(QWidget):
     # x,y in pixels for check if geom is in visible area
     def calcVisiblePolygon(self):
         skyMargin=0
-        if self.show3D==True and self.showSky==True:
+        if self.show3DView()==True and self.showSky==True:
             skyMargin=SKY_WIDTH
             
         invertedTransform=self.transformHeading.inverted()
@@ -1252,7 +1260,7 @@ class QtOSMWidget(QWidget):
         self.painter.resetTransform()
         
                 
-        if self.show3D==True and self.showSky==True:
+        if self.show3DView()==True and self.showSky==True:
             skyRect=QRectF(0, 0, self.width(), SKY_WIDTH)
             gradient=QLinearGradient(skyRect.topLeft(), skyRect.bottomLeft())
             gradient.setColorAt(1, self.style.getStyleColor("mapBackgroundColor"))
@@ -1272,7 +1280,7 @@ class QtOSMWidget(QWidget):
 
         # sort by y voordinate
         # farthest nodes (smaller y coordinate) are drawn first
-        if self.show3D==True:
+        if self.show3DView()==True:
             self.orderedNodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
 
         self.displayNodes()
@@ -1323,6 +1331,10 @@ class QtOSMWidget(QWidget):
 #            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
         self.displayGPSPosition()
+        
+        self.displaySidebar()
+        self.displayTopbar()
+            
 #        self.displayControlOverlay()
         self.displayControlOverlay2()
 
@@ -1334,7 +1346,7 @@ class QtOSMWidget(QWidget):
             
         self.showTextInfo()
         self.showSpeedInfo()
-        self.showTunnelInfo()
+#        self.showTunnelInfo()
         
         self.painter.end()
 
@@ -1344,6 +1356,56 @@ class QtOSMWidget(QWidget):
             print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
             print("paintEvent:%f"%(time.time()-start))
   
+    def displaySidebar(self):
+        diff =40-32
+        if self.sidebarVisible==True:
+            textBackground=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.height())
+            self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 0+diff/2, IMAGE_WIDTH, 32, self.style.getStylePixmap("hideSidebarPixmap"))
+            self.sidebarControlRect=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, 40)
+            self.sidebarRect=QRect(self.width()-SIDEBAR_WIDTH, self.sidebarControlRect.height(), SIDEBAR_WIDTH, self.height()-self.sidebarControlRect.height())
+        
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("addressesPixmap"))
+            self.addressRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("favoritesPixmap"))
+            self.favoriteRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("routePixmap"))
+            self.routesRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("centerGPSPixmap"))
+            self.centerGPSRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("gpsDataPixmap"))
+            self.showGPSDataRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
+            self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+        else:
+            self.sidebarRect=None
+            textBackground=QRect(self.width()-SIDEBAR_WIDTH, CONTROL_WIDTH, SIDEBAR_WIDTH, 40)
+            self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, CONTROL_WIDTH+diff/2, IMAGE_WIDTH, 32, self.style.getStylePixmap("showSidebarPixmap"))
+            self.sidebarControlRect=textBackground
+            
+    def displayTopbar(self):
+        textBackground=QRect(CONTROL_WIDTH, 0, self.width()-self.getSidebarWidth()-2*CONTROL_WIDTH, 30)
+        self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
+        
+        font=self.style.getStyleFont("monoFont")
+        self.painter.setFont(font)
+        fm=self.painter.fontMetrics()
+        
+        lat=self.osmutils.rad2deg(self.gps_rlat)
+        lon=self.osmutils.rad2deg(self.gps_rlon)
+        speed=self.speed
+        altitude=self.altitude
+        
+        self.painter.setPen(self.style.getStylePen("textPen"))
+        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.5f %.5f %3dkm/h %4dm"%(lat, lon, speed, altitude))
+        
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
         
@@ -1684,6 +1746,42 @@ class QtOSMWidget(QWidget):
     def event(self, event):
         if event.type()==QEvent.ToolTip:
             mousePos=QPoint(event.x(), event.y())
+            if self.sidebarVisible==True:
+                if self.addressRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Search address")
+                    return True
+                elif self.favoriteRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Select favorite")
+                    return True
+                elif self.routesRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Load route")
+                    return True
+                elif self.centerGPSRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Center map to GPS")
+                    return True
+                elif self.showGPSDataRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Show GPS data")
+                    return True
+                elif self.optionsRect.contains(mousePos):
+                    QToolTip.showText(event.globalPos(), "Options")
+                    return True
+                
+            if self.sidebarControlRect.contains(mousePos):
+                if self.sidebarVisible==True:
+                    QToolTip.showText(event.globalPos(), "Hide")
+                    return True
+                else:
+                    QToolTip.showText(event.globalPos(), "Show")
+                    return True
+            
+            if self.plusRect.contains(mousePos):
+                QToolTip.showText(event.globalPos(), "+ Zoom %d"%(self.map_zoom))
+                return True
+
+            if self.minusRect.contains(mousePos):
+                QToolTip.showText(event.globalPos(), "- Zoom %d"%(self.map_zoom))
+                return True
+                
             tags=self.getNodeTagsForPos(mousePos)
             if tags!=None:
                 if "name" in tags:
@@ -2021,11 +2119,11 @@ class QtOSMWidget(QWidget):
             print(tags)
 
     def showTextInfoBackground(self):
-        textBackground=QRect(0, self.height()-50, self.width(), 50)
+        textBackground=QRect(0, self.height()-50, self.width()-self.getSidebarWidth(), 50)
         self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
         
         if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
-            routeInfoBackground=QRect(self.width()-100, self.height()-50-200, 100, 200)
+            routeInfoBackground=QRect(self.width()-100-self.getSidebarWidth(), self.height()-50-200, 100, 200)
             self.painter.fillRect(routeInfoBackground, self.style.getStyleColor("backgroundColor"))
             
     def showTextInfo(self):
@@ -2055,11 +2153,10 @@ class QtOSMWidget(QWidget):
             else:
                 distanceToEndStr="%dm"%self.distanceToEnd
                 
-            distanceToEndPos=QPoint(self.width()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
+            distanceToEndPos=QPoint(self.width()-self.getSidebarWidth()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
             self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
 
         if self.distanceToCrossing!=0:
-            crossingDistancePos=QPoint(self.width()-90, self.height()-60)
             if self.distanceToCrossing>10000:
                 crossingLengthStr="%dkm"%(int(self.distanceToCrossing/1000))
             elif self.distanceToCrossing>500:
@@ -2067,7 +2164,7 @@ class QtOSMWidget(QWidget):
             else:
                 crossingLengthStr="%dm"%self.distanceToCrossing
             
-            crossingDistancePos=QPoint(self.width()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
+            crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
             self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
 
         font=self.style.getStyleFont("wayInfoFont")
@@ -2098,10 +2195,10 @@ class QtOSMWidget(QWidget):
             elif "motorway:exit" in crossingInfo:
                 crossingInfoStr="Take motorway exit"
             
-            routeInfoPos1=QPoint(self.width()-fm.width(crossingInfoStr)-10, self.height()-15)
+            routeInfoPos1=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingInfoStr)-10, self.height()-15)
             self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
                             
-            x=self.width()-92
+            x=self.width()-self.getSidebarWidth()-92
             y=self.height()-50-100+10
             self.displayRouteDirectionImage(direction, exitNumber, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, x, y) 
      
@@ -2133,15 +2230,15 @@ class QtOSMWidget(QWidget):
                 speedPixmap=QPixmap(imagePath)
                 self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, speedPixmap)
                 
-    def showTunnelInfo(self):
-        if self.isInTunnel==True:
-            x=self.width()-72
-            y=8
-            
-            tunnelBackground=QRect(self.width()-80, 0, 80, 80)
-            self.painter.fillRect(tunnelBackground, self.style.getStyleColor("backgroundColor"))
-            
-            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("tunnelPixmap"))
+#    def showTunnelInfo(self):
+#        if self.isInTunnel==True:
+#            x=self.width()-72
+#            y=8
+#            
+#            tunnelBackground=QRect(self.width()-80, 0, 80, 80)
+#            self.painter.fillRect(tunnelBackground, self.style.getStyleColor("backgroundColor"))
+#            
+#            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("tunnelPixmap"))
             
     def displayRoutingPoints(self):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
@@ -2616,22 +2713,41 @@ class QtOSMWidget(QWidget):
     def mouseReleaseEvent(self, event ):
         self.mousePressed=False
 
+        eventPos=QPoint(event.x(), event.y())
         if not self.moving:
-            if not self.minusRect.contains(event.x(), event.y()) and not self.plusRect.contains(event.x(), event.y()):
-                self.lastMouseMoveX=event.x()
-                self.lastMouseMoveY=event.y()
-                self.showTrackOnMousePos(event.x(), event.y())
-
-            else:
-#                self.pointInsideMoveOverlay(event.x(), event.y())
+            if self.sidebarVisible==True:
+                if self.sidebarRect.contains(eventPos):
+                    if self.addressRect.contains(eventPos):
+                        self.parent()._showAdress()
+                    elif self.favoriteRect.contains(eventPos):
+                        self.parent()._showFavorites()
+                    elif self.routesRect.contains(eventPos):
+                        self.parent()._loadRoute()
+                    elif self.centerGPSRect.contains(eventPos):
+                        self.parent()._centerGPS()
+                    elif self.showGPSDataRect.contains(eventPos):
+                        self.parent()._showGPSData()
+                    elif self.optionsRect.contains(eventPos):
+                        self.parent()._showSettings()
+                    return
+                
+            if self.sidebarControlRect.contains(eventPos):
+                if self.sidebarVisible==True:
+                    self.sidebarVisible=False
+                else:
+                    self.sidebarVisible=True
+                self.update()
+                return
+            
+            if self.minusRect.contains(eventPos) or self.plusRect.contains(eventPos):
                 self.pointInsideZoomOverlay(event.x(), event.y())
+                return
+            
+            self.lastMouseMoveX=event.x()
+            self.lastMouseMoveY=event.y()
+            self.showTrackOnMousePos(event.x(), event.y())
                 
         else:
-#            dx=self.lastMouseMoveX-event.x()
-#            dy=self.lastMouseMoveY-event.y()
-#            self.osm_map_scroll(dx, dy)
-#            self.lastMouseMoveX=event.x()
-#            self.lastMouseMoveY=event.y()
             self.moving=False
 
 
@@ -2672,16 +2788,16 @@ class QtOSMWidget(QWidget):
 #        self.painter.drawPixmap(0, 0, self.osmControlImage)
 
     def displayControlOverlay2(self):
-        minusBackground=QRect(0, 0, 80, 80)
-        diff=80-IMAGE_WIDTH
+        minusBackground=QRect(0, 0, CONTROL_WIDTH, CONTROL_WIDTH)
+        diff=CONTROL_WIDTH-IMAGE_WIDTH
         self.painter.fillRect(minusBackground, self.style.getStyleColor("backgroundColor"))
         self.minusRect=minusBackground
-        self.painter.drawPixmap(diff/2, 5, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
+        self.painter.drawPixmap(diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
 
-        plusBackground=QRect(self.width()-80, 0, 80, 80)
+        plusBackground=QRect(self.width()-self.getSidebarWidth()-CONTROL_WIDTH, 0, CONTROL_WIDTH, CONTROL_WIDTH)
         self.painter.fillRect(plusBackground, self.style.getStyleColor("backgroundColor"))
         self.plusRect=plusBackground
-        self.painter.drawPixmap(self.width()-80+diff/2, 5, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("plusPixmap"))
+        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-CONTROL_WIDTH+diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("plusPixmap"))
 
     def mousePressEvent(self, event):
         self.mousePressed=True
@@ -3568,13 +3684,13 @@ class OSMWidget(QWidget):
         self.favoriteList=list()
         self.mapWidgetQt=QtOSMWidget(self)
         
-        self.style=OSMStyle()
-        self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
-        self.addressIcon=QIcon(self.style.getStylePixmap("addressesPixmap"))
-        self.routesIccon=QIcon(self.style.getStylePixmap("routePixmap"))
-        self.centerGPSIcon=QIcon(self.style.getStylePixmap("centerGPSPixmap"))
-        self.settingsIcon=QIcon(self.style.getStylePixmap("settingsPixmap"))
-        self.gpsIcon=QIcon(self.style.getStylePixmap("gpsDataPixmap"))
+#        self.style=OSMStyle()
+#        self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
+#        self.addressIcon=QIcon(self.style.getStylePixmap("addressesPixmap"))
+#        self.routesIccon=QIcon(self.style.getStylePixmap("routePixmap"))
+#        self.centerGPSIcon=QIcon(self.style.getStylePixmap("centerGPSPixmap"))
+#        self.settingsIcon=QIcon(self.style.getStylePixmap("settingsPixmap"))
+#        self.gpsIcon=QIcon(self.style.getStylePixmap("gpsDataPixmap"))
 
         self.incLat=0.0
         self.incLon=0.0
@@ -3593,84 +3709,84 @@ class OSMWidget(QWidget):
         hbox1=QHBoxLayout()
         hbox1.addWidget(self.mapWidgetQt)
         
-        buttons=QVBoxLayout()        
-        buttons.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-        buttons.setSpacing(0)
+#        buttons=QVBoxLayout()        
+#        buttons.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+#        buttons.setSpacing(0)
 
-        iconSize=QSize(48, 48)
-        self.adressButton=QPushButton("", self)
-        self.adressButton.setIcon(self.addressIcon)
-        self.adressButton.setToolTip("Addresses")
-        self.adressButton.clicked.connect(self._showAdress)
-        self.adressButton.setIconSize(iconSize)        
-        buttons.addWidget(self.adressButton)
-                
-        self.favoritesButton=QPushButton("", self)
-        self.favoritesButton.setIcon(self.favoriteIcon)
-        self.favoritesButton.setToolTip("Favorites")
-        self.favoritesButton.clicked.connect(self._showFavorites)
-        self.favoritesButton.setIconSize(iconSize)        
-        buttons.addWidget(self.favoritesButton)
+#        iconSize=QSize(48, 48)
+#        self.adressButton=QPushButton("", self)
+#        self.adressButton.setIcon(self.addressIcon)
+#        self.adressButton.setToolTip("Addresses")
+#        self.adressButton.clicked.connect(self._showAdress)
+#        self.adressButton.setIconSize(iconSize)        
+#        buttons.addWidget(self.adressButton)
+#                
+#        self.favoritesButton=QPushButton("", self)
+#        self.favoritesButton.setIcon(self.favoriteIcon)
+#        self.favoritesButton.setToolTip("Favorites")
+#        self.favoritesButton.clicked.connect(self._showFavorites)
+#        self.favoritesButton.setIconSize(iconSize)        
+#        buttons.addWidget(self.favoritesButton)
+#        
+#        self.routesButton=QPushButton("", self)
+#        self.routesButton.setIcon(self.routesIccon)
+#        self.routesButton.setToolTip("Routes")
+#        self.routesButton.clicked.connect(self._loadRoute)
+#        self.routesButton.setIconSize(iconSize)        
+#        buttons.addWidget(self.routesButton)
+#
+#        self.centerGPSButton=QPushButton("", self)
+#        self.centerGPSButton.setToolTip("Center map to GPS")
+#        self.centerGPSButton.setIcon(self.centerGPSIcon)
+#        self.centerGPSButton.setIconSize(iconSize)        
+#        self.centerGPSButton.clicked.connect(self._centerGPS)
+#        buttons.addWidget(self.centerGPSButton)
+#        
+#        self.showGPSDataButton=QPushButton("", self)
+#        self.showGPSDataButton.setToolTip("Show data from GPS")
+#        self.showGPSDataButton.setIcon(self.gpsIcon)
+#        self.showGPSDataButton.setIconSize(iconSize)        
+#        self.showGPSDataButton.clicked.connect(self._showGPSData)
+#        buttons.addWidget(self.showGPSDataButton)
+#
+#        self.optionsButton=QPushButton("", self)
+#        self.optionsButton.setToolTip("Settings")
+#        self.optionsButton.setIcon(self.settingsIcon)
+#        self.optionsButton.setIconSize(iconSize)        
+#        self.optionsButton.clicked.connect(self._showSettings)
+#        buttons.addWidget(self.optionsButton)  
         
-        self.routesButton=QPushButton("", self)
-        self.routesButton.setIcon(self.routesIccon)
-        self.routesButton.setToolTip("Routes")
-        self.routesButton.clicked.connect(self._loadRoute)
-        self.routesButton.setIconSize(iconSize)        
-        buttons.addWidget(self.routesButton)
-
-        self.centerGPSButton=QPushButton("", self)
-        self.centerGPSButton.setToolTip("Center map to GPS")
-        self.centerGPSButton.setIcon(self.centerGPSIcon)
-        self.centerGPSButton.setIconSize(iconSize)        
-        self.centerGPSButton.clicked.connect(self._centerGPS)
-        buttons.addWidget(self.centerGPSButton)
-        
-        self.showGPSDataButton=QPushButton("", self)
-        self.showGPSDataButton.setToolTip("Show data from GPS")
-        self.showGPSDataButton.setIcon(self.gpsIcon)
-        self.showGPSDataButton.setIconSize(iconSize)        
-        self.showGPSDataButton.clicked.connect(self._showGPSData)
-        buttons.addWidget(self.showGPSDataButton)
-
-        self.optionsButton=QPushButton("", self)
-        self.optionsButton.setToolTip("Settings")
-        self.optionsButton.setIcon(self.settingsIcon)
-        self.optionsButton.setIconSize(iconSize)        
-        self.optionsButton.clicked.connect(self._showSettings)
-        buttons.addWidget(self.optionsButton)  
-        
-        font = QFont("Mono")
-        font.setPointSize(14)
-        font.setStyleHint(QFont.TypeWriter)
-
-        coords=QVBoxLayout()        
-        coords.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-        coords.setSpacing(0)
-
-        buttons.addLayout(coords)
-
-        self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
-        self.gpsPosValueLat.setFont(font)
-        self.gpsPosValueLat.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.gpsPosValueLat)
-
-        self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
-        self.gpsPosValueLon.setFont(font)
-        self.gpsPosValueLon.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.gpsPosValueLon)
-        
-        self.gpsAltitudeValue=QLabel("%d"%(0), self)
-        self.gpsAltitudeValue.setFont(font)
-        self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.gpsAltitudeValue)
-
-        self.gpsSpeedValue=QLabel("%d"%(0), self)
-        self.gpsSpeedValue.setFont(font)
-        self.gpsSpeedValue.setAlignment(Qt.AlignRight)
-        coords.addWidget(self.gpsSpeedValue)
-        
-        hbox1.addLayout(buttons)
+#        font = QFont("Mono")
+#        font.setPointSize(14)
+#        font.setStyleHint(QFont.TypeWriter)
+#
+#        coords=QVBoxLayout()        
+#        coords.setAlignment(Qt.AlignLeft|Qt.AlignTop)
+#        coords.setSpacing(0)
+#
+#        buttons.addLayout(coords)
+#
+#        self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
+#        self.gpsPosValueLat.setFont(font)
+#        self.gpsPosValueLat.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.gpsPosValueLat)
+#
+#        self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
+#        self.gpsPosValueLon.setFont(font)
+#        self.gpsPosValueLon.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.gpsPosValueLon)
+#        
+#        self.gpsAltitudeValue=QLabel("%d"%(0), self)
+#        self.gpsAltitudeValue.setFont(font)
+#        self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.gpsAltitudeValue)
+#
+#        self.gpsSpeedValue=QLabel("%d"%(0), self)
+#        self.gpsSpeedValue.setFont(font)
+#        self.gpsSpeedValue.setAlignment(Qt.AlignRight)
+#        coords.addWidget(self.gpsSpeedValue)
+#        
+#        hbox1.addLayout(buttons)
 
         vbox.addLayout(hbox1)
         
@@ -3891,10 +4007,10 @@ class OSMWidget(QWidget):
         
         self.mapWidgetQt.updateGPSLocation(gpsData, debug)
         
-        self.gpsPosValueLat.setText("%.5f"%(lat))
-        self.gpsPosValueLon.setText("%.5f"%(lon))   
-        self.gpsAltitudeValue.setText("%d"%(altitude))
-        self.gpsSpeedValue.setText("%d"%(speed))
+#        self.gpsPosValueLat.setText("%.5f"%(lat))
+#        self.gpsPosValueLon.setText("%.5f"%(lon))   
+#        self.gpsAltitudeValue.setText("%d"%(altitude))
+#        self.gpsSpeedValue.setText("%d"%(speed))
             
     def init(self, lat, lon, zoom):        
         self.mapWidgetQt.init()
@@ -4048,6 +4164,12 @@ class OSMWidget(QWidget):
     def setStartZoom3DView(self, value):
         self.mapWidgetQt.startZoom3DView=value
         
+    def getSidebarVisible(self):
+        return self.mapWidgetQt.sidebarVisible
+    
+    def setSidebarVisible(self, value):
+        self.mapWidgetQt.sidebarVisible=value
+        
     def loadConfig(self, config):
         self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
         self.setAutocenterGPSValue(config.getDefaultSection().getboolean("autocenterGPS", False))
@@ -4068,6 +4190,7 @@ class OSMWidget(QWidget):
         self.setTileStartZoom(config.getDefaultSection().getint("tileStartZoom", defaultTileStartZoom))
         self.setVirtualZoom(config.getDefaultSection().getboolean("virtualZoom", False))
         self.setStartZoom3DView(config.getDefaultSection().getint("startZoom3D", defaultStart3DZoom))
+        self.setSidebarVisible(config.getDefaultSection().getboolean("sidebarVisible", True))
         
         section="poi"
         if config.hasSection(section):
@@ -4112,6 +4235,7 @@ class OSMWidget(QWidget):
         config.getDefaultSection()["tileStartZoom"]=str(self.getTileStartZoom())
         config.getDefaultSection()["virtualZoom"]=str(self.getVirtualZoom())
         config.getDefaultSection()["startZoom3D"]=str(self.getStartZoom3DView())
+        config.getDefaultSection()["sidebarVisible"]=str(self.getSidebarVisible())
         
         if self.mapWidgetQt.gps_rlat!=0.0:
             config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)

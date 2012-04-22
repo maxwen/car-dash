@@ -1523,6 +1523,13 @@ class OSMParserData():
             
         return sumLat/n, sumLon/n
     
+    def parseBooleanTag(self, tags, key):
+        if key in tags:
+            if tags[key]=="1" or tags[key]=="true" or tags[key]=="yes":
+                return True
+            
+        return False
+    
     def parse_ways(self, way):
         if self.skipWays==True:
             return 
@@ -1694,11 +1701,7 @@ class OSMParserData():
                     oneway=0
                     roundabout=0
                     if "oneway" in tags:
-                        if tags["oneway"]=="yes":
-                            oneway=1
-                        elif tags["oneway"]=="true":
-                            oneway=1
-                        elif tags["oneway"]=="1":
+                        if tags["oneway"]=="yes" or tags["oneway"]=="true" or tags["oneway"]=="1":
                             oneway=1
                         elif tags["oneway"]=="-1":
                             oneway=2
@@ -1713,13 +1716,11 @@ class OSMParserData():
 
                     tunnel=0
                     if "tunnel" in tags:
-                        if tags["tunnel"]=="yes":
-                            tunnel=1
+                        tunnel=1
                     
                     bridge=0
                     if "bridge" in tags:
-                        if tags["bridge"]=="yes":
-                            bridge=1
+                        bridge=1
                             
                     maxspeed=self.getMaxspeed(tags, streetTypeId)
                         
@@ -2403,8 +2404,8 @@ class OSMParserData():
         
         return self.isOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
     
-    def isMinimalDistanceOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance):        
-        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2)
+    def isMinimalDistanceOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance, addStart=True, addEnd=True):        
+        nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, addStart=addStart, addEnd=addEnd)
         minDistance=maxDistance
         onLine=False
         point=None
@@ -4247,30 +4248,30 @@ class OSMParserData():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
         
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
-        osmData["osmFile"]=None
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
+#        osmData["osmFile"]=None
         osmData["poly"]="switzerland.poly"
         osmData["polyCountry"]="Europe / Western Europe / Switzerland"
         osmDataList[1]=osmData
     
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
-        osmData["osmFile"]=None
+#        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
         osmDataList[2]=osmData
         
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
-        osmData["osmFile"]=None
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
+#        osmData["osmFile"]=None
         osmData["poly"]="liechtenstein.poly"
         osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
         osmDataList[3]=osmData

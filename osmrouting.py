@@ -917,6 +917,9 @@ class OSMRouting():
         closestEdge=None
         minDistance=maxDistance
         minHeadingDiff=DECISION_HEADING_RANGE
+        # dont match end and start points here to make sure we are ON the edge
+        addStart=False
+        addEnd=False
         
         currentEdgeData=None
         if self.currentEdgeData!=None:
@@ -932,7 +935,7 @@ class OSMRouting():
                                                 
             lat1, lon1=coords[0]
             for lat2, lon2 in coords[1:]:
-                onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+                onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance, addStart, addEnd)
                 if onLine==True:
                     if oneway==0 or oneway==2:
                         heading=self.osmutils.headingDegrees(lat2, lon2, lat1, lon1)
