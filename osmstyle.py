@@ -72,7 +72,7 @@ class OSMStyle():
         self.pixmapDict["favoritesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "favorites.png"))
         self.pixmapDict["addressesPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "addresses.png"))
         self.pixmapDict["routePixmap"]=QPixmap(os.path.join(env.getImageRoot(), "route.png"))
-        self.pixmapDict["centerGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "map-gps.png"))
+        self.pixmapDict["centerGPSPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "center-gps.png"))
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "gps.png"))
         self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(env.getImageRoot(), "flagMap.png"))
@@ -631,6 +631,11 @@ class OSMStyle():
         font.setPointSize(16)
         self.fontDict["routeDistanceFont"]=font     
         
+        font = QFont("Mono")
+        font.setPointSize(16)
+        font.setStyleHint(QFont.TypeWriter)
+        self.fontDict["monoFontTopbar"]=font     
+
         font = QFont("Mono")
         font.setPointSize(14)
         font.setStyleHint(QFont.TypeWriter)

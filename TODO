@@ -175,3 +175,10 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
 
   TODO: place POIs could be schown in adress search
   
+  TODO: incomplete countries in search
+  -if no country admin exists all address are lost from the search
+  -e.g. add country poly but how to match beetween osm country relation
+  
+  TODO: expand nodes for matching 
+  -expand all is TOOOOOO slow
+  

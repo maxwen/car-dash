@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import Polygon
+import env
 
 class OSMBoarderUtils():
     def __init__(self, dataDir):
@@ -46,16 +47,18 @@ class OSMBoarderUtils():
     def readMultiPolygon(self, f):
 
         polygons = []
+        polygonCoords=[]
         while True:
             dummy = f.readline()
             if not(dummy):
                 break
            
-            cPolygon = self.readPolygon(f)
+            coords, cPolygon = self.readPolygon(f)
             if cPolygon != None:
                 polygons.append(cPolygon)
+                polygonCoords.append(coords)
                                
-        return polygons
+        return polygonCoords, polygons
     
     # Read a polygon from file
     # NB: holes aren't supported yet
@@ -86,24 +89,25 @@ class OSMBoarderUtils():
             coords.append((lon, lat))
        
         if len(coords) < 3:
-            return None
+            return None, None
         
-        return Polygon.Polygon(coords)
+        return coords, Polygon.Polygon(coords)
     
     def readPolyFile(self, fileName):
         f=open(fileName, "r")
         name = f.readline().strip()
-        polygons = self.readMultiPolygon(f)     
+        polygonCoords, polygons = self.readMultiPolygon(f)     
         f.close()
         poly=dict()
         poly["name"]=name
-        poly["coords"]=polygons
+        poly["coords"]=polygonCoords
+        poly["polygons"]=polygons
         self.polyData.append(poly)
     
     def countryNameOfPoint(self, lat, lon):
         for poly in self.polyData:
             name=poly["name"]
-            polygons=poly["coords"]
+            polygons=poly["polygons"]
             for cPolygon in polygons:
                 if cPolygon.isInside(lon, lat):
                     return name
@@ -122,8 +126,29 @@ class OSMBoarderUtils():
                     
         return nameList
     
+    def createMultiPolygonPartFromCoords(self, coords):
+        polyString="(("
+        coordString=''.join(["%f %f"%(lon, lat)+"," for lon, lat in coords])    
+        coordString=coordString[:-1]
+        polyString=polyString+coordString+")),"                
+        return polyString
+    
+    def createMultiPolygonFromPoly(self, name):
+        for poly in self.polyData:
+            if poly["name"]==name:
+                polyString="'MULTIPOLYGON("
+                for coords in poly["coords"]:
+                    polyStringPart=self.createMultiPolygonPartFromCoords(coords)
+                    polyString=polyString+polyStringPart
+                                                                    
+                polyString=polyString[:-1]
+                polyString=polyString+")'"
+                return polyString
+            
+        return None
+    
 def main(argv):        
-    bu=OSMBoarderUtils("/home/maxl/workspaces/pydev/car-dash/data3/poly-simple")
+    bu=OSMBoarderUtils(env.getPolyDataRoot())
     bu.initData()
     
     lat=47.8205
@@ -277,6 +302,12 @@ def main(argv):
     start=time.time()
     print(bu.countryNameOfPoint(lat, lon))  
     end=time.time()
+    
+#    lat=49.467988
+#    lon=11.0278791
+#    start=time.time()
+#    name=bu.countryNameOfPoint(lat, lon)  
+#    print(bu.createMultiPolygonFromPoly(name))
     
 if __name__ == "__main__":
     main(sys.argv)  

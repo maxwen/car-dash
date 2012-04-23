@@ -1414,7 +1414,7 @@ class QtOSMWidget(QWidget):
         textBackground=QRect(CONTROL_WIDTH, 0, self.width()-self.getSidebarWidth()-2*CONTROL_WIDTH, 30)
         self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
         
-        font=self.style.getStyleFont("monoFont")
+        font=self.style.getStyleFont("monoFontTopbar")
         self.painter.setFont(font)
         fm=self.painter.fontMetrics()
         
@@ -1781,15 +1781,15 @@ class QtOSMWidget(QWidget):
                     QToolTip.showText(event.globalPos(), "Show GPS data")
                     return True
                 elif self.optionsRect.contains(mousePos):
-                    QToolTip.showText(event.globalPos(), "Options")
+                    QToolTip.showText(event.globalPos(), "Settings")
                     return True
                 
             if self.sidebarControlRect.contains(mousePos):
                 if self.sidebarVisible==True:
-                    QToolTip.showText(event.globalPos(), "Hide")
+                    QToolTip.showText(event.globalPos(), "Hide toolbar")
                     return True
                 else:
-                    QToolTip.showText(event.globalPos(), "Show")
+                    QToolTip.showText(event.globalPos(), "Show toolbar")
                     return True
             
             if self.plusRect.contains(mousePos):
@@ -3358,7 +3358,8 @@ class QtOSMWidget(QWidget):
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                wayId, tags, refs, _, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+                wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+#                print(osmParserData.decodeStreetInfo2(streetInfo))
 #                print(wayId)
 #                print(tags)
 #                refRings=osmParserData.mergeEqualWayEntries(wayId)

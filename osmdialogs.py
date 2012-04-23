@@ -126,6 +126,7 @@ class OSMCityModel():
         self.root=dict()
         self.countryId=countryId
         self.osmParserData=osmParserData
+        self.cityDataCache=dict()
         self.buildModel(self.countryId, self.root)
     
     def buildModel(self, currentCityId, data):
@@ -133,6 +134,7 @@ class OSMCityModel():
         for cityId, cityName in cityList:
             childs=dict()
             data[cityId]=(cityId, cityName, currentCityId, childs)
+            self.cityDataCache[cityId]=(cityId, cityName, currentCityId, childs)
             self.buildModel(cityId, childs)
             
     def getRootNodes(self):
@@ -151,15 +153,22 @@ class OSMCityModel():
         return None
     
     def getCityData(self, currentCityId, data):
-        for (cityId, cityName, parentId, childs) in data.values():
-            if cityId==currentCityId:
-                return (cityId, cityName, parentId, childs)
-            
-            foundCityId, foundCityName, foundParent, foundChilds=self.getCityData(currentCityId, childs)
-            if foundCityId!=None:
-                return foundCityId, foundCityName, foundParent, foundChilds
+        return self.cityDataCache[currentCityId]
+        
+#        cityData=self.getCityDataRecursive(currentCityId, data)
+#        self.cityDataCache[currentCityId]=cityData
+#        return cityData
     
-        return None, None, None, None
+#    def getCityDataRecursive(self, currentCityId, data):
+#        for (cityId, cityName, parentId, childs) in data.values():
+#            if cityId==currentCityId:
+#                return (cityId, cityName, parentId, childs)
+#            
+#            foundCityId, foundCityName, foundParent, foundChilds=self.getCityDataRecursive(currentCityId, childs)
+#            if foundCityId!=None:
+#                return foundCityId, foundCityName, foundParent, foundChilds
+#    
+#        return None, None, None, None
     
     def hasMatchingChilds(self, currentCityId, filteredCityList):
         cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
@@ -711,19 +720,26 @@ class OSMAdressDialog(QDialog):
             if filterValue[-1]!="*":
                 filterValue=filterValue+"*"
             self.filteredCityList=list()
-            filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            filterValueMod=None
+            if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
+                filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
             for (cityId, cityName) in self.cityList:
-                if not fnmatch.fnmatch(cityName.upper(), filterValue.upper()) and not fnmatch.fnmatch(cityName.upper(), filterValueMod.upper()):
-                    continue
-                self.filteredCityList.append((cityId, cityName))
+                match=False
+                if fnmatch.fnmatch(cityName.upper(), filterValue.upper()):
+                    match=True
+                if match==False and filterValueMod!=None and fnmatch.fnmatch(cityName.upper(), filterValueMod.upper()):
+                    match=True
+                
+                if match==True:
+                    self.filteredCityList.append((cityId, cityName))
         
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
-            self.cityView.expandAll()
         
         else:
             self.filteredCityList=self.cityList
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
+            self.cityView.expandAll()
         
 
 

@@ -134,8 +134,11 @@ class Constants():
                 STREET_TYPE_UNCLASSIFIED,
                 STREET_TYPE_ROAD,
                 STREET_TYPE_PRIMARY,
+                STREET_TYPE_PRIMARY_LINK,
                 STREET_TYPE_SECONDARY,
+                STREET_TYPE_SECONDARY_LINK,
                 STREET_TYPE_TERTIARY,
+                STREET_TYPE_TERTIARY_LINK,
                 STREET_TYPE_RESIDENTIAL])
     
     ADDRESS_STREET_SET=set([STREET_TYPE_SERVICE,
@@ -3953,7 +3956,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data4")
+        return os.path.join(env.getDataRoot(), "data3")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -4254,12 +4257,12 @@ class OSMParserData():
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
         
-        osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
-#        osmData["osmFile"]=None
-        osmData["poly"]="switzerland.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-        osmDataList[1]=osmData
+#        osmData=dict()
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
+##        osmData["osmFile"]=None
+#        osmData["poly"]="switzerland.poly"
+#        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
+#        osmDataList[1]=osmData
     
         osmData=dict()
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
@@ -4269,12 +4272,12 @@ class OSMParserData():
         osmData["polyCountry"]="Europe / Western Europe / Germany"
         osmDataList[2]=osmData
         
-        osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
-#        osmData["osmFile"]=None
-        osmData["poly"]="liechtenstein.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
-        osmDataList[3]=osmData
+#        osmData=dict()
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
+##        osmData["osmFile"]=None
+#        osmData["poly"]="liechtenstein.poly"
+#        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
+#        osmDataList[3]=osmData
 
         return osmDataList
 
@@ -4549,6 +4552,9 @@ class OSMParserData():
             i=i+1
 
         print("") 
+        
+        # TODO: search if there are admin areas with level4 and no parent
+        # check if a poly file matches them and add this to the DB
         
     def getAdminListForId(self, osmId, adminDict):
         self.cursorArea.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
