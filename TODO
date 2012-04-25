@@ -81,6 +81,29 @@ DONE
   crossing
   -dont add start and endpoints for initial matching
   DONE 
+  
+TODO: incomplete countries in search
+  -if no country admin exists all address are lost from the search
+  -e.g. add country poly 
+  DONE
+  
+  TODO: show POI info on map
+ -tooltip
+ DONE
+ 
+ TODO: use admin area hierarchy in search dialogs
+ DONE
+ 
+ TODO:
+ solve cases where build and node exists for same POI
+ -actually OSM says alterantivly node or way
+ NOACTION
+ 
+ TODO: use lanes tags for street width if available
+-else use usefull defaults
+lanes tag is not consitently used -> ignore for now
+ NOACTION
+
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -95,12 +118,8 @@ DONE
  
  TODO: parser config file
  -definition of imported data
- 
-TODO: use lanes tags for street width if available
--else use usefull defaults
-lanes tag is not consitently used -> ignore for now
 
-TODO: dstances in osmrouting are calculated as straight lines!
+TODO: crossing distances in osmrouting are calculated as straight lines!
 -should actually follow the edge -> time?
 
 TODO: use newer version of geos for spatialite
@@ -149,9 +168,6 @@ relation with via type way {'to': 54858215, 'viaWay': [127061650], 'type': 'no_u
 relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_left_turn', 'id': 2079173, 'from': 154613298}
 relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
 
- TODO:
- solve cases where build and node exists for same POI
- -actually OSM says alterantivly node or way
  
  TODO: solve problem with multipolygon saved as polygons
  -change back to multipolygon -> drawing must be changed
@@ -164,21 +180,11 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
  -but e.g. residential or natural should be drawn before the rest
  
  TODO: add POI based searching
-
- TODO: use admin area hierarchy in search dialogs
- DONE
  
  TODO: show POI info on map
- -tooltip
- DONE
   -what to show = - currently tags["name"]
 
   TODO: place POIs could be schown in adress search
-  
-  TODO: incomplete countries in search
-  -if no country admin exists all address are lost from the search
-  -e.g. add country poly 
-  DONE
   
   TODO: matching between poly files and osm admin areas
   -multilanguage support
@@ -186,6 +192,9 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO: choosing of osmId for poly countries
    -ensure the id the polygon is saved does not clash with other areas
   
-  TODO: expand nodes for matching 
-  -expand all is TOOOOOO slow
+  TODO: address dialog
+  -expand city nodes?
+  -matching city and/or streets is too slow
   
+  TODO: support super relations?
+  -relations with member relation

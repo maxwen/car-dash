@@ -14,6 +14,7 @@ from osmparser.osmparserdata import OSMParserData
 from gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
 from osmrouting import OSMRoutingPoint, OSMRoute
+from mapnik.mapnikwrapper import disableMappnik
 
 class MyTabWidget(QTabWidget):
     def __init__(self, parent):
@@ -1798,7 +1799,6 @@ class OSMOptionsDialog(QDialog):
         
         self.followGPS=parent.getAutocenterGPSValue()
         self.withDownload=parent.getWithDownloadValue()
-        self.withMapnik=parent.getWithMapnikValue()
         self.withMapRotation=parent.getWithMapRotationValue()
         self.withShow3D=parent.getShow3DValue()
 #        self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
@@ -1808,7 +1808,11 @@ class OSMOptionsDialog(QDialog):
         self.XAxisRotation=parent.getXAxisRotation()
         self.tileServer=parent.getTileServer()
         self.tileHome=parent.getTileHome()
-        self.mapnikConfig=parent.getMapnikConfig()
+        
+        if disableMappnik==False:
+            self.mapnikConfig=parent.getMapnikConfig()
+            self.withMapnik=parent.getWithMapnikValue()
+            
         self.tileStartZoom=parent.getTileStartZoom()
         self.displayPOITypeList=list(parent.getDisplayPOITypeList())
         self.displayAreaTypeList=list(parent.getDisplayAreaTypeList())
@@ -1855,16 +1859,20 @@ class OSMOptionsDialog(QDialog):
         self.withMapRotationButton.setIconSize(iconSize)        
         tab1Layout.addWidget(self.withMapRotationButton)
                 
-        self.downloadTilesButton=QRadioButton("Download missing tiles", self)
+        if disableMappnik==True:
+            self.downloadTilesButton=QCheckBox("Download missing tiles", self)
+        else:
+            self.downloadTilesButton=QRadioButton("Download missing tiles", self)
 #        self.downloadTilesButton.setIcon(self.downloadIcon)
         self.downloadTilesButton.setChecked(self.withDownload)
         self.downloadTilesButton.setIconSize(iconSize)        
         tab2Layout.addRow(self.downloadTilesButton, filler)  
 
-        self.withMapnikButton=QRadioButton("Use Mapnik", self)
-        self.withMapnikButton.setChecked(self.withMapnik)
-        self.withMapnikButton.setIconSize(iconSize)    
-        tab2Layout.addRow(self.withMapnikButton, filler)  
+        if disableMappnik==False:
+            self.withMapnikButton=QRadioButton("Use Mapnik", self)
+            self.withMapnikButton.setChecked(self.withMapnik)
+            self.withMapnikButton.setIconSize(iconSize)    
+            tab2Layout.addRow(self.withMapnikButton, filler)  
         
         label=QLabel(self)
         label.setText("Tile Server:")
@@ -1887,16 +1895,17 @@ class OSMOptionsDialog(QDialog):
 
         tab2Layout.addRow(label, self.tileHomeField)   
         
-        label=QLabel(self)
-        label.setText("Mapnik Config:")
-        
-        self.validator=IntValueValidator(self)
-        self.mapnikConfigField=QLineEdit(self)
-        self.mapnikConfigField.setToolTip("Relative to $HOME or absolute")
-        self.mapnikConfigField.setText("%s"%self.mapnikConfig)
-        self.mapnikConfigField.setMinimumWidth(200)
-
-        tab2Layout.addRow(label, self.mapnikConfigField) 
+        if disableMappnik==False:
+            label=QLabel(self)
+            label.setText("Mapnik Config:")
+            
+            self.validator=IntValueValidator(self)
+            self.mapnikConfigField=QLineEdit(self)
+            self.mapnikConfigField.setToolTip("Relative to $HOME or absolute")
+            self.mapnikConfigField.setText("%s"%self.mapnikConfig)
+            self.mapnikConfigField.setMinimumWidth(200)
+    
+            tab2Layout.addRow(label, self.mapnikConfigField) 
         
         label=QLabel(self)
         label.setText("Tile Zoom:")
@@ -1998,7 +2007,6 @@ class OSMOptionsDialog(QDialog):
     def _ok(self):
         self.withDownload=self.downloadTilesButton.isChecked()
         self.followGPS=self.followGPSButton.isChecked()
-        self.withMapnik=self.withMapnikButton.isChecked()
         self.withMapRotation=self.withMapRotationButton.isChecked()
         self.withShow3D=self.withShow3DButton.isChecked()
 #        self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
@@ -2008,7 +2016,11 @@ class OSMOptionsDialog(QDialog):
         self.XAxisRotation=int(self.xAxisRoationField.text())
         self.tileServer=self.tileServerField.text()
         self.tileHome=self.tileHomeField.text()
-        self.mapnikConfig=self.mapnikConfigField.text()
+        
+        if disableMappnik==False:
+            self.mapnikConfig=self.mapnikConfigField.text()
+            self.withMapnik=self.withMapnikButton.isChecked()
+        
         self.tileStartZoom=int(self.tileStartZoomField.text())
         self.startZoom3D=int(self.startZoom3DField.text())
         

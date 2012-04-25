@@ -27,8 +27,9 @@ from osmparser.osmutils import OSMUtils
 from gpsutils import GPSMonitorUpateWorker
 from gps import gps, misc
 from osmdialogs import *
-from mapnik.mapnikwrapper import MapnikWrapper
-from mapnik.mapnikwrappercpp import MapnikWrapperCPP
+
+from mapnik.mapnikwrapper import MapnikWrapper, disableMappnik
+#from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
 from datetime import datetime
 from Polygon import Polygon
@@ -231,8 +232,10 @@ class OSMMapnikTilesWorker(QThread):
         
     def setup(self):
         self.updateStatusLabel("OSM starting mapnik thread")
-        self.mapnikWrapper=MapnikWrapper(self.tileDir, self.mapFile)
+        if disableMappnik==False:
+            self.mapnikWrapper=MapnikWrapper(self.tileDir, self.mapFile)
 #        self.mapnikWrapperCPP=MapnikWrapperCPP(self.mapFile)
+
         self.exiting = False
         self.start()
             
@@ -805,8 +808,8 @@ class QtOSMWidget(QWidget):
             self.addTileToCache(pixbuf, fileName)
             return pixbuf
         else:
-            if self.withMapnik==True:
-                self.callMapnikForTile2(zoom, x, y)
+            if self.withMapnik==True and disableMappnik==False:
+                self.callMapnikForTile(zoom, x, y)
                 return self.getTilePlaceholder(zoom, x, y)
             
             elif self.withDownload==True:
@@ -2700,18 +2703,10 @@ class QtOSMWidget(QWidget):
         
     def cleanImageCache(self):
         self.tileCache.clear()
-                
-    def getBBoxDifference(self, bbox1, bbox2):
-        None
-        
-#    def callMapnikForTile(self):
-#        bbox=self.getVisibleBBoxForMapnik()  
-##        print("call mapnik with %s"%bbox)   
-##        print(bbox)       
-#        self.osmWidget.mapnikThread.addBboxAndZoom(bbox, self.map_zoom)
-
-    def callMapnikForTile2(self, zoom, x, y):   
-        self.osmWidget.mapnikThread.addTile(zoom, x, y)
+                        
+    def callMapnikForTile(self, zoom, x, y):   
+        if disableMappnik==False:
+            self.osmWidget.mapnikThread.addTile(zoom, x, y)
 
     def setForceDownload(self, value, update):
         self.forceDownload=value
@@ -3869,11 +3864,14 @@ class OSMWidget(QWidget):
         self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
         self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
 
-        self.mapnikThread=OSMMapnikTilesWorker(self, self.mapWidgetQt.getTileHomeFullPath(), self.mapWidgetQt.getMapnikConfigFullPath())
-        self.mapnikThread.setWidget(self.mapWidgetQt)
-        self.connect(self.mapnikThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-        self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateMapnikThreadState)
-
+        if disableMappnik==False:
+            self.mapnikThread=OSMMapnikTilesWorker(self, self.mapWidgetQt.getTileHomeFullPath(), self.mapWidgetQt.getMapnikConfigFullPath())
+            self.mapnikThread.setWidget(self.mapWidgetQt)
+            self.connect(self.mapnikThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
+            self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateMapnikThreadState)
+        else:
+            self.mapnikThread=None
+            
         self.trackLogReplayThread=OSMGPSLocationWorker(self, False)
         self.trackLogReplayThread.setWidget(self)
         self.connect(self.trackLogReplayThread, SIGNAL("updateGPSDataDisplay1(PyQt_PyObject)"), self.updateGPSDataDisplay1)
@@ -3898,14 +3896,10 @@ class OSMWidget(QWidget):
         optionsDialog=OSMOptionsDialog(self)
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
-            oldMapnikValue=self.getWithMapnikValue()
             
             self.setWithDownloadValue(optionsDialog.withDownload)
             self.setAutocenterGPSValue(optionsDialog.followGPS)
-            self.setWithMapnikValue(optionsDialog.withMapnik)
             self.setWithMapRotationValue(optionsDialog.withMapRotation)
-            if optionsDialog.withMapnik!=oldMapnikValue:
-                self.mapWidgetQt.cleanImageCache()
             self.setShow3DValue(optionsDialog.withShow3D)
 #            self.setShowBackgroundTiles(optionsDialog.withShowBackgroundTiles)
             self.setShowAreas(optionsDialog.withShowAreas)
@@ -3914,7 +3908,14 @@ class OSMWidget(QWidget):
             self.setXAxisRotation(optionsDialog.XAxisRotation)
             self.setTileServer(optionsDialog.tileServer)
             self.setTileHome(optionsDialog.tileHome)
-            self.setMapnikConfig(optionsDialog.mapnikConfig)
+            
+            if disableMappnik==False:
+                oldMapnikValue=self.getWithMapnikValue()
+                self.setMapnikConfig(optionsDialog.mapnikConfig)
+                self.setWithMapnikValue(optionsDialog.withMapnik)
+                if optionsDialog.withMapnik!=oldMapnikValue:
+                    self.mapWidgetQt.cleanImageCache()
+                
             self.setTileStartZoom(optionsDialog.tileStartZoom)
             self.setDisplayPOITypeList(optionsDialog.displayPOITypeList)
             self.setDisplayAreaTypeList(optionsDialog.displayAreaTypeList)
@@ -3931,8 +3932,9 @@ class OSMWidget(QWidget):
         if self.downloadThread.isRunning():
             self.downloadThread.stop()        
         
-        if self.mapnikThread.isRunning():
-            self.mapnikThread.stop()
+        if disableMappnik==False:
+            if self.mapnikThread.isRunning():
+                self.mapnikThread.stop()
             
         if self.tunnelModeThread.isRunning():
             self.tunnelModeThread.stop()
@@ -4105,7 +4107,8 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.withMapRotation=value
  
     def setWithMapnikValue(self, value):
-        self.mapWidgetQt.withMapnik=value
+        if disableMappnik==False:
+            self.mapWidgetQt.withMapnik=value
     
     def setDrivingMode(self, value):
         self.mapWidgetQt.drivingMode=value
@@ -4153,7 +4156,8 @@ class OSMWidget(QWidget):
         return self.mapWidgetQt.mapnikConfig
     
     def setMapnikConfig(self, value):
-        self.mapWidgetQt.mapnikConfig=value  
+        if disableMappnik==False:
+            self.mapWidgetQt.mapnikConfig=value  
               
     def getTileStartZoom(self):
         return self.mapWidgetQt.tileStartZoom
@@ -4199,7 +4203,11 @@ class OSMWidget(QWidget):
         self.setStartLongitude(config.getDefaultSection().getfloat("lon", self.startLon))
         self.setTileHome(config.getDefaultSection().get("tileHome", defaultTileHome))
         self.setTileServer(config.getDefaultSection().get("tileServer", defaultTileServer))
-        self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
+        
+        if disableMappnik==False:
+            self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
+            self.setMapnikConfig(config.getDefaultSection().get("mapnikConfig", defaultMapnikConfig))
+        
         self.setWithMapRotationValue(config.getDefaultSection().getboolean("withMapRotation", False))
         self.setShow3DValue(config.getDefaultSection().getboolean("with3DView", False))
 #        self.setShowBackgroundTiles(config.getDefaultSection().getboolean("showBackgroundTiles", False))
@@ -4207,7 +4215,6 @@ class OSMWidget(QWidget):
         self.setShowPOI(config.getDefaultSection().getboolean("showPOI", False))
         self.setShowSky(config.getDefaultSection().getboolean("showSky", False))
         self.setXAxisRotation(config.getDefaultSection().getint("XAxisRotation", 60))
-        self.setMapnikConfig(config.getDefaultSection().get("mapnikConfig", defaultMapnikConfig))
         self.setTileStartZoom(config.getDefaultSection().getint("tileStartZoom", defaultTileStartZoom))
         self.setVirtualZoom(config.getDefaultSection().getboolean("virtualZoom", False))
         self.setStartZoom3DView(config.getDefaultSection().getint("startZoom3D", defaultStart3DZoom))
@@ -4520,7 +4527,8 @@ class OSMWindow(QMainWindow):
         self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.osmWidget.mapnikThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+        if disableMappnik==False:
+            self.connect(self.osmWidget.mapnikThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.osmWidget, SIGNAL("startProgress()"), self.startProgress)
         self.connect(self.osmWidget, SIGNAL("stopProgress()"), self.stopProgress)
         

@@ -1607,10 +1607,7 @@ class OSMParserData():
                             self.addToPOIRefTable(storedRef, lat, lon, tags, nodeType, layer)
 
             if not "highway" in tags:   
-                # could be part of a relation
-                if wayid==60550617:
-                    print(tags)
-                    
+                # could be part of a relation                    
                 self.addToWayRefTable(wayid, refs)
                  
                 if self.skipAreas==False:         
@@ -1871,6 +1868,11 @@ class OSMParserData():
                         relationWayId=int(way[0])
                         role=way[2]
                         
+                        if memberType=="relation":
+                            print("super relation %d %s"%(osmid, tags))
+                            skipArea=True
+                            break
+
                         if role=="outer" and memberType=="way":
                             # from boundary way table
                             wayId, refs=self.getWayRefEntry(relationWayId)
@@ -4293,8 +4295,8 @@ class OSMParserData():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
@@ -4307,9 +4309,9 @@ class OSMParserData():
 #        osmDataList[1]=osmData
     
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"

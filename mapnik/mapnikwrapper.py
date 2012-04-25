@@ -1,9 +1,15 @@
 from math import pi,cos,sin,log,exp,atan, tan, radians, sinh, degrees
 import sys, os, time
-import mapnik2
 from queue import Queue
 import threading
 from PyQt4.QtCore import SIGNAL, QObject
+
+disableMappnik=False
+try:
+    import mapnik2
+except ImportError:
+    print("mapnik is disabled")
+    disableMappnik=True
 
 DEG_TO_RAD = pi/180
 RAD_TO_DEG = 180/pi
