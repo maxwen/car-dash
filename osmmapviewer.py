@@ -2129,7 +2129,7 @@ class QtOSMWidget(QWidget):
         return Constants.ADMIN_LEVEL_SET
     
     def getAdminBoundaries(self, lat, lon):
-        adminLevelList=[4, 6, 8]
+        adminLevelList=[2, 4, 6, 8]
         resultList=osmParserData.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, True)
         resultList.reverse()
 

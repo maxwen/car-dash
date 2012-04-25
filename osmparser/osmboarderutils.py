@@ -15,7 +15,7 @@ import env
 
 class OSMBoarderUtils():
     def __init__(self, dataDir):
-        self.polyData=list()
+        self.polyData=dict()
         self.dataDir=dataDir
         
     def initData(self):
@@ -57,7 +57,7 @@ class OSMBoarderUtils():
             if cPolygon != None:
                 polygons.append(cPolygon)
                 polygonCoords.append(coords)
-                               
+                    
         return polygonCoords, polygons
     
     # Read a polygon from file
@@ -65,32 +65,41 @@ class OSMBoarderUtils():
     def readPolygon(self, f):
         coords = []
         first_coord = True
+        lat=None
+        lon=None
+        firstLat=None
+        firstLon=None
+        
         while True:
             line = f.readline()
             if not(line):
-                break;
+                continue;
                    
             line = line.strip()
             if line == "END":
                 break
-           
+            
+            ords = line.split()
+            if len(ords)!=2:
+                continue
+            
+            lon=float(ords[0])
+            lat=float(ords[1])
+            coords.append((lon, lat))
+            
             # NOTE: needs to happen before not(line).
             # There can be a blank line in the poly file if the centroid wasn't calculated!
             if first_coord:
                 first_coord = False
-                continue       
-           
-            if not(line):
-                continue
-           
-            ords = line.split()
-            lon=float(ords[0])
-            lat=float(ords[1])
-            coords.append((lon, lat))
+                firstLat=lat
+                firstLon=lon
        
         if len(coords) < 3:
             return None, None
         
+        if firstLat!=lat or firstLon!=lon:
+            print("first!=last coord ")
+            
         return coords, Polygon.Polygon(coords)
     
     def readPolyFile(self, fileName):
@@ -102,10 +111,10 @@ class OSMBoarderUtils():
         poly["name"]=name
         poly["coords"]=polygonCoords
         poly["polygons"]=polygons
-        self.polyData.append(poly)
+        self.polyData[name]=(poly)
     
     def countryNameOfPoint(self, lat, lon):
-        for poly in self.polyData:
+        for poly in self.polyData.values():
             name=poly["name"]
             polygons=poly["polygons"]
             for cPolygon in polygons:
@@ -115,9 +124,8 @@ class OSMBoarderUtils():
     
     def countryNameListOfBBox(self, bbox):
         nameList=list()
-        print(bbox)
         bboxCPolygon=Polygon.Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])
-        for poly in self.polyData:
+        for poly in self.polyData.values():
             name=poly["name"]
             polygons=poly["coords"]
             for cPolygon in polygons:
@@ -134,21 +142,24 @@ class OSMBoarderUtils():
         return polyString
     
     def createMultiPolygonFromPoly(self, name):
-        for poly in self.polyData:
-            if poly["name"]==name:
-                polyString="'MULTIPOLYGON("
-                for coords in poly["coords"]:
-                    polyStringPart=self.createMultiPolygonPartFromCoords(coords)
-                    polyString=polyString+polyStringPart
-                                                                    
-                polyString=polyString[:-1]
-                polyString=polyString+")'"
-                return polyString
+        if name in self.polyData.keys():
+            poly=self.polyData[name]
+            polyString="'MULTIPOLYGON("
+            for coords in poly["coords"]:
+                polyStringPart=self.createMultiPolygonPartFromCoords(coords)
+                polyString=polyString+polyStringPart
+                                                                
+            polyString=polyString[:-1]
+            polyString=polyString+")'"
+            return polyString
             
         return None
     
+    def getPolyCountryList(self):
+        return list(self.polyData.keys())
+    
 def main(argv):        
-    bu=OSMBoarderUtils(env.getPolyDataRoot())
+    bu=OSMBoarderUtils(env.getPolyDataRootSimple())
     bu.initData()
     
     lat=47.8205

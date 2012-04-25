@@ -177,7 +177,14 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   
   TODO: incomplete countries in search
   -if no country admin exists all address are lost from the search
-  -e.g. add country poly but how to match beetween osm country relation
+  -e.g. add country poly 
+  DONE
+  
+  TODO: matching between poly files and osm admin areas
+  -multilanguage support
+  
+  TODO: choosing of osmId for poly countries
+   -ensure the id the polygon is saved does not clash with other areas
   
   TODO: expand nodes for matching 
   -expand all is TOOOOOO slow
