@@ -108,6 +108,8 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
+        self.colorDict["tourismAreaColor"]=QColor(255, 255, 255)
+        self.colorDict["amenityAreaColor"]=QColor(255, 255, 255)
         self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9, 200)
         self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
         self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
@@ -122,6 +124,7 @@ class OSMStyle():
         self.colorDict["industrialColor"]=QColor(0xdf, 0xd1, 0xd6)
         self.colorDict["aerowayColor"]=QColor(0x50, 0x50, 0x50)
         self.colorDict["aerowayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
+        self.colorDict["nightModeColor"]=QColor(120, 120, 120, 70)
         
         self.initStreetColors()
         self.initBrush()
@@ -500,6 +503,8 @@ class OSMStyle():
         self.brushDict["industrial"]=QBrush(self.getStyleColor("industrialColor"), Qt.SolidPattern)
         self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
+        self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
+        self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
         
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():

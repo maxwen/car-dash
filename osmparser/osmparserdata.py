@@ -79,15 +79,21 @@ class Constants():
     AREA_TYPE_HIGHWAY_AREA=4
     AREA_TYPE_RAILWAY=5
     AREA_TYPE_AEROWAY=6
+    AREA_TYPE_TOURISM=7
+    AREA_TYPE_AMENITY=8
     
-    LANDUSE_TYPE_SET=set(["forest", "grass", "grassland", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard"])
-    LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "grassland", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
+    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction"])
+    LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
-    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank"])
-    WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain"])
+    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree"])
+    NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland"])
+    
+    WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain", "ditch"])
     RAILWAY_TYPE_SET=set(["rail"])
     AEROWAY_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
+    TOURISM_TYPE_SET=set(["camp_site", "caravan_site"])
+    
     BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
     BOUNDARY_TYPE_SET=set(["administrative"])
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb"])
@@ -101,7 +107,9 @@ class Constants():
                        "hospital": (POI_TYPE_HOSPITAL, None),
                        "police": (POI_TYPE_POLICE, None),
                        "veterinary":(POI_TYPE_VETERIANERY, None)}
-
+    
+    AMENITY_AREA_TYPE_SET=set(["parking"])
+    
     TOURISM_POI_TYPE_DICT={"camp_site": POI_TYPE_CAMPING,
                        "caravan_site": POI_TYPE_CAMPING}
     
@@ -1055,11 +1063,12 @@ class OSMParserData():
             print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
     def testAdminAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE adminLevel=2')
+        self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE adminLevel=4')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, tags, adminLevel, parent=self.adminAreaFromDBWithParent(x)
-            print("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
+            print("%d %s"%(osmId, tags["name"]))
+#            print("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
 
     def dropAreaTable(self):
         self.cursorArea.execute('DROP TABLE areaTable')
@@ -1507,6 +1516,12 @@ class OSMParserData():
     def getAerowayTypes(self):
         return Constants.AEROWAY_TYPE_SET
     
+    def getTourismTypes(self):
+        return Constants.TOURISM_TYPE_SET
+    
+    def getAmenityTypes(self):
+        return Constants.AMENITY_AREA_TYPE_SET
+    
     def getLayerValue(self, tags):
         layer=0
         if "layer" in tags:
@@ -1559,6 +1574,8 @@ class OSMParserData():
             isNatural=False
             isRailway=False
             isAeroway=False
+            isTourism=False
+            isAmenity=False
                        
             layer=self.getLayerValue(tags)
                 
@@ -1630,15 +1647,25 @@ class OSMParserData():
                     if "aeroway" in tags:
                         if tags["aeroway"] in self.getAerowayTypes():
                             isAeroway=True
-                        
+                    
+                    if "tourism" in tags:
+                        if tags["tourism"] in self.getTourismTypes():
+                            isTourism=True
+
+                    if "amenity" in tags:
+                        if tags["amenity"] in self.getAmenityTypes():
+                            isAmenity=True
+                            
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
                         isNatural=False
                         isRailway=False
                         isAeroway=False
+                        isTourism=False
+                        isAmenity=False
                
-                    if isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
+                    if isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
                         continue
                     
                     isPolygon=False
@@ -1677,6 +1704,10 @@ class OSMParserData():
                         areaType=Constants.AREA_TYPE_RAILWAY
                     elif isAeroway==True:
                         areaType=Constants.AREA_TYPE_AEROWAY
+                    elif isTourism==True:
+                        areaType=Constants.AREA_TYPE_TOURISM
+                    elif isAmenity==True:
+                        areaType=Constants.AREA_TYPE_AMENITY
                         
                     if areaType!=None:
                         if isPolygon==True:
@@ -1690,6 +1721,8 @@ class OSMParserData():
                                                                  
                 streetTypeId=self.getStreetTypeId(streetType)
                 if streetTypeId==-1:
+                    # but could be part of a relation                    
+                    self.addToWayRefTable(wayid, refs)
                     continue
                 
                 if "area" in tags:
@@ -1826,11 +1859,30 @@ class OSMParserData():
                     isNatural=False
                     isAdminBoundary=False
                     isAeroway=False
-                    
+                    isTourism=False
+                    isAmenity=False
+                    adminLevel=None
                     layer=self.getLayerValue(tags)
 
                     if "boundary" in tags:
                         if tags["boundary"] in self.getBoundaryTypes():
+                            if not "name" in tags:
+                                print("skip admin multipolygon: %d no name in tags"%(osmid))
+                                continue
+                            
+                            if not "admin_level" in tags:
+                                print("skip admin multipolygon: %d no admin_level in tags"%(osmid))
+                                continue
+                            
+                            try:
+                                adminLevel=int(tags["admin_level"])
+                                if adminLevel!=2 and adminLevel!=4 and adminLevel!=6 and adminLevel!=8:
+                                    print("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
+                                    continue                                    
+                            except ValueError:
+                                print("skip admin multipolygon: %d %s parse error adminLevel %s "%(osmid, tags["name"], tags["admin_level"]))
+                                continue
+ 
                             isAdminBoundary=True
                         
                     if "waterway" in tags:
@@ -1849,14 +1901,26 @@ class OSMParserData():
                         if tags["aeroway"] in self.getAerowayTypes():
                             isAeroway=True
                     
+                    if "tourism" in tags:
+                        if tags["tourism"] in self.getTourismTypes():
+                            isTourism=True
+                    
+                    if "amenity" in tags:
+                        if tags["amenity"] in self.getAmenityTypes():
+                            isAmenity=True
+
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
                         isNatural=False
                         isAdminBoundary=False
                         isAeroway=False
+                        isTourism=False
+                        isAmenity=False
                         
-                    if isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
+                    if isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
+                        if len(tags)!=1:
+                            print("skip multipolygon: %d %s unknwon type"%(osmid, tags))
                         continue
                                             
                     # (59178604, 'way', 'outer')
@@ -1873,17 +1937,17 @@ class OSMParserData():
                             skipArea=True
                             break
 
-                        if role=="outer" and memberType=="way":
+                        if role!="inner" and memberType=="way":
                             # from boundary way table
                             wayId, refs=self.getWayRefEntry(relationWayId)
                             if wayId!=None:
                                 allRefs.append((wayId, refs, 0, 0))
                             else:
                                 # from "real" way table
-                                wayId, _, refs, streetInfo, _, _, _, _=self.getWayEntryForId(relationWayId)
+                                wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
                                 if wayId!=None:
-                                    _, oneway, roundabout=self.decodeStreetInfo(streetInfo)
-                                    allRefs.append((wayId, refs, oneway, roundabout))
+#                                    _, oneway, roundabout=self.decodeStreetInfo(streetInfo)
+                                    allRefs.append((wayId, refs, 0, 0))
                                 else:
                                     if isAdminBoundary==True:
                                         print("failed to resolve way %d from admin relation %d %s"%(relationWayId, osmid, tags["name"]))    
@@ -1896,83 +1960,100 @@ class OSMParserData():
                         continue
                     
                     if len(allRefs)==0:
+                        print("skip multipolygon: %d len(allRefs)==0"%(osmid))
+                        continue
+                    
+                    refRings=self.mergeWayRefs(allRefs)
+                    if len(refRings)!=0:
                         if isAdminBoundary==True:
-                            print("skip amin relation: %d %s len(allRefs)==0"%(osmid, tags["name"]))
-                        else:
-                            print("skip multipolygon: %d %s len(allRefs)==0"%(osmid, tags))
-                    else:
-                        refRings=self.mergeWayRefs(allRefs)
-                        if len(refRings)!=0:
-                            if isAdminBoundary==True:
-                                # convert to multipolygon
-                                polyString="'MULTIPOLYGON("
-                                for refRingEntry in refRings:                                
-                                    refs=refRingEntry["refs"]
-                                    if refs[0]!=refs[-1]:
-                                        print("skip admin multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
-                                        skipArea=True
-                                        break
-    
-                                    coords, newRefList=self.createRefsCoords(refs)
-                                    # TODO: skip complete area if coords are missing?
-                                    if len(refs)==len(newRefList):
-                                        polyStringPart=self.createMultiPolygonPartFromCoords(coords)
-                                    else:
-                                        print("skip admin multipolygon: %d %s coords missing"%(osmid, tags["name"]))
-                                        skipArea=True
-                                        break
-                                    
-                                    polyString=polyString+polyStringPart
-                                                                    
-                                polyString=polyString[:-1]
-                                polyString=polyString+")'"
-    
-                                # skip complete relation if coords are missing
-                                if skipArea==False:
-                                    adminLevel=None
-                                    if "admin_level" in tags:
-                                        try:
-                                            adminLevel=int(tags["admin_level"])
-                                            if adminLevel!=2 and adminLevel!=4 and adminLevel!=6 and adminLevel!=8:
-                                                continue
-                                            
-#                                            print("add admin relation %d %s"%(osmid, tags["name"]))
-                                            self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
-                                        except ValueError:
-                                            None
-                            else:    
-#                                print("%d %s"%(osmid, tags))
-                                # convert to polygons
-#                                if len(refRings)>1:
-#                                    print("%d real multipolygon"%(osmid))
-                                i=0
-                                for refRingEntry in refRings: 
-                                    # TODO: 
-                                    areaId=osmid*1000000+i                             
-                                    refs=refRingEntry["refs"]
-                                    if refs[0]!=refs[-1]:
-                                        print("skip multipolygon part: %d refs[0]!=refs[-1]"%(osmid))
-                                        continue
-    
-                                    coords, newRefList=self.createRefsCoords(refs)
-                                    # skip complete area if coords are missing?
-                                    if len(refs)==len(newRefList):
-                                        polyString=self.createPolygonFromCoords(coords)
-                                    else:
-                                        print("skip multipolygon part: %d coords missing"%(osmid))
-                                        continue
-                                                                                                        
-                                    if isNatural==True:
-                                        self.addPolygonToAreaTable(Constants.AREA_TYPE_NATURAL, areaId, tags, polyString, layer)
-                                    elif isLanduse==True:
-                                        self.addPolygonToAreaTable(Constants.AREA_TYPE_LANDUSE, areaId, tags, polyString, layer)
-                                    elif isBuilding==True:  
-                                        self.addPolygonToAreaTable(Constants.AREA_TYPE_BUILDING, areaId, tags, polyString, layer)
-                                    elif isAeroway==True:
-                                        self.addPolygonToAreaTable(Constants.AREA_TYPE_AEROWAY, areaId, tags, polyString, layer)
+                            # convert to multipolygon
+                            polyString="'MULTIPOLYGON("
+                            for refRingEntry in refRings:                                
+                                refs=refRingEntry["refs"]
+                                if refs[0]!=refs[-1]:
+                                    print("skip admin multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
+                                    skipArea=True
+                                    break
 
-                                    i=i+1
+                                coords, newRefList=self.createRefsCoords(refs)
+                                # TODO: skip complete area if coords are missing?
+                                if len(refs)==len(newRefList):
+                                    polyStringPart=self.createMultiPolygonPartFromCoords(coords)
+                                else:
+                                    print("skip admin multipolygon: %d %s coords missing"%(osmid, tags["name"]))
+                                    skipArea=True
+                                    break
+                                
+                                polyString=polyString+polyStringPart
+                                                                
+                            polyString=polyString[:-1]
+                            polyString=polyString+")'"
+
+                            # skip complete relation if coords are missing
+                            if skipArea==False:
+                                if adminLevel!=None:
+                                    self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
+                                else:
+                                    print("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
+                                    continue
+                            else:
+                                continue
+
+                        else:    
+                            i=0
+                            for refRingEntry in refRings: 
+                                # TODO: 
+                                areaId=osmid*1000000+i                             
+                                refs=refRingEntry["refs"]
+                                
+                                isPolygon=False
+                                if refs[0]==refs[-1]:
+                                    isPolygon=True
                                     
+                                coords, newRefList=self.createRefsCoords(refs)
+                                if isPolygon==True:
+                                    if len(coords)<3:
+                                        print("skip multipolygon polygon part: %d len(coords)<3"%(osmid))
+                                        continue
+                                else:
+                                    if len(coords)<2:
+                                        print("skip multipolygon line part: %d len(coords)<2"%(osmid))
+                                        continue
+                
+                                if isPolygon==True:
+                                    if newRefList[0]==newRefList[-1]:
+                                        geomString=self.createPolygonFromCoords(coords)
+                                    else:
+                                        print("skip multipolygon part: %d coords missing"%(osmid)) 
+                                        continue
+                                else:
+                                    geomString=self.createLineStringFromCoords(coords)
+                                
+                                areaType=None
+                                if isNatural==True:
+                                    areaType=Constants.AREA_TYPE_NATURAL
+                                elif isLanduse==True:
+                                    areaType=Constants.AREA_TYPE_LANDUSE
+                                elif isBuilding==True:
+                                    areaType=Constants.AREA_TYPE_BUILDING
+                                elif isAeroway==True:
+                                    areaType=Constants.AREA_TYPE_AEROWAY
+                                elif isTourism==True:
+                                    areaType=Constants.AREA_TYPE_TOURISM
+                                elif isAmenity==True:
+                                    areaType=Constants.AREA_TYPE_AMENITY
+                                    
+                                if areaType!=None:
+                                    if isPolygon==True:
+                                        self.addPolygonToAreaTable(areaType, areaId, tags, geomString, layer)
+                                    else:
+                                        self.addLineToAreaTable(areaType, areaId, tags, geomString, layer)
+                                    
+                                i=i+1
+                    else:
+                        print("skip multipolygon: %d mergeWayRefs==0"%(osmid))
+                        continue
+                   
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
@@ -2246,9 +2327,9 @@ class OSMParserData():
         self.getAdminChildsForIdRecursive(osmId, cityList)
         
         # add self
-        cityList.append((osmId, None))
+        cityList.append((osmId, None, None))
         filterString='('
-        for cityId, cityName in cityList:
+        for cityId, cityName, adminLevel in cityList:
             filterString=filterString+str(cityId)+','
         filterString=filterString[:-1]
         filterString=filterString+')'
@@ -4309,8 +4390,8 @@ class OSMParserData():
 #        osmDataList[1]=osmData
     
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
@@ -4667,10 +4748,11 @@ class OSMParserData():
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             childId=int(x[0])
+            adminLevel=int(x[2])
             if x[1]!=None:
                 tags=pickle.loads(x[1])
                 if "name" in tags:
-                    childList.append((childId, tags["name"]))
+                    childList.append((childId, tags["name"], adminLevel))
                     
         return childList
 
@@ -4679,10 +4761,11 @@ class OSMParserData():
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             childId=int(x[0])
+            adminLevel=int(x[2])
             if x[1]!=None:
                 tags=pickle.loads(x[1])
                 if "name" in tags:
-                    childList.append((childId, tags["name"]))
+                    childList.append((childId, tags["name"], adminLevel))
                     self.getAdminChildsForIdRecursive(childId, childList)
                     
     
@@ -4928,6 +5011,23 @@ class OSMParserData():
             
         return resultList, wayIdSet
 
+    def getAreaTagsWithId(self, osmId):
+        self.cursorArea.execute('SELECT tags FROM areaTable WHERE osmId=%d'%(osmId))
+        allentries=self.cursorArea.fetchall()
+        if len(allentries)==1:
+            if allentries[0][0]!=None:
+                tags=pickle.loads(allentries[0][0])
+                return tags
+
+        self.cursorArea.execute('SELECT tags FROM areaLineTable WHERE osmId=%d'%(osmId))
+        allentries=self.cursorArea.fetchall()
+        if len(allentries)==1:
+            if allentries[0][0]!=None:
+                tags=pickle.loads(allentries[0][0])
+                return tags
+            
+        return None
+    
     def getAreasInBboxWithGeom(self, areaTypeList, bbox, margin):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
@@ -5422,7 +5522,7 @@ def main(argv):
 #    p.vacuumAreaDB()
 #    p.resolvePOIRefs()
 #    p.resolveAdminAreas()
-#    p.testAdminAreaTable()
+    p.testAdminAreaTable()
 #    print(p.getAdminAreaConversion())
 #    p.getPOIEntriesWithAddress()
 

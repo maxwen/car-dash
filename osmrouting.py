@@ -881,7 +881,7 @@ class OSMRouting():
                             elif onlyOneMatchingEdge==True:
 #                                if self.currentEdgeCheckTrigger==1:
                                 edge=self.checkEdge(lat, lon, track, speed, self.expectedNextEdge, fromMouse, margin)
-                                if edge[0]!=None:
+                                if edge!=None:
                                     return self.currentEdgeData
 #                                else:
 #                                    self.debugPrint(lat, lon, "wait for on more gps data until decision")
@@ -889,7 +889,7 @@ class OSMRouting():
                                 
                         else:
                             edge=self.checkEdge(lat, lon, track, speed, self.expectedNextEdge, fromMouse, margin)
-                            if edge[0]!=None:
+                            if edge!=None:
                                 return self.currentEdgeData
                             
             if self.approachingRef==None:

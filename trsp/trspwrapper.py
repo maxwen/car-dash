@@ -51,7 +51,7 @@ class TrspWrapper():
         return self.lastBBoxCPolygon.covers(bboxCPolyon)
         
     def computeShortestPath(self, startEdge, endEdge, startPos, endPos, bbox, shortest):
-        lib_routing = cdll.LoadLibrary("_compute_path_trsp.so")
+        lib_routing = cdll.LoadLibrary("librouting_trsp.so")
                 
         edgeList=list()
         cost=0
@@ -69,10 +69,10 @@ class TrspWrapper():
             
             if self.lastBBoxCPolygon==None or newBBox==True:
                 self.calcQueryBBox(bbox)
-                lib_routing.clean_edge_table()
+                lib_routing.clean_edges()
         else:
             self.lastBBoxCPolygon=None
-            lib_routing.clean_edge_table()
+            lib_routing.clean_edges()
             
 #        print(self.lastBBox)
 
@@ -99,7 +99,7 @@ class TrspWrapper():
         path=path_element_t()
         pathPointer=pointer(path)
         
-        ret=lib_routing.compute_shortest_path(file, sqlEdge, sqlRestriction, doVertexC, startEdgeC, startPosC, endEdgeC, endPosC, byref(pathPointer), byref(path_count))
+        ret=lib_routing.compute_trsp(file, sqlEdge, sqlRestriction, doVertexC, startEdgeC, startPosC, endEdgeC, endPosC, byref(pathPointer), byref(path_count))
         
         if ret==0:
             num=path_count.value

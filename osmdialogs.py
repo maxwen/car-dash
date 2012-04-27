@@ -132,23 +132,23 @@ class OSMCityModel():
     
     def buildModel(self, currentCityId, data):
         cityList=self.osmParserData.getAdminChildsForId(currentCityId)
-        for cityId, cityName in cityList:
+        for cityId, cityName, adminLevel in cityList:
             childs=dict()
-            data[cityId]=(cityId, cityName, currentCityId, childs)
-            self.cityDataCache[cityId]=(cityId, cityName, currentCityId, childs)
+            data[cityId]=(cityId, cityName, currentCityId, childs, adminLevel)
+            self.cityDataCache[cityId]=(cityId, cityName, currentCityId, childs, adminLevel)
             self.buildModel(cityId, childs)
             
     def getRootNodes(self):
         return list(self.root.values())
         
     def getParent(self, currentCityId):
-        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
+        cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return parentId
         return None
     
     def getChilds(self, currentCityId):
-        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
+        cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return list(childs.values())
         return None
@@ -172,12 +172,12 @@ class OSMCityModel():
 #        return None, None, None, None
     
     def hasMatchingChilds(self, currentCityId, filteredCityList):
-        cityId, cityName, parentId, childs=self.getCityData(currentCityId, self.root)
+        cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
 
         if cityId in filteredCityList:
             return True
             
-        for (cityId, cityName, parentId, childs) in childs.values():            
+        for (cityId, _, _, _, _) in childs.values():            
             matching=self.hasMatchingChilds(cityId, filteredCityList)
             if matching==True:
                 return matching
@@ -185,11 +185,12 @@ class OSMCityModel():
         return False
 
 class OSMTreeItem(object):
-    def __init__(self, osmId, areaName, parentItem):
+    def __init__(self, osmId, areaName, parentItem, adminLevel):
         self.osmId=osmId
         self.areaName=areaName
         self.parentItem=parentItem
         self.childItems=[]
+        self.adminLevel=adminLevel
         
     def appendChild(self, item):
         self.childItems.append(item)
@@ -199,13 +200,12 @@ class OSMTreeItem(object):
 
     def childCount(self):
         return len(self.childItems)
-
-    def columnCount(self):
-        return 1
     
     def data(self, column):
         if column == 0:
             return self.areaName
+        if column == 1:
+            return self.adminLevel
         return None
 
     def parent(self):
@@ -227,7 +227,7 @@ class OSMTreeItem(object):
 class OSMAdressTreeModelCity(QAbstractItemModel):
     def __init__(self, parent):
         QAbstractItemModel.__init__(self, parent)
-        self.rootItem=OSMTreeItem(-1, "ALL", None)
+        self.rootItem=OSMTreeItem(-1, "ALL", None, 0)
         
     def citySort(self, item):
         return item[1]
@@ -240,17 +240,17 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
             if index.isValid():
                 itemList.append((index.row(), index.column(), index.internalPointer()))
 
-        self.rootItem=OSMTreeItem(-1, "ALL", None)
+        self.rootItem=OSMTreeItem(-1, "ALL", None, 0)
         
         filterdCitySet=set()
-        for cityId, cityName in filteredCityList:
+        for cityId, cityName, adminLevel in filteredCityList:
             filterdCitySet.add(cityId)
             
         rootNodes=treeModel.getRootNodes()
         rootNodes.sort(key=self.citySort)
-        for cityId, cityName, parentId, childs in rootNodes:
+        for cityId, cityName, parentId, childs, adminLevel in rootNodes:
             if treeModel.hasMatchingChilds(cityId, filterdCitySet):
-                treeItem=OSMTreeItem(cityId, cityName, self.rootItem)
+                treeItem=OSMTreeItem(cityId, cityName, self.rootItem, adminLevel)
                 self.rootItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
              
@@ -264,14 +264,14 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
     def addChilds(self, filterdCitySet, parentTreeItem, treeModel):
         childNodes=treeModel.getChilds(parentTreeItem.osmId)
         childNodes.sort(key=self.citySort)
-        for cityId, cityName, parentId, childs in childNodes:
+        for cityId, cityName, parentId, childs, adminLevel in childNodes:
             if treeModel.hasMatchingChilds(cityId, filterdCitySet):
-                treeItem=OSMTreeItem(cityId, cityName, parentTreeItem)
+                treeItem=OSMTreeItem(cityId, cityName, parentTreeItem, adminLevel)
                 parentTreeItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
             
     def columnCount(self, parent=None):
-        return 1
+        return 2
 
     def data(self, index, role):
         if not index.isValid():
@@ -289,6 +289,8 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
             if role == Qt.DisplayRole:
                 if col==0:
                     return "City"
+                if col==1:
+                    return "Admin Level"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -386,7 +388,8 @@ class OSMAdressDialog(QDialog):
          
     def updateAdressListForCity(self):
         if self.currentCityId!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+#            self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+            self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
@@ -476,10 +479,11 @@ class OSMAdressDialog(QDialog):
 #        self.cityView.setModel(self.proxyModel)
 #        self.cityView.setSortingEnabled(True)
         
-#        header=QHeaderView(Qt.Horizontal, self.cityView)
-#        header.setStretchLastSection(True)
-#        self.cityView.setHorizontalHeader(header)
-#        self.cityView.setColumnWidth(0, 300)
+        header=QHeaderView(Qt.Horizontal, self.cityView)
+        header.setStretchLastSection(True)
+        self.cityView.setHeader(header)
+        self.cityView.setColumnWidth(0, 300)
+
 #        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
 #        self.cityView.setFixedHeight(150)
 
@@ -725,7 +729,7 @@ class OSMAdressDialog(QDialog):
             if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (cityId, cityName) in self.cityList:
+            for (cityId, cityName, adminLevel) in self.cityList:
                 match=False
                 if fnmatch.fnmatch(cityName.upper(), filterValue.upper()):
                     match=True
@@ -733,7 +737,7 @@ class OSMAdressDialog(QDialog):
                     match=True
                 
                 if match==True:
-                    self.filteredCityList.append((cityId, cityName))
+                    self.filteredCityList.append((cityId, cityName, adminLevel))
         
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
         

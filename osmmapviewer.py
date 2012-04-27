@@ -567,6 +567,7 @@ class QtOSMWidget(QWidget):
         self.show3D=True
 #        self.showBackgroundTiles=True
         self.refRing=None
+        self.nightMode=False
         
 #        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
 #        self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -1371,6 +1372,9 @@ class QtOSMWidget(QWidget):
         self.showSpeedInfo()
 #        self.showTunnelInfo()
         
+        if self.nightMode==True:
+            self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("nightModeColor"))
+
         self.painter.end()
 
 #        self.unsetCursor()
@@ -1764,6 +1768,25 @@ class QtOSMWidget(QWidget):
         
         return None
     
+    # for debugging
+    def getAreaTagsForPos(self, pos):
+        # the polygons are transformed
+        point0=self.transformHeading.inverted()[0].map(pos)
+        map_x, map_y=self.getMapZeroPos()
+        
+        for osmId, (cPolygon, _) in self.areaPolygonCache.items():
+            if cPolygon!=None:
+                # must create a copy cause shift changes values intern
+                p=Polygon(cPolygon)
+                p.shift(-map_x, -map_y)
+            
+                if p.isInside(point0.x(), point0.y()):
+                    tags=osmParserData.getAreaTagsWithId(osmId)
+                    if tags!=None:
+                        print("%d %s"%(osmId, tags))
+                    break
+        
+        
     def event(self, event):
         if event.type()==QEvent.ToolTip:
             mousePos=QPoint(event.x(), event.y())
@@ -1807,6 +1830,9 @@ class QtOSMWidget(QWidget):
             if tags!=None:
                 if "name" in tags:
                     QToolTip.showText(event.globalPos(), tags["name"])
+                else:
+                    QToolTip.showText(event.globalPos(), str(tags))
+                    
             else:
                 QToolTip.hideText()
                 event.ignore()
@@ -2022,7 +2048,7 @@ class QtOSMWidget(QWidget):
                     
                 elif "natural" in tags:
                     natural=tags["natural"]
-                    if natural=="water" or natural=="riverbank":
+                    if natural in Constants.NATURAL_WATER_TYPE_SET:
                         brush=self.style.getStyleBrush("water")
                     else:
                         brush=self.style.getStyleBrush("natural")
@@ -2056,6 +2082,12 @@ class QtOSMWidget(QWidget):
                             
             elif areaType==Constants.AREA_TYPE_AEROWAY:
                 brush=self.style.getStyleBrush("aerowayArea")
+                
+            elif areaType==Constants.AREA_TYPE_TOURISM:
+                brush=self.style.getStyleBrush("tourismArea")
+
+            elif areaType==Constants.AREA_TYPE_AMENITY:
+                brush=self.style.getStyleBrush("amenityArea")
                 
             else:
                 continue
@@ -2461,7 +2493,7 @@ class QtOSMWidget(QWidget):
             cPolygon, painterPath=cacheDict[osmId]
         
         if cPolygon!=None:
-            # must create a copy cause shift changes alues intern
+            # must create a copy cause shift changes values intern
             p=Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
@@ -2896,7 +2928,9 @@ class QtOSMWidget(QWidget):
         routingPointSubMenu.setDisabled(mapPointMenuDisabled)
 
         showAdminHierarchy=QAction("Show Admin Info for here", self)
-        
+        showAreaTags=QAction("Show Area Info for here", self)
+        showWayTags=QAction("Show Way Info", self)
+
         menu.addAction(forceDownloadAction)
         menu.addSeparator()
         menu.addAction(setStartPointAction)
@@ -2919,6 +2953,8 @@ class QtOSMWidget(QWidget):
         menu.addSeparator()
         menu.addAction(zoomToCompleteRoute)
         menu.addAction(showAdminHierarchy)
+        menu.addAction(showAreaTags)
+        menu.addAction(showWayTags)
 
         routingPointList=self.getCompleteRoutingPoints()
         addPointDisabled=False
@@ -2935,6 +2971,7 @@ class QtOSMWidget(QWidget):
         editRoutingPointAction.setDisabled(routeIncomplete)
         zoomToCompleteRoute.setDisabled(routeIncomplete)
         clearRouteAction.setDisabled(self.currentRoute==None)
+        showWayTags.setDisabled(self.lastWayId==None)
         
         showRouteDisabled=(self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or routeIncomplete
         showRouteAction.setDisabled(showRouteDisabled)
@@ -2968,7 +3005,7 @@ class QtOSMWidget(QWidget):
         elif action==gotoPosAction:
             self.showPosOnMap()
         elif action==showPosAction:
-            (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
+            (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             self.showPos(lat, lon)
         elif action==saveRouteAction:
             self.saveCurrentRoute()
@@ -2977,14 +3014,20 @@ class QtOSMWidget(QWidget):
         elif action==clearRouteAction:
             self.clearCurrentRoute()
         elif action==recalcRouteAction:
-            (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
+            (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))                
             self.recalcRouteFromPoint(currentPoint)
         elif action==recalcRouteGPSAction:
             self.recalcRouteFromPoint(self.gpsPoint)
         elif action==showAdminHierarchy:
-            (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
+            (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             self.getAdminBoundaries(lat, lon)
+        elif action==showAreaTags:
+            pos=QPoint(self.mousePos[0], self.mousePos[1])
+            self.getAreaTagsForPos(pos)
+        elif action==showWayTags:
+            print(osmParserData.getWayEntryForId(self.lastWayId))
+
         else:
             if isinstance(action, OSMRoutingPointAction):
                 routingPoint=action.getRoutingPoint()
@@ -3124,7 +3167,7 @@ class QtOSMWidget(QWidget):
                         self.wayPoints.remove(selectedPoint)
     
     def addToFavorite(self, mousePos):
-        (lat, lon)=self.getMousePosition(mousePos[0], mousePos[1])
+        (lat, lon)=self.getPosition(mousePos[0], mousePos[1])
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return 
@@ -3142,7 +3185,7 @@ class QtOSMWidget(QWidget):
             self.osmWidget.favoriteList.append(favoritePoint)
             
     def addRoutingPoint(self, pointType):
-        (lat, lon)=self.getMousePosition(self.mousePos[0], self.mousePos[1])
+        (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
         if edgeId==None:
             return
@@ -3214,7 +3257,7 @@ class QtOSMWidget(QWidget):
         elif nameRef!=None and name==None:
             return "%s"%(nameRef)
         else:
-            return "No name"
+            return ""
         return None
     
     def recalcRoute(self, lat, lon, edgeId):
@@ -3605,14 +3648,14 @@ class QtOSMWidget(QWidget):
 
     def showTrackOnMousePos(self, x, y):
         if self.drivingMode==False:
-            (lat, lon)=self.getMousePosition(x, y)
+            (lat, lon)=self.getPosition(x, y)
             self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)
 
     def showTrackOnGPSPos(self, lat, lon, update):
         if self.drivingMode==True:
             self.showTrackOnPos(lat, lon, self.track, self.speed, update, False)            
     
-    def getMousePosition(self, x, y):
+    def getPosition(self, x, y):
         point=QPointF(x, y)        
         invertedTransform=self.transformHeading.inverted()
         point0=invertedTransform[0].map(point)    
@@ -4110,8 +4153,16 @@ class OSMWidget(QWidget):
         if disableMappnik==False:
             self.mapWidgetQt.withMapnik=value
     
+    def setNightMode(self, value):
+        self.mapWidgetQt.nightMode=value
+        self.update()
+    
+    def getNightMode(self):
+        return self.mapWidgetQt.nightMode
+    
     def setDrivingMode(self, value):
         self.mapWidgetQt.drivingMode=value
+        self.update()
         
     def getDrivingMode(self):
         return self.mapWidgetQt.drivingMode
@@ -4532,6 +4583,10 @@ class OSMWindow(QMainWindow):
         self.connect(self.osmWidget, SIGNAL("startProgress()"), self.startProgress)
         self.connect(self.osmWidget, SIGNAL("stopProgress()"), self.stopProgress)
         
+        self.nightModeButton=QCheckBox("Night Mode", self)
+        self.nightModeButton.clicked.connect(self._nightMode)        
+        self.statusbar.addPermanentWidget(self.nightModeButton)
+
         self.drivingModeButton=QCheckBox("Driving Mode", self)
         self.drivingModeButton.clicked.connect(self._drivingMode)        
         self.statusbar.addPermanentWidget(self.drivingModeButton)
@@ -4560,6 +4615,11 @@ class OSMWindow(QMainWindow):
         else:
             self.disconnectGPS()
     
+    @pyqtSlot()
+    def _nightMode(self):
+        value=self.nightModeButton.isChecked()
+        self.osmWidget.setNightMode(value)
+
     @pyqtSlot()
     def _drivingMode(self):
         value=self.drivingModeButton.isChecked()
