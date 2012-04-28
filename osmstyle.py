@@ -10,7 +10,7 @@ import math
 
 from PyQt4.QtCore import Qt
 from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
-from osmparser.osmparserdata import Constants
+from osmparser.osmdataaccess import Constants
 
 class OSMStyle():
     POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":15},

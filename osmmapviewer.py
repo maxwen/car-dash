@@ -18,7 +18,7 @@ import cProfile
 
 from PyQt4.QtCore import QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmparserdata import Constants, OSMParserData
+from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
@@ -75,7 +75,7 @@ idleState="idle"
 runState="run"
 stoppedState="stopped"
 
-osmParserData = OSMParserData()
+osmParserData = OSMDataAccess()
 trackLog=TrackLog(False)
 osmRouting=OSMRouting(osmParserData)
     

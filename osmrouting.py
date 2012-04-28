@@ -5,7 +5,7 @@ Created on Feb 22, 2012
 '''
 
 from osmparser.osmutils import OSMUtils
-from osmparser.osmparserdata import Constants
+from osmparser.osmdataaccess import Constants
 import time
 
 WITH_CROSSING_DEBUG=False
