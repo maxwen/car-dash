@@ -104,6 +104,9 @@ TODO: incomplete countries in search
 lanes tag is not consitently used -> ignore for now
  NOACTION
 
+  TODO: for debugging support showing tags for position
+  -context menu
+  DONE
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -212,5 +215,3 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO: amenity can also be area and relation
   -added parking
   
-  TODO: for debugging support showing tags for position
-  -context menu

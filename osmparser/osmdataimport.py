@@ -122,7 +122,6 @@ class OSMDataImport():
         
     def createCoordsDBTables(self):
         self.createCoordsTable()
-        self.createWayRefTable()
 
     def commitAdressDB(self):
         self.connectionAdress.commit()
@@ -210,23 +209,16 @@ class OSMDataImport():
         self.closeEdgeDB()
         self.closeAreaDB()
         self.closeAdressDB()
-#        self.closeTmpDB(False)
         self.closeCoordsDB(False)  
 
     def createCoordsTable(self):
         self.cursorCoords.execute('CREATE TABLE coordsTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL)')
-
-    def createWayRefTable(self):
-        self.cursorCoords.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
-
-    def clearWayRefTable(self):
-        self.cursorCoords.execute("DROP TABLE wayRefTable")
         
     def addToCoordsTable(self, ref, lat, lon):
         self.cursorCoords.execute('INSERT OR IGNORE INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
     
     def addToWayRefTable(self, wayId, refs):
-        self.cursorCoords.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
+        self.cursorTmp.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
         
     def addToTmpRefWayTable(self, refid, wayId):
         storedRef, wayIdList=self.getTmpRefWayEntryForId(refid)
@@ -250,8 +242,8 @@ class OSMDataImport():
         return None, None, None
 
     def getWayRefEntry(self, wayId):
-        self.cursorCoords.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
-        allentries=self.cursorCoords.fetchall()
+        self.cursorTmp.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
+        allentries=self.cursorTmp.fetchall()
         if len(allentries)==1:
             return(allentries[0][0], pickle.loads(allentries[0][1]))
         return None, None    
@@ -287,16 +279,8 @@ class OSMDataImport():
         self.cursorWay.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
     def createTmpTable(self):
-#        self.cursorTmp.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER)')
-#        self.cursorTmp.execute("CREATE INDEX name_idx ON wayTable (name)")
         self.cursorTmp.execute('CREATE TABLE refWayTable (refId INTEGER PRIMARY KEY, wayIdList BLOB)')
-
-#    def dropTmpWayTable(self):
-#        self.cursorTmp.execute('DROP TABLE wayTable')
-#        self.cursorTmp.execute('DROP INDEX name_idx')
-
-    def dropTmpTable(self):
-        self.cursorTmp.execute('DROP TABLE refWayTable')
+        self.cursorTmp.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
         
     def createAddressTable(self):
         self.cursorAdress.execute('CREATE TABLE addressTable (id INTEGER PRIMARY KEY, refId INTEGER, country INTEGER, city INTEGER, postCode INTEGER, streetName TEXT, houseNumber TEXT, lat REAL, lon REAL)')
@@ -830,18 +814,13 @@ class OSMDataImport():
             print("%d %s"%(osmId, tags["name"]))
 #            print("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
 
-    def dropAreaTable(self):
-        self.cursorArea.execute('DROP TABLE areaTable')
-
     def testCoordsTable(self):
 #        self.cursorCoords.execute('SELECT * from coordsTable WHERE refId=98110819')
 #        allentries=self.cursorCoords.fetchall()  
-
-        self.cursorCoords.execute('SELECT * from wayRefTable WHERE wayId=31664992')
-        allentries=self.cursorCoords.fetchall()  
-        
-        
-        print(allentries)
+#        self.cursorCoords.execute('SELECT * from wayRefTable WHERE wayId=31664992')
+#        allentries=self.cursorCoords.fetchall()  
+#        print(allentries)
+        None
 
     def wayFromDB(self, x):
         wayId=x[0]
@@ -2009,6 +1988,7 @@ class OSMDataImport():
                         if refId==refs[0] or refId==refs[-1]:
                             continue
                     possibleWays.append((wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout))
+        
         return possibleWays
             
     def getAdressCityList(self, countryId):
@@ -2518,7 +2498,7 @@ class OSMDataImport():
         
         return 1
     
-    def getCostsOfWay(self, wayId, tags, refs, distance, crossingFactor, streetInfo, maxspeed):
+    def getCostsOfWay(self, wayId, tags, distance, crossingFactor, streetInfo, maxspeed):
             
         streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
         if roundabout==1:
@@ -2588,7 +2568,7 @@ class OSMDataImport():
                     refList=self.getRefListSubset(refs, startRef, endRef)
                     coords, _=self.createRefsCoords(refList)
                     if len(coords)>=2:
-                        cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetInfo, maxspeed)                                         
+                        cost, reverseCost=self.getCostsOfWay(wayId, tags, distance, crossingFactor, streetInfo, maxspeed)                                         
                         self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, streetInfo, coords)
 #                    else:
 #                        print("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
@@ -2607,7 +2587,7 @@ class OSMDataImport():
                 refList=self.getRefListSubset(refs, startRef, endRef)
                 coords, _=self.createRefsCoords(refList)                
                 if len(coords)>=2:
-                    cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, distance, crossingFactor, streetInfo, maxspeed)                    
+                    cost, reverseCost=self.getCostsOfWay(wayId, tags, distance, crossingFactor, streetInfo, maxspeed)                    
                     self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, streetInfo, coords)
 #                else:
 #                    print("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
@@ -2903,7 +2883,6 @@ class OSMDataImport():
                         self.addToCrossingsTable(wayid, ref, wayList)
         
         print("")
-        self.dropTmpTable()
         
     def createPOIEntriesForWays(self):
         self.cursorWay.execute('SELECT * FROM wayTable')
@@ -3139,7 +3118,10 @@ class OSMDataImport():
                 self.commitAdressDB()
             
             self.commitCoordsDB()
-                            
+            
+            # not needed anymore
+            self.addressCache=None
+                       
 #            print("merge ways")
 #            self.mergeWayEntries()
 #            print("end merge ways")
@@ -3150,6 +3132,9 @@ class OSMDataImport():
             self.commitWayDB()
             self.commitNodeDB()
             
+        # not needed anymore
+        self.closeTmpDB(False)
+
         if createEdgeDB:            
             print("create edges")
             self.createEdgeTableEntries()
@@ -3216,13 +3201,10 @@ class OSMDataImport():
             self.resolvePOIRefs()
             
         if createCoordsDB==True:
-            print("drop wayRefTable from coords DB")
-            self.clearWayRefTable()
             print("vacuum coords DB")
             self.vacuumCoordsDB()
             
         self.closeCoordsDB(False)
-        self.closeTmpDB(False)
         self.closeAllDB()
 
     def parseAreas(self):
@@ -3662,10 +3644,7 @@ class OSMDataImport():
             amount=amount+1
 
         print("") 
-        
-        # TODO: search if there are admin areas with level4 and no parent
-        # check if a poly file matches them and add this to the DB
-        
+                
     def getAdminListForId(self, osmId, adminDict):
         self.cursorArea.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
@@ -3765,6 +3744,7 @@ class OSMDataImport():
 #                print("remove edge %d %d %d %d"%(edgeId, wayId, startRef, endRef))
                 self.cursorEdge.execute('DELETE FROM edgeTable WHERE id=%d'%(edgeId))
                 removeCount=removeCount+1
+
         print("")
         print("removed %d edges"%(removeCount))
         
@@ -3778,7 +3758,7 @@ class OSMDataImport():
         removeCount=0
         prog = ProgressBar(0, allWaysLength, 77)
         for way in allWays:
-            wayid, _, refs, _, _, _, _, _=self.wayFromDB(way)
+            wayid, _, _, _, _, _, _, _=self.wayFromDB(way)
 
             prog.updateAmount(allWaysCount)
             print(prog, end="\r")
@@ -3791,6 +3771,7 @@ class OSMDataImport():
                     
                 self.cursorWay.execute('DELETE FROM wayTable WHERE wayId=%d'%(wayid))
                 removeCount=removeCount+1
+        
         print("")
         print("removed %d ways"%(removeCount))
         
@@ -3846,7 +3827,7 @@ class OSMDataImport():
                 continue
             
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
-            cost, reverseCost=self.getCostsOfWay(wayId, tags, refs, length, 1, streetTypeId, oneway, roundabout, maxspeed)
+            cost, reverseCost=self.getCostsOfWay(wayId, tags, length, 1, streetTypeId, oneway, roundabout, maxspeed)
             self.updateCostsOfEdge(edgeId, cost, reverseCost)
 
         print("")
