@@ -183,8 +183,10 @@ class OSMParserData():
         self.cursorAdress=None
         self.connectionCoords=None
         self.cursorCoords=None
-        self.cursorGlobal=None
-        self.connectionGlobal=None
+        self.cursorWay=None
+        self.connectionWay=None
+        self.cursorNode=None
+        self.connectionNode=None
         self.cursorTmp=None
         self.connectionTmp=None
         self.edgeId=1
@@ -234,11 +236,11 @@ class OSMParserData():
         self.createAddressTable()
         
     def setPragmaForDB(self, cursor):
-        cursor.execute('PRAGMA journal_mode=OFF')
-        cursor.execute('PRAGMA synchronous=OFF')
+#        cursor.execute('PRAGMA journal_mode=OFF')
+#        cursor.execute('PRAGMA synchronous=OFF')
         cursor.execute('PRAGMA cache_size=40000')
         cursor.execute('PRAGMA page_size=4096')
-        cursor.execute('PRAGMA ignore_check_constraint=ON')
+#        cursor.execute('PRAGMA ignore_check_constraint=ON')
         
     def openEdgeDB(self):
         self.connectionEdge=sqlite3.connect(self.getEdgeDBFile())
@@ -254,12 +256,19 @@ class OSMParserData():
         self.cursorArea.execute("SELECT load_extension('libspatialite.so')")
         self.setPragmaForDB(self.cursorArea)
 
-    def openGlobalDB(self):
-        self.connectionGlobal=sqlite3.connect(self.getGlobalDBFile())
-        self.cursorGlobal=self.connectionGlobal.cursor()
-        self.connectionGlobal.enable_load_extension(True)
-        self.cursorGlobal.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorGlobal)
+    def openWayDB(self):
+        self.connectionWay=sqlite3.connect(self.getWayDBFile())
+        self.cursorWay=self.connectionWay.cursor()
+        self.connectionWay.enable_load_extension(True)
+        self.cursorWay.execute("SELECT load_extension('libspatialite.so')")
+        self.setPragmaForDB(self.cursorWay)
+
+    def openNodeDB(self):
+        self.connectionNode=sqlite3.connect(self.getNodeDBFile())
+        self.cursorNode=self.connectionNode.cursor()
+        self.connectionNode.enable_load_extension(True)
+        self.cursorNode.execute("SELECT load_extension('libspatialite.so')")
+        self.setPragmaForDB(self.cursorNode)
         
     def openAdressDB(self):
         self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
@@ -291,9 +300,12 @@ class OSMParserData():
     def commitCoordsDB(self):
         self.connectionCoords.commit()
 
-    def commitGlobalDB(self):
-        self.connectionGlobal.commit()
+    def commitWayDB(self):
+        self.connectionWay.commit()
 
+    def commitNodeDB(self):
+        self.connectionNode.commit()
+        
     def commitAreaDB(self):
         self.connectionArea.commit()
         
@@ -311,12 +323,19 @@ class OSMParserData():
             self.connectionArea=None     
             self.cursorArea=None
            
-    def closeGlobalDB(self):
-        if self.connectionGlobal!=None:
-            self.connectionGlobal.commit()        
-            self.cursorGlobal.close()
-            self.connectionGlobal=None     
-            self.cursorGlobal=None
+    def closeWayDB(self):
+        if self.connectionWay!=None:
+            self.connectionWay.commit()        
+            self.cursorWay.close()
+            self.connectionWay=None     
+            self.cursorWay=None
+
+    def closeNodeDB(self):
+        if self.connectionNode!=None:
+            self.connectionNode.commit()        
+            self.cursorNode.close()
+            self.connectionNode=None     
+            self.cursorNode=None
 
     def closeAdressDB(self):
         if self.connectionAdress!=None:
@@ -344,7 +363,8 @@ class OSMParserData():
                 self.deleteTmpDBFile() 
                  
     def openAllDB(self):
-        self.openGlobalDB()
+        self.openWayDB()
+        self.openNodeDB()
         self.openEdgeDB()
         self.openAreaDB()
         self.openAdressDB()
@@ -352,7 +372,8 @@ class OSMParserData():
         self.openCoordsDB()
         
     def closeAllDB(self):
-        self.closeGlobalDB()
+        self.closeWayDB()
+        self.closeNodeDB()
         self.closeEdgeDB()
         self.closeAreaDB()
         self.closeAdressDB()
@@ -421,26 +442,28 @@ class OSMParserData():
             return(allentries[0][0], pickle.loads(allentries[0][1]))
         return None, None    
         
-    def createGlobalDBTables(self):
-        self.cursorGlobal.execute("SELECT InitSpatialMetaData()")
+    def createNodeDBTables(self):
+        self.cursorNode.execute("SELECT InitSpatialMetaData()")
         
-        self.cursorGlobal.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, layer INTEGER)')
-        self.cursorGlobal.execute("SELECT AddGeometryColumn('refTable', 'geom', 4326, 'POINT', 2)")
+        self.cursorNode.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, layer INTEGER)')
+        self.cursorNode.execute("SELECT AddGeometryColumn('refTable', 'geom', 4326, 'POINT', 2)")
 
-        self.cursorGlobal.execute('CREATE TABLE poiRefTable (id INTEGER PRIMARY KEY, refId INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER)')
-        self.cursorGlobal.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
-        self.cursorGlobal.execute("CREATE INDEX type_idx ON poiRefTable (type)")
-        self.cursorGlobal.execute("CREATE INDEX country_idx ON poiRefTable (country)")
-        self.cursorGlobal.execute("CREATE INDEX city_idx ON poiRefTable (city)")
-        self.cursorGlobal.execute("SELECT AddGeometryColumn('poiRefTable', 'geom', 4326, 'POINT', 2)")
+        self.cursorNode.execute('CREATE TABLE poiRefTable (id INTEGER PRIMARY KEY, refId INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER)')
+        self.cursorNode.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
+        self.cursorNode.execute("CREATE INDEX type_idx ON poiRefTable (type)")
+        self.cursorNode.execute("CREATE INDEX country_idx ON poiRefTable (country)")
+        self.cursorNode.execute("CREATE INDEX city_idx ON poiRefTable (city)")
+        self.cursorNode.execute("SELECT AddGeometryColumn('poiRefTable', 'geom', 4326, 'POINT', 2)")
         
-        self.cursorGlobal.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
-        self.cursorGlobal.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
-        self.cursorGlobal.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
+    def createWayDBTables(self):
+        self.cursorWay.execute("SELECT InitSpatialMetaData()")
+        self.cursorWay.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
+        self.cursorWay.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
+        self.cursorWay.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
 
-        self.cursorGlobal.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
-        self.cursorGlobal.execute("CREATE INDEX wayId_idx ON crossingTable (wayId)")
-        self.cursorGlobal.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
+        self.cursorWay.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
+        self.cursorWay.execute("CREATE INDEX wayId_idx ON crossingTable (wayId)")
+        self.cursorWay.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
     def createTmpTable(self):
 #        self.cursorTmp.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER)')
@@ -590,7 +613,7 @@ class OSMParserData():
         pointString=pointString+"%f %f"%(lon, lat)
         pointString=pointString+")'"
 
-        self.cursorGlobal.execute('INSERT OR IGNORE INTO refTable VALUES( ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, layer))
+        self.cursorNode.execute('INSERT OR IGNORE INTO refTable VALUES( ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, layer))
 
     def addToPOIRefTable(self, refid, lat, lon, tags, nodeType, layer):   
         # check if nodeType for refid is already in table
@@ -607,7 +630,7 @@ class OSMParserData():
         if tags!=None:
             tagsString=pickle.dumps(tags)
 
-        self.cursorGlobal.execute('INSERT INTO poiRefTable VALUES( ?, ?, ?, ?, ?, ?, ?, PointFromText(%s, 4326))'%(pointString), (self.poiId, refid, tagsString, nodeType, layer, None, None))
+        self.cursorNode.execute('INSERT INTO poiRefTable VALUES( ?, ?, ?, ?, ?, ?, ?, PointFromText(%s, 4326))'%(pointString), (self.poiId, refid, tagsString, nodeType, layer, None, None))
 
         self.poiId=self.poiId+1
         
@@ -615,13 +638,13 @@ class OSMParserData():
         wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _, layer, coordsStr=self.getWayEntryForIdWithCoords(wayId)
         if wayId!=None:
             streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
-            self.cursorGlobal.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList), streetTypeId, layer))
+            self.cursorWay.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList), streetTypeId, layer))
         
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer):
         name=self.encodeStreetName(name)
         streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
         lineString=self.createLineStringFromCoords(coords)
-        self.cursorGlobal.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
+        self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
 
 #    def addToTmpWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge):
 #        name=self.encodeStreetName(name)
@@ -634,7 +657,7 @@ class OSMParserData():
         return name
         
     def addToCrossingsTable(self, wayid, refId, nextWaysList):
-        self.cursorGlobal.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
+        self.cursorWay.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
         self.crossingId=self.crossingId+1
 
     def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, streetInfo, coords):
@@ -670,20 +693,12 @@ class OSMParserData():
         self.cursorArea.execute('SELECT CreateSpatialIndex("areaLineTable", "geom")')
         self.cursorArea.execute('SELECT CreateSpatialIndex("adminAreaTable", "geom")')
 
-    def createSpatialIndexForGlobalTables(self):
-        self.cursorGlobal.execute('SELECT CreateSpatialIndex("refTable", "geom")')
-        self.cursorGlobal.execute('SELECT CreateSpatialIndex("poiRefTable", "geom")')
-        self.cursorGlobal.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
+    def createSpatialIndexForWayTables(self):
+        self.cursorWay.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
 
-#    def clearCrosssingsTable(self):
-#        self.cursorGlobal.execute('DROP table crossingTable')
-#        self.crossingId=0
-#        self.cursorGlobal.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
-#
-#    def clearEdgeTable(self):
-#        self.cursorEdge.execute('DROP table edgeTable')
-#        self.edgeId=1
-#        self.createEdgeTables()
+    def createSpatialIndexForNodeTables(self):
+        self.cursorNode.execute('SELECT CreateSpatialIndex("refTable", "geom")')
+        self.cursorNode.execute('SELECT CreateSpatialIndex("poiRefTable", "geom")')
                         
     def getLenOfEdgeTable(self):
         self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable')
@@ -852,16 +867,16 @@ class OSMParserData():
         return resultList
     
     def getRefEntryForId(self, refId):
-        self.cursorGlobal.execute('SELECT refId, layer, AsText(geom) FROM refTable where refId=%d'%(refId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable where refId=%d'%(refId))
+        allentries=self.cursorNode.fetchall()
         if len(allentries)==1:
             return self.refFromDB(allentries[0])
 
         return None, None, None, None
 
     def getPOIRefEntryForId(self, refId, nodeType):
-        self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable where refId=%d AND type=%d'%(refId, nodeType))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable where refId=%d AND type=%d'%(refId, nodeType))
+        allentries=self.cursorNode.fetchall()
         if len(allentries)==1:
             return self.poiRefFromDB(allentries[0])
 
@@ -874,8 +889,8 @@ class OSMParserData():
         filterString=filterString[:-1]
         filterString=filterString+')'
 
-        self.cursorGlobal.execute('SELECT refId, tags, type FROM poiRefTable WHERE type IN %s'%(filterString))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT refId, tags, type FROM poiRefTable WHERE type IN %s'%(filterString))
+        allentries=self.cursorNode.fetchall()
         resultDict=dict()
         for x in allentries:
             refId=int(x[0])
@@ -887,52 +902,44 @@ class OSMParserData():
         return resultDict
     
     def updatePOIRefEntry(self, poiId, country, city):
-        self.cursorGlobal.execute('UPDATE OR IGNORE poiRefTable SET country=%d,city=%d WHERE id=%d'%(country, city, poiId))
+        self.cursorNode.execute('UPDATE OR IGNORE poiRefTable SET country=%d,city=%d WHERE id=%d'%(country, city, poiId))
     
     def getTagsForWayEntry(self, wayId):
-        self.cursorGlobal.execute('SELECT tags FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT tags FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
             return self.decodeWayTags(allentries[0][0])
         
         return None
 
     def getRefsForWayEntry(self, wayId):
-        self.cursorGlobal.execute('SELECT refs FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT refs FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
             return pickle.loads(allentries[0][0])
         
         return None
 
     def getWayEntryForId(self, wayId):
-        self.cursorGlobal.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
             return self.wayFromDB(allentries[0])
         
         return (None, None, None, None, None, None, None, None)
 
     def getWayEntryForIdWithCoords(self, wayId):
-        self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable where wayId=%d'%(wayId))
+        allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
             return self.wayFromDBWithCoordsString(allentries[0])
         
         return (None, None, None, None, None, None, None, None, None, None)
-    
-#    def getWayEntryForStreetName(self, streetName):
-#        self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE name="%s"'%(streetName))
-#        allentries=self.cursorGlobal.fetchall()
-#        resultList=list()
-#        for x in allentries:
-#            resultList.append(self.wayFromDBWithCoordsString(x))
-#        return resultList
         
     def getCrossingEntryFor(self, wayid):
-        self.cursorGlobal.execute('SELECT * FROM crossingTable where wayId=%d'%(wayid))      
+        self.cursorWay.execute('SELECT * FROM crossingTable where wayId=%d'%(wayid))      
         resultList=list()
-        allentries=self.cursorGlobal.fetchall()
+        allentries=self.cursorWay.fetchall()
         for result in allentries:
             crossing=self.crossingFromDB(result)
             resultList.append(crossing)
@@ -940,9 +947,9 @@ class OSMParserData():
         return resultList
     
     def getCrossingEntryForRefId(self, wayid, refId):
-        self.cursorGlobal.execute('SELECT * FROM crossingTable where wayId=%d AND refId=%d'%(wayid, refId))  
+        self.cursorWay.execute('SELECT * FROM crossingTable where wayId=%d AND refId=%d'%(wayid, refId))  
         resultList=list()
-        allentries=self.cursorGlobal.fetchall()
+        allentries=self.cursorWay.fetchall()
         for result in allentries:
             crossing=self.crossingFromDB(result)
             resultList.append(crossing)
@@ -950,23 +957,23 @@ class OSMParserData():
         return resultList
     
     def testRefTable(self):
-        self.cursorGlobal.execute('SELECT refId, layer, AsText(geom) FROM refTable')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
+        allentries=self.cursorNode.fetchall()
         for x in allentries:
             refId, lat, lon, layer=self.refFromDB(x)
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
 
     def testPOIRefTable(self):
-        self.cursorGlobal.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        allentries=self.cursorNode.fetchall()
         for x in allentries:
             poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
             print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
 
     def getPOIEntriesWithAddress(self):
         resultList=list()
-        self.cursorGlobal.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        allentries=self.cursorNode.fetchall()
         for x in allentries:
             poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
             streetName, houseNumber=self.getAddressForRefId(refId)
@@ -1029,15 +1036,15 @@ class OSMParserData():
         return self.expectedNextEdgeId
     
     def testWayTable(self):
-        self.cursorGlobal.execute('SELECT * FROM wayTable WHERE wayId=147462600')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
+        allentries=self.cursorWay.fetchall()
         for x in allentries:
             wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
             print( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
 
     def testCrossingTable(self):
-        self.cursorGlobal.execute('SELECT * FROM crossingTable')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM crossingTable')
+        allentries=self.cursorWay.fetchall()
         for x in allentries:
             crossingEntryId, wayid, refId, wayIdList=self.crossingFromDB(x)
             print( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
@@ -3163,8 +3170,8 @@ class OSMParserData():
             routeInfoEntry["length"]=allLength
 
     def createEdgeTableEntries(self):
-        self.cursorGlobal.execute('SELECT * FROM wayTable')
-        allWays=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable')
+        allWays=self.cursorWay.fetchall()
         
         allWaysLength=len(allWays)
         allWaysCount=0
@@ -3801,8 +3808,8 @@ class OSMParserData():
         return (streetTypeId==Constants.STREET_TYPE_MOTORWAY_LINK and streetTypeId2!=Constants.STREET_TYPE_MOTORWAY_LINK) or (streetTypeId==Constants.STREET_TYPE_TRUNK_LINK and streetTypeId2!=Constants.STREET_TYPE_TRUNK_LINK) or (streetTypeId==Constants.STREET_TYPE_PRIMARY_LINK and streetTypeId2!=Constants.STREET_TYPE_PRIMARY_LINK) or (streetTypeId==Constants.STREET_TYPE_SECONDARY_LINK and streetTypeId2!=Constants.STREET_TYPE_SECONDARY_LINK) or (streetTypeId==Constants.STREET_TYPE_TERTIARY_LINK and streetTypeId2!=Constants.STREET_TYPE_TERTIARY_LINK)
 
     def createCrossingEntries(self):
-        self.cursorGlobal.execute('SELECT * FROM wayTable')
-        allWays=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable')
+        allWays=self.cursorWay.fetchall()
         
         allWaysLength=len(allWays)
         allWaysCount=0
@@ -3976,8 +3983,8 @@ class OSMParserData():
         self.dropTmpTable()
         
     def createPOIEntriesForWays(self):
-        self.cursorGlobal.execute('SELECT * FROM wayTable')
-        allWays=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable')
+        allWays=self.cursorWay.fetchall()
         
         allWaysLength=len(allWays)
         allWaysCount=0
@@ -4011,8 +4018,8 @@ class OSMParserData():
         print("")
           
     def createPOIEntriesForWays2(self):
-        self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE type=%d OR type=%d'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_BARRIER))
-        allRefs=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE type=%d OR type=%d'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_BARRIER))
+        allRefs=self.cursorNode.fetchall()
         
         allRefsLength=len(allRefs)
         allRefsCount=0
@@ -4029,8 +4036,8 @@ class OSMParserData():
             poiList=list()
             poiList.append((refId, nodeType))
             
-            self.cursorGlobal.execute('SELECT wayId, refs, poiList FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lon, lat, lon, lat))
-            allWays=self.cursorGlobal.fetchall()
+            self.cursorWay.execute('SELECT wayId, refs, poiList FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lon, lat, lon, lat))
+            allWays=self.cursorWay.fetchall()
             if len(allWays)==0:
                 print("could not resolve way for POI refId %d"%(refId))
                 continue
@@ -4069,7 +4076,7 @@ class OSMParserData():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data5")
+        return os.path.join(env.getDataRoot(), "data4")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -4083,16 +4090,16 @@ class OSMParserData():
         file="adress.db"
         return os.path.join(self.getDataDir(), file)
     
-    def getGlobalCountryDBFile(self):
-        file="country.db"
-        return os.path.join(self.getDataDir(), file)
-
     def getCoordsDBFile(self):
         file="coords.db"
         return os.path.join(self.getDataDir(), file)
 
-    def getGlobalDBFile(self):
-        file="global.db"
+    def getWayDBFile(self):
+        file="ways.db"
+        return os.path.join(self.getDataDir(), file)
+
+    def getNodeDBFile(self):
+        file="nodes.db"
         return os.path.join(self.getDataDir(), file)
     
     def getTmpDBFile(self):
@@ -4116,12 +4123,12 @@ class OSMParserData():
     def areaDBExists(self):
         return os.path.exists(self.getAreaDBFile())
 
-    def globalDBExists(self):
-        return os.path.exists(self.getGlobalDBFile())
-                
-    def globalCountryDBExists(self):
-        return os.path.exists(self.getGlobalCountryDBFile())
+    def wayDBExists(self):
+        return os.path.exists(self.getWayDBFile())
 
+    def nodeDBExists(self):
+        return os.path.exists(self.getNodeDBFile())
+                
     def adressDBExists(self):
         return os.path.exists(self.getAdressDBFile())
 
@@ -4168,12 +4175,19 @@ class OSMParserData():
         else:
             self.openAdressDB()
 
-        createGlobalDB=not self.globalDBExists()
-        if createGlobalDB:
-            self.openGlobalDB()
-            self.createGlobalDBTables()
+        createWayDB=not self.wayDBExists()
+        if createWayDB:
+            self.openWayDB()
+            self.createWayDBTables()
         else:
-            self.openGlobalDB()
+            self.openWayDB()
+
+        createNodeDB=not self.nodeDBExists()
+        if createNodeDB:
+            self.openNodeDB()
+            self.createNodeDBTables()
+        else:
+            self.openNodeDB()
 
         self.openTmpDB()
         self.createTmpTable()
@@ -4185,7 +4199,7 @@ class OSMParserData():
 #        else:
 #            self.openTmpDB()
 
-        if createGlobalDB==True:
+        if createWayDB==True:
             self.skipNodes=False
             self.skipWays=False
             self.skipRelations=False
@@ -4201,7 +4215,8 @@ class OSMParserData():
                 self.firstNode=False   
   
                 self.parse(country)
-                self.commitGlobalDB()
+                self.commitWayDB()
+                self.commitNodeDB()
                 self.commitAdressDB()
             
             self.commitCoordsDB()
@@ -4213,7 +4228,8 @@ class OSMParserData():
             print("create crossings")
             self.createCrossingEntries()
             
-            self.commitGlobalDB()
+            self.commitWayDB()
+            self.commitNodeDB()
             
         if createEdgeDB:            
             print("create edges")
@@ -4237,21 +4253,28 @@ class OSMParserData():
 
             print("remove orphaned ways")
             self.removeOrphanedWays()
-            self.commitGlobalDB()
+            self.commitWayDB()
             
-            print("vacuum global DB")
-            self.vacuumGlobalDB()
+            print("vacuum way DB")
+            self.vacuumWayDB()
 
+            print("vaccum node DB")
+            self.vacuumNodeDB()
+            
             print("vacuum edge DB")
             self.vacuumEdgeDB()
             
             print("vacuum area DB")
             self.vacuumAreaDB()
             
-        if createGlobalDB==True:
-            print("create spatial index for global table")
-            self.createSpatialIndexForGlobalTables()
+        if createWayDB==True:
+            print("create spatial index for way table")
+            self.createSpatialIndexForWayTables()
 
+        if createNodeDB==True:
+            print("create spatial index for node table")
+            self.createSpatialIndexForNodeTables()
+            
         if createAreaDB==True:
             print("create spatial index for area table")
             self.createSpatialIndexForAreaTable()
@@ -4268,7 +4291,7 @@ class OSMParserData():
             self.commitAdressDB()
             self.vacuumAddressDB()
 
-        if createGlobalDB==True:
+        if createWayDB==True:
             print("create POI entries")
             self.createPOIEntriesForWays2()
             self.resolvePOIRefs()
@@ -4316,7 +4339,7 @@ class OSMParserData():
             
             self.parse(country)
                 
-        self.commitGlobalDB()
+        self.commitNodeDB()
     
     def parseRelations(self):
         self.skipWays=True
@@ -4376,8 +4399,8 @@ class OSMParserData():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
@@ -4391,8 +4414,8 @@ class OSMParserData():
     
         osmData=dict()
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
@@ -4423,15 +4446,9 @@ class OSMParserData():
             (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
             print(edge)
             
-        
-#        self.cursorGlobal.execute('SELECT refId, tags, type, AsText(geom) FROM refTable WHERE refId==892024881')
-#        allentries=self.cursorGlobal.fetchall()
-#        for x in allentries:
-#            print(self.refFromDB(x))
-
     def printCrossingsForWayId(self, wayId):
-        self.cursorGlobal.execute('SELECT * from crossingTable WHERE wayId=%d'%(wayId))
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * from crossingTable WHERE wayId=%d'%(wayId))
+        allentries=self.cursorWay.fetchall()
         for x in allentries:
             print(self.crossingFromDB(x))
 
@@ -4532,8 +4549,8 @@ class OSMParserData():
         
         if addWays==True:
             print("add all ways to address DB")
-            self.cursorGlobal.execute('SELECT * FROM wayTable')
-            allWays=self.cursorGlobal.fetchall()
+            self.cursorWay.execute('SELECT * FROM wayTable')
+            allWays=self.cursorWay.fetchall()
             
             allWaysLength=len(allWays)
             allWaysCount=0
@@ -4591,8 +4608,8 @@ class OSMParserData():
     def resolvePOIRefs(self):
         print("resolve POI refs from admin boundaries")
         adminLevelList=[4, 6, 8]
-        self.cursorGlobal.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorGlobal.fetchall()
+        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        allentries=self.cursorNode.fetchall()
         
         allPOIRefsLength=len(allentries)
         allPOIRefCount=0
@@ -4785,8 +4802,11 @@ class OSMParserData():
     def vacuumEdgeDB(self):
         self.cursorEdge.execute('VACUUM')
 
-    def vacuumGlobalDB(self):
-        self.cursorGlobal.execute('VACUUM')
+    def vacuumWayDB(self):
+        self.cursorWay.execute('VACUUM')
+
+    def vacuumNodeDB(self):
+        self.cursorNode.execute('VACUUM')
 
     def vacuumAddressDB(self):
         self.cursorAdress.execute('VACUUM')
@@ -4822,8 +4842,8 @@ class OSMParserData():
         print("removed %d edges"%(removeCount))
         
     def removeOrphanedWays(self):
-        self.cursorGlobal.execute('SELECT * FROM wayTable')
-        allWays=self.cursorGlobal.fetchall()
+        self.cursorWay.execute('SELECT * FROM wayTable')
+        allWays=self.cursorWay.fetchall()
         
         allWaysLength=len(allWays)
         allWaysCount=0
@@ -4840,9 +4860,9 @@ class OSMParserData():
             resultList=self.getEdgeEntryForWayId(wayid)
             if len(resultList)==0:
                 for ref in refs:
-                    self.cursorGlobal.execute('DELETE FROM refTable WHERE refId=%d'%(ref))
+                    self.cursorNode.execute('DELETE FROM refTable WHERE refId=%d'%(ref))
                     
-                self.cursorGlobal.execute('DELETE FROM wayTable WHERE wayId=%d'%(wayid))
+                self.cursorWay.execute('DELETE FROM wayTable WHERE wayId=%d'%(wayid))
                 removeCount=removeCount+1
         print("")
         print("removed %d ways"%(removeCount))
@@ -4850,8 +4870,8 @@ class OSMParserData():
     def removeOrphanedPOIs(self):
         if len(self.usedBarrierList)!=0:
             barrierSet=set(self.usedBarrierList)
-            self.cursorGlobal.execute('SELECT refId FROM poiRefTable WHERE type=%d'%(Constants.POI_TYPE_BARRIER))
-            allBarrierRefs=self.cursorGlobal.fetchall()
+            self.cursorNode.execute('SELECT refId FROM poiRefTable WHERE type=%d'%(Constants.POI_TYPE_BARRIER))
+            allBarrierRefs=self.cursorNode.fetchall()
             
             allRefLength=len(allBarrierRefs)
             allRefsCount=0
@@ -4866,7 +4886,7 @@ class OSMParserData():
                 allRefsCount=allRefsCount+1
                 
                 if not refId in barrierSet:
-                    self.cursorGlobal.execute('DELETE FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, Constants.POI_TYPE_BARRIER))
+                    self.cursorNode.execute('DELETE FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, Constants.POI_TYPE_BARRIER))
                     removeCount=removeCount+1
             print("")
             print("removed %d nodes"%(removeCount))
@@ -4930,7 +4950,7 @@ class OSMParserData():
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
 
         if len(nodeTypeList)==0:
-            self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
             filterString='('
             for nodeType in nodeTypeList:
@@ -4938,9 +4958,9 @@ class OSMParserData():
             filterString=filterString[:-1]
             filterString=filterString+')'
             
-            self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
             
-        allentries=self.cursorGlobal.fetchall()
+        allentries=self.cursorNode.fetchall()
         resultList=list()
         for x in allentries:
             refId, lat, lon, tags, nodeType, _=self.poiRefFromDB(x)
@@ -4951,9 +4971,9 @@ class OSMParserData():
     def getPOIsOfNodeTypeInDistance(self, lat, lon, distancekm, nodeType):
         distanceDegree=distancekm/100
         
-        self.cursorGlobal.execute('SELECT refId, tags, type, layer, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeDistWithin(%f, %f, %f)) AND type=%d'%(lon, lat, lon, lat, distanceDegree, nodeType))
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeDistWithin(%f, %f, %f)) AND type=%d'%(lon, lat, lon, lat, distanceDegree, nodeType))
             
-        allentries=self.cursorGlobal.fetchall()
+        allentries=self.cursorNode.fetchall()
         resultList=list()
 
         for x in allentries:
@@ -4991,7 +5011,7 @@ class OSMParserData():
         
         # streetTypeId an layer sorting
         if streetTypeList==None or len(streetTypeList)==0:    
-            self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
             filterString='('
             for streetType in streetTypeList:
@@ -4999,10 +5019,10 @@ class OSMParserData():
             filterString=filterString[:-1]
             filterString=filterString+')'
             
-            self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
             
         wayIdSet=set()
-        allentries=self.cursorGlobal.fetchall()
+        allentries=self.cursorWay.fetchall()
         resultList=list()
         for x in allentries:
             way=self.wayFromDBWithCoordsString(x)
@@ -5503,7 +5523,6 @@ def main(argv):
 #    p.parseRelations()
     
 #    p.parseAddresses()
-#    p.resolveAddresses(False)
 #    p.parseAreas()
 #    p.parseNodes()
 #    p.testAddressTable()
@@ -5522,7 +5541,8 @@ def main(argv):
 #    p.vacuumAreaDB()
 #    p.resolvePOIRefs()
 #    p.resolveAdminAreas()
-    p.testAdminAreaTable()
+#    p.resolveAddresses(False)
+#    p.testAdminAreaTable()
 #    print(p.getAdminAreaConversion())
 #    p.getPOIEntriesWithAddress()
 
