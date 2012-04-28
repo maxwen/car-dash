@@ -3,22 +3,24 @@ Created on Dec 13, 2011
 
 @author: maxl
 '''
-#from osmparser.parser.simple import OSMParser
-from osmparser.parser.xml.parser import XMLParser
 import sys
 import os
 import sqlite3
-from osmparser.osmutils import OSMUtils
 import pickle
-import env
 import re
-from misc.progress import ProgressBar
 import cProfile
 
+from utils.progress import ProgressBar
+from utils.env import getDataRoot, getPolyDataRoot
+from utils.osmutils import OSMUtils
+from osmparser.parser.xml.parser import XMLParser
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
 from Polygon import Polygon
-            
+from osmparser.importlog import ImportLog
+ 
+importLog=ImportLog(True)
+
 class OSMDataImport():
     def __init__(self):
         self.connectionEdge=None
@@ -331,7 +333,7 @@ class OSMDataImport():
         allentries=self.cursorAdress.fetchall()
         for x in allentries:
             addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
-            print( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
+            self.log( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
 
     def addressFromDB(self, x):
         addressId=x[0]
@@ -406,7 +408,7 @@ class OSMDataImport():
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
             restrictionId, target, viaPath, toCost=self.restrictionFromDB(x)
-            print("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
+            self.log("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
     
 #    def getCountryOfPos(self, lat, lon):
 #        polyCountry=self.countryNameOfPoint(lat, lon)
@@ -524,21 +526,21 @@ class OSMDataImport():
     def updateSourceOfEdge(self, edgeId, sourceId):
 #        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
 #        if existingEdgeId==None:
-#            print("no edge with id %d"%(edgeId))
+#            self.log("no edge with id %d"%(edgeId))
 #            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET source=%d WHERE id=%d'%(sourceId, edgeId))
 
     def updateTargetOfEdge(self, edgeId, targetId):
 #        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
 #        if existingEdgeId==None:
-#            print("no edge with id %d"%(edgeId))
+#            self.log("no edge with id %d"%(edgeId))
 #            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET target=%d WHERE id=%d'%(targetId, edgeId))
         
     def updateCostsOfEdge(self, edgeId, cost, reverseCost):
 #        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
 #        if existingEdgeId==None:
-#            print("no edge with id %d"%(edgeId))
+#            self.log("no edge with id %d"%(edgeId))
 #            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET cost=%d, reverseCost=%d WHERE id=%d'%(cost, reverseCost, edgeId))
 
@@ -583,7 +585,7 @@ class OSMDataImport():
         if len(allentries)==1:
             edge=self.edgeFromDB(allentries[0])
             return edge
-        print("no edge with %d"%(edgeId))
+        self.log("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None)
 
     def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
@@ -592,7 +594,7 @@ class OSMDataImport():
         if len(allentries)==1:
             edge=self.edgeFromDBWithCoords(allentries[0])
             return edge
-        print("no edge with %d"%(edgeId))
+        self.log("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None, None, None)
         
     
@@ -751,14 +753,14 @@ class OSMDataImport():
 #        allentries=self.cursorNode.fetchall()
 #        for x in allentries:
 #            refId, lat, lon, layer=self.refFromDB(x)
-#            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
+#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
 
     def testPOIRefTable(self):
         self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
             poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
+            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
 
     def getPOIEntriesWithAddress(self):
         resultList=list()
@@ -777,49 +779,49 @@ class OSMDataImport():
         allentries=self.cursorWay.fetchall()
         for x in allentries:
             wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
-            print( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
+            self.log( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
 
     def testCrossingTable(self):
         self.cursorWay.execute('SELECT * FROM crossingTable')
         allentries=self.cursorWay.fetchall()
         for x in allentries:
             crossingEntryId, wayid, refId, wayIdList=self.crossingFromDB(x)
-            print( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
+            self.log( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
         
     def testEdgeTable(self):
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, AsText(geom) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
             edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoords(x)
-            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
+            self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
         self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
         self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
     def testAdminAreaTable(self):
         self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE adminLevel=4')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, tags, adminLevel, parent=self.adminAreaFromDBWithParent(x)
-            print("%d %s"%(osmId, tags["name"]))
-#            print("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
+            self.log("%d %s"%(osmId, tags["name"]))
+#            self.log("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
 
     def testCoordsTable(self):
 #        self.cursorCoords.execute('SELECT * from coordsTable WHERE refId=98110819')
 #        allentries=self.cursorCoords.fetchall()  
 #        self.cursorCoords.execute('SELECT * from wayRefTable WHERE wayId=31664992')
 #        allentries=self.cursorCoords.fetchall()  
-#        print(allentries)
+#        self.log(allentries)
         None
 
     def wayFromDB(self, x):
@@ -1034,7 +1036,7 @@ class OSMDataImport():
         
         if self.firstNode==False:
             self.firstNode=True
-            print("Parsing nodes...")
+            self.log("Parsing nodes...")
 
         for ref, tags, coords in node:
             # <tag k="highway" v="motorway_junction"/>
@@ -1259,11 +1261,11 @@ class OSMDataImport():
         
         if self.firstWay==False:
             self.firstWay=True
-            print("Parsing ways...")
+            self.log("Parsing ways...")
             
         for wayid, tags, refs in way:
             if len(refs)<2:
-                print("way with len(ref)<2 %d"%(wayid))
+                self.log("way with len(ref)<2 %d"%(wayid))
                 continue
             
             isBuilding=False
@@ -1372,11 +1374,11 @@ class OSMDataImport():
                     coords, newRefList=self.createRefsCoords(refs)
                     if isPolygon==True:
                         if len(coords)<3:
-                            print("parse_ways: skipping polygon area %d %s len(coords)<3"%(wayid, refs))
+                            self.log("parse_ways: skipping polygon area %d %s len(coords)<3"%(wayid, refs))
                             continue
                     else:
                         if len(coords)<2:
-                            print("parse_ways: skipping line area %d %s len(coords)<2"%(wayid, refs))
+                            self.log("parse_ways: skipping line area %d %s len(coords)<2"%(wayid, refs))
                             continue
                     
                     # TODO: skip complete area if coords are missing?
@@ -1385,7 +1387,7 @@ class OSMDataImport():
                         if newRefList[0]==newRefList[-1]:
                             geomString=self.createPolygonFromCoords(coords)
                         else:
-                            print("parse_ways: skipping polygon area %d %s newRefList[0]!=newRefList[-1]"%(wayid, newRefList))
+                            self.log("parse_ways: skipping polygon area %d %s newRefList[0]!=newRefList[-1]"%(wayid, newRefList))
                             continue
                     else:
                         geomString=self.createLineStringFromCoords(coords)
@@ -1428,7 +1430,7 @@ class OSMDataImport():
                             if refs[0]==refs[-1]:                                
                                 coords, newRefList=self.createRefsCoords(refs)
                                 if len(coords)<2:
-                                    print("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
+                                    self.log("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
                                     continue
                     
                                 geomString=self.createPolygonFromCoords(coords)
@@ -1452,7 +1454,7 @@ class OSMDataImport():
                     
 #                    if roundabout==0:
 #                        if refs[0]==refs[-1]:
-#                            print("highway + closed: %d %s"%(wayid, tags))
+#                            self.log("highway + closed: %d %s"%(wayid, tags))
                     
 
                     tunnel=0
@@ -1478,7 +1480,7 @@ class OSMDataImport():
                         requiredTags=self.stripUnneededTags(tags)
                         self.addToWayTable(wayid, requiredTags, newRefList, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer)   
                     else:
-                        print("parse_ways: skipping way %d %s len(coords)<2"%(wayid, refs))
+                        self.log("parse_ways: skipping way %d %s len(coords)<2"%(wayid, refs))
 
     def parse_relations(self, relation):
         if self.skipRelations==True:
@@ -1486,7 +1488,7 @@ class OSMDataImport():
         
         if self.firstRelation==False:
             self.firstRelation=True
-            print("Parsing relations...")
+            self.log("Parsing relations...")
 
         for osmid, tags, ways in relation:
             if "type" in tags:     
@@ -1564,20 +1566,20 @@ class OSMDataImport():
                     if "boundary" in tags:
                         if tags["boundary"] in self.getBoundaryTypes():
                             if not "name" in tags:
-                                print("skip admin multipolygon: %d no name in tags"%(osmid))
+                                self.log("skip admin multipolygon: %d no name in tags"%(osmid))
                                 continue
                             
                             if not "admin_level" in tags:
-                                print("skip admin multipolygon: %d no admin_level in tags"%(osmid))
+                                self.log("skip admin multipolygon: %d no admin_level in tags"%(osmid))
                                 continue
                             
                             try:
                                 adminLevel=int(tags["admin_level"])
                                 if adminLevel!=2 and adminLevel!=4 and adminLevel!=6 and adminLevel!=8:
-                                    print("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
+                                    self.log("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
                                     continue                                    
                             except ValueError:
-                                print("skip admin multipolygon: %d %s parse error adminLevel %s "%(osmid, tags["name"], tags["admin_level"]))
+                                self.log("skip admin multipolygon: %d %s parse error adminLevel %s "%(osmid, tags["name"], tags["admin_level"]))
                                 continue
  
                             isAdminBoundary=True
@@ -1617,7 +1619,7 @@ class OSMDataImport():
                         
                     if isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
                         if len(tags)!=1:
-                            print("skip multipolygon: %d %s unknwon type"%(osmid, tags))
+                            self.log("skip multipolygon: %d %s unknwon type"%(osmid, tags))
                         continue
                                             
                     # (59178604, 'way', 'outer')
@@ -1630,7 +1632,7 @@ class OSMDataImport():
                         role=way[2]
                         
                         if memberType=="relation":
-                            print("super relation %d %s"%(osmid, tags))
+                            self.log("super relation %d %s"%(osmid, tags))
                             skipArea=True
                             break
 
@@ -1647,9 +1649,9 @@ class OSMDataImport():
                                     allRefs.append((wayId, refs, 0, 0))
                                 else:
                                     if isAdminBoundary==True:
-                                        print("failed to resolve way %d from admin relation %d %s"%(relationWayId, osmid, tags["name"]))    
+                                        self.log("failed to resolve way %d from admin relation %d %s"%(relationWayId, osmid, tags["name"]))    
                                     else:
-                                        print("failed to resolve way %d from relation %d"%(relationWayId, osmid))    
+                                        self.log("failed to resolve way %d from relation %d"%(relationWayId, osmid))    
                                     skipArea=True
                                     break
                     
@@ -1657,7 +1659,7 @@ class OSMDataImport():
                         continue
                     
                     if len(allRefs)==0:
-                        print("skip multipolygon: %d len(allRefs)==0"%(osmid))
+                        self.log("skip multipolygon: %d len(allRefs)==0"%(osmid))
                         continue
                     
                     refRings=self.mergeWayRefs(allRefs)
@@ -1668,7 +1670,7 @@ class OSMDataImport():
                             for refRingEntry in refRings:                                
                                 refs=refRingEntry["refs"]
                                 if refs[0]!=refs[-1]:
-                                    print("skip admin multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
+                                    self.log("skip admin multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
                                     skipArea=True
                                     break
 
@@ -1677,7 +1679,7 @@ class OSMDataImport():
                                 if len(refs)==len(newRefList):
                                     polyStringPart=self.createMultiPolygonPartFromCoords(coords)
                                 else:
-                                    print("skip admin multipolygon: %d %s coords missing"%(osmid, tags["name"]))
+                                    self.log("skip admin multipolygon: %d %s coords missing"%(osmid, tags["name"]))
                                     skipArea=True
                                     break
                                 
@@ -1691,7 +1693,7 @@ class OSMDataImport():
                                 if adminLevel!=None:
                                     self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
                                 else:
-                                    print("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
+                                    self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
                                     continue
                             else:
                                 continue
@@ -1710,18 +1712,18 @@ class OSMDataImport():
                                 coords, newRefList=self.createRefsCoords(refs)
                                 if isPolygon==True:
                                     if len(coords)<3:
-                                        print("skip multipolygon polygon part: %d len(coords)<3"%(osmid))
+                                        self.log("skip multipolygon polygon part: %d len(coords)<3"%(osmid))
                                         continue
                                 else:
                                     if len(coords)<2:
-                                        print("skip multipolygon line part: %d len(coords)<2"%(osmid))
+                                        self.log("skip multipolygon line part: %d len(coords)<2"%(osmid))
                                         continue
                 
                                 if isPolygon==True:
                                     if newRefList[0]==newRefList[-1]:
                                         geomString=self.createPolygonFromCoords(coords)
                                     else:
-                                        print("skip multipolygon part: %d coords missing"%(osmid)) 
+                                        self.log("skip multipolygon part: %d coords missing"%(osmid)) 
                                         continue
                                 else:
                                     geomString=self.createLineStringFromCoords(coords)
@@ -1748,7 +1750,7 @@ class OSMDataImport():
                                     
                                 i=i+1
                     else:
-                        print("skip multipolygon: %d mergeWayRefs==0"%(osmid))
+                        self.log("skip multipolygon: %d mergeWayRefs==0"%(osmid))
                         continue
                    
                 elif tags["type"]=="enforcement":
@@ -1976,7 +1978,7 @@ class OSMDataImport():
         for wayid in wayIdList: 
             wayEntryId, tags, refs, streetInfo, name, nameRef, _, _=self.getWayEntryForId(wayid)   
             if wayEntryId==None:
-                print("create crossings: skip crossing for wayId %s at refId %d to wayId %d"%(fromWayId, refId, wayid))
+                self.log("create crossings: skip crossing for wayId %s at refId %d to wayId %d"%(fromWayId, refId, wayid))
                 continue
             
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
@@ -2081,12 +2083,12 @@ class OSMDataImport():
         
         for way in allWays:
             prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allWaysCount=allWaysCount+1
 
             self.createEdgeTableEntriesForWay(way)
 
-        print("")
+        self.log("")
         
     def createEdgeTableNodeEntries(self):
         self.cursorEdge.execute('SELECT id FROM edgeTable')
@@ -2099,7 +2101,7 @@ class OSMDataImport():
                 
         for edgeEntryId in allEdges:   
             prog.updateAmount(allEdgesCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allEdgesCount=allEdgesCount+1
              
             edgeId=int(edgeEntryId[0])
@@ -2112,7 +2114,7 @@ class OSMDataImport():
             edge=self.getEdgeEntryForEdgeId(edgeId)
             self.createEdgeTableNodeSourceEnriesFor(edge)
 
-        print("")
+        self.log("")
         
         self.cursorEdge.execute('SELECT id FROM edgeTable WHERE source=0 OR target=0')
         allEdges=self.cursorEdge.fetchall()
@@ -2124,7 +2126,7 @@ class OSMDataImport():
         
         for edgeEntryId in allEdges:
             prog.updateAmount(allEdgesCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allEdgesCount=allEdgesCount+1
 
             edgeId=edgeEntryId[0]
@@ -2140,7 +2142,7 @@ class OSMDataImport():
                 self.nodeId=self.nodeId+1
                 self.updateTargetOfEdge(edgeId, targetId)
                 
-        print("")
+        self.log("")
         
     def createEdgeTableNodeSameStartEnriesFor(self, edge):
         edgeId, startRef, _, _, _, sourceId, _, _, _=edge
@@ -2202,7 +2204,7 @@ class OSMDataImport():
 
         for barrierRestrictionEntry in self.barrierRestrictionList:
             prog.updateAmount(allRestrictionCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allRestrictionCount=allRestrictionCount+1
             
             wayId=barrierRestrictionEntry["wayId"]
@@ -2241,7 +2243,7 @@ class OSMDataImport():
                         self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                         self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
                 else:
-                    print("createBarrierRestrictions: failed to resolve fromEdge for %s"%(barrierRestrictionEntry))
+                    self.log("createBarrierRestrictions: failed to resolve fromEdge for %s"%(barrierRestrictionEntry))
             else:
                 # barrier in the middle of the way
                 resultList=self.getEdgeEntryForWayId(wayId)
@@ -2260,10 +2262,10 @@ class OSMDataImport():
                     self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
                     self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
                 else:
-                    print("createBarrierRestrictions: failed to resolve %s"%(barrierRestrictionEntry))
+                    self.log("createBarrierRestrictions: failed to resolve %s"%(barrierRestrictionEntry))
    
         self.barrierRestrictionList=None
-        print("")
+        self.log("")
         
     def createWayRestrictionsDB(self):
         allRestricitionLength=len(self.wayRestricitionList)
@@ -2274,7 +2276,7 @@ class OSMDataImport():
         toAddRules=list()
         for wayRestrictionEntry in self.wayRestricitionList:
             prog.updateAmount(allRestrictionCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allRestrictionCount=allRestrictionCount+1
 
             fromWayId=int(wayRestrictionEntry["from"])
@@ -2282,7 +2284,7 @@ class OSMDataImport():
             restrictionType=wayRestrictionEntry["type"]
 
             if "viaWay" in wayRestrictionEntry:
-#                print("relation with via type way %s"%(wayRestrictionEntry))
+#                self.log("relation with via type way %s"%(wayRestrictionEntry))
                 continue
 
             resultList=self.getEdgeEntryForWayId(fromWayId)
@@ -2325,7 +2327,7 @@ class OSMDataImport():
             self.addToRestrictionTable(toEdgeId, str(fromEdgeId), 10000)
         
         self.wayRestricitionList=None
-        print("")
+        self.log("")
             
     def getStreetTypeFactor(self, streetTypeId):
         # motorway
@@ -2513,10 +2515,10 @@ class OSMDataImport():
             cost=(distance * streetTypeFactor * accessFactor * crossingFactor)
         except ZeroDivisionError:
             cost=distance
-            print(tags)
+            self.log(tags)
         except TypeError:
             cost=distance
-            print(tags)
+            self.log(tags)
             
         if oneway==1:
             reverseCost=100000
@@ -2571,7 +2573,7 @@ class OSMDataImport():
                         cost, reverseCost=self.getCostsOfWay(wayId, tags, distance, crossingFactor, streetInfo, maxspeed)                                         
                         self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, streetInfo, coords)
 #                    else:
-#                        print("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
+#                        self.log("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
 
                     refNodeList=list()
                     distance=0
@@ -2590,7 +2592,7 @@ class OSMDataImport():
                     cost, reverseCost=self.getCostsOfWay(wayId, tags, distance, crossingFactor, streetInfo, maxspeed)                    
                     self.addToEdgeTable(startRef, endRef, distance, wayId, cost, reverseCost, streetInfo, coords)
 #                else:
-#                    print("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
+#                    self.log("createEdgeTableEntriesForWay: skipping wayId %d from %d to %d len(coords)<2"%(wayId, startRef, endRef))
 
     # lat, lon
     def createRefsCoords(self, refList):
@@ -2729,7 +2731,7 @@ class OSMDataImport():
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
   
             prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allWaysCount=allWaysCount+1
                         
             for ref in refs:  
@@ -2882,7 +2884,7 @@ class OSMDataImport():
                     if len(wayList)!=0:
                         self.addToCrossingsTable(wayid, ref, wayList)
         
-        print("")
+        self.log("")
         
     def createPOIEntriesForWays(self):
         self.cursorWay.execute('SELECT * FROM wayTable')
@@ -2897,7 +2899,7 @@ class OSMDataImport():
             wayId, tags, refs, _, _, _, _, poiList=self.wayFromDB(way)
 
             prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allWaysCount=allWaysCount+1
 
             if poiList==None:
@@ -2917,7 +2919,7 @@ class OSMDataImport():
             if len(poiList)!=0:
                 self.updateWayTableEntryPOIList(wayId, poiList)
             
-        print("")
+        self.log("")
           
     def createPOIEntriesForWays2(self):
         self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE type=%d OR type=%d'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_BARRIER))
@@ -2930,7 +2932,7 @@ class OSMDataImport():
 
         for x in allRefs:
             prog.updateAmount(allRefsLength)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allRefsCount=allRefsCount+1
             
             refId, lat, lon, tags, nodeType, _=self.poiRefFromDB(x)
@@ -2941,7 +2943,7 @@ class OSMDataImport():
             self.cursorWay.execute('SELECT wayId, refs, poiList FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lon, lat, lon, lat))
             allWays=self.cursorWay.fetchall()
             if len(allWays)==0:
-                print("could not resolve way for POI refId %d"%(refId))
+                self.log("could not resolve way for POI refId %d"%(refId))
                 continue
             
             wayResoled=False
@@ -2957,16 +2959,16 @@ class OSMDataImport():
                     wayResoled=True
             
             if wayResoled==False:
-                print("could not resolve way for POI refId %d"%(refId))
+                self.log("could not resolve way for POI refId %d"%(refId))
                     
             
-        print("")  
+        self.log("")  
         
     def parse(self, country):
         osmFile=self.getOSMFile(country)
         if osmFile!=None:
-            print(self.osmList[country])
-            print("start parsing")
+            self.log(self.osmList[country])
+            self.log("start parsing")
             p = XMLParser(nodes_callback=self.parse_nodes, 
                       ways_callback=self.parse_ways, 
                       relations_callback=self.parse_relations,
@@ -2978,7 +2980,7 @@ class OSMDataImport():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data4")
+        return os.path.join(getDataRoot(), "data1")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -3038,7 +3040,7 @@ class OSMDataImport():
         return os.path.exists(self.getTmpDBFile())
 
     def initDB(self):
-        print(self.getDataDir())
+        self.log(self.getDataDir())
         
 #        self.openCoordsDB()
 #        self.createCoordsDBTables()
@@ -3122,11 +3124,11 @@ class OSMDataImport():
             # not needed anymore
             self.addressCache=None
                        
-#            print("merge ways")
+#            self.log("merge ways")
 #            self.mergeWayEntries()
-#            print("end merge ways")
+#            self.log("end merge ways")
                         
-            print("create crossings")
+            self.log("create crossings")
             self.createCrossingEntries()
             
             self.commitWayDB()
@@ -3136,55 +3138,55 @@ class OSMDataImport():
         self.closeTmpDB(False)
 
         if createEdgeDB:            
-            print("create edges")
+            self.log("create edges")
             self.createEdgeTableEntries()
 
-            print("create edge nodes")
+            self.log("create edge nodes")
             self.createEdgeTableNodeEntries()
                         
-            print("create barrier restriction entries")
+            self.log("create barrier restriction entries")
             self.createBarrierRestrictions()
             
-            print('remove orphaned POIs')
+            self.log('remove orphaned POIs')
             self.removeOrphanedPOIs()
 
-            print("create way restrictions")
+            self.log("create way restrictions")
             self.createWayRestrictionsDB()              
 
-            print("remove orphaned edges")
+            self.log("remove orphaned edges")
             self.removeOrphanedEdges()
             self.commitEdgeDB()
 
-            print("remove orphaned ways")
+            self.log("remove orphaned ways")
             self.removeOrphanedWays()
             self.commitWayDB()
             
-            print("vacuum way DB")
+            self.log("vacuum way DB")
             self.vacuumWayDB()
 
-            print("vaccum node DB")
+            self.log("vaccum node DB")
             self.vacuumNodeDB()
             
-            print("vacuum edge DB")
+            self.log("vacuum edge DB")
             self.vacuumEdgeDB()
             
-            print("vacuum area DB")
+            self.log("vacuum area DB")
             self.vacuumAreaDB()
             
         if createWayDB==True:
-            print("create spatial index for way table")
+            self.log("create spatial index for way table")
             self.createSpatialIndexForWayTables()
 
         if createNodeDB==True:
-            print("create spatial index for node table")
+            self.log("create spatial index for node table")
             self.createSpatialIndexForNodeTables()
             
         if createAreaDB==True:
-            print("create spatial index for area table")
+            self.log("create spatial index for area table")
             self.createSpatialIndexForAreaTable()
 
         if createEdgeDB==True:
-            print("create spatial index for edge table")
+            self.log("create spatial index for edge table")
             self.createSpatialIndexForEdgeTable()
 
         if createAreaDB==True:
@@ -3196,12 +3198,12 @@ class OSMDataImport():
             self.vacuumAddressDB()
 
         if createWayDB==True:
-            print("create POI entries")
+            self.log("create POI entries")
             self.createPOIEntriesForWays2()
             self.resolvePOIRefs()
             
         if createCoordsDB==True:
-            print("vacuum coords DB")
+            self.log("vacuum coords DB")
             self.vacuumCoordsDB()
             
         self.closeCoordsDB(False)
@@ -3281,15 +3283,15 @@ class OSMDataImport():
             self.firstWay=False
             self.firstNode=False   
             
-            print(self.osmList[country])
-            print("start parsing")
+            self.log(self.osmList[country])
+            self.log("start parsing")
             self.parse(country)
-            print("end parsing")
+            self.log("end parsing")
                 
         self.commitAdressDB()
         
     def initBoarders(self):
-        self.bu=OSMBoarderUtils(env.getPolyDataRoot())
+        self.bu=OSMBoarderUtils(getPolyDataRoot())
         self.bu.initData()
 
 #        self.buSimple=OSMBoarderUtils(env.getPolyDataRootSimple())
@@ -3340,57 +3342,57 @@ class OSMDataImport():
         resultList=self.getEdgeEntryForWayId(25491267)
         for edge in resultList:
             (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            print(edge)
+            self.log(edge)
             
         resultList=self.getEdgeEntryForWayId(25491266)
         for edge in resultList:
             (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            print(edge)
+            self.log(edge)
 
         resultList=self.getEdgeEntryForWayId(23685496)
         for edge in resultList:
             (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            print(edge)
+            self.log(edge)
             
     def printCrossingsForWayId(self, wayId):
         self.cursorWay.execute('SELECT * from crossingTable WHERE wayId=%d'%(wayId))
         allentries=self.cursorWay.fetchall()
         for x in allentries:
-            print(self.crossingFromDB(x))
+            self.log(self.crossingFromDB(x))
 
 #    def recreateCrossings(self):
 #        self.clearCrosssingsTable()
 #        
-#        print("recreate crossings")
+#        self.log("recreate crossings")
 #        self.createCrossingEntries()
-#        print("end recreate crossings")
+#        self.log("end recreate crossings")
                                 
 #    def recreateEdges(self):
 #        self.clearEdgeTable()
-#        print("recreate edges")
+#        self.log("recreate edges")
 #        self.createEdgeTableEntries()
-#        print("end recreate edges")   
+#        self.log("end recreate edges")   
 #                        
-#        print("recreate edge nodes")
+#        self.log("recreate edge nodes")
 #        self.createEdgeTableNodeEntries()
-#        print("end recreate edge nodes")
+#        self.log("end recreate edge nodes")
 #        
-#        print("create barrier restriction entries")
+#        self.log("create barrier restriction entries")
 #        self.createBarrierRestrictions()
 #        
-##        print("remove orphaned edges")
+##        self.log("remove orphaned edges")
 ##        self.removeOrphanedEdges()
-##        print("end remove orphaned edges")
+##        self.log("end remove orphaned edges")
 ##        
-##        print("vacuum edge DB")
+##        self.log("vacuum edge DB")
 ##        self.vacuumEdgeDB()
-##        print("end vacuum edge DB")
+##        self.log("end vacuum edge DB")
 
     def getStreetTypeIdForAddesses(self):
         return Constants.ADDRESS_STREET_SET
 
     def resolveAddresses(self, addWays):
-        print("resolve addresses from admin boundaries")
+        self.log("resolve addresses from admin boundaries")
         adminLevelList=[4, 6, 8]
         self.addressId=self.getLenOfAddressTable()
         
@@ -3422,7 +3424,7 @@ class OSMDataImport():
             addressId, _, _, storedCity, _, streetName, _, lat, lon=self.addressFromDB(x)
             
             prog.updateAmount(allAddressCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allAddressCount=allAddressCount+1
             
             if storedCity!=None:
@@ -3444,17 +3446,17 @@ class OSMDataImport():
                     if country!=None:
                         self.updateAddressEntry(addressId, country, osmId)
 #                    else:
-#                        print("unknown country for %d"%(osmId))
+#                        self.log("unknown country for %d"%(osmId))
                     resolved=True
                     break
                     
 #            if resolved==False:
-#                print("failed to resolve %s"%(streetName))
+#                self.log("failed to resolve %s"%(streetName))
                 
-        print("")
+        self.log("")
         
         if addWays==True:
-            print("add all ways to address DB")
+            self.log("add all ways to address DB")
             self.cursorWay.execute('SELECT * FROM wayTable')
             allWays=self.cursorWay.fetchall()
             
@@ -3469,7 +3471,7 @@ class OSMDataImport():
                 streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
                 
                 prog.updateAmount(allWaysCount)
-                print(prog, end="\r")
+                self.log(prog, end="\r")
                 allWaysCount=allWaysCount+1
                 
                 if streetName==None:
@@ -3500,19 +3502,19 @@ class OSMDataImport():
                                 if country!=None:
                                     self.addToAddressTable2(refId, country, osmId, streetName, None, lat, lon)
     #                            else:
-    #                                print("unknown country for %d"%(osmId))
+    #                                self.log("unknown country for %d"%(osmId))
                                 addressSet.add("%s-%s"%(streetName, osmId))
                             
                             resolved=True
                             break
                             
     #                if resolved==False:
-    #                    print("failed to resolve %s"%(streetName))
+    #                    self.log("failed to resolve %s"%(streetName))
                         
-            print("")
+            self.log("")
 
     def resolvePOIRefs(self):
-        print("resolve POI refs from admin boundaries")
+        self.log("resolve POI refs from admin boundaries")
         adminLevelList=[4, 6, 8]
         self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
@@ -3542,7 +3544,7 @@ class OSMDataImport():
             (poiId, _, lat, lon, _, _, _, _, storedCity)=self.poiRefFromDB2(x)
                         
             prog.updateAmount(allPOIRefCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allPOIRefCount=allPOIRefCount+1
             
             if storedCity!=None:
@@ -3563,14 +3565,14 @@ class OSMDataImport():
                     if country!=None:
                         self.updatePOIRefEntry(poiId, country, osmId)
 #                    else:
-#                        print("unknown country for %d"%(osmId))
+#                        self.log("unknown country for %d"%(osmId))
   
                     break
                 
-        print("")        
+        self.log("")        
                 
     def resolveAdminAreas(self):
-        print("resolve admin area relations")
+        self.log("resolve admin area relations")
 
         adminLevelList=[8, 6, 4, 2]
         
@@ -3596,7 +3598,7 @@ class OSMDataImport():
         for polyCountryName in polyCountryList:
             if not polyCountryName in osmCountryList:
                 osmId=999999+i
-                print("add country %s from polylist"%(polyCountryName))
+                self.log("add country %s from polylist"%(polyCountryName))
                 polyString=self.bu.createMultiPolygonFromPoly(polyCountryName)
                 tags=dict()
                 tags["int_name"]=polyCountryName
@@ -3626,7 +3628,7 @@ class OSMDataImport():
         for adminLevel in adminLevelList[:-1]:
             currentAdminLevelIndex=adminLevelList.index(adminLevel)
             prog.updateAmount(amount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             
             for osmId, cPolygon, tags in polyList[adminLevel]:
                 resolved=False
@@ -3643,7 +3645,7 @@ class OSMDataImport():
                     i=i+1
             amount=amount+1
 
-        print("") 
+        self.log("") 
                 
     def getAdminListForId(self, osmId, adminDict):
         self.cursorArea.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
@@ -3732,7 +3734,7 @@ class OSMDataImport():
         
         for edge in allEdges:
             prog.updateAmount(allEdgesCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allEdgesCount=allEdgesCount+1
 
             edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.edgeFromDB(edge)
@@ -3741,12 +3743,12 @@ class OSMDataImport():
             resultList3=self.getEdgeEntryForSource(source)
             resultList4=self.getEdgeEntryForTarget(target)
             if len(resultList1)==0 and len(resultList2)==0 and len(resultList3)==1 and len(resultList4)==1:
-#                print("remove edge %d %d %d %d"%(edgeId, wayId, startRef, endRef))
+#                self.log("remove edge %d %d %d %d"%(edgeId, wayId, startRef, endRef))
                 self.cursorEdge.execute('DELETE FROM edgeTable WHERE id=%d'%(edgeId))
                 removeCount=removeCount+1
 
-        print("")
-        print("removed %d edges"%(removeCount))
+        self.log("")
+        self.log("removed %d edges"%(removeCount))
         
     def removeOrphanedWays(self):
         self.cursorWay.execute('SELECT * FROM wayTable')
@@ -3761,7 +3763,7 @@ class OSMDataImport():
             wayid, _, _, _, _, _, _, _=self.wayFromDB(way)
 
             prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allWaysCount=allWaysCount+1
 
             resultList=self.getEdgeEntryForWayId(wayid)
@@ -3772,8 +3774,8 @@ class OSMDataImport():
                 self.cursorWay.execute('DELETE FROM wayTable WHERE wayId=%d'%(wayid))
                 removeCount=removeCount+1
         
-        print("")
-        print("removed %d ways"%(removeCount))
+        self.log("")
+        self.log("removed %d ways"%(removeCount))
         
     def removeOrphanedPOIs(self):
         if len(self.usedBarrierList)!=0:
@@ -3790,14 +3792,14 @@ class OSMDataImport():
             for x in allBarrierRefs:
                 refId=int(x[0])
                 prog.updateAmount(allRefsCount)
-                print(prog, end="\r")
+                self.log(prog, end="\r")
                 allRefsCount=allRefsCount+1
                 
                 if not refId in barrierSet:
                     self.cursorNode.execute('DELETE FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, Constants.POI_TYPE_BARRIER))
                     removeCount=removeCount+1
-            print("")
-            print("removed %d nodes"%(removeCount))
+            self.log("")
+            self.log("removed %d nodes"%(removeCount))
             
     def removeBuildings(self):
         self.cursorArea.execute('SELECT osmId, type FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_BUILDING))
@@ -3807,7 +3809,7 @@ class OSMDataImport():
             self.cursorArea.execute('DELETE FROM areaTable WHERE osmId=%d AND type=%d'%(osmId, Constants.AREA_TYPE_BUILDING))
 
     def recreateCostsForEdges(self):
-        print("recreate costs")
+        self.log("recreate costs")
         self.cursorEdge.execute('SELECT * FROM edgeTable')
         allEdges=self.cursorEdge.fetchall()
         
@@ -3818,7 +3820,7 @@ class OSMDataImport():
         
         for edge in allEdges:
             prog.updateAmount(allEdgesCount)
-            print(prog, end="\r")
+            self.log(prog, end="\r")
             allEdgesCount=allEdgesCount+1
             
             edgeId, _, _, length, wayId, _, _, cost, reverseCost=self.edgeFromDB(edge)
@@ -3830,13 +3832,13 @@ class OSMDataImport():
             cost, reverseCost=self.getCostsOfWay(wayId, tags, length, 1, streetTypeId, oneway, roundabout, maxspeed)
             self.updateCostsOfEdge(edgeId, cost, reverseCost)
 
-        print("")
+        self.log("")
                       
     def testEdgeTableGeom(self):
         self.cursorEdge.execute('SELECT AsText(geom) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            print(x)
+            self.log(x)
                    
     def createBBoxAroundPoint(self, lat, lon, margin):
         latRangeMax=lat+margin
@@ -3950,14 +3952,14 @@ class OSMDataImport():
 #        allWaysCount=0
 #        alLWaysPercentCount=0
 #        
-#        print("old way length=%d"%(allWaysLength))
+#        self.log("old way length=%d"%(allWaysLength))
 #
 #        for way in allWays:
 #            wayId, tags, refs, streetInfo, name, nameRef, maxspeed=self.wayFromTmpDB(way)
-##            print(way)
+##            self.log(way)
 #
 #            if allWaysCount>waysBlockCount:
-#                print("done %d"%(alLWaysPercentCount))
+#                self.log("done %d"%(alLWaysPercentCount))
 #                alLWaysPercentCount=alLWaysPercentCount+1
 #                allWaysCount=0
 #            else:
@@ -4003,7 +4005,7 @@ class OSMDataImport():
 #                    allRefs.append((otherWayId, otherRefs, oneway, roundabout))
 #                
 #                refRings=self.mergeWayRefs(allRefs)
-##                print(refRings)
+##                self.log(refRings)
 #                for refRingEntry in refRings:
 #                    wayId=refRingEntry["wayId"]
 #                    refs=refRingEntry["refs"]
@@ -4014,9 +4016,9 @@ class OSMDataImport():
 #                    coords, newRefList=self.createRefsCoords(refs)
 #                    if len(coords)!=0:
 ##                        if len(wayIdList)>1:
-##                            print("add merged way %d %s"%(wayId, wayIdList))
+##                            self.log("add merged way %d %s"%(wayId, wayIdList))
 ##                        else:
-##                            print("add single way %d"%(wayId))
+##                            self.log("add single way %d"%(wayId))
 #                        newWayCount=newWayCount+1
 #                        self.addToWayTable(wayId, tags, newRefList, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords)   
 #                        for ref in refs:  
@@ -4027,13 +4029,13 @@ class OSMDataImport():
 #                            self.addToRefTable(ref, lat, lon, None, 0)
 #                            self.addToTmpRefWayTable(ref, wayId)
 #                    else:
-#                        print("mergeWayEntries: skipping wayId %d because of missing coords"%(wayId))
+#                        self.log("mergeWayEntries: skipping wayId %d because of missing coords"%(wayId))
 #    
 #            else:
 #                doneWays.add(wayId)
 #                coords, newRefList=self.createRefsCoords(refs)
 #                if len(coords)!=0:
-##                    print("add single way %d"%wayId)
+##                    self.log("add single way %d"%wayId)
 #                    newWayCount=newWayCount+1
 #                    self.addToWayTable(wayId, tags, newRefList, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords)   
 #                    for ref in refs:  
@@ -4044,12 +4046,15 @@ class OSMDataImport():
 #                        self.addToRefTable(ref, lat, lon, None, 0)
 #                        self.addToTmpRefWayTable(ref, wayId)
 #                else:
-#                    print("mergeWayEntries: skipping wayId %d because of missing coords"%(wayId))
+#                    self.log("mergeWayEntries: skipping wayId %d because of missing coords"%(wayId))
 #
 #        if len(doneWays)!=allWaysLength:
-#            print("length missmatch")
+#            self.log("length missmatch")
 #        
-#        print("new way length=%d"%(newWayCount))
+#        self.log("new way length=%d"%(newWayCount))
+
+    def log(self, text):
+        importLog.addTrackLogLine(str(text))
         
 def main(argv):    
     p = OSMDataImport()
@@ -4063,7 +4068,7 @@ def main(argv):
 #    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
 #    allentries=p.cursorArea.fetchall()
 #    for x in allentries:
-#        print(x)
+#        self.log(x)
 
 
 #    p.cursorEdge.execute('PRAGMA table_info(cache_edgeTable_Geometry)')
@@ -4074,20 +4079,20 @@ def main(argv):
 #    p.cursorEdge.execute('SELECT * FROM geometry_columns')
 #    allentries=p.cursorEdge.fetchall()
 #    for x in allentries:
-#        print(x)
+#        self.log(x)
 
 #    si=p.encodeStreetInfo2(0, 1, 1, 1, 1)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 1, 0, 1, 1)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 0, 0, 1, 1)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 0, 1, 0, 0)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 2, 0, 0, 1)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 2, 1, 1, 0)
-#    print(p.decodeStreetInfo2(si))
+#    self.log(p.decodeStreetInfo2(si))
    
 #    lat=47.820928
 #    lon=13.016525
@@ -4103,9 +4108,9 @@ def main(argv):
 #    p.testAreaTable()
        
 
-#    print(p.getLenOfEdgeTable())
-#    print(p.getEdgeEntryForEdgeId(6719))
-#    print(p.getEdgeEntryForEdgeId(2024))
+#    self.log(p.getLenOfEdgeTable())
+#    self.log(p.getEdgeEntryForEdgeId(6719))
+#    self.log(p.getEdgeEntryForEdgeId(2024))
 
 #    p.test()
 
@@ -4154,10 +4159,10 @@ def main(argv):
 #    p.resolveAdminAreas()
 #    p.resolveAddresses(False)
 #    p.testAdminAreaTable()
-#    print(p.getAdminAreaConversion())
+#    self.log(p.getAdminAreaConversion())
 #    p.getPOIEntriesWithAddress()
 
-#    print(p.bu.getPolyCountryList())
+#    self.log(p.bu.getPolyCountryList())
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000001))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000000))

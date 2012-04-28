@@ -13,7 +13,7 @@ import io
 import socket
 from collections import deque, OrderedDict
 import time
-import env
+from utils.env import getTileRoot, getImageRoot, getRoot
 import cProfile
 
 from PyQt4.QtCore import QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
@@ -22,9 +22,9 @@ from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
-from config import Config
-from osmparser.osmutils import OSMUtils
-from gpsutils import GPSMonitorUpateWorker
+from utils.config import Config
+from utils.osmutils import OSMUtils
+from utils.gpsutils import GPSMonitorUpateWorker
 from gps import gps, misc
 from osmdialogs import *
 
@@ -614,13 +614,13 @@ class QtOSMWidget(QWidget):
         if os.path.isabs(self.tileHome):
             return self.tileHome
         else:
-            return os.path.join(env.getTileRoot(), self.tileHome)
+            return os.path.join(getTileRoot(), self.tileHome)
     
     def getMapnikConfigFullPath(self):
         if os.path.isabs(self.mapnikConfig):
             return self.mapnikConfig
         else:
-            return os.path.join(env.getTileRoot(), self.mapnikConfig)
+            return os.path.join(getTileRoot(), self.mapnikConfig)
         
     def getTileFullPath(self, zoom, x, y):
         home=self.getTileHomeFullPath()
@@ -2279,7 +2279,7 @@ class QtOSMWidget(QWidget):
             else:
                 self.painter.fillRect(speedBackground, self.style.getStyleColor("backgroundColor"))
 
-            imagePath=os.path.join(env.getImageRoot(), "speedsigns", "%d.png"%(self.speedInfo))
+            imagePath=os.path.join(getImageRoot(), "speedsigns", "%d.png"%(self.speedInfo))
             if os.path.exists(imagePath):
                 speedPixmap=QPixmap(imagePath)
                 self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, speedPixmap)
@@ -4027,7 +4027,7 @@ class OSMWidget(QWidget):
                     return
 
             self.lastGPSDataTime=timeStamp
-            trackLog.addTrackLogLine2(gpsData.toLogLine())
+            trackLog.addTrackLogLine(gpsData.toLogLine())
 
     def updateGPSDataDisplay1(self, gpsData):        
         if gpsData.isValid():
@@ -4358,7 +4358,7 @@ class OSMWidget(QWidget):
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
             (_, refId, country, _, _, streetName, houseNumber, lat, lon)=address
-            print(refId)
+#            print(refId)
             if houseNumber!=None:
                 name=streetName+" "+houseNumber
             else:
@@ -4446,7 +4446,7 @@ class OSMWidget(QWidget):
     @pyqtSlot()
     def _loadTrackLog(self):
         fileName = QFileDialog.getOpenFileName(self, "Select Tracklog",
-                                                 os.path.join(env.getRoot(), "tracks"),
+                                                 os.path.join(getRoot(), "tracks"),
                                                  "Tracklogs (*.log)")
         if len(fileName)==0:
             return

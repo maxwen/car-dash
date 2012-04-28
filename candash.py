@@ -7,8 +7,8 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANSocketWorker, CANDecoder, canIdleState, canRunState, canStoppedState
-from gpsutils import GPSMonitor, GPSMonitorUpateWorker, gpsIdleState, gpsRunState, gpsStoppedState
-from config import Config
+from utils.gpsutils import GPSMonitor, GPSMonitorUpateWorker, gpsIdleState, gpsRunState, gpsStoppedState
+from utils.config import Config
 from log import Log, DebugLogWidget
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot

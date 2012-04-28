@@ -6,9 +6,9 @@ Created on Dec 13, 2011
 import sys
 import os
 import sqlite3
-from osmparser.osmutils import OSMUtils
+from utils.osmutils import OSMUtils
 import pickle
-import env
+from utils.env import getDataRoot
 import re
 import cProfile
 
@@ -1794,7 +1794,7 @@ class OSMDataAccess():
             
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(env.getDataRoot(), "data4")
+        return os.path.join(getDataRoot(), "data4")
 
     def getEdgeDBFile(self):
         file="edge.db"

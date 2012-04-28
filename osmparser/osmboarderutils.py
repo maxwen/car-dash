@@ -11,7 +11,7 @@ import os
 import sys
 import time
 import Polygon
-import env
+from utils.env import getPolyDataRootSimple
 
 class OSMBoarderUtils():
     def __init__(self, dataDir):
@@ -159,7 +159,7 @@ class OSMBoarderUtils():
         return list(self.polyData.keys())
     
 def main(argv):        
-    bu=OSMBoarderUtils(env.getPolyDataRootSimple())
+    bu=OSMBoarderUtils(getPolyDataRootSimple())
     bu.initData()
     
     lat=47.8205

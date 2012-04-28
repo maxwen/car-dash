@@ -12,8 +12,8 @@ import sys
 from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
 from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from gaugecompass import QtPngCompassGauge
-from osmparser.osmutils import OSMUtils
-from config import Config
+from utils.osmutils import OSMUtils
+from utils.config import Config
 
 gpsIdleState="idle"
 gpsRunState="run"

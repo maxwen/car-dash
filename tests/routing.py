@@ -5,12 +5,13 @@ Created on Feb 29, 2012
 '''
 
 import unittest
-from osmparser.osmparserdata import OSMParserData, OSMRoute
-from config import Config
+from osmparser.osmdataaccess import OSMDataAccess
+from osmrouting import OSMRoute
+from utils.config import Config
 
 class RoutingTest(unittest.TestCase):          
     def setUp(self):
-        self.p=OSMParserData()
+        self.p=OSMDataAccess()
         self.p.initDB()
         self.p.openAllDB()
         

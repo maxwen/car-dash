@@ -7,7 +7,7 @@ import time
 import sys
 import signal
 import os
-import env
+from utils.env import getRoot
 from datetime import datetime
 from collections import deque
 
@@ -15,7 +15,7 @@ from PyQt4.QtCore import Qt, pyqtSlot
 from PyQt4.QtGui import QPlainTextEdit, QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 
 class Log():
-    def __init__(self, withPrint, logFile=os.path.join(env.getRoot(), "debug.log"), size=100):
+    def __init__(self, withPrint, logFile=os.path.join(getRoot(), "debug.log"), size=100):
         self.fileName=logFile
         self.logLines=deque("", size)
         self.withPrint=withPrint
