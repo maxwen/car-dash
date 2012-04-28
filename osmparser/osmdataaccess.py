@@ -8,7 +8,6 @@ import os
 import sqlite3
 from osmparser.osmutils import OSMUtils
 import pickle
-import time
 import env
 import re
 import cProfile
@@ -16,11 +15,8 @@ import cProfile
 #from pygraph-routing.dijkstrapygraph import DijkstraWrapperPygraph
 #from igraph.dijkstraigraph import DijkstraWrapperIgraph
 
-from config import Config
 from osmparser.osmboarderutils import OSMBoarderUtils
 from trsp.trspwrapper import TrspWrapper
-from osmparser.osmpoly import OSMPoly
-from Polygon import Polygon
 
 HEADING_CALC_LENGTH=20.0
 
@@ -187,21 +183,12 @@ class OSMDataAccess():
         self.cursorTmp=None
         self.connectionTmp=None
         self.trackItemList=list()
-        self.dWrapper=None
-        self.dWrapperTrsp=None
+        self.dWrapperTrsp=TrspWrapper(self.getDataDir())
         self.osmutils=OSMUtils()
-        self.initBoarders()
-        self.osmList=self.getOSMDataInfo()
+#        self.initBoarders()
         self.roundaboutExitNumber=None
         self.roundaboutEnterItem=None
         self.currentSearchBBox=None
-        self.currentPossibleEdgeList=list()
-        self.expectedNextEdgeId=None
-        self.expectedHeading=None
-        self.crosingWithoutExpected=False
-        self.checkExpectedEdge=False
-        self.approachingRef=None
-        self.getPosTrigger=0
         
     def setPragmaForDB(self, cursor):
 #        cursor.execute('PRAGMA journal_mode=OFF')
@@ -542,14 +529,6 @@ class OSMDataAccess():
         
         return None
 
-    def getRefsForWayEntry(self, wayId):
-        self.cursorWay.execute('SELECT refs FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorWay.fetchall()
-        if len(allentries)==1:
-            return pickle.loads(allentries[0][0])
-        
-        return None
-
     def getWayEntryForId(self, wayId):
         self.cursorWay.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursorWay.fetchall()
@@ -658,12 +637,6 @@ class OSMDataAccess():
 
     def getCurrentSearchBBox(self):
         return self.currentSearchBBox
-    
-    def getCurrentSearchEdgeList(self):
-        return self.currentPossibleEdgeList
-    
-    def getExpectedNextEdge(self):
-        return self.expectedNextEdgeId
     
     def testWayTable(self):
         self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
@@ -912,9 +885,6 @@ class OSMDataAccess():
             return (lat, lon)
         
         return (None, None)
-           
-    def getAdressCountryList(self):
-        return self.osmList.keys()
     
     def getAdressCityList(self, countryId):
         self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d'%(countryId))
@@ -1678,11 +1648,6 @@ class OSMDataAccess():
         length=self.getLengthOnEdge(lat, lon, coords, True)
         remaining=edgeLength-length
         return remaining
-                    
-    def getRefListOfEdge(self, edgeId, wayId, startRef, endRef):
-        wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(wayId)
-        refList=self.getRefListSubset(refs, startRef, endRef)
-        return refList
 
     def printRoute(self, route):
         routeInfo=route.getRouteInfo()
@@ -1841,10 +1806,7 @@ class OSMDataAccess():
         coordString=coordString[:-1]
         polyString=polyString+coordString+")),"                
         return polyString
-        
-    def getOSMFile(self, country):
-        return self.osmList[country]["osmFile"]
-    
+            
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
         return os.path.join(env.getDataRoot(), "data4")
@@ -1893,16 +1855,10 @@ class OSMDataAccess():
 
     def tmpDBExists(self):
         return os.path.exists(self.getTmpDBFile())
-    
-    def initGraph(self):                     
-        if self.dWrapperTrsp==None:
-            self.dWrapperTrsp=TrspWrapper(self.getDataDir())
 
-
-    def initBoarders(self):
-        self.bu=OSMBoarderUtils(env.getPolyDataRoot())
-        self.bu.initData()
-
+#    def initBoarders(self):
+#        self.bu=OSMBoarderUtils(env.getPolyDataRoot())
+#        self.bu.initData()
 #        self.buSimple=OSMBoarderUtils(env.getPolyDataRootSimple())
 #        self.buSimple.initData()
             
@@ -2320,21 +2276,6 @@ class OSMDataAccess():
 
         heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
         return heading    
-
-    def getDistanceFromPointToRef(self, lat, lon, ref):
-        storedRefId, lat1, lon1, _=self.getRefEntryForId(ref)
-        if storedRefId==None:
-            return None
-        
-        return self.osmutils.distance(lat, lon, lat1, lon1)
-
-    def getNearerRefToPoint(self, lat, lon, ref1, ref2):
-        distanceRef1=self.getDistanceFromPointToRef(lat, lon, ref1)
-        distanceRef2=self.getDistanceFromPointToRef(lat, lon, ref2)
-                
-        if distanceRef1 < distanceRef2:
-            return ref1
-        return ref2    
     
     def getEdgesOfTunnel(self, edgeId, ref):
         tunnelEdgeList=list()

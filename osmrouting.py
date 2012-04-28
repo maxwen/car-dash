@@ -801,8 +801,6 @@ class OSMRouting():
     
     # TODO: this is the straight distance and does NOT follow the edge
     def getDistanceToNextCrossing(self, lat, lon):
-#        distance1=self.getDistanceFromPointToRef(lat, lon, self.approachingRef)
-#            distance=length-self.osmParserData.getLengthOnEdge(lat, lon, coords1)
 
         _, startRef, endRef, _, _, _, _, _, _, _, coords=self.currentEdgeData
         if self.approachingRef==startRef:

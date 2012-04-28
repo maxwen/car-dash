@@ -433,7 +433,6 @@ class OSMRouteCalcWorker(QThread):
         self.exiting = False
         self.route=route
         self.startProgress()
-        osmParserData.initGraph()
         self.start()
  
     def updateRouteCalcThreadState(self, state):
@@ -1270,11 +1269,6 @@ class QtOSMWidget(QWidget):
     
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox())
-
-#        if self.refRing!=None:   
-#            pen=self.style.getStylePen("trackPen")
-#            pen.setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))   
-#            self.displayRefs(self.refRing, pen)
 
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
@@ -2512,18 +2506,6 @@ class QtOSMWidget(QWidget):
             # TODO: building as linestring 100155254
             if pen!=Qt.NoPen:
                 self.painter.strokePath(painterPath, pen)
-        
-    def displayRefs(self, refList, pen):        
-        polygon=QPolygon()
-        
-        for ref in refList:
-            lat, lon=osmParserData.getCoordsWithRef(ref)
-            (y, x)=self.getPixelPosForLocationDeg(lat, lon, True)
-            point=QPoint(x, y);
-            polygon.append( point )
-               
-        self.painter.setPen(pen)
-        self.painter.drawPolyline(polygon)
         
     def displayRouteOverlay(self, remainingTrackList, edgeIndexList):
         if remainingTrackList!=None:                        
