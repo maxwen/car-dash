@@ -63,17 +63,17 @@ class Constants():
     POI_TYPE_SUPERMARKET=11
     POI_TYPE_AIRPORT=12
     POI_TYPE_RAILWAYSTATION=13
-    POI_TYPE_VETERIANERY=15
-    POI_TYPE_CAMPING=16
+    POI_TYPE_VETERIANERY=14
+    POI_TYPE_CAMPING=15
     
-    AREA_TYPE_NATURAL=1
-    AREA_TYPE_LANDUSE=2
-    AREA_TYPE_BUILDING=3
-    AREA_TYPE_HIGHWAY_AREA=4
+    AREA_TYPE_LANDUSE=1
+    AREA_TYPE_NATURAL=2
+    AREA_TYPE_HIGHWAY_AREA=3
+    AREA_TYPE_AEROWAY=4
     AREA_TYPE_RAILWAY=5
-    AREA_TYPE_AEROWAY=6
-    AREA_TYPE_TOURISM=7
-    AREA_TYPE_AMENITY=8
+    AREA_TYPE_TOURISM=6
+    AREA_TYPE_AMENITY=7
+    AREA_TYPE_BUILDING=8
     
     LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
@@ -294,7 +294,7 @@ class OSMDataAccess():
             return(allentries[0][0], allentries[0][1], allentries[0][2])
         return None, None, None
 
-    def getWayRefEntry(self, wayId):
+    def getTmpWayRefEntry(self, wayId):
         self.cursorCoords.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
         allentries=self.cursorCoords.fetchall()
         if len(allentries)==1:
@@ -1794,7 +1794,7 @@ class OSMDataAccess():
             
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data4")
+        return os.path.join(getDataRoot(), "data1")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -2105,11 +2105,10 @@ class OSMDataAccess():
             filterString=filterString[:-1]
             filterString=filterString+')'
             
-        # TODO: no layer sorting
         if filterString==None:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY type'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s ORDER BY type'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
         
         allentries=self.cursorArea.fetchall()
         
@@ -2118,11 +2117,10 @@ class OSMDataAccess():
             resultList.append((osmId, areaType, tags, layer, polyStr, 0))
             areaIdSet.add(int(x[0]))
                 
-        # use layer sorting
         if filterString==None:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s ORDER BY layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
         
         allentries=self.cursorArea.fetchall()
 

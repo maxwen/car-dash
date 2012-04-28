@@ -2047,6 +2047,8 @@ class QtOSMWidget(QWidget):
                     natural=tags["natural"]
                     if natural in Constants.NATURAL_WATER_TYPE_SET:
                         brush=self.style.getStyleBrush("water")
+                    elif natural=="scrub":
+                        brush=self.style.getStyleBrush("scrubArea")
                     else:
                         brush=self.style.getStyleBrush("natural")
             

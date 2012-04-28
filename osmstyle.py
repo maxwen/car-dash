@@ -108,6 +108,7 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
+        self.colorDict["scrubAreaColor"]=QColor(0xb5, 0xe3, 0xb5)
         self.colorDict["tourismAreaColor"]=QColor(255, 255, 255)
         self.colorDict["amenityAreaColor"]=QColor(255, 255, 255)
         self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9, 200)
@@ -505,7 +506,8 @@ class OSMStyle():
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
         self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
         self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
-        
+        self.brushDict["scrubArea"]=QBrush(self.getStyleColor("scrubAreaColor"), Qt.SolidPattern)
+
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
             pixmapName=self.POI_INFO_DICT[nodeType]["pixmap"]

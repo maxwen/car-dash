@@ -4,7 +4,7 @@ Created on Feb 22, 2012
 @author: maxl
 '''
 
-from osmparser.osmutils import OSMUtils
+from utils.osmutils import OSMUtils
 from osmparser.osmdataaccess import Constants
 import time
 
