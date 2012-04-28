@@ -972,7 +972,10 @@ class QtOSMWidget(QWidget):
         if approachingRef!=None:
             pen=QPen()
             pen.setWidth(3)
-            lat, lon=osmParserData.getCoordsWithRef(approachingRef)
+            storedRef, lat, lon=osmParserData.getCoordsEntry(approachingRef)
+            if storedRef==None:
+                return False
+            
             y,x=self.getPixelPosForLocationDeg(lat, lon, True)
             if self.isPointVisible(x, y):
                 pen.setColor(Qt.red)

@@ -219,6 +219,9 @@ class OSMDataImport():
     def createWayRefTable(self):
         self.cursorCoords.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
 
+    def clearWayRefTable(self):
+        self.cursorCoords.execute("DROP TABLE wayRefTable")
+        
     def addToCoordsTable(self, ref, lat, lon):
         self.cursorCoords.execute('INSERT OR IGNORE INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
     
@@ -263,8 +266,8 @@ class OSMDataImport():
     def createNodeDBTables(self):
         self.cursorNode.execute("SELECT InitSpatialMetaData()")
         
-        self.cursorNode.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, layer INTEGER)')
-        self.cursorNode.execute("SELECT AddGeometryColumn('refTable', 'geom', 4326, 'POINT', 2)")
+#        self.cursorNode.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, layer INTEGER)')
+#        self.cursorNode.execute("SELECT AddGeometryColumn('refTable', 'geom', 4326, 'POINT', 2)")
 
         self.cursorNode.execute('CREATE TABLE poiRefTable (id INTEGER PRIMARY KEY, refId INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER)')
         self.cursorNode.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
@@ -425,14 +428,15 @@ class OSMDataImport():
 #        polyCountry=self.countryNameOfPoint(lat, lon)
 #        return self.getCountryForPolyCountry(polyCountry)
 
-    def addToRefTable(self, refid, lat, lon, layer):   
-        # make complete point
-        pointString="'POINT("
-        pointString=pointString+"%f %f"%(lon, lat)
-        pointString=pointString+")'"
-
-        self.cursorNode.execute('INSERT OR IGNORE INTO refTable VALUES( ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, layer))
-
+#    def addToRefTable(self, refid, lat, lon, layer):   
+#        # make complete point
+##        pointString="'POINT("
+##        pointString=pointString+"%f %f"%(lon, lat)
+##        pointString=pointString+")'"
+##
+##        self.cursorNode.execute('INSERT OR IGNORE INTO refTable VALUES( ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, layer))
+#        None
+        
     def addToPOIRefTable(self, refid, lat, lon, tags, nodeType, layer):   
         # check if nodeType for refid is already in table
         storedRefId, _, _, _, _, _=self.getPOIRefEntryForId(refid, nodeType)
@@ -515,7 +519,7 @@ class OSMDataImport():
         self.cursorWay.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
 
     def createSpatialIndexForNodeTables(self):
-        self.cursorNode.execute('SELECT CreateSpatialIndex("refTable", "geom")')
+#        self.cursorNode.execute('SELECT CreateSpatialIndex("refTable", "geom")')
         self.cursorNode.execute('SELECT CreateSpatialIndex("poiRefTable", "geom")')
                         
     def getLenOfEdgeTable(self):
@@ -758,12 +762,12 @@ class OSMDataImport():
             
         return resultList
     
-    def testRefTable(self):
-        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            refId, lat, lon, layer=self.refFromDB(x)
-            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
+#    def testRefTable(self):
+#        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
+#        allentries=self.cursorNode.fetchall()
+#        for x in allentries:
+#            refId, lat, lon, layer=self.refFromDB(x)
+#            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
 
     def testPOIRefTable(self):
         self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
@@ -1101,7 +1105,7 @@ class OSMDataImport():
                     
             if self.skipAddress==False:
                 if "addr:street" in tags:
-                    self.addToRefTable(ref, lat, lon, layer)
+#                    self.addToRefTable(ref, lat, lon, layer)
                     self.parseFullAddress(tags, ref, lat, lon)
 
     def parse_coords(self, coord):
@@ -1487,7 +1491,7 @@ class OSMDataImport():
                         if storedRef==None:
                             continue
     
-                        self.addToRefTable(ref, lat, lon, layer)
+#                        self.addToRefTable(ref, lat, lon, layer)
                         self.addToTmpRefWayTable(ref, wayid)
                     
                     coords, newRefList=self.createRefsCoords(refs)
@@ -3211,6 +3215,12 @@ class OSMDataImport():
             self.createPOIEntriesForWays2()
             self.resolvePOIRefs()
             
+        if createCoordsDB==True:
+            print("drop wayRefTable from coords DB")
+            self.clearWayRefTable()
+            print("vacuum coords DB")
+            self.vacuumCoordsDB()
+            
         self.closeCoordsDB(False)
         self.closeTmpDB(False)
         self.closeAllDB()
@@ -3628,7 +3638,7 @@ class OSMDataImport():
                 cPolygon=Polygon(coords)
                 polyList[adminLevel].append((osmId, cPolygon, tags))
 
-        amount=0
+        amount=1
         prog = ProgressBar(0, len(adminLevelList)-1, 77)
         
         for adminLevel in adminLevelList[:-1]:
@@ -3727,6 +3737,9 @@ class OSMDataImport():
 
     def vacuumAreaDB(self):
         self.cursorArea.execute('VACUUM')
+
+    def vacuumCoordsDB(self):
+        self.cursorCoords.execute('VACUUM')
                                 
     def removeOrphanedEdges(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')
@@ -3773,8 +3786,8 @@ class OSMDataImport():
 
             resultList=self.getEdgeEntryForWayId(wayid)
             if len(resultList)==0:
-                for ref in refs:
-                    self.cursorNode.execute('DELETE FROM refTable WHERE refId=%d'%(ref))
+#                for ref in refs:
+#                    self.cursorNode.execute('DELETE FROM refTable WHERE refId=%d'%(ref))
                     
                 self.cursorWay.execute('DELETE FROM wayTable WHERE wayId=%d'%(wayid))
                 removeCount=removeCount+1

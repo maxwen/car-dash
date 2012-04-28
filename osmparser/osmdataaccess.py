@@ -485,14 +485,6 @@ class OSMDataAccess():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
-    
-    def getRefEntryForId(self, refId):
-        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable where refId=%d'%(refId))
-        allentries=self.cursorNode.fetchall()
-        if len(allentries)==1:
-            return self.refFromDB(allentries[0])
-
-        return None, None, None, None
 
     def getPOIRefEntryForId(self, refId, nodeType):
         self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable where refId=%d AND type=%d'%(refId, nodeType))
@@ -565,12 +557,12 @@ class OSMDataAccess():
             
         return resultList
     
-    def testRefTable(self):
-        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            refId, lat, lon, layer=self.refFromDB(x)
-            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
+#    def testRefTable(self):
+#        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
+#        allentries=self.cursorNode.fetchall()
+#        for x in allentries:
+#            refId, lat, lon, layer=self.refFromDB(x)
+#            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
 
     def testPOIRefTable(self):
         self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
@@ -878,13 +870,6 @@ class OSMDataAccess():
 #        plainTags=zlib.decompress(compressedTags)
         tags=pickle.loads(plainTags)
         return tags
-        
-    def getCoordsWithRef(self, refId):
-        storedRefId, lat, lon, _=self.getRefEntryForId(refId)
-        if storedRefId!=None:
-            return (lat, lon)
-        
-        return (None, None)
     
     def getAdressCityList(self, countryId):
         self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d'%(countryId))
@@ -1065,10 +1050,10 @@ class OSMDataAccess():
     
     # true if any point is closer then maxDistance
     def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
-        storedRefId, lat1, lon1, _=self.getRefEntryForId(ref1)
+        storedRefId, lat1, lon1=self.getCoordsEntry(ref1)
         if storedRefId==None:
             return False
-        storedRefId, lat2, lon2, _=self.getRefEntryForId(ref2)
+        storedRefId, lat2, lon2=self.getCoordsEntry(ref2)
         if storedRefId==None:
             return False
         
