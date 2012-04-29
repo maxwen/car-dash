@@ -14,6 +14,7 @@ import socket
 from collections import deque, OrderedDict
 import time
 from utils.env import getTileRoot, getImageRoot, getRoot
+from utils.gisutils import GISUtils
 import cProfile
 
 from PyQt4.QtCore import QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
@@ -586,6 +587,9 @@ class QtOSMWidget(QWidget):
         self.virtualZoomValue=2.0
         self.prefetchBBox=None
         self.sidebarVisible=True
+#        self.controlAreaRect=None
+
+        self.gisUtils=GISUtils()
     
     def getSidebarWidth(self):
         if self.sidebarVisible==True:
@@ -1372,6 +1376,11 @@ class QtOSMWidget(QWidget):
         if self.nightMode==True:
             self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("nightModeColor"))
 
+#        if self.controlAreaRect!=None:
+#            self.painter.setBrush(Qt.NoBrush)
+#            self.painter.setPen(QPen(Qt.red))
+#            self.painter.drawRect(self.controlAreaRect)
+        
         self.painter.end()
 
 #        self.unsetCursor()
@@ -1771,10 +1780,19 @@ class QtOSMWidget(QWidget):
         point0=self.transformHeading.inverted()[0].map(pos)
         map_x, map_y=self.getMapZeroPos()
         
-        for osmId, (_, painterPath, geomType) in self.areaPolygonCache.items():
+        for osmId, (cPolygon, painterPath, geomType) in self.areaPolygonCache.items():
             if geomType==0:
+#                p=Polygon(cPolygon)
+#                p.shift(-map_x, -map_y)
+#                if p.isInside(point0.x(), point0.y()):
+#                    tags=osmParserData.getAreaTagsWithId(osmId)
+#                    if tags!=None:
+#                        print("%d %s"%(osmId, tags))
+#                        break
                 painterPath=painterPath.translated(-map_x, -map_y)
                 if painterPath.contains(point0):
+#                    self.controlAreaRect=painterPath.controlPointRect()
+                    
                     tags=osmParserData.getAreaTagsWithId(osmId)
                     if tags!=None:
                         print("%d %s"%(osmId, tags))
@@ -1879,13 +1897,15 @@ class QtOSMWidget(QWidget):
         if nodeType==Constants.POI_TYPE_PLACE:
             if "name" in tags:
                 text=tags["name"]
+                placeType=tags["place"]
                 
-                font=self.style.getFontForPlaceTagDisplay(tags, self.map_zoom, self.isVirtualZoom)
-                if font!=None:
-                    painterPath, painterPathText=self.createTextLabel(text, font)
-                    painterPath, painterPathText=self.moveTextLabelToPos(x, y, painterPath, painterPathText)
-                    self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
-                    return
+                if self.style.displayPlaceTypeForZoom(placeType, self.map_zoom):
+                    font=self.style.getFontForPlaceTagDisplay(tags, self.map_zoom, self.isVirtualZoom)
+                    if font!=None:
+                        painterPath, painterPathText=self.createTextLabel(text, font)
+                        painterPath, painterPathText=self.moveTextLabelToPos(x, y, painterPath, painterPathText)
+                        self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
+            return
                 
         if nodeType==Constants.POI_TYPE_MOTORWAY_JUNCTION:
             if "name" in tags:
@@ -1899,7 +1919,7 @@ class QtOSMWidget(QWidget):
                     painterPath, painterPathText=self.createTextLabel(text, font)
                     painterPath, painterPathText=self.moveTextLabelToPos(x, y, painterPath, painterPathText)
                     self.displayTextLabel(painterPath, painterPathText, self.style.getStyleBrush("placeTag"), self.style.getStylePen("placePen"))
-                    return
+            return
 
         pixmap=self.getPixmapForNodeType(nodeType)
         if pixmap!=None:
@@ -2031,46 +2051,10 @@ class QtOSMWidget(QWidget):
             brush=Qt.NoBrush
             pen=Qt.NoPen
             if areaType==Constants.AREA_TYPE_NATURAL:
-                if "waterway" in tags:         
-#                    print(tags)
-                    brush=self.style.getStyleBrush("water")
-         
-                    if tags["waterway"]!="riverbank":
-                        pen=self.style.getStylePen("waterwayPen")
-                        pen.setWidth(self.style.getWaterwayPenWidthForZoom(self.map_zoom, tags))                      
-                    
-                elif "natural" in tags:
-                    natural=tags["natural"]
-                    if natural in Constants.NATURAL_WATER_TYPE_SET:
-                        brush=self.style.getStyleBrush("water")
-                    elif natural=="scrub":
-                        brush=self.style.getStyleBrush("scrubArea")
-                    else:
-                        brush=self.style.getStyleBrush("natural")
+                brush=self.style.getBrushForNaturalArea(tags, self.map_zoom)
             
             elif areaType==Constants.AREA_TYPE_LANDUSE:
-                landuse=tags["landuse"]
-                if landuse=="railway":
-                    brush=self.style.getStyleBrush("railwayLanduse")
-                elif landuse=="residential":
-                    brush=self.style.getStyleBrush("residential")
-                elif landuse=="commercial" or landuse=="retail":
-                    brush=self.style.getStyleBrush("commercial")
-                elif landuse=="field" or landuse=="farmland" or landuse=="farm" or landuse=="farmyard":
-                    brush=self.style.getStyleBrush("farm")
-                elif landuse=="grass" or landuse=="meadow" or landuse=="grassland":
-                    brush=self.style.getStyleBrush("grass")
-                elif landuse=="greenfield" or landuse=="brownfield":
-                    brush=self.style.getStyleBrush("greenfield")
-                elif landuse=="industrial":
-                    brush=self.style.getStyleBrush("industrial")
-                    
-                elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
-                    brush=self.style.getStyleBrush("natural")
-                elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
-                        brush=self.style.getStyleBrush("water")                    
-                else:
-                    brush=self.style.getStyleBrush("landuse")
+                brush=self.style.getBrushForLanduseArea(tags, self.map_zoom)
 
             elif areaType==Constants.AREA_TYPE_HIGHWAY_AREA:
                 brush=self.style.getStyleBrush("highway")
@@ -2086,8 +2070,9 @@ class QtOSMWidget(QWidget):
                 
             else:
                 continue
-               
-            self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
+            
+            if brush!=Qt.NoBrush:
+                self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
 
         self.painter.setBrush(Qt.NoBrush)
 
@@ -2398,7 +2383,7 @@ class QtOSMWidget(QWidget):
         if not wayId in self.wayPolygonCache.keys():
             painterPath=QPainterPath()
 
-            coords=osmParserData.createCoordsFromLineString(coordsStr)
+            coords=self.gisUtils.createCoordsFromLineString(coordsStr)
                 
             i=0
             for point in coords:
@@ -2450,14 +2435,14 @@ class QtOSMWidget(QWidget):
             painterPath=QPainterPath()
             coordsList=list()
             if geomType==0:
-                coordsList=osmParserData.createCoordsFromMultiPolygon(polyStr)
+                coordsList=self.gisUtils.createCoordsFromMultiPolygon(polyStr)
             else:
-                coords=osmParserData.createCoordsFromLineString(polyStr)     
-                coordsList.append(coords)
+                coords=self.gisUtils.createCoordsFromLineString(polyStr)     
+                coordsList.append((coords, list()))
             
-            for coords in coordsList:
+            for outerCoords, _ in coordsList:
                 i=0
-                for point in coords:
+                for point in outerCoords:
                     lat, lon=point 
                     (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
                     point=QPointF(x, y);
@@ -2478,6 +2463,26 @@ class QtOSMWidget(QWidget):
                   (rect.x(), rect.y()+rect.height())]
 
             cPolygon=Polygon(cont)
+            
+            if geomType==0:
+                for _, innerCoordsList in coordsList:
+                    for innerCoords in innerCoordsList:
+                        innerPainterPath=QPainterPath()
+                        i=0
+                        for point in innerCoords:
+                            lat, lon=point 
+                            (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                            point=QPointF(x, y);
+                            if i==0:
+                                innerPainterPath.moveTo(point)
+                            else:
+                                innerPainterPath.lineTo(point)
+                                
+                            i=i+1
+                        
+                        innerPainterPath.closeSubpath()
+                        painterPath=painterPath.subtracted(innerPainterPath)
+
             cacheDict[osmId]=(cPolygon, painterPath, geomType)
         
         else:

@@ -35,7 +35,7 @@ class OSMStyle():
                     Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None}}  
           
     def __init__(self):
-        self.styleDict=dict()
+        selfDict=dict()
         self.colorDict=dict()
         self.pixmapDict=dict()
         self.penDict=dict()
@@ -108,6 +108,7 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
+        self.colorDict["woodAreaColor"]=QColor(0xae, 0xd1, 0xa0)
         self.colorDict["scrubAreaColor"]=QColor(0xb5, 0xe3, 0xb5)
         self.colorDict["tourismAreaColor"]=QColor(255, 255, 255)
         self.colorDict["amenityAreaColor"]=QColor(255, 255, 255)
@@ -506,7 +507,25 @@ class OSMStyle():
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
         self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
         self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
+        
+        brush=QBrush(self.getStyleColor("scrubAreaColor"))
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/scrub.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["scrubPatternArea"]=brush
+        
+        brush=QBrush(self.getStyleColor("naturalColor"))
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/forest.png")))
+        brush.setStyle(Qt.TexturePattern)        
+        self.brushDict["forestPatternArea"]=brush
+        
         self.brushDict["scrubArea"]=QBrush(self.getStyleColor("scrubAreaColor"), Qt.SolidPattern)
+        self.brushDict["forestArea"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
+        self.brushDict["woodArea"]=QBrush(self.getStyleColor("woodAreaColor"), Qt.SolidPattern)
+
+        brush=QBrush(self.getStyleColor("waterColor"))
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/marsh.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["marshPatternArea"]=brush
 
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -602,10 +621,25 @@ class OSMStyle():
             font=self.fontDict["normalFont"]
             if placeType=="village":
                 font.setPointSize(minFont+2)                    
-            elif placeType=="suburb":
+            elif placeType=="suburb" or placeType=="hamlet":
                 font.setPointSize(minFont)
             
         return font
+    
+    def displayPlaceTypeForZoom(self, placeType, zoom):
+        if zoom>=14:
+            return True
+        elif zoom>=13:
+            if placeType!="hamlet":
+                return True
+        elif zoom>=12:
+            if placeType!="hamlet" and placeType!="suburb":
+                return True
+        else:
+            if placeType=="city" or placeType=="town":
+                return True
+            
+        return False
     
     def getStyleFont(self, key):
         if key in self.fontDict.keys():
@@ -686,4 +720,69 @@ class OSMStyle():
 #        print(zoom)
 #        S=6371000*math.cos(0)/math.pow(2, zoom+8)
 #        return S
+
+    def getBrushForLanduseArea(self, tags, zoom):
+        brush=Qt.NoBrush
+
+        landuse=tags["landuse"]
+        if landuse=="railway":
+            brush=self.getStyleBrush("railwayLanduse")
+        elif landuse=="residential":
+            brush=self.getStyleBrush("residential")
+        elif landuse=="commercial" or landuse=="retail":
+            brush=self.getStyleBrush("commercial")
+        elif landuse=="field" or landuse=="farmland" or landuse=="farm" or landuse=="farmyard":
+            brush=self.getStyleBrush("farm")
+        elif landuse=="grass" or landuse=="meadow" or landuse=="grassland":
+            brush=self.getStyleBrush("grass")
+        elif landuse=="greenfield" or landuse=="brownfield":
+            brush=self.getStyleBrush("greenfield")
+        elif landuse=="industrial":
+            brush=self.getStyleBrush("industrial")
+        elif landuse=="forest":
+            if zoom>=14:
+                brush=self.getStyleBrush("forestPatternArea")
+            else:
+                brush=self.getStyleBrush("forestArea")
+        elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
+            brush=self.getStyleBrush("natural")
+        elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
+            brush=self.getStyleBrush("water")                    
+        else:
+            brush=self.getStyleBrush("landuse")
+
+        return brush
         
+    def getBrushForNaturalArea(self, tags, zoom):
+        brush=Qt.NoBrush
+        if "waterway" in tags:         
+            brush=self.getStyleBrush("water")
+ 
+            if tags["waterway"]!="riverbank":
+                pen=self.getStylePen("waterwayPen")
+                pen.setWidth(self.getWaterwayPenWidthForZoom(zoom, tags))                      
+            
+        elif "natural" in tags:
+            natural=tags["natural"]
+            if natural=="scrub":
+                if zoom>=14:
+                    brush=self.getStyleBrush("scrubPatternArea")
+                else:
+                    brush=self.getStyleBrush("scrubArea")
+                    
+            elif natural=="marsh" or natural=="wetland" or natural=="mud":
+                if zoom>=13:
+                    brush=self.getStyleBrush("marshPatternArea")
+                else:
+                    brush=self.getStyleBrush("water")
+                    
+            elif natural=="wood":
+                brush=self.getStyleBrush("woodArea")
+            
+            else:
+                if natural in Constants.NATURAL_WATER_TYPE_SET:
+                    brush=self.getStyleBrush("water")
+                else:
+                    brush=self.getStyleBrush("natural")
+        
+        return brush

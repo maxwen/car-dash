@@ -79,8 +79,8 @@ class Constants():
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
-    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree"])
-    NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland"])
+    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree", "marsh", "mud"])
+    NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland", "marsh", "mud"])
     
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain", "ditch"])
     RAILWAY_TYPE_SET=set(["rail"])
@@ -89,7 +89,7 @@ class Constants():
     
     BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
     BOUNDARY_TYPE_SET=set(["administrative"])
-    PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb"])
+    PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb", "hamlet"])
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
     
     PARKING_LIMITATIONS_DICT={"access":"yes",
@@ -652,17 +652,17 @@ class OSMDataAccess():
             print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable')
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE osmId=136661')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
             print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
+#        allentries=self.cursorArea.fetchall()
+#        for x in allentries:
+#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+#            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
     def testAdminAreaTable(self):
         self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE adminLevel=4')
@@ -1714,84 +1714,7 @@ class OSMDataAccess():
                 return True
 
         return False
-        
-    def createLineStringFromCoords(self, coords):
-        lineString="'LINESTRING("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        lineString=lineString+coordString+")'"
-        return lineString
-    
-    def createCoordsFromLineString(self, lineString):
-        coords=list()
-        coordsStr=lineString[11:-1] # LINESTRING
-        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-        i=0
-        while i<len(x)-2:
-            coords.append((float(x[i+2]), float(x[i])))
-            i=i+4
-            
-        return coords
-
-    def createCoordsFromPolygon(self, polyString):
-        coords=list()
-        coordsStr=polyString[9:-2] # POLYGON
-        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-        i=0
-        while i<len(x)-2:
-            coords.append((float(x[i+2]), float(x[i])))
-            i=i+4
-            
-        return coords
-    
-    def createCoordsFromMultiPolygon(self, coordsStr):
-        allCoordsList=list()
-        coordsStr=coordsStr[15:-3]
-        polyParts=coordsStr.split(")), ((")
-        if len(polyParts)==1:
-            poly=coordsStr
-            coords=list()
-            x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
-            i=0
-            while i<len(x)-2:
-                coords.append((float(x[i+2]), float(x[i])))
-                i=i+4
-
-            allCoordsList.append(coords)
-        else:
-            for poly in polyParts:
-                coords=list()
-                x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
-                i=0
-                while i<len(x)-2:
-                    coords.append((float(x[i+2]), float(x[i])))
-                    i=i+4
                 
-                allCoordsList.append(coords)
-        
-        return allCoordsList
-
-    def createPolygonFromCoords(self, coords):
-        polyString="'POLYGON(("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+"))'"        
-        return polyString
-            
-    def createMultiPolygonFromCoords(self, coords):
-        polyString="'MULTIPOLYGON((("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+")))'"        
-        return polyString
-
-    def createMultiPolygonPartFromCoords(self, coords):
-        polyString="(("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+")),"                
-        return polyString
-            
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
         return os.path.join(getDataRoot(), "data1")
@@ -2360,7 +2283,7 @@ def main(argv):
 #    p.testDBConistency()
 #    p.testRestrictionTable()
     
-#    p.testAreaTable()
+    p.testAreaTable()
 #    p.testRoutes()
 #    p.testWayTable()
 

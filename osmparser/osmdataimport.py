@@ -13,6 +13,7 @@ import cProfile
 from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
 from utils.osmutils import OSMUtils
+from utils.gisutils import GISUtils
 from osmparser.parser.xml.parser import XMLParser
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
@@ -62,6 +63,7 @@ class OSMDataImport():
         self.skipAreas=False
         self.skipPOINodes=False
         self.addressCache=set()
+        self.gisUtils=GISUtils()
 
     def createEdgeTables(self):
         self.createEdgeTable()
@@ -451,7 +453,7 @@ class OSMDataImport():
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer):
         name=self.encodeStreetName(name)
         streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
-        lineString=self.createLineStringFromCoords(coords)
+        lineString=self.gisUtils.createLineStringFromCoords(coords)
         self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
 
 #    def addToTmpWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge):
@@ -471,7 +473,7 @@ class OSMDataImport():
     def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, streetInfo, coords):
         resultList=self.getEdgeEntryForStartAndEndPointAndWayId(startRef, endRef, wayId)
         if len(resultList)==0:
-            lineString=self.createLineStringFromCoords(coords)
+            lineString=self.gisUtils.createLineStringFromCoords(coords)
             
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, streetInfo))
             self.edgeId=self.edgeId+1
@@ -1231,7 +1233,7 @@ class OSMDataImport():
         return layer
     
     def getCenterOfPolygon(self, refs):
-        coords, _=self.createPolygonFromRefsCoords(refs)
+        coords, _=self.createRefsCoords(refs)
         if len(coords)>2:
             cPolygon=Polygon(coords)
             lon, lat=cPolygon.center()
@@ -1384,12 +1386,12 @@ class OSMDataImport():
                     # e.g. waterway=riverbank ist missing then for Salzach
                     if isPolygon==True:
                         if newRefList[0]==newRefList[-1]:
-                            geomString=self.createMultiPolygonFromCoords(coords)
+                            geomString=self.gisUtils.createMultiPolygonFromCoords(coords)
                         else:
                             self.log("parse_ways: skipping polygon area %d %s newRefList[0]!=newRefList[-1]"%(wayid, newRefList))
                             continue
                     else:
-                        geomString=self.createLineStringFromCoords(coords)
+                        geomString=self.gisUtils.createLineStringFromCoords(coords)
                         
                     areaType=None
                     if isNatural==True:
@@ -1432,7 +1434,7 @@ class OSMDataImport():
                                     self.log("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
                                     continue
                     
-                                geomString=self.createMultiPolygonFromCoords(coords)
+                                geomString=self.gisUtils.createMultiPolygonFromCoords(coords)
                                 self.addPolygonToAreaTable(Constants.AREA_TYPE_HIGHWAY_AREA, wayid, tags, geomString, layer)
                             
                             continue
@@ -1622,7 +1624,8 @@ class OSMDataImport():
                         continue
                                             
                     # (59178604, 'way', 'outer')
-                    allRefs=list()
+                    allOuterRefs=list()
+                    allInnerRefs=list()
                     skipArea=False
                         
                     for way in ways:
@@ -1635,57 +1638,87 @@ class OSMDataImport():
                             skipArea=True
                             break
 
-                        if role!="inner" and memberType=="way":
-                            # from boundary way table
-                            wayId, refs=self.getTmpWayRefEntry(relationWayId)
-                            if wayId!=None:
-                                allRefs.append((wayId, refs, 0, 0))
-                            else:
-                                # from "real" way table
-                                wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
+                        if memberType=="way":
+                            if role=="inner":
+                                wayId, refs=self.getTmpWayRefEntry(relationWayId)
                                 if wayId!=None:
-#                                    _, oneway, roundabout=self.decodeStreetInfo(streetInfo)
-                                    allRefs.append((wayId, refs, 0, 0))
+                                    allInnerRefs.append((wayId, refs, 0, 0))
                                 else:
-                                    if isAdminBoundary==True:
-                                        self.log("failed to resolve way %d from admin relation %d %s"%(relationWayId, osmid, tags["name"]))    
+                                    wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
+                                    if wayId!=None:
+                                        allInnerRefs.append((wayId, refs, 0, 0))
                                     else:
-                                        self.log("failed to resolve way %d from relation %d"%(relationWayId, osmid))    
-                                    skipArea=True
-                                    break
+                                        self.log("failed to resolve way %d from inner relation %d"%(relationWayId, osmid))    
+                                        continue
+                            else:
+                                wayId, refs=self.getTmpWayRefEntry(relationWayId)
+                                if wayId!=None:
+                                    allOuterRefs.append((wayId, refs, 0, 0))
+                                else:
+                                    wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
+                                    if wayId!=None:
+                                        allOuterRefs.append((wayId, refs, 0, 0))
+                                    else:
+                                        self.log("failed to resolve way %d from outer relation %d"%(relationWayId, osmid))    
+                                        skipArea=True
+                                        break
                     
                     if skipArea==True:
                         continue
                     
-                    if len(allRefs)==0:
-                        self.log("skip multipolygon: %d len(allRefs)==0"%(osmid))
+                    if len(allOuterRefs)==0:
+                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
-                    refRings=self.mergeWayRefs(allRefs)
-                    if len(refRings)!=0:
+                    outerRefRings=self.mergeWayRefs(allOuterRefs)
+                    innerRefRings=self.mergeWayRefs(allInnerRefs)
+
+                    if len(outerRefRings)!=0:
                         # convert to multipolygon
                         polyString="'MULTIPOLYGON("
-                        for refRingEntry in refRings:                                
+                        for refRingEntry in outerRefRings:                                
                             refs=refRingEntry["refs"]
                             if refs[0]!=refs[-1]:
-                                self.log("skip multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
-                                skipArea=True
-                                break
-
-                            coords, newRefList=self.createRefsCoords(refs)
-                            # TODO: skip complete area if coords are missing?
-                            if len(refs)==len(newRefList):
-                                polyStringPart=self.createMultiPolygonPartFromCoords(coords)
-                            else:
-                                self.log("skip multipolygon: %d %s coords missing"%(osmid, tags["name"]))
+                                self.log("skip outer multipolygon: %d refs[0]!=refs[-1]"%(osmid))
                                 skipArea=True
                                 break
                             
+                            cPolygonOuter=refRingEntry["polygon"]
+                            newRefList=refRingEntry["newRefs"]
+                            outerCoords=refRingEntry["coords"]
+                            if len(refs)!=len(newRefList):
+                                self.log("skip outer multipolygon: %d coords missing"%(osmid))
+                                skipArea=True
+                                break
+                            
+                            innerCoords=list()
+                            if len(innerRefRings)!=0:
+                                for innerRefRingEntry in innerRefRings:
+                                    innerRefs=innerRefRingEntry["refs"]
+                                    if innerRefs[0]!=innerRefs[-1]:
+                                        self.log("skip inner multipolygon: %d refs[0]!=refs[-1]"%(osmid))
+                                        continue
+
+                                    innerNewRefs=innerRefRingEntry["newRefs"]
+                                    if len(innerRefs)!=len(innerNewRefs):
+                                        self.log("skip inner multipolygon: %d coords missing"%(osmid))
+                                        continue
+                                    
+                                    cPolygonInner=innerRefRingEntry["polygon"]
+                                    if not cPolygonOuter.covers(cPolygonInner):
+                                        continue
+                                    
+                                    innerCoords.append(innerRefRingEntry["coords"])
+                                    
+                            polyStringPart=self.gisUtils.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
+
                             polyString=polyString+polyStringPart
                                                             
                         polyString=polyString[:-1]
                         polyString=polyString+")'"
 
+#                        if len(innerRefRings)!=0:
+#                            print(polyString)
                         # skip complete relation if coords are missing
                         if skipArea==True:
                             continue
@@ -1790,7 +1823,12 @@ class OSMDataImport():
             if roundAbout==1 and refs[-1]==refs[0]:
                 refRingEntry["refs"]=refs
                 refRingEntry["wayIdList"]=wayIdList
-
+                coords, newRefList=self.createRefsCoords(refs)
+                cPolygon=Polygon(coords)
+                refRingEntry["coords"]=coords
+                refRingEntry["newRefs"]=newRefList
+                refRingEntry["polygon"]=cPolygon
+                
                 refRings.append(refRingEntry)
                 allRefs.remove(refEntry)
                 refRingEntry=dict()
@@ -1865,6 +1903,11 @@ class OSMDataImport():
             if len(refRing)!=0:
                 refRingEntry["refs"]=refRing
                 refRingEntry["wayIdList"]=wayIdList
+                coords, newRefList=self.createRefsCoords(refRing)
+                cPolygon=Polygon(coords)
+                refRingEntry["coords"]=coords
+                refRingEntry["newRefs"]=newRefList
+                refRingEntry["polygon"]=cPolygon
                 refRings.append(refRingEntry)
             
             refRingEntry=dict()
@@ -2570,104 +2613,10 @@ class OSMDataImport():
                 newRefList.append(ref)
             else:
                 # it is possible that we dont have these coords
-                # TODO: skip complete way if coords are missing?
                 continue
             
         return coords, newRefList
-
-    # lon, lat
-    def createPolygonFromRefsCoords(self, refList):
-        coords=list()
-        newRefList=list()
-        for ref in refList:
-            storedRef, lat, lon=self.getCoordsEntry(ref)
-            if storedRef!=None:
-                coords.append((lon, lat))
-                newRefList.append(ref)
-            else:
-                # it is possible that we dont have these coords
-                # TODO: skip complete way if coords are missing?
-                continue
             
-        return coords, newRefList
-    
-    def createLineStringFromCoords(self, coords):
-        lineString="'LINESTRING("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        lineString=lineString+coordString+")'"
-        return lineString
-    
-#    def createCoordsFromLineString(self, lineString):
-#        coords=list()
-#        coordsStr=lineString[11:-1] # LINESTRING
-#        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-#        i=0
-#        while i<len(x)-2:
-#            coords.append((float(x[i+2]), float(x[i])))
-#            i=i+4
-#            
-#        return coords
-
-#    def createCoordsFromPolygon(self, polyString):
-#        coords=list()
-#        coordsStr=polyString[9:-2] # POLYGON
-#        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-#        i=0
-#        while i<len(x)-2:
-#            coords.append((float(x[i+2]), float(x[i])))
-#            i=i+4
-#            
-#        return coords
-    
-    def createCoordsFromMultiPolygon(self, coordsStr):
-        allCoordsList=list()
-        coordsStr=coordsStr[15:-3]
-        polyParts=coordsStr.split(")), ((")
-        if len(polyParts)==1:
-            poly=coordsStr
-            coords=list()
-            x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
-            i=0
-            while i<len(x)-2:
-                coords.append((float(x[i+2]), float(x[i])))
-                i=i+4
-
-            allCoordsList.append(coords)
-        else:
-            for poly in polyParts:
-                coords=list()
-                x=re.findall(r'[0-9\.]+|[^0-9\.]+', poly)
-                i=0
-                while i<len(x)-2:
-                    coords.append((float(x[i+2]), float(x[i])))
-                    i=i+4
-                
-                allCoordsList.append(coords)
-        
-        return allCoordsList
-
-    def createPolygonFromCoords(self, coords):
-        polyString="'POLYGON(("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+"))'"        
-        return polyString
-            
-    def createMultiPolygonFromCoords(self, coords):
-        polyString="'MULTIPOLYGON((("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+")))'"        
-        return polyString
-
-    def createMultiPolygonPartFromCoords(self, coords):
-        polyString="(("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+")),"                
-        return polyString
-        
     def isLinkToLink(self, streetTypeId, streetTypeId2):
         return (streetTypeId==Constants.STREET_TYPE_MOTORWAY_LINK and streetTypeId2==Constants.STREET_TYPE_MOTORWAY_LINK) or (streetTypeId==Constants.STREET_TYPE_TRUNK_LINK and streetTypeId2==Constants.STREET_TYPE_TRUNK_LINK) or (streetTypeId==Constants.STREET_TYPE_PRIMARY_LINK and streetTypeId2==Constants.STREET_TYPE_PRIMARY_LINK) or (streetTypeId==Constants.STREET_TYPE_SECONDARY_LINK and streetTypeId2==Constants.STREET_TYPE_SECONDARY_LINK) or (streetTypeId==Constants.STREET_TYPE_TERTIARY_LINK and streetTypeId2==Constants.STREET_TYPE_TERTIARY_LINK)
 
@@ -3379,7 +3328,7 @@ class OSMDataImport():
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.createCoordsFromMultiPolygon(polyStr)
+                coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
                 for coords in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
@@ -3499,7 +3448,7 @@ class OSMDataImport():
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.createCoordsFromMultiPolygon(polyStr)
+                coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
                 for coords in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
@@ -3582,7 +3531,7 @@ class OSMDataImport():
             adminLevel=area[2]
             polyStr=area[3]
             
-            coordsList=self.createCoordsFromMultiPolygon(polyStr)
+            coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
             for coords in coordsList:
                 cPolygon=Polygon(coords)
                 polyList[adminLevel].append((osmId, cPolygon, tags))
@@ -4131,6 +4080,19 @@ def main(argv):
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000001))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000000))
+#    polyString="'MULTIPOLYGON("
+#
+#    outerCoords=[(20,35), (45, 20), (30, 5), (10, 10), (10, 30), (20, 35)]
+#    innerCoordsList=list()
+#    innerCoordsList.append([(30,20), (20,25), (20, 15), (30, 20)])
+#    polyString=polyString+p.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoordsList)
+#    polyString=polyString[:-1]
+#    polyString=polyString+")'"
+#    print(polyString)
+#    
+#    coords=p.createOuterCoordsFromMultiPolygon(polyString)
+#    print(coords)
+    
     p.closeAllDB()
 
 
