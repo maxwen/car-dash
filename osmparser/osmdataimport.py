@@ -369,7 +369,7 @@ class OSMDataImport():
         self.cursorArea.execute("SELECT InitSpatialMetaData()")
         self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, layer INTEGER)')
         self.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
-        self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'POLYGON', 2)")
+        self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
         
         self.cursorArea.execute('CREATE TABLE areaLineTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, layer INTEGER)')
         self.cursorArea.execute("CREATE INDEX areaLineType_idx ON areaLineTable (type)")
@@ -477,7 +477,7 @@ class OSMDataImport():
             self.edgeId=self.edgeId+1
         
     def addPolygonToAreaTable(self, areaType, osmId, tags, polyString, layer):
-        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, PolygonFromText(%s, 4326))'%(polyString), (osmId, areaType, pickle.dumps(tags), layer))
+        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaType, pickle.dumps(tags), layer))
 
     def addLineToAreaTable(self, areaType, osmId, tags, lineString, layer):
         self.cursorArea.execute('INSERT OR IGNORE INTO areaLineTable VALUES( ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (osmId, areaType, pickle.dumps(tags), layer))
@@ -588,14 +588,14 @@ class OSMDataImport():
         self.log("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None)
 
-    def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
-        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id=%d'%(edgeId))
-        allentries=self.cursorEdge.fetchall()
-        if len(allentries)==1:
-            edge=self.edgeFromDBWithCoords(allentries[0])
-            return edge
-        self.log("no edge with %d"%(edgeId))
-        return (None, None, None, None, None, None, None, None, None, None, None)
+#    def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
+#        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id=%d'%(edgeId))
+#        allentries=self.cursorEdge.fetchall()
+#        if len(allentries)==1:
+#            edge=self.edgeFromDBWithCoords(allentries[0])
+#            return edge
+#        self.log("no edge with %d"%(edgeId))
+#        return (None, None, None, None, None, None, None, None, None, None, None)
         
     
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
@@ -656,14 +656,14 @@ class OSMDataImport():
             resultList.append(edge)
         return resultList
 
-    def getDifferentEdgeEntryForStartOrEndPointWithCoords(self, ref, edgeId):
-        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for result in allentries:
-            edge=self.edgeFromDBWithCoords(result)
-            resultList.append(edge)
-        return resultList        
+#    def getDifferentEdgeEntryForStartOrEndPointWithCoords(self, ref, edgeId):
+#        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
+#        resultList=list()
+#        allentries=self.cursorEdge.fetchall()
+#        for result in allentries:
+#            edge=self.edgeFromDBWithCoords(result)
+#            resultList.append(edge)
+#        return resultList        
     
     def getEdgeEntryForWayId(self, wayId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=%d'%(wayId))
@@ -792,7 +792,7 @@ class OSMDataImport():
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, AsText(geom) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoords(x)
+            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoordsString(x)
             self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
@@ -931,7 +931,7 @@ class OSMDataImport():
         reverseCost=x[8]
         return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)
  
-    def edgeFromDBWithCoords(self, x):
+    def edgeFromDBWithCoordsString(self, x):
         edgeId=x[0]
         startRef=x[1]
         endRef=x[2]
@@ -943,8 +943,7 @@ class OSMDataImport():
         reverseCost=x[8]
         streetInfo=x[9]
         coordsStr=x[10]
-        coords=self.createCoordsFromLineString(coordsStr)
-        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords)
+        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coordsStr)
 
     def areaFromDBWithCoordsString(self, x):
         osmId=x[0]
@@ -1232,7 +1231,7 @@ class OSMDataImport():
         return layer
     
     def getCenterOfPolygon(self, refs):
-        coords, _=self.createPolygonRefsCoords(refs)
+        coords, _=self.createPolygonFromRefsCoords(refs)
         if len(coords)>2:
             cPolygon=Polygon(coords)
             lon, lat=cPolygon.center()
@@ -1385,7 +1384,7 @@ class OSMDataImport():
                     # e.g. waterway=riverbank ist missing then for Salzach
                     if isPolygon==True:
                         if newRefList[0]==newRefList[-1]:
-                            geomString=self.createPolygonFromCoords(coords)
+                            geomString=self.createMultiPolygonFromCoords(coords)
                         else:
                             self.log("parse_ways: skipping polygon area %d %s newRefList[0]!=newRefList[-1]"%(wayid, newRefList))
                             continue
@@ -1433,7 +1432,7 @@ class OSMDataImport():
                                     self.log("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
                                     continue
                     
-                                geomString=self.createPolygonFromCoords(coords)
+                                geomString=self.createMultiPolygonFromCoords(coords)
                                 self.addPolygonToAreaTable(Constants.AREA_TYPE_HIGHWAY_AREA, wayid, tags, geomString, layer)
                             
                             continue
@@ -1664,91 +1663,57 @@ class OSMDataImport():
                     
                     refRings=self.mergeWayRefs(allRefs)
                     if len(refRings)!=0:
-                        if isAdminBoundary==True:
-                            # convert to multipolygon
-                            polyString="'MULTIPOLYGON("
-                            for refRingEntry in refRings:                                
-                                refs=refRingEntry["refs"]
-                                if refs[0]!=refs[-1]:
-                                    self.log("skip admin multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
-                                    skipArea=True
-                                    break
+                        # convert to multipolygon
+                        polyString="'MULTIPOLYGON("
+                        for refRingEntry in refRings:                                
+                            refs=refRingEntry["refs"]
+                            if refs[0]!=refs[-1]:
+                                self.log("skip multipolygon: %d %s refs[0]!=refs[-1]"%(osmid, tags["name"]))
+                                skipArea=True
+                                break
 
-                                coords, newRefList=self.createRefsCoords(refs)
-                                # TODO: skip complete area if coords are missing?
-                                if len(refs)==len(newRefList):
-                                    polyStringPart=self.createMultiPolygonPartFromCoords(coords)
-                                else:
-                                    self.log("skip admin multipolygon: %d %s coords missing"%(osmid, tags["name"]))
-                                    skipArea=True
-                                    break
-                                
-                                polyString=polyString+polyStringPart
-                                                                
-                            polyString=polyString[:-1]
-                            polyString=polyString+")'"
-
-                            # skip complete relation if coords are missing
-                            if skipArea==False:
-                                if adminLevel!=None:
-                                    self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
-                                else:
-                                    self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
-                                    continue
+                            coords, newRefList=self.createRefsCoords(refs)
+                            # TODO: skip complete area if coords are missing?
+                            if len(refs)==len(newRefList):
+                                polyStringPart=self.createMultiPolygonPartFromCoords(coords)
                             else:
-                                continue
+                                self.log("skip multipolygon: %d %s coords missing"%(osmid, tags["name"]))
+                                skipArea=True
+                                break
+                            
+                            polyString=polyString+polyStringPart
+                                                            
+                        polyString=polyString[:-1]
+                        polyString=polyString+")'"
 
+                        # skip complete relation if coords are missing
+                        if skipArea==True:
+                            continue
+                        
+                        if isAdminBoundary==True:
+                            if adminLevel!=None:
+                                self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
+                            else:
+                                self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
+                                continue
                         else:    
-                            i=0
-                            for refRingEntry in refRings: 
-                                # TODO: 
-                                areaId=osmid*1000000+i                             
-                                refs=refRingEntry["refs"]
+                            areaType=None
+                            if isNatural==True:
+                                areaType=Constants.AREA_TYPE_NATURAL
+                            elif isLanduse==True:
+                                areaType=Constants.AREA_TYPE_LANDUSE
+                            elif isBuilding==True:
+                                areaType=Constants.AREA_TYPE_BUILDING
+                            elif isAeroway==True:
+                                areaType=Constants.AREA_TYPE_AEROWAY
+                            elif isTourism==True:
+                                areaType=Constants.AREA_TYPE_TOURISM
+                            elif isAmenity==True:
+                                areaType=Constants.AREA_TYPE_AMENITY
                                 
-                                isPolygon=False
-                                if refs[0]==refs[-1]:
-                                    isPolygon=True
-                                    
-                                coords, newRefList=self.createRefsCoords(refs)
-                                if isPolygon==True:
-                                    if len(coords)<3:
-                                        self.log("skip multipolygon polygon part: %d len(coords)<3"%(osmid))
-                                        continue
-                                else:
-                                    if len(coords)<2:
-                                        self.log("skip multipolygon line part: %d len(coords)<2"%(osmid))
-                                        continue
-                
-                                if isPolygon==True:
-                                    if newRefList[0]==newRefList[-1]:
-                                        geomString=self.createPolygonFromCoords(coords)
-                                    else:
-                                        self.log("skip multipolygon part: %d coords missing"%(osmid)) 
-                                        continue
-                                else:
-                                    geomString=self.createLineStringFromCoords(coords)
-                                
-                                areaType=None
-                                if isNatural==True:
-                                    areaType=Constants.AREA_TYPE_NATURAL
-                                elif isLanduse==True:
-                                    areaType=Constants.AREA_TYPE_LANDUSE
-                                elif isBuilding==True:
-                                    areaType=Constants.AREA_TYPE_BUILDING
-                                elif isAeroway==True:
-                                    areaType=Constants.AREA_TYPE_AEROWAY
-                                elif isTourism==True:
-                                    areaType=Constants.AREA_TYPE_TOURISM
-                                elif isAmenity==True:
-                                    areaType=Constants.AREA_TYPE_AMENITY
-                                    
-                                if areaType!=None:
-                                    if isPolygon==True:
-                                        self.addPolygonToAreaTable(areaType, areaId, tags, geomString, layer)
-                                    else:
-                                        self.addLineToAreaTable(areaType, areaId, tags, geomString, layer)
-                                    
-                                i=i+1
+                            if areaType!=None:
+                                self.addPolygonToAreaTable(areaType, osmid, tags, polyString, layer)
+
                     else:
                         self.log("skip multipolygon: %d mergeWayRefs==0"%(osmid))
                         continue
@@ -2611,7 +2576,7 @@ class OSMDataImport():
         return coords, newRefList
 
     # lon, lat
-    def createPolygonRefsCoords(self, refList):
+    def createPolygonFromRefsCoords(self, refList):
         coords=list()
         newRefList=list()
         for ref in refList:
@@ -2633,27 +2598,27 @@ class OSMDataImport():
         lineString=lineString+coordString+")'"
         return lineString
     
-    def createCoordsFromLineString(self, lineString):
-        coords=list()
-        coordsStr=lineString[11:-1] # LINESTRING
-        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-        i=0
-        while i<len(x)-2:
-            coords.append((float(x[i+2]), float(x[i])))
-            i=i+4
-            
-        return coords
+#    def createCoordsFromLineString(self, lineString):
+#        coords=list()
+#        coordsStr=lineString[11:-1] # LINESTRING
+#        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
+#        i=0
+#        while i<len(x)-2:
+#            coords.append((float(x[i+2]), float(x[i])))
+#            i=i+4
+#            
+#        return coords
 
-    def createCoordsFromPolygon(self, polyString):
-        coords=list()
-        coordsStr=polyString[9:-2] # POLYGON
-        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
-        i=0
-        while i<len(x)-2:
-            coords.append((float(x[i+2]), float(x[i])))
-            i=i+4
-            
-        return coords
+#    def createCoordsFromPolygon(self, polyString):
+#        coords=list()
+#        coordsStr=polyString[9:-2] # POLYGON
+#        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
+#        i=0
+#        while i<len(x)-2:
+#            coords.append((float(x[i+2]), float(x[i])))
+#            i=i+4
+#            
+#        return coords
     
     def createCoordsFromMultiPolygon(self, coordsStr):
         allCoordsList=list()
@@ -3890,9 +3855,9 @@ class OSMDataImport():
             
         return areaNameDict,reverseAdminAreaDict
       
-    def getCoordsOfEdge(self, edgeId):
-        (edgeId, _, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
-        return coords    
+#    def getCoordsOfEdge(self, edgeId):
+#        (edgeId, _, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
+#        return coords    
 
 #    def mergeEqualWayEntries(self, wayId):        
 #        self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, AsText(geom) FROM wayTable WHERE wayId=%d'%(wayId))

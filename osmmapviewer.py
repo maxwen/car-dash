@@ -1088,7 +1088,7 @@ class QtOSMWidget(QWidget):
         point0=invertedTransform[0].map(point)
         self.painter.drawPoint(point0)
     
-    def getPrefetchBoxMargin(self):
+    def getPrefetchBoxMargin(self):    
         if self.map_zoom in range(17, 19):
             return 0.005
         if self.map_zoom in range(14, 17):
@@ -1771,18 +1771,14 @@ class QtOSMWidget(QWidget):
         point0=self.transformHeading.inverted()[0].map(pos)
         map_x, map_y=self.getMapZeroPos()
         
-        for osmId, (cPolygon, _) in self.areaPolygonCache.items():
-            if cPolygon!=None:
-                # must create a copy cause shift changes values intern
-                p=Polygon(cPolygon)
-                p.shift(-map_x, -map_y)
-            
-                if p.isInside(point0.x(), point0.y()):
+        for osmId, (_, painterPath, geomType) in self.areaPolygonCache.items():
+            if geomType==0:
+                painterPath=painterPath.translated(-map_x, -map_y)
+                if painterPath.contains(point0):
                     tags=osmParserData.getAreaTagsWithId(osmId)
                     if tags!=None:
                         print("%d %s"%(osmId, tags))
-                    break
-        
+                        break
         
     def event(self, event):
         if event.type()==QEvent.ToolTip:
@@ -2400,20 +2396,12 @@ class QtOSMWidget(QWidget):
         map_x, map_y=self.getMapZeroPos()
         
         if not wayId in self.wayPolygonCache.keys():
-            cont=[]
             painterPath=QPainterPath()
 
             coords=osmParserData.createCoordsFromLineString(coordsStr)
-
-            displayCoords=coords
-#            if self.map_zoom<16:
-#                if len(coords)>=3:
-#                    displayCoords=coords[1::2]
-#                    displayCoords[0]=coords[0]
-#                    displayCoords[-1]=coords[-1]
                 
             i=0
-            for point in displayCoords:
+            for point in coords:
                 lat, lon=point 
                 (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
                 point=QPointF(x, y);
@@ -2422,11 +2410,16 @@ class QtOSMWidget(QWidget):
                 else:
                     painterPath.lineTo(point)
                     
-                cont.append((point.x(), point.y()))
                 i=i+1
                 
-            if len(cont)>2:
-                cPolygon=Polygon(cont)
+            rect=painterPath.controlPointRect()
+            cont=[(rect.x(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()+rect.height()), 
+                  (rect.x(), rect.y()+rect.height())]
+
+            cPolygon=Polygon(cont)
+
             self.wayPolygonCache[wayId]=(cPolygon, painterPath)
         
         else:
@@ -2454,42 +2447,41 @@ class QtOSMWidget(QWidget):
         map_x, map_y=self.getMapZeroPos()
         
         if not osmId in cacheDict.keys():
-            cont=[]
             painterPath=QPainterPath()
+            coordsList=list()
             if geomType==0:
-                coords=osmParserData.createCoordsFromPolygon(polyStr)[:-1]
+                coordsList=osmParserData.createCoordsFromMultiPolygon(polyStr)
             else:
-                coords=osmParserData.createCoordsFromLineString(polyStr)
-                        
-            displayCoords=coords
-#            if geomType==1 and self.map_zoom<16:
-#                if len(coords)>=3:
-#                    displayCoords=coords[1::2]
-#                    displayCoords[0]=coords[0]
-#                    displayCoords[-1]=coords[-1]
+                coords=osmParserData.createCoordsFromLineString(polyStr)     
+                coordsList.append(coords)
             
-            i=0
-            for point in displayCoords:
-                lat, lon=point 
-                (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
-                point=QPointF(x, y);
-                if i==0:
-                    painterPath.moveTo(point)
-                else:
-                    painterPath.lineTo(point)
-                    
-                cont.append((point.x(), point.y()))
-                i=i+1
+            for coords in coordsList:
+                i=0
+                for point in coords:
+                    lat, lon=point 
+                    (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                    point=QPointF(x, y);
+                    if i==0:
+                        painterPath.moveTo(point)
+                    else:
+                        painterPath.lineTo(point)
+                        
+                    i=i+1
 
             if geomType==0:
                 painterPath.closeSubpath()
-                
-            if len(cont)>2:
-                cPolygon=Polygon(cont)
-            cacheDict[osmId]=(cPolygon, painterPath)
+            
+            rect=painterPath.controlPointRect()
+            cont=[(rect.x(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()+rect.height()), 
+                  (rect.x(), rect.y()+rect.height())]
+
+            cPolygon=Polygon(cont)
+            cacheDict[osmId]=(cPolygon, painterPath, geomType)
         
         else:
-            cPolygon, painterPath=cacheDict[osmId]
+            cPolygon, painterPath, _=cacheDict[osmId]
         
         if cPolygon!=None:
             # must create a copy cause shift changes values intern
@@ -3010,7 +3002,7 @@ class QtOSMWidget(QWidget):
             (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             self.getAdminBoundaries(lat, lon)
         elif action==showAreaTags:
-            pos=QPoint(self.mousePos[0], self.mousePos[1])
+            pos=QPointF(self.mousePos[0], self.mousePos[1])
             self.getAreaTagsForPos(pos)
         elif action==showWayTags:
             print(osmParserData.getWayEntryForId(self.lastWayId))
