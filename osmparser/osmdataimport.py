@@ -1673,83 +1673,75 @@ class OSMDataImport():
                     outerRefRings=self.mergeWayRefs(allOuterRefs)
                     innerRefRings=self.mergeWayRefs(allInnerRefs)
 
-                    if len(outerRefRings)!=0:
-                        # convert to multipolygon
-                        polyString="'MULTIPOLYGON("
-                        for refRingEntry in outerRefRings:                                
-                            refs=refRingEntry["refs"]
-                            if refs[0]!=refs[-1]:
-                                self.log("skip outer multipolygon: %d refs[0]!=refs[-1]"%(osmid))
-                                skipArea=True
-                                break
-                            
-                            cPolygonOuter=refRingEntry["polygon"]
-                            newRefList=refRingEntry["newRefs"]
-                            outerCoords=refRingEntry["coords"]
-                            if len(refs)!=len(newRefList):
-                                self.log("skip outer multipolygon: %d coords missing"%(osmid))
-                                skipArea=True
-                                break
-                            
-                            innerCoords=list()
-                            if len(innerRefRings)!=0:
-                                for innerRefRingEntry in innerRefRings:
-                                    innerRefs=innerRefRingEntry["refs"]
-                                    if innerRefs[0]!=innerRefs[-1]:
-                                        self.log("skip inner multipolygon: %d refs[0]!=refs[-1]"%(osmid))
-                                        continue
-
-                                    innerNewRefs=innerRefRingEntry["newRefs"]
-                                    if len(innerRefs)!=len(innerNewRefs):
-                                        self.log("skip inner multipolygon: %d coords missing"%(osmid))
-                                        continue
-                                    
-                                    cPolygonInner=innerRefRingEntry["polygon"]
-                                    if not cPolygonOuter.covers(cPolygonInner):
-                                        continue
-                                    
-                                    innerCoords.append(innerRefRingEntry["coords"])
-                                    
-                            polyStringPart=self.gisUtils.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
-
-                            polyString=polyString+polyStringPart
-                                                            
-                        polyString=polyString[:-1]
-                        polyString=polyString+")'"
-
-#                        if len(innerRefRings)!=0:
-#                            print(polyString)
-                        # skip complete relation if coords are missing
-                        if skipArea==True:
-                            continue
+                    # convert to multipolygon
+                    polyString="'MULTIPOLYGON("
+                    for refRingEntry in outerRefRings:                                
+                        refs=refRingEntry["refs"]
+                        if refs[0]!=refs[-1]:
+                            self.log("skip outer multipolygon: %d refs[0]!=refs[-1]"%(osmid))
+                            skipArea=True
+                            break
                         
-                        if isAdminBoundary==True:
-                            if adminLevel!=None:
-                                self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
-                            else:
-                                self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
-                                continue
-                        else:    
-                            areaType=None
-                            if isNatural==True:
-                                areaType=Constants.AREA_TYPE_NATURAL
-                            elif isLanduse==True:
-                                areaType=Constants.AREA_TYPE_LANDUSE
-                            elif isBuilding==True:
-                                areaType=Constants.AREA_TYPE_BUILDING
-                            elif isAeroway==True:
-                                areaType=Constants.AREA_TYPE_AEROWAY
-                            elif isTourism==True:
-                                areaType=Constants.AREA_TYPE_TOURISM
-                            elif isAmenity==True:
-                                areaType=Constants.AREA_TYPE_AMENITY
-                                
-                            if areaType!=None:
-                                self.addPolygonToAreaTable(areaType, osmid, tags, polyString, layer)
+                        cPolygonOuter=refRingEntry["polygon"]
+                        newRefList=refRingEntry["newRefs"]
+                        outerCoords=refRingEntry["coords"]
+                        if len(refs)!=len(newRefList):
+                            self.log("skip outer multipolygon: %d coords missing"%(osmid))
+                            skipArea=True
+                            break
+                        
+                        innerCoords=list()
+                        if len(innerRefRings)!=0:
+                            for innerRefRingEntry in innerRefRings:
+                                innerRefs=innerRefRingEntry["refs"]
+                                if innerRefs[0]!=innerRefs[-1]:
+                                    self.log("skip inner multipolygon: %d refs[0]!=refs[-1]"%(osmid))
+                                    continue
 
-                    else:
-                        self.log("skip multipolygon: %d mergeWayRefs==0"%(osmid))
+                                innerNewRefs=innerRefRingEntry["newRefs"]
+                                if len(innerRefs)!=len(innerNewRefs):
+                                    self.log("skip inner multipolygon: %d coords missing"%(osmid))
+                                    continue
+                                
+                                cPolygonInner=innerRefRingEntry["polygon"]
+                                if not cPolygonOuter.covers(cPolygonInner):
+                                    continue
+                                
+                                innerCoords.append(innerRefRingEntry["coords"])
+                                
+                        polyStringPart=self.gisUtils.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
+
+                        polyString=polyString+polyStringPart
+                                                        
+                    polyString=polyString[:-1]
+                    polyString=polyString+")'"
+
+                    if skipArea==True:
                         continue
+                    
+                    if isAdminBoundary==True:
+                        if adminLevel!=None:
+                            self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
+                        else:
+                            self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
+                            continue
+                    else:    
+                        areaType=None
+                        if isNatural==True:
+                            areaType=Constants.AREA_TYPE_NATURAL
+                        elif isLanduse==True:
+                            areaType=Constants.AREA_TYPE_LANDUSE
+                        elif isBuilding==True:
+                            areaType=Constants.AREA_TYPE_BUILDING
+                        elif isAeroway==True:
+                            areaType=Constants.AREA_TYPE_AEROWAY
+                        elif isTourism==True:
+                            areaType=Constants.AREA_TYPE_TOURISM
+                        elif isAmenity==True:
+                            areaType=Constants.AREA_TYPE_AMENITY
+                            
+                        if areaType!=None:
+                            self.addPolygonToAreaTable(areaType, osmid, tags, polyString, layer)
                    
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:

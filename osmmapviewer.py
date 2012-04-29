@@ -56,7 +56,7 @@ IMAGE_HEIGHT_TINY=24
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
-WITH_TIMING_DEBUG=False
+WITH_TIMING_DEBUG=True
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
 
@@ -1195,7 +1195,9 @@ class QtOSMWidget(QWidget):
               
         self.numHiddenPolygons=0
         self.numVisiblePolygons=0
-        
+        self.numHiddenWays=0
+        self.numVisibleWays=0
+                
         self.orderedNodeList=list()
         
         fetchStart=time.time()
@@ -1387,6 +1389,7 @@ class QtOSMWidget(QWidget):
 
         if WITH_TIMING_DEBUG==True:
             print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
+            print("displayedWays: %d hiddenWays: %d"%(self.numVisibleWays, self.numHiddenWays))
             print("paintEvent:%f"%(time.time()-start))
   
     def displaySidebar(self):
@@ -2415,10 +2418,10 @@ class QtOSMWidget(QWidget):
             p=Polygon(cPolygon)
             p.shift(-map_x, -map_y)
             if not self.visibleCPolygon.overlaps(p):
-                self.numHiddenPolygons=self.numHiddenPolygons+1
+                self.numHiddenWays=self.numHiddenWays+1
                 return 
                     
-        self.numVisiblePolygons=self.numVisiblePolygons+1
+        self.numVisibleWays=self.numVisibleWays+1
 
         painterPath=painterPath.translated(-map_x, -map_y)
         self.painter.strokePath(painterPath, pen)

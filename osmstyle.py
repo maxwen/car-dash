@@ -127,6 +127,8 @@ class OSMStyle():
         self.colorDict["aerowayColor"]=QColor(0x50, 0x50, 0x50)
         self.colorDict["aerowayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
         self.colorDict["nightModeColor"]=QColor(120, 120, 120, 70)
+        self.colorDict["villageGreenAreaColor"]=QColor(0xcf, 0xec, 0xa8)
+        
         
         self.initStreetColors()
         self.initBrush()
@@ -507,7 +509,8 @@ class OSMStyle():
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
         self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
         self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
-        
+        self.brushDict["villageGreenArea"]=QBrush(self.getStyleColor("villageGreenAreaColor"), Qt.SolidPattern)
+
         brush=QBrush(self.getStyleColor("scrubAreaColor"))
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/scrub.png")))
         brush.setStyle(Qt.TexturePattern)
@@ -526,6 +529,21 @@ class OSMStyle():
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/marsh.png")))
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["marshPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/glacier2.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["glacierPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/cliff2.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["cliffPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/grave_yard_generic.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["cemeteryPatternArea"]=brush
 
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -744,6 +762,10 @@ class OSMStyle():
                 brush=self.getStyleBrush("forestPatternArea")
             else:
                 brush=self.getStyleBrush("forestArea")
+        elif landuse=="cemetery" or landuse=="grave_yard":
+            brush=self.getStyleBrush("cemeteryPatternArea")
+        elif landuse=="village_green":
+            brush=self.getStyleBrush("villageGreenArea")
         elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
             brush=self.getStyleBrush("natural")
         elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
@@ -779,6 +801,12 @@ class OSMStyle():
             elif natural=="wood":
                 brush=self.getStyleBrush("woodArea")
             
+            elif natural=="glacier":
+                brush=self.getStyleBrush("glacierPatternArea")
+
+#            elif natural=="cliff":
+#                brush=self.getStyleBrush("cliffPatternArea")
+                
             else:
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
                     brush=self.getStyleBrush("water")
