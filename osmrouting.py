@@ -390,10 +390,10 @@ class OSMRouting():
                 edgeId, startRef, endRef, length, _, _, _, _, _, streetInfo, coords=edge
                 streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
        
-                # ignore certain types for crossing expectations
-                if streetTypeId==Constants.STREET_TYPE_SERVICE:
-                    # street type service
-                    continue
+#                # ignore certain types for crossing expectations
+#                if streetTypeId==Constants.STREET_TYPE_SERVICE:
+#                    # street type service
+#                    continue
             
                 # filter out onways with wrong start
                 if oneway!=0:

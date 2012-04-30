@@ -59,6 +59,7 @@ WITH_CROSSING_DEBUG=True
 WITH_TIMING_DEBUG=False
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
+SCREEN_BORDER_WIDTH=50
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -1125,13 +1126,13 @@ class QtOSMWidget(QWidget):
     # near to the border and not hidden behind
     def calcVisiblePolygon2(self):            
         invertedTransform=self.transformHeading.inverted()
-        point=QPoint(CONTROL_WIDTH, 0+CONTROL_WIDTH);
+        point=QPoint(SCREEN_BORDER_WIDTH, 0+SCREEN_BORDER_WIDTH);
         point0=invertedTransform[0].map(point)
-        point=QPoint(self.width()-CONTROL_WIDTH, 0+CONTROL_WIDTH);
+        point=QPoint(self.width()-SCREEN_BORDER_WIDTH, 0+SCREEN_BORDER_WIDTH);
         point1=invertedTransform[0].map(point)
-        point=QPoint(self.width()-CONTROL_WIDTH, self.height()-CONTROL_WIDTH);
+        point=QPoint(self.width()-SCREEN_BORDER_WIDTH, self.height()-SCREEN_BORDER_WIDTH);
         point2=invertedTransform[0].map(point)
-        point=QPoint(CONTROL_WIDTH, self.height()-CONTROL_WIDTH);
+        point=QPoint(SCREEN_BORDER_WIDTH, self.height()-SCREEN_BORDER_WIDTH);
         point3=invertedTransform[0].map(point)
         
         cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
@@ -1607,31 +1608,33 @@ class QtOSMWidget(QWidget):
     # should not overlap with others
     def calcWayTagPlacement(self, wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList):
         if reverseRefs==False:
-            for tagLabelPoint in range(1, 9, 1):
-                point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
+#            for tagLabelPoint in range(5, 50, 5):
+                percent=wayPainterPath.percentAtLength(80)
+                point=wayPainterPath.pointAtPercent(percent)
                 if self.visibleCPolygon2.isInside(point.x(), point.y()): 
                     point0=self.transformHeading.map(point)
                     newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
                     rect=newTagPainterPath.boundingRect()
                     placeFound=True
-                    for visibleRect in rectList:
-                        if visibleRect.intersects(rect):
-                            placeFound=False
+#                    for visibleRect in rectList:
+#                        if visibleRect.intersects(rect):
+#                            placeFound=False
                         
                     if placeFound==True:
                         rectList.append(rect)
                         return newTagPainterPath, newTagPainterPathText
         else:
-            for tagLabelPoint in range(9, 1, -1):
-                point=wayPainterPath.pointAtPercent(tagLabelPoint/10)
+#            for tagLabelPoint in range(50, 5, -5):
+                percent=wayPainterPath.percentAtLength(wayPainterPath.length()-80)
+                point=wayPainterPath.pointAtPercent(percent)
                 if self.visibleCPolygon2.isInside(point.x(), point.y()):
                     point0=self.transformHeading.map(point)
                     newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
                     rect=newTagPainterPath.boundingRect()
                     placeFound=True
-                    for visibleRect in rectList:
-                        if visibleRect.intersects(rect):
-                            placeFound=False
+#                    for visibleRect in rectList:
+#                        if visibleRect.intersects(rect):
+#                            placeFound=False
                         
                     if placeFound==True:
                         rectList.append(rect)
@@ -2066,11 +2069,11 @@ class QtOSMWidget(QWidget):
                 brush=self.style.getStyleBrush("aerowayArea")
                 
             elif areaType==Constants.AREA_TYPE_TOURISM:
-                brush=self.style.getStyleBrush("tourismArea")
+                brush, pen=self.style.getBrushForTourismArea(tags, self.map_zoom)
 
             elif areaType==Constants.AREA_TYPE_AMENITY:
-                brush=self.style.getStyleBrush("amenityArea")
-                
+                brush, pen=self.style.getBrushForAmenityArea(tags, self.map_zoom)
+                                
             else:
                 continue
             

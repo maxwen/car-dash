@@ -479,7 +479,7 @@ class OSMDataImport(OSMDataSQLite):
         return resultList
     
     def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable WHERE refId=265396681')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
             poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
@@ -511,15 +511,15 @@ class OSMDataImport(OSMDataSQLite):
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
+            if areaType==Constants.AREA_TYPE_AMENITY:
                 self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
-                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
+#        allentries=self.cursorArea.fetchall()
+#        for x in allentries:
+#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+#            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
+#                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
     def testAdminAreaTable(self):
         self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
@@ -754,7 +754,7 @@ class OSMDataImport(OSMDataSQLite):
         coords, _=self.createRefsCoords(refs)
         if len(coords)>2:
             cPolygon=Polygon(coords)
-            lon, lat=cPolygon.center()
+            lat, lon=cPolygon.center()
             return lat, lon
     
         # lat = Sum(lat_1..lat_n)/n , lon=Sum(lon_1, lon_n)/n 
@@ -806,6 +806,8 @@ class OSMDataImport(OSMDataSQLite):
                             self.parseFullAddress(tags, storedRef, lat, lon)
                         
             if "amenity" in tags:
+                if wayid==24423582:
+                    None
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
@@ -3248,7 +3250,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-    p.testAreaTable()
+#    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -3288,7 +3290,7 @@ def main(argv):
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
-#    p.testPOIRefTable()
+    p.testPOIRefTable()
 
 #    p.mergeEqualWayEntries()
     

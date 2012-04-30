@@ -32,8 +32,10 @@ class OSMStyle():
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
                     Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
-                    Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None}}  
-          
+                    Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None},
+                    Constants.AREA_TYPE_AMENITY:{"desc":"Amenity", "zoom":None}, 
+                    Constants.AREA_TYPE_TOURISM:{"desc":"Tourism", "zoom":None}}
+    
     def __init__(self):
         selfDict=dict()
         self.colorDict=dict()
@@ -110,8 +112,10 @@ class OSMStyle():
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
         self.colorDict["woodAreaColor"]=QColor(0xae, 0xd1, 0xa0)
         self.colorDict["scrubAreaColor"]=QColor(0xb5, 0xe3, 0xb5)
-        self.colorDict["tourismAreaColor"]=QColor(255, 255, 255)
-        self.colorDict["amenityAreaColor"]=QColor(255, 255, 255)
+        self.colorDict["tourismAreaColor"]=Qt.red
+        self.colorDict["tourismCampingAreaColor"]=QColor(0xcc, 0xff, 0x99)
+        self.colorDict["amenityParkingAreaColor"]=QColor(0xf7, 0xef, 0xb7)
+        self.colorDict["amenityAreaColor"]=Qt.red
         self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9, 200)
         self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
         self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
@@ -519,7 +523,10 @@ class OSMStyle():
         self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
         self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
+        self.brushDict["tourismCampingArea"]=QBrush(self.getStyleColor("tourismCampingAreaColor"), Qt.SolidPattern)
         self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
+        self.brushDict["amenityParkingArea"]=QBrush(self.getStyleColor("amenityParkingAreaColor"), Qt.SolidPattern)
+        
         self.brushDict["villageGreenArea"]=QBrush(self.getStyleColor("villageGreenAreaColor"), Qt.SolidPattern)
 
         brush=QBrush(self.getStyleColor("scrubAreaColor"))
@@ -835,3 +842,28 @@ class OSMStyle():
                     brush=self.getStyleBrush("natural")
         
         return brush, pen
+
+    def getBrushForAmenityArea(self, tags, zoom):
+        brush=Qt.NoBrush
+        pen=Qt.NoPen
+        
+        amenity=tags["amenity"]
+        if amenity=="parking":    
+            brush=self.getStyleBrush("amenityParkingArea")
+        else:
+            brush=self.getStyleBrush("amenityArea")
+
+        return brush, pen
+    
+    def getBrushForTourismArea(self, tags, zoom):
+        brush=Qt.NoBrush
+        pen=Qt.NoPen
+        
+        tourism=tags["tourism"]
+        if tourism=="camping" or tourism=="camp_site":    
+            brush=self.getStyleBrush("tourismCampingArea")
+        else:
+            brush=self.getStyleBrush("tourismArea")
+
+        return brush, pen    
+    

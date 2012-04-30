@@ -107,6 +107,22 @@ lanes tag is not consitently used -> ignore for now
   TODO: for debugging support showing tags for position
   -context menu
   DONE
+  
+    TODO: parser import messages in log file
+  DONE
+  
+  TODO: relations with ways that are already added 
+  -we could assume that the way members of an relation
+  have already been tagged and added in parse_ways except admin areas
+  otherwise we would need to check every wayid if the tags
+  are the same
+  -we may add a waid again
+  
+  NOACTION we assume that either the way has been tagged or the relation
+  
+ TODO split DBs
+ -split global into way and node db      
+ DONE
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -144,9 +160,6 @@ TODO: create faster create edge table nodes
  TODO parser
  -pbf parser
  -add filters   
- 
- TODO split DBs
- -split global into way and node db      
  
 TODO: turn restrications for "viaWay"
 relation with via type way {'to': 30031793, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 215852, 'from': 4408193}
@@ -202,18 +215,10 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO: support super relations?
   -relations with member relation
   
-  TODO: relations with ways that are already added 
-  -we could assume that the way members of an relation
-  have already been tagged and added in parse_ways except admin areas
-  otherwise we would need to check every wayid if the tags
-  are the same
-  -we may add a waid again
-  -or we assume that either the way has been tagged or the relation
-  
-  TODO: parser import messages in log file
-  
   TODO: amenity can also be area and relation
   -added parking
   
   TODO:
   landuse overrides natural?
+
+TODO: remove need of coords.db
