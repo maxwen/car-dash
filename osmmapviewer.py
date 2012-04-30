@@ -56,7 +56,7 @@ IMAGE_HEIGHT_TINY=24
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
-WITH_TIMING_DEBUG=True
+WITH_TIMING_DEBUG=False
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
 
@@ -1799,7 +1799,7 @@ class QtOSMWidget(QWidget):
                     tags=osmParserData.getAreaTagsWithId(osmId)
                     if tags!=None:
                         print("%d %s"%(osmId, tags))
-                        break
+#                        break
         
     def event(self, event):
         if event.type()==QEvent.ToolTip:
@@ -2054,13 +2054,13 @@ class QtOSMWidget(QWidget):
             brush=Qt.NoBrush
             pen=Qt.NoPen
             if areaType==Constants.AREA_TYPE_NATURAL:
-                brush=self.style.getBrushForNaturalArea(tags, self.map_zoom)
+                brush, pen=self.style.getBrushForNaturalArea(tags, self.map_zoom)
             
             elif areaType==Constants.AREA_TYPE_LANDUSE:
-                brush=self.style.getBrushForLanduseArea(tags, self.map_zoom)
+                brush, pen=self.style.getBrushForLanduseArea(tags, self.map_zoom)
 
             elif areaType==Constants.AREA_TYPE_HIGHWAY_AREA:
-                brush=self.style.getStyleBrush("highway")
+                brush=self.style.getStyleBrush("highwayArea")
                             
             elif areaType==Constants.AREA_TYPE_AEROWAY:
                 brush=self.style.getStyleBrush("aerowayArea")
@@ -2074,8 +2074,7 @@ class QtOSMWidget(QWidget):
             else:
                 continue
             
-            if brush!=Qt.NoBrush:
-                self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
+            self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
 
         self.painter.setBrush(Qt.NoBrush)
 
@@ -2084,7 +2083,6 @@ class QtOSMWidget(QWidget):
             pen=Qt.NoPen
             
             for area in self.buildingList:      
-#                print(area)
                 brush=self.style.getStyleBrush("building")
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
     

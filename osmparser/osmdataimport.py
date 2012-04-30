@@ -17,25 +17,15 @@ from utils.gisutils import GISUtils
 from osmparser.parser.xml.parser import XMLParser
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
+from osmparser.osmdatasqlite import OSMDataSQLite
+
 from Polygon import Polygon
 from osmparser.importlog import ImportLog
  
 importLog=ImportLog(True)
 
-class OSMDataImport():
+class OSMDataImport(OSMDataSQLite):
     def __init__(self):
-        self.connectionEdge=None
-        self.cursorEdge=None
-        self.connectionArea=None
-        self.cursorArea=None
-        self.connectionAdress=None
-        self.cursorAdress=None
-        self.connectionCoords=None
-        self.cursorCoords=None
-        self.cursorWay=None
-        self.connectionWay=None
-        self.cursorNode=None
-        self.connectionNode=None
         self.cursorTmp=None
         self.connectionTmp=None
         self.edgeId=1
@@ -72,52 +62,6 @@ class OSMDataImport():
     def createAdressTable(self):
         self.createAddressTable()
         
-    def setPragmaForDB(self, cursor):
-#        cursor.execute('PRAGMA journal_mode=OFF')
-#        cursor.execute('PRAGMA synchronous=OFF')
-        cursor.execute('PRAGMA cache_size=40000')
-        cursor.execute('PRAGMA page_size=4096')
-#        cursor.execute('PRAGMA ignore_check_constraint=ON')
-        
-    def openEdgeDB(self):
-        self.connectionEdge=sqlite3.connect(self.getEdgeDBFile())
-        self.cursorEdge=self.connectionEdge.cursor()
-        self.connectionEdge.enable_load_extension(True)
-        self.cursorEdge.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorEdge)
-
-    def openAreaDB(self):
-        self.connectionArea=sqlite3.connect(self.getAreaDBFile())
-        self.cursorArea=self.connectionArea.cursor()
-        self.connectionArea.enable_load_extension(True)
-        self.cursorArea.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorArea)
-
-    def openWayDB(self):
-        self.connectionWay=sqlite3.connect(self.getWayDBFile())
-        self.cursorWay=self.connectionWay.cursor()
-        self.connectionWay.enable_load_extension(True)
-        self.cursorWay.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorWay)
-
-    def openNodeDB(self):
-        self.connectionNode=sqlite3.connect(self.getNodeDBFile())
-        self.cursorNode=self.connectionNode.cursor()
-        self.connectionNode.enable_load_extension(True)
-        self.cursorNode.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorNode)
-        
-    def openAdressDB(self):
-        self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
-        self.cursorAdress=self.connectionAdress.cursor()
-        self.setPragmaForDB(self.cursorAdress)
-
-    def openCoordsDB(self):
-        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
-#        self.connectionCoords=sqlite3.connect(":memory:")
-        self.cursorCoords=self.connectionCoords.cursor()
-        self.setPragmaForDB(self.cursorCoords)
-
     def openTmpDB(self):
 #        self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
         self.connectionTmp=sqlite3.connect(":memory:")
@@ -145,75 +89,12 @@ class OSMDataImport():
     def commitAreaDB(self):
         self.connectionArea.commit()
         
-    def closeEdgeDB(self):
-        if self.connectionEdge!=None:
-            self.connectionEdge.commit()        
-            self.cursorEdge.close()
-            self.connectionEdge=None     
-            self.cursorEdge=None
-
-    def closeAreaDB(self):
-        if self.connectionArea!=None:
-            self.connectionArea.commit()        
-            self.cursorArea.close()
-            self.connectionArea=None     
-            self.cursorArea=None
-           
-    def closeWayDB(self):
-        if self.connectionWay!=None:
-            self.connectionWay.commit()        
-            self.cursorWay.close()
-            self.connectionWay=None     
-            self.cursorWay=None
-
-    def closeNodeDB(self):
-        if self.connectionNode!=None:
-            self.connectionNode.commit()        
-            self.cursorNode.close()
-            self.connectionNode=None     
-            self.cursorNode=None
-
-    def closeAdressDB(self):
-        if self.connectionAdress!=None:
-            self.connectionAdress.commit()
-            self.cursorAdress.close()
-            self.connectionAdress=None
-            self.cursorAdress=None
-                
-    def closeCoordsDB(self, delete):
-        if self.connectionCoords!=None:
-            self.connectionCoords.commit()
-            self.cursorCoords.close()
-            self.connectionCoords=None
-            self.cursorCoords=None   
-            if delete==True: 
-                self.deleteCoordsDBFile()        
-
-    def closeTmpDB(self, delete):
+    def closeTmpDB(self):
         if self.connectionTmp!=None:
             self.connectionTmp.commit()
             self.cursorTmp.close()
             self.connectionTmp=None
             self.cursorTmp=None   
-            if delete==True: 
-                self.deleteTmpDBFile() 
-                 
-    def openAllDB(self):
-        self.openWayDB()
-        self.openNodeDB()
-        self.openEdgeDB()
-        self.openAreaDB()
-        self.openAdressDB()
-#        self.openTmpDB()
-        self.openCoordsDB()
-        
-    def closeAllDB(self):
-        self.closeWayDB()
-        self.closeNodeDB()
-        self.closeEdgeDB()
-        self.closeAreaDB()
-        self.closeAdressDB()
-        self.closeCoordsDB(False)  
 
     def createCoordsTable(self):
         self.cursorCoords.execute('CREATE TABLE coordsTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL)')
@@ -237,13 +118,6 @@ class OSMDataImport():
         wayIdList=list()
         wayIdList.append(wayId)
         self.cursorTmp.execute('INSERT INTO refWayTable VALUES( ?, ?)', (refid, pickle.dumps(wayIdList)))
-
-    def getCoordsEntry(self, ref):
-        self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))
-        allentries=self.cursorCoords.fetchall()
-        if len(allentries)==1:
-            return(allentries[0][0], allentries[0][1], allentries[0][2])
-        return None, None, None
 
     def getTmpWayRefEntry(self, wayId):
         self.cursorTmp.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
@@ -337,21 +211,6 @@ class OSMDataImport():
             addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
             self.log( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
 
-    def addressFromDB(self, x):
-        addressId=x[0]
-        refId=x[1]
-        country=x[2]
-        if x[3]!=None:
-            city=int(x[3])
-        else:
-            city=None
-        postCode=x[4]
-        streetName=x[5]
-        houseNumber=x[6]
-        lat=x[7]
-        lon=x[8]
-        return (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
-    
     def getLenOfAddressTable(self):
         self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
         allentries=self.cursorAdress.fetchall()
@@ -389,21 +248,6 @@ class OSMDataImport():
     def addToRestrictionTable(self, target, viaPath, toCost):
         self.cursorEdge.execute('INSERT INTO restrictionTable VALUES( ?, ?, ?, ?)', (self.restrictionId, target, viaPath, toCost))
         self.restrictionId=self.restrictionId+1
-
-    def getRestrictionEntryForTargetEdge(self, toEdgeId):
-        self.cursorEdge.execute('SELECT * FROM restrictionTable WHERE target=%d'%(toEdgeId))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for x in allentries:
-            resultList.append(self.restrictionFromDB(x))
-        return resultList
-    
-    def restrictionFromDB(self, x):
-        restrictionId=x[0]
-        target=x[1]
-        viaPath=x[2]
-        toCost=x[3]
-        return (restrictionId, target, viaPath, toCost)
     
     def testRestrictionTable(self):
         self.cursorEdge.execute('SELECT * from restrictionTable ORDER by target')
@@ -509,50 +353,15 @@ class OSMDataImport():
     def createSpatialIndexForNodeTables(self):
 #        self.cursorNode.execute('SELECT CreateSpatialIndex("refTable", "geom")')
         self.cursorNode.execute('SELECT CreateSpatialIndex("poiRefTable", "geom")')
-                        
-    def getLenOfEdgeTable(self):
-        self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable')
-        allentries=self.cursorEdge.fetchall()
-        return allentries[0][0]
-    
-    def getLenOfEdgeTableForRouting(self, bbox):
-        ymin=bbox[1]-0.1
-        xmin=bbox[0]-0.1
-        ymax=bbox[3]+0.1
-        xmax=bbox[2]+0.1
-        
-        self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax))
-        allentries=self.cursorEdge.fetchall()
-        return allentries[0][0]
-
+                            
     def updateSourceOfEdge(self, edgeId, sourceId):
-#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-#        if existingEdgeId==None:
-#            self.log("no edge with id %d"%(edgeId))
-#            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET source=%d WHERE id=%d'%(sourceId, edgeId))
 
     def updateTargetOfEdge(self, edgeId, targetId):
-#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-#        if existingEdgeId==None:
-#            self.log("no edge with id %d"%(edgeId))
-#            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET target=%d WHERE id=%d'%(targetId, edgeId))
         
     def updateCostsOfEdge(self, edgeId, cost, reverseCost):
-#        existingEdgeId, _, _, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
-#        if existingEdgeId==None:
-#            self.log("no edge with id %d"%(edgeId))
-#            return
         self.cursorEdge.execute('UPDATE OR IGNORE edgeTable SET cost=%d, reverseCost=%d WHERE id=%d'%(cost, reverseCost, edgeId))
-
-#    def clearSourceAndTargetOfEdges(self):
-#        self.cursorEdge.execute('SELECT id FROM edgeTable')
-#        allentries=self.cursorEdge.fetchall()
-#        for x in allentries:
-#            edgeId=x[0]
-#            self.updateSourceOfEdge(edgeId, 0)
-#            self.updateTargetOfEdge(edgeId, 0)
 
     def getEdgeEntryForSource(self, sourceId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where source=%d'%(sourceId))
@@ -571,34 +380,6 @@ class OSMDataImport():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList      
-    
-    def getEdgeEntryForSourceAndTarget(self, sourceId, targetId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where source=%d AND target=%d'%(sourceId, targetId))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for result in allentries:
-            edge=self.edgeFromDB(result)
-            resultList.append(edge)
-        return resultList   
-    
-    def getEdgeEntryForEdgeId(self, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
-        allentries=self.cursorEdge.fetchall()
-        if len(allentries)==1:
-            edge=self.edgeFromDB(allentries[0])
-            return edge
-        self.log("no edge with %d"%(edgeId))
-        return (None, None, None, None, None, None, None, None, None)
-
-#    def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
-#        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id=%d'%(edgeId))
-#        allentries=self.cursorEdge.fetchall()
-#        if len(allentries)==1:
-#            edge=self.edgeFromDBWithCoords(allentries[0])
-#            return edge
-#        self.log("no edge with %d"%(edgeId))
-#        return (None, None, None, None, None, None, None, None, None, None, None)
-        
     
     def getEdgeEntryForStartPoint(self, startRef, edgeId):
         if edgeId!=None:
@@ -630,15 +411,6 @@ class OSMDataImport():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
-
-    def getEdgeEntryForStartPointAndWayId(self, startRef, wayId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d AND wayId=%d'%(startRef, wayId))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for result in allentries:
-            edge=self.edgeFromDB(result)
-            resultList.append(edge)
-        return resultList    
     
     def getEdgeEntryForStartOrEndPoint(self, ref):
         self.cursorEdge.execute('SELECT * FROM edgeTable where startRef=%d OR endRef=%d'%(ref, ref))
@@ -648,25 +420,7 @@ class OSMDataImport():
             edge=self.edgeFromDB(result)
             resultList.append(edge)
         return resultList
-    
-    def getDifferentEdgeEntryForStartOrEndPoint(self, ref, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for result in allentries:
-            edge=self.edgeFromDB(result)
-            resultList.append(edge)
-        return resultList
-
-#    def getDifferentEdgeEntryForStartOrEndPointWithCoords(self, ref, edgeId):
-#        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
-#        resultList=list()
-#        allentries=self.cursorEdge.fetchall()
-#        for result in allentries:
-#            edge=self.edgeFromDBWithCoords(result)
-#            resultList.append(edge)
-#        return resultList        
-    
+        
     def getEdgeEntryForWayId(self, wayId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where wayId=%d'%(wayId))
         resultList=list()
@@ -706,22 +460,6 @@ class OSMDataImport():
     def updatePOIRefEntry(self, poiId, country, city):
         self.cursorNode.execute('UPDATE OR IGNORE poiRefTable SET country=%d,city=%d WHERE id=%d'%(country, city, poiId))
     
-    def getTagsForWayEntry(self, wayId):
-        self.cursorWay.execute('SELECT tags FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorWay.fetchall()
-        if len(allentries)==1:
-            return self.decodeWayTags(allentries[0][0])
-        
-        return None
-
-    def getWayEntryForId(self, wayId):
-        self.cursorWay.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
-        allentries=self.cursorWay.fetchall()
-        if len(allentries)==1:
-            return self.wayFromDB(allentries[0])
-        
-        return (None, None, None, None, None, None, None, None)
-
     def getWayEntryForIdWithCoords(self, wayId):
         self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursorWay.fetchall()
@@ -740,41 +478,12 @@ class OSMDataImport():
             
         return resultList
     
-    def getCrossingEntryForRefId(self, wayid, refId):
-        self.cursorWay.execute('SELECT * FROM crossingTable where wayId=%d AND refId=%d'%(wayid, refId))  
-        resultList=list()
-        allentries=self.cursorWay.fetchall()
-        for result in allentries:
-            crossing=self.crossingFromDB(result)
-            resultList.append(crossing)
-            
-        return resultList
-    
-#    def testRefTable(self):
-#        self.cursorNode.execute('SELECT refId, layer, AsText(geom) FROM refTable')
-#        allentries=self.cursorNode.fetchall()
-#        for x in allentries:
-#            refId, lat, lon, layer=self.refFromDB(x)
-#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " layer:"+str(layer))
-
     def testPOIRefTable(self):
         self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
             poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
             self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
-
-    def getPOIEntriesWithAddress(self):
-        resultList=list()
-        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-            streetName, houseNumber=self.getAddressForRefId(refId)
-            if streetName!=None:
-                resultList.append((poiId, refId, lat, lon, tags, nodeType, layer, country, city, streetName, houseNumber))
-
-        return resultList
         
     def testWayTable(self):
         self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
@@ -802,13 +511,15 @@ class OSMDataImport():
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
+                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
         self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
+                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
     def testAdminAreaTable(self):
         self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
@@ -825,161 +536,6 @@ class OSMDataImport():
 #        allentries=self.cursorCoords.fetchall()  
 #        self.log(allentries)
         None
-
-    def wayFromDB(self, x):
-        wayId=x[0]
-        refs=pickle.loads(x[2])
-        tags=self.decodeWayTags(x[1])
-        streetInfo=x[3]
-        name=x[4]
-        nameRef=x[5]
-        maxspeed=x[6]
-        poiList=None
-        if x[7]!=None:
-            poiList=pickle.loads(x[7])
-
-        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList)
- 
-    def wayFromDBWithCoordsString(self, x):
-        wayId=x[0]
-        refs=pickle.loads(x[2])
-        tags=self.decodeWayTags(x[1])
-        streetInfo=x[3]
-        name=x[4]
-        nameRef=x[5]
-        maxspeed=x[6]
-        poiList=None
-        if x[7]!=None:
-            poiList=pickle.loads(x[7])    
-        layer=int(x[8])
-        coordsStr=x[9]            
-        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)   
-
-    def refFromDB(self, x):
-        refId=x[0]
-        layer=int(x[1])
-        pointStr=x[2]
-
-        pointStr=pointStr[6:-1]
-        coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
-
-        return (refId, lat, lon, layer)
-    
-    def poiRefFromDB(self, x):
-        refId=int(x[0])
-        
-        tags=None
-        if x[1]!=None:
-            tags=pickle.loads(x[1])
-        
-        nodeType=int(x[2])            
-        layer=int(x[3])
-        pointStr=x[4]
-
-        pointStr=pointStr[6:-1]
-        coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
-
-        return (refId, lat, lon, tags, nodeType, layer)
-
-    def poiRefFromDB2(self, x):
-        poiId=int(x[0])
-        refId=int(x[1])
-        
-        tags=None
-        if x[2]!=None:
-            tags=pickle.loads(x[2])
-        
-        nodeType=int(x[3])            
-        layer=int(x[4])
-        if x[5]!=None:
-            country=int(x[5])
-        else:
-            country=None
-        
-        if x[6]!=None:
-            city=int(x[6])
-        else:
-            city=None
-            
-        pointStr=x[7]
-
-        pointStr=pointStr[6:-1]
-        coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
-
-        return (poiId, refId, lat, lon, tags, nodeType, layer, country, city)    
-    
-    def crossingFromDB(self, x):
-        crossingEntryId=x[0]
-        wayid=x[1]
-        refId=x[2]            
-        nextWayIdList=pickle.loads(x[3])
-        return (crossingEntryId, wayid, refId, nextWayIdList)
-    
-    def edgeFromDB(self, x):
-        edgeId=x[0]
-        startRef=x[1]
-        endRef=x[2]
-        length=x[3]
-        wayId=x[4]     
-        source=x[5]
-        target=x[6]
-        cost=x[7]
-        reverseCost=x[8]
-        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)
- 
-    def edgeFromDBWithCoordsString(self, x):
-        edgeId=x[0]
-        startRef=x[1]
-        endRef=x[2]
-        length=x[3]
-        wayId=x[4]     
-        source=x[5]
-        target=x[6]
-        cost=x[7]
-        reverseCost=x[8]
-        streetInfo=x[9]
-        coordsStr=x[10]
-        return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coordsStr)
-
-    def areaFromDBWithCoordsString(self, x):
-        osmId=x[0]
-        areaType=x[1]
-        tags=pickle.loads(x[2])  
-        layer=int(x[3])
-        polyStr=x[4]
-        return (osmId, areaType, tags, layer, polyStr)
-
-    def adminAreaFromDBWithCoordsString(self, x):
-        osmId=x[0]
-        tags=pickle.loads(x[1])
-        adminLevel=int(x[2])  
-        polyStr=x[3]
-        return (osmId, tags, adminLevel, polyStr)
-    
-    def adminAreaFromDBWithParent(self, x):
-        osmId=x[0]
-        tags=pickle.loads(x[1])
-        if x[2]!=None:
-            adminLevel=int(x[2])  
-        else:
-            adminLevel=None
-        if x[3]!=None:
-            parent=int(x[3])
-        else:
-            parent=None
-        return (osmId, tags, adminLevel, parent)
-     
-    def areaFromDB(self, x):
-        osmId=x[0]
-        areaType=x[1]
-        tags=pickle.loads(x[2])  
-        return (osmId, areaType, tags)
     
     def isUsableBarierType(self):
         return Constants.BARIER_NODES_TYPE_SET
@@ -1126,40 +682,9 @@ class OSMDataImport():
         self.addToAddressTable(refId, None, None, streetName, houseNumber, lat, lon)
         return True
     
-    def decodeStreetInfo(self, streetInfo):
-        oneway=(streetInfo&63)>>4
-        roundabout=(streetInfo&127)>>6
-        streetTypeId=(streetInfo&15)
-        return streetTypeId, oneway, roundabout
-    
-#    def encodeStreetInfo(self, streetTypeId, oneway, roundabout):
-#        streetInfo=streetTypeId+(oneway<<4)+(roundabout<<6)
-#        return streetInfo
-    
-    def decodeStreetInfo2(self, streetInfo):
-        oneway=(streetInfo&63)>>4
-        roundabout=(streetInfo&127)>>6
-        tunnel=(streetInfo&255)>>7
-        bridge=(streetInfo&511)>>8
-        streetTypeId=(streetInfo&15)
-        return streetTypeId, oneway, roundabout, tunnel, bridge
-    
     def encodeStreetInfo2(self, streetTypeId, oneway, roundabout, tunnel, bridge):
         streetInfo=streetTypeId+(oneway<<4)+(roundabout<<6)+(tunnel<<7)+(bridge<<8)
         return streetInfo
-    
-    def isValidOnewayEnter(self, oneway, ref, startRef, endRef):
-        # in the middle of a oneway
-        if ref!=startRef and ref!=endRef:
-            return True
-        
-        if oneway==1:
-            if ref==startRef:
-                return True
-        elif oneway==2:
-            if ref==endRef:
-                return True
-        return False
     
     def isValidWay2WayCrossing(self, refs, refs2):
         return (refs[-1]==refs2[0] 
@@ -1190,13 +715,6 @@ class OSMDataImport():
         pickeledTags=pickle.dumps(tags)
 #        compressedTags=zlib.compress(pickeledTags)
         return pickeledTags
-        
-    def decodeWayTags(self, plainTags):
-        if plainTags==None:
-            return dict()
-#        plainTags=zlib.decompress(compressedTags)
-        tags=pickle.loads(plainTags)
-        return tags
         
     def getWaterwayTypes(self):
         return Constants.WATERWAY_TYPE_SET
@@ -1339,6 +857,8 @@ class OSMDataImport():
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
+                            # landuse overrides natural
+                            isNatural=False
                                                    
                     if "railway" in tags:
                         if tags["railway"] in self.getRailwayTypes():
@@ -1596,6 +1116,8 @@ class OSMDataImport():
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
+                            # landuse overrides natural
+                            isNatural=False
                     
                     if "aeroway" in tags:
                         if tags["aeroway"] in self.getAerowayTypes():
@@ -1991,54 +1513,7 @@ class OSMDataImport():
                             continue
                     possibleWays.append((wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout))
         
-        return possibleWays
-            
-    def getAdressCityList(self, countryId):
-        self.cursorAdress.execute('SELECT DISTINCT city, postCode FROM addressTable WHERE country=%d'%(countryId))
-        allentries=self.cursorAdress.fetchall()
-        cityList=list()
-        for x in allentries:
-            if x[0]!=None:
-                cityList.append((int(x[0]), x[1]))
-        return cityList
-
-    def getAdressListForCity(self, countryId, cityId):
-        streetList=list()
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city=%d'%(countryId, cityId))
-        allentries=self.cursorAdress.fetchall()
-        for x in allentries:
-            streetList.append(self.addressFromDB(x))
-
-        return streetList
-
-    def getAdressListForCityRecursive(self, countryId, osmId):
-        streetList=list()
-        cityList=list()
-        self.getAdminChildsForIdRecursive(osmId, cityList)
-        
-        # add self
-        cityList.append((osmId, None, None))
-        filterString='('
-        for cityId, cityName, adminLevel in cityList:
-            filterString=filterString+str(cityId)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
-        
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city IN %s'%(countryId, filterString))
-        allentries=self.cursorAdress.fetchall()
-        for x in allentries:
-            streetList.append(self.addressFromDB(x))
-
-        return streetList         
-                   
-    def getAdressListForCountry(self, countryId):
-        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d'%(countryId))
-        allentries=self.cursorAdress.fetchall()
-        streetList=list()
-        for x in allentries:
-            streetList.append(self.addressFromDB(x))
-
-        return streetList
+        return possibleWays      
     
     def getAdressListForStreetAndNumber(self, streetName, houseNumber):
         streetList=list()
@@ -2049,14 +1524,6 @@ class OSMDataImport():
             streetList.append(self.addressFromDB(x))
             
         return streetList
-        
-    def getAddressForRefId(self, refId):
-        self.cursorAdress.execute('SELECT streetName, houseNumber FROM addressTable WHERE refId=%d'%(refId))
-        allentries=self.cursorAdress.fetchall()
-        if len(allentries)==1:
-            x=allentries[0]
-            return x[0], x[1]
-        return None, None
  
     def getRefListSubset(self, refs, startRef, endRef):
         if not startRef in refs and not endRef in refs:
@@ -2433,25 +1900,6 @@ class OSMDataImport():
         else:
             maxspeed=50
         return maxspeed
-    
-    def isAccessRestricted(self, tags):
-        if "vehicle" in tags:
-            if tags["vehicle"]!="yes":
-                return True
-
-        if "motorcar" in tags:
-            if tags["motorcar"]!="yes":
-                return True
-                
-        if "motor_vehicle" in tags:
-            if tags["motor_vehicle"]!="yes":
-                return True
-            
-        if "access" in tags:
-            if tags["access"]!="yes":
-                return True
-
-        return False
     
     def getAccessFactor(self, tags, streetTypeId):
         if "vehicle" in tags:
@@ -2884,67 +2332,6 @@ class OSMDataImport():
     def getOSMFile(self, country):
         return self.osmList[country]["osmFile"]
     
-    # TODO: should be relativ to this dir by default
-    def getDataDir(self):
-        return os.path.join(getDataRoot(), "data1")
-
-    def getEdgeDBFile(self):
-        file="edge.db"
-        return os.path.join(self.getDataDir(), file)
-
-    def getAreaDBFile(self):
-        file="area.db"
-        return os.path.join(self.getDataDir(), file)
-    
-    def getAdressDBFile(self):
-        file="adress.db"
-        return os.path.join(self.getDataDir(), file)
-    
-    def getCoordsDBFile(self):
-        file="coords.db"
-        return os.path.join(self.getDataDir(), file)
-
-    def getWayDBFile(self):
-        file="ways.db"
-        return os.path.join(self.getDataDir(), file)
-
-    def getNodeDBFile(self):
-        file="nodes.db"
-        return os.path.join(self.getDataDir(), file)
-    
-    def getTmpDBFile(self):
-        file="tmp.db"
-        return os.path.join(self.getDataDir(), file)
-        
-    def deleteCoordsDBFile(self):
-        if os.path.exists(self.getCoordsDBFile()):
-            os.remove(self.getCoordsDBFile())
-
-    def deleteTmpDBFile(self):
-        if os.path.exists(self.getTmpDBFile()):
-            os.remove(self.getTmpDBFile())
-            
-    def coordsDBExists(self):
-        return os.path.exists(self.getCoordsDBFile())
-
-    def edgeDBExists(self):
-        return os.path.exists(self.getEdgeDBFile())
-
-    def areaDBExists(self):
-        return os.path.exists(self.getAreaDBFile())
-
-    def wayDBExists(self):
-        return os.path.exists(self.getWayDBFile())
-
-    def nodeDBExists(self):
-        return os.path.exists(self.getNodeDBFile())
-                
-    def adressDBExists(self):
-        return os.path.exists(self.getAdressDBFile())
-
-    def tmpDBExists(self):
-        return os.path.exists(self.getTmpDBFile())
-
     def initDB(self):
         self.log(self.getDataDir())
         
@@ -3041,7 +2428,7 @@ class OSMDataImport():
             self.commitNodeDB()
             
         # not needed anymore
-        self.closeTmpDB(False)
+        self.closeTmpDB()
 
         if createEdgeDB:            
             self.log("create edges")
@@ -3112,7 +2499,7 @@ class OSMDataImport():
             self.log("vacuum coords DB")
             self.vacuumCoordsDB()
             
-        self.closeCoordsDB(False)
+        self.closeCoordsDB()
         self.closeAllDB()
 
     def parseAreas(self):
@@ -3202,70 +2589,7 @@ class OSMDataImport():
 
 #        self.buSimple=OSMBoarderUtils(env.getPolyDataRootSimple())
 #        self.buSimple.initData()
-            
-#    def countryNameOfPoint(self, lat, lon):
-#        country=self.bu.countryNameOfPoint(lat, lon)
-#        if country==None:
-#            # HACK if the point is exactly on the border:(
-#            country=self.bu.countryNameOfPoint(lat+0.0001, lon+0.0001)
-#        return country
-    
-    def getOSMDataInfo(self):
-        osmDataList=dict()
-        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
-        osmData["poly"]="austria.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Austria"
-        osmDataList[0]=osmData
-        
-#        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
-##        osmData["osmFile"]=None
-#        osmData["poly"]="switzerland.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-#        osmDataList[1]=osmData
-    
-        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
-#        osmData["osmFile"]=None
-        osmData["poly"]="germany.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Germany"
-        osmDataList[2]=osmData
-        
-#        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
-##        osmData["osmFile"]=None
-#        osmData["poly"]="liechtenstein.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
-#        osmDataList[3]=osmData
-
-        return osmDataList
-
-    def test(self):
-        resultList=self.getEdgeEntryForWayId(25491267)
-        for edge in resultList:
-            (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            self.log(edge)
-            
-        resultList=self.getEdgeEntryForWayId(25491266)
-        for edge in resultList:
-            (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            self.log(edge)
-
-        resultList=self.getEdgeEntryForWayId(23685496)
-        for edge in resultList:
-            (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)=edge
-            self.log(edge)
-            
-    def printCrossingsForWayId(self, wayId):
-        self.cursorWay.execute('SELECT * from crossingTable WHERE wayId=%d'%(wayId))
-        allentries=self.cursorWay.fetchall()
-        for x in allentries:
-            self.log(self.crossingFromDB(x))
-
+                        
 #    def recreateCrossings(self):
 #        self.clearCrosssingsTable()
 #        
@@ -3567,48 +2891,7 @@ class OSMDataImport():
             else:
                 parent=int(parent)
                 adminDict[adminLevel]=osmId
-                return self.getAdminListForId(parent, adminDict)
- 
-    def getAdminChildsForId(self, osmId):
-        childList=list()
-        
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            childId=int(x[0])
-            adminLevel=int(x[2])
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
-                if "name" in tags:
-                    childList.append((childId, tags["name"], adminLevel))
-                    
-        return childList
-
-    def getAdminChildsForIdRecursive(self, osmId, childList):        
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            childId=int(x[0])
-            adminLevel=int(x[2])
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
-                if "name" in tags:
-                    childList.append((childId, tags["name"], adminLevel))
-                    self.getAdminChildsForIdRecursive(childId, childList)
-                    
-    
-    def getAdminCountryList(self):
-        adminLevelList=[2]
-        countryDict=dict()
-        adminList=self.getAllAdminAreas(adminLevelList, False)
-            
-        for area in adminList:
-            osmId=area[0]
-            tags=area[1]
-            if "name" in tags:
-                countryDict[osmId]=tags["name"]
-                
-        return countryDict
+                return self.getAdminListForId(parent, adminDict)                    
     
     def vacuumEdgeDB(self):
         self.cursorEdge.execute('VACUUM')
@@ -3753,53 +3036,7 @@ class OSMDataImport():
         lonRangeMin=lon-margin*1.4          
         
         return lonRangeMin, latRangeMin, lonRangeMax, latRangeMax
-            
-    def getAllAdminAreas(self, adminLevelList, sortByAdminLevel):
-
-        filterString='('
-        for adminLevel in adminLevelList:
-            filterString=filterString+str(adminLevel)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
-
-        if sortByAdminLevel==True:
-            sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE adminLevel IN %s ORDER BY adminLevel'%(filterString)
-        else:
-            sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE adminLevel IN %s'%(filterString)
-
-        self.cursorArea.execute(sql)
-             
-        allentries=self.cursorArea.fetchall()
-        resultList=list()
-        for x in allentries:
-            resultList.append(self.adminAreaFromDBWithCoordsString(x))
-            
-        return resultList          
-    
-    def getAdminAreaConversion(self):
-        areaNameDict=dict()
-        reverseAdminAreaDict=dict()
-        
-        sql='SELECT osmId, tags FROM adminAreaTable'
-        self.cursorArea.execute(sql)
-             
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            osmId=x[0]
-            if x[1]==None:
-                continue
-            tags=pickle.loads(x[1])
-            if "name" in tags:
-                adminName=tags["name"]
-                areaNameDict[osmId]=adminName
-                reverseAdminAreaDict[adminName]=osmId
-            
-        return areaNameDict,reverseAdminAreaDict
       
-#    def getCoordsOfEdge(self, edgeId):
-#        (edgeId, _, _, _, _, _, _, _, _, _, coords)=self.getEdgeEntryForEdgeIdWithCoords(edgeId)                    
-#        return coords    
-
 #    def mergeEqualWayEntries(self, wayId):        
 #        self.cursorGlobal.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, AsText(geom) FROM wayTable WHERE wayId=%d'%(wayId))
 #
@@ -4011,7 +3248,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-#    p.testAreaTable()
+    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -4065,8 +3302,6 @@ def main(argv):
 #    p.resolveAdminAreas()
 #    p.resolveAddresses(False)
 #    p.testAdminAreaTable()
-#    self.log(p.getAdminAreaConversion())
-#    p.getPOIEntriesWithAddress()
 
 #    self.log(p.bu.getPolyCountryList())
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))

@@ -124,12 +124,12 @@ class OSMStyle():
         self.colorDict["grassColor"]=QColor(0xcf, 0xec, 0xa8)
         self.colorDict["greenfieldColor"]=QColor(0x9d, 0x9d, 0x6c)
         self.colorDict["industrialColor"]=QColor(0xdf, 0xd1, 0xd6)
-        self.colorDict["aerowayColor"]=QColor(0x50, 0x50, 0x50)
+        self.colorDict["aerowayColor"]=QColor(0xbb, 0xbb, 0xcc)
         self.colorDict["aerowayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
         self.colorDict["nightModeColor"]=QColor(120, 120, 120, 70)
         self.colorDict["villageGreenAreaColor"]=QColor(0xcf, 0xec, 0xa8)
-        
-        
+        self.colorDict["cliffColor"]=QColor(Qt.darkGray)
+        self.colorDict["militaryColor"]=QColor(0xff, 0x55, 0x55)
         self.initStreetColors()
         self.initBrush()
         self.initPens()
@@ -231,7 +231,18 @@ class OSMStyle():
         pen.setColor(self.getStyleColor("aerowayColor"))
         pen.setStyle(Qt.SolidLine)
         self.penDict["aeroway"]=pen
-                      
+        
+        pen=QPen()
+        pen.setColor(self.getStyleColor("cliffColor"))
+        pen.setStyle(Qt.DashLine)
+        pen.setWidth(2.0)
+        self.penDict["cliffPen"]=pen
+        
+        pen=QPen()
+        pen.setColor(self.getStyleColor("militaryColor"))
+        pen.setWidth(3.0)
+        self.penDict["militaryPen"]=pen
+                              
     def getStylePen(self, key):
         if key in self.penDict:
             return self.penDict[key]
@@ -496,7 +507,7 @@ class OSMStyle():
         self.brushDict["natural"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["adminArea"]=QBrush(self.getStyleColor("adminAreaColor"), Qt.SolidPattern)
         self.brushDict["building"]=QBrush(self.getStyleColor("buildingColor"), Qt.SolidPattern)
-        self.brushDict["highway"]=QBrush(self.getStyleColor("highwayAreaColor"), Qt.SolidPattern)
+        self.brushDict["highwayArea"]=QBrush(self.getStyleColor("highwayAreaColor"), Qt.SolidPattern)
         self.brushDict["railwayLanduse"]=QBrush(self.getStyleColor("railwayAreaColor"), Qt.SolidPattern)
         self.brushDict["landuse"]=QBrush(self.getStyleColor("landuseColor"), Qt.SolidPattern)
         self.brushDict["residential"]=QBrush(self.getStyleColor("residentialColor"), Qt.SolidPattern)
@@ -524,7 +535,7 @@ class OSMStyle():
         self.brushDict["scrubArea"]=QBrush(self.getStyleColor("scrubAreaColor"), Qt.SolidPattern)
         self.brushDict["forestArea"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["woodArea"]=QBrush(self.getStyleColor("woodAreaColor"), Qt.SolidPattern)
-
+        
         brush=QBrush(self.getStyleColor("waterColor"))
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/marsh.png")))
         brush.setStyle(Qt.TexturePattern)
@@ -544,6 +555,11 @@ class OSMStyle():
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/grave_yard_generic.png")))
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["cemeteryPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/military.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["militaryPatternArea"]=brush
 
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -741,7 +757,8 @@ class OSMStyle():
 
     def getBrushForLanduseArea(self, tags, zoom):
         brush=Qt.NoBrush
-
+        pen=Qt.NoPen
+        
         landuse=tags["landuse"]
         if landuse=="railway":
             brush=self.getStyleBrush("railwayLanduse")
@@ -769,14 +786,18 @@ class OSMStyle():
         elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
             brush=self.getStyleBrush("natural")
         elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
-            brush=self.getStyleBrush("water")                    
+            brush=self.getStyleBrush("water") 
+        elif landuse=="military":
+            brush=self.getStyleBrush("militaryPatternArea")
+            pen=self.getStylePen("militaryPen")                   
         else:
             brush=self.getStyleBrush("landuse")
-
-        return brush
+        
+        return brush, pen
         
     def getBrushForNaturalArea(self, tags, zoom):
         brush=Qt.NoBrush
+        pen=Qt.NoPen
         if "waterway" in tags:         
             brush=self.getStyleBrush("water")
  
@@ -803,9 +824,9 @@ class OSMStyle():
             
             elif natural=="glacier":
                 brush=self.getStyleBrush("glacierPatternArea")
-
-#            elif natural=="cliff":
-#                brush=self.getStyleBrush("cliffPatternArea")
+            
+            elif natural=="cliff":
+                pen=self.getStylePen("cliffPen")
                 
             else:
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
@@ -813,4 +834,4 @@ class OSMStyle():
                 else:
                     brush=self.getStyleBrush("natural")
         
-        return brush
+        return brush, pen

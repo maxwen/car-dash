@@ -215,3 +215,5 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO: amenity can also be area and relation
   -added parking
   
+  TODO:
+  landuse overrides natural?
