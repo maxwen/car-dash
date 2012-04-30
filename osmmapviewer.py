@@ -2750,17 +2750,17 @@ class QtOSMWidget(QWidget):
             if self.sidebarVisible==True:
                 if self.sidebarRect.contains(eventPos):
                     if self.addressRect.contains(eventPos):
-                        self.parent()._showAdress()
+                        self.osmWidget._showAdress()
                     elif self.favoriteRect.contains(eventPos):
-                        self.parent()._showFavorites()
+                        self.osmWidget._showFavorites()
                     elif self.routesRect.contains(eventPos):
-                        self.parent()._loadRoute()
+                        self.osmWidget._loadRoute()
                     elif self.centerGPSRect.contains(eventPos):
-                        self.parent()._centerGPS()
+                        self.osmWidget._centerGPS()
                     elif self.showGPSDataRect.contains(eventPos):
-                        self.parent()._showGPSData()
+                        self.osmWidget._showGPSData()
                     elif self.optionsRect.contains(eventPos):
-                        self.parent()._showSettings()
+                        self.osmWidget._showSettings()
                     return
                 
             if self.sidebarControlRect.contains(eventPos):
