@@ -6,12 +6,9 @@ Created on Dec 6, 2011
 import configparser
 
 class Config():
-    def __init__(self, fileName=None):
+    def __init__(self, fileName):
         self.config=configparser.ConfigParser()
-        if fileName==None:
-            self.fileName="candash.cfg"
-        else:
-            self.fileName=fileName
+        self.fileName=fileName
         self.readConfig()
         
     def writeConfig(self):

@@ -454,7 +454,7 @@ class CANMonitor(QMainWindow):
         self.replayMode=False
         self.canIdList=[0x621, 0x353, 0x351, 0x635, 0x271, 0x371, 0x623, 0x571, 0x3e5, 0x591, 0x5d1]
         self.updateGPSThread=None
-        self.config=Config()
+        self.config=Config("candash.cfg")
         self.log=Log(False)
         font = self.font()
         font.setPointSize(14)
