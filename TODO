@@ -222,3 +222,6 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   landuse overrides natural?
 
 TODO: remove need of coords.db
+
+TODO: we store poi nodes of ways with the wayId
+which could be same as a node refId

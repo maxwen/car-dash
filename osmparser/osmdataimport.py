@@ -270,11 +270,8 @@ class OSMDataImport(OSMDataSQLite):
 #        None
         
     def addToPOIRefTable(self, refid, lat, lon, tags, nodeType, layer):   
-        # check if nodeType for refid is already in table
-        if refid!=None:
-            storedRefId, _, _, _, _, _=self.getPOIRefEntryForId(refid, nodeType)
-            if storedRefId!=None:
-                return
+        if self.hasPOIRefEntryForPos(refid, lat, lon, nodeType):
+            return
         
         # make complete point
         pointString="'POINT("
@@ -431,13 +428,28 @@ class OSMDataImport(OSMDataSQLite):
             resultList.append(edge)
         return resultList
 
+    # in theory could be more then one if there 
+    # is a wayId same to a node refId
+    # so use it only with wayrefs
     def getPOIRefEntryForId(self, refId, nodeType):
-        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable where refId NOTNULL AND refId=%d AND type=%d'%(refId, nodeType))
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, nodeType))
         allentries=self.cursorNode.fetchall()
         if len(allentries)==1:
             return self.poiRefFromDB(allentries[0])
 
         return None, None, None, None, None, None
+
+    # check ref and position because 
+    # wayId and node refId could be the same
+    def hasPOIRefEntryForPos(self, refId, lat, lon, nodeType):
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, nodeType))
+        allentries=self.cursorNode.fetchall()
+        for x in allentries:
+            _, storedLat, storedLon, _, _, _=self.poiRefFromDB(x)
+            if storedLat==lat and storedLon==lon:
+                return True
+            
+        return False
     
     def getAllPOIRefEntrysDict(self, nodeTypeList):
         filterString='('
@@ -801,46 +813,36 @@ class OSMDataImport(OSMDataSQLite):
             if "building" in tags:
                 if self.skipAddress==False:
                     if "addr:street" in tags:
-#                        storedRef, _, _=self.getCoordsEntry(refs[0])
-#                        if storedRef!=None:
-                            lat, lon=self.getCenterOfPolygon(refs)
-                            self.parseFullAddress(tags, None, lat, lon)
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        self.parseFullAddress(tags, None, lat, lon)
                         
             if "amenity" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
-#                        storedRef, _, _=self.getCoordsEntry(refs[0])
-#                        if storedRef!=None:
-                            lat, lon=self.getCenterOfPolygon(refs)
-                            self.addToPOIRefTable(None, lat, lon, tags, nodeType, layer)
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
 
             if "shop" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
-#                        storedRef, _, _=self.getCoordsEntry(refs[0])
-#                        if storedRef!=None:
-                            lat, lon=self.getCenterOfPolygon(refs)
-                            self.addToPOIRefTable(None, lat, lon, tags, nodeType, layer)
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
 
             if "aeroway" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
                     if nodeType!=-1:
-#                        storedRef, _, _=self.getCoordsEntry(refs[0])
-#                        if storedRef!=None:
-                            lat, lon=self.getCenterOfPolygon(refs)
-                            self.addToPOIRefTable(None, lat, lon, tags, nodeType, layer)
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
 
             if "tourism" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
-#                        storedRef, _, _=self.getCoordsEntry(refs[0])
-#                        if storedRef!=None:
-                            lat, lon=self.getCenterOfPolygon(refs)
-                            self.addToPOIRefTable(None, lat, lon, tags, nodeType, layer)
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
 
             if not "highway" in tags:   
                 # could be part of a relation                    

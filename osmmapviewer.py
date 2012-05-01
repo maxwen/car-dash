@@ -4407,8 +4407,7 @@ class OSMWidget(QWidget):
         result=searchDialog.exec()
         if result==QDialog.Accepted:
             address, pointType=searchDialog.getResult()
-            (_, refId, country, _, _, streetName, houseNumber, lat, lon)=address
-#            print(refId)
+            (_, _, _, _, _, streetName, houseNumber, lat, lon)=address
             if houseNumber!=None:
                 name=streetName+" "+houseNumber
             else:

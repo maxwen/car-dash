@@ -158,10 +158,7 @@ class OSMDataSQLite():
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)   
     
     def poiRefFromDB(self, x):
-        if x[0]!=None:
-            refId=int(x[0])
-        else:
-            refId=None
+        refId=int(x[0])
             
         tags=None
         if x[1]!=None:
@@ -179,12 +176,8 @@ class OSMDataSQLite():
         return (refId, lat, lon, tags, nodeType, layer)
 
     def poiRefFromDB2(self, x):
-        poiId=int(x[0])
-        
-        if x[0]!=None:
-            refId=int(x[0])
-        else:
-            refId=None
+        poiId=int(x[0]) 
+        refId=int(x[1])
         
         tags=None
         if x[2]!=None:
