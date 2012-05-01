@@ -121,7 +121,7 @@ class OSMRoute():
 
     def routingPointValid(self):
         for point in self.routingPointList:
-            if point.getSource()==0:
+            if point.getSource()==0 or point.getClosestRefPos()==None:
                 return False
         return True
     
@@ -194,6 +194,8 @@ class OSMRoutingPoint():
         self.usedRefId=0
 #        self.country=None                
         self.posOnEdge=0.0
+        self.refPos=None
+        self.closestRefPos=None
     
     def resolveFromPos(self, osmParserData):
         edgeId, _=osmParserData.getEdgeIdOnPos(self.lat, self.lon, DEFAULT_SEARCH_MARGIN, 30.0)
@@ -204,23 +206,31 @@ class OSMRoutingPoint():
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         wayId, _, refs, _, _, _, _, _=osmParserData.getWayEntryForId(wayId)
         if wayId==None:
+            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
         
         refList=osmParserData.getRefListSubset(refs, startRef, endRef)
-        ref, point=osmParserData.getClosestRefOnEdge(self.lat, self.lon, refList, coords, 30.0)
+        ref, refPoint, point=osmParserData.getClosestRefOnEdge(self.lat, self.lon, refList, coords, 30.0)
 
-        self.lat=point[0]
-        self.lon=point[1]
+        if ref==None:
+            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
+            return 
+        
+        self.closestRefPos=point
         self.edgeId=edgeId
         self.target=target
         self.source=source
         self.usedRefId=ref
         self.wayId=wayId
+        self.refPos=refPoint
 #        self.country=country
         
-        self.posOnEdge=osmParserData.getPosOnOnEdge(self.lat, self.lon, coords, length)
+        self.posOnEdge=osmParserData.getPosOnOnEdge(self.closestRefPos[0], self.closestRefPos[1], coords, length)
 #        print(self.posOnEdge)
 
+    def isValid(self):
+        return self.closestRefPos!=None
+    
     def getPosOnEdge(self):
         return self.posOnEdge
     
@@ -246,6 +256,12 @@ class OSMRoutingPoint():
     
     def getPos(self):
         return (self.lat, self.lon)
+    
+    def getClosestRefPos(self):
+        return self.closestRefPos
+    
+    def getRefPos(self):
+        return self.refPos
     
     def getEdgeId(self):
         return self.edgeId

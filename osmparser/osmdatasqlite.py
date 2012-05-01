@@ -158,8 +158,11 @@ class OSMDataSQLite():
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)   
     
     def poiRefFromDB(self, x):
-        refId=int(x[0])
-        
+        if x[0]!=None:
+            refId=int(x[0])
+        else:
+            refId=None
+            
         tags=None
         if x[1]!=None:
             tags=pickle.loads(x[1])
@@ -177,7 +180,11 @@ class OSMDataSQLite():
 
     def poiRefFromDB2(self, x):
         poiId=int(x[0])
-        refId=int(x[1])
+        
+        if x[0]!=None:
+            refId=int(x[0])
+        else:
+            refId=None
         
         tags=None
         if x[2]!=None:

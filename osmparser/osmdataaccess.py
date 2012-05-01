@@ -551,7 +551,7 @@ class OSMDataAccess(OSMDataSQLite):
                     prevRefId=routeEndRefId
                      
                 if prevRefId!=routeEndRefId:
-                    lat, lon=endPoint.getPos()
+                    lat, lon=endPoint.getClosestRefPos()
                     onLine=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
                     if onLine==True:
                         routeEndRefId=prevRefId
@@ -571,7 +571,7 @@ class OSMDataAccess(OSMDataSQLite):
                     nextRefId=routeStartRefId
                                     
                 if nextRefId!=routeStartRefId:
-                    lat, lon=startPoint.getPos()
+                    lat, lon=startPoint.getClosestRefPos()
                     onLine=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
                     if onLine==True:
                         routeStartRefId=nextRefId
@@ -585,7 +585,7 @@ class OSMDataAccess(OSMDataSQLite):
             
             if routeStartRefId!=None and routeStartRefPassed==False:
                 if ref==routeStartRefId:
-                    startLat, startLon=startPoint.getPos()
+                    startLat, startLon=startPoint.getClosestRefPos()
                     preTrackItemRef=dict()
                     preTrackItemRef["coords"]=(startLat, startLon)
                     trackItemRefs.append(preTrackItemRef)
@@ -612,7 +612,7 @@ class OSMDataAccess(OSMDataSQLite):
             trackItemRefs.append(trackItemRef)
 
             if routeEndRefId!=None and ref==routeEndRefId:
-                endLat, endLon=endPoint.getPos()
+                endLat, endLon=endPoint.getClosestRefPos()
                 postTrackItemRef=dict()
                 postTrackItemRef["coords"]=(endLat, endLon)
                 postTrackItemRef["direction"]=99
@@ -815,12 +815,12 @@ class OSMDataAccess(OSMDataSQLite):
         indexEnd=refListPart.index(routeEndRefId)
 
         if indexEnd-indexStart<=1 or len(refListPart)==2:
-            startLat, startLon=startPoint.getPos()
+            startLat, startLon=startPoint.getClosestRefPos()
             preTrackItemRef=dict()
             preTrackItemRef["coords"]=(startLat, startLon)
             trackItemRefs.append(preTrackItemRef)
 
-            endLat, endLon=endPoint.getPos()
+            endLat, endLon=endPoint.getClosestRefPos()
             postTrackItemRef=dict()
             postTrackItemRef["coords"]=(endLat, endLon)
             trackItemRefs.append(postTrackItemRef)
@@ -835,7 +835,7 @@ class OSMDataAccess(OSMDataSQLite):
                 prevRefId=routeEndRefId
                  
             if prevRefId!=routeEndRefId:
-                lat, lon=endPoint.getPos()
+                lat, lon=endPoint.getClosestRefPos()
                 onLine=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
                 if onLine==True:
                     routeEndRefId=prevRefId
@@ -846,7 +846,7 @@ class OSMDataAccess(OSMDataSQLite):
                 nextRefId=routeStartRefId
                                 
             if nextRefId!=routeStartRefId:
-                lat, lon=startPoint.getPos()
+                lat, lon=startPoint.getClosestRefPos()
                 onLine=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
                 if onLine==True:
                     routeStartRefId=nextRefId
@@ -860,7 +860,7 @@ class OSMDataAccess(OSMDataSQLite):
           
                 if routeStartRefId!=None and routeStartRefPassed==False:
                     if ref==routeStartRefId:
-                        startLat, startLon=startPoint.getPos()
+                        startLat, startLon=startPoint.getClosestRefPos()
                         preTrackItemRef=dict()
                         preTrackItemRef["coords"]=(startLat, startLon)
                         trackItemRefs.append(preTrackItemRef)
@@ -877,7 +877,7 @@ class OSMDataAccess(OSMDataSQLite):
                 trackItemRefs.append(trackItemRef)
                 
                 if routeEndRefId!=None and ref==routeEndRefId:
-                    endLat, endLon=endPoint.getPos()
+                    endLat, endLon=endPoint.getClosestRefPos()
                     postTrackItemRef=dict()
                     postTrackItemRef["coords"]=(endLat, endLon)
                     trackItemRefs.append(postTrackItemRef)
@@ -946,6 +946,7 @@ class OSMDataAccess(OSMDataSQLite):
 
     def getClosestRefOnEdge(self, lat, lon, refs, coords, maxDistance):
         closestRef=None
+        closestRefPoint=None
         closestPoint=None
         
         minDistance=maxDistance
@@ -960,11 +961,14 @@ class OSMDataAccess(OSMDataSQLite):
                     distance2=self.osmutils.distance(lat, lon, lat2, lon2)
                     if distance1<distance2:
                         closestRef=refs[i]
+                        closestRefPoint=coords[i]
                     else:
                         if i<len(refs)-1:
                             closestRef=refs[i+1]
+                            closestRefPoint=coords[i+1]
                         else:
                             closestRef=refs[-1]
+                            closestRefPoint=coords[-1]
                             
                     closestPoint=point
                 
@@ -972,7 +976,7 @@ class OSMDataAccess(OSMDataSQLite):
             lon1=lon2
             i=i+1
 
-        return closestRef, closestPoint
+        return closestRef, closestRefPoint, closestPoint
     
     def getPosOnOnEdge(self, lat, lon, coords, edgeLength):
         length=self.getLengthOnEdge(lat, lon, coords)

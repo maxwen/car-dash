@@ -18,7 +18,7 @@ from utils.gisutils import GISUtils
 import cProfile
 
 from PyQt4.QtCore import QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
 from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
@@ -875,8 +875,10 @@ class QtOSMWidget(QWidget):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
         
         y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])        
-        self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("mapPointPixmap")))
-         
+        if self.isPointVisibleTransformed(x, y):
+            self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("mapPointPixmap")))        
+            self.displayRoutingPointRefPositions(mapPoint)
+        
     def osm_autocenter_map(self, update=True):
         if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
             (pixel_y, pixel_x)=self.getPixelPosForLocationRad(self.gps_rlat, self.gps_rlon, False)
@@ -1261,7 +1263,7 @@ class QtOSMWidget(QWidget):
         else:
             self.showTiles()
                     
-        if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and not self.routeCalculationThread.isRunning():
+        if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
             if self.currentEdgeIndexList!=None:
                 self.displayRouteOverlay(self.currentTrackList, self.currentEdgeIndexList)
@@ -1386,12 +1388,11 @@ class QtOSMWidget(QWidget):
         
         self.painter.end()
 
-#        self.unsetCursor()
-
         if WITH_TIMING_DEBUG==True:
             print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
             print("displayedWays: %d hiddenWays: %d"%(self.numVisibleWays, self.numHiddenWays))
-            print("paintEvent:%f"%(time.time()-start))
+        
+        print("paintEvent:%f"%(time.time()-start))
   
     def displaySidebar(self):
         diff =40-32
@@ -2281,23 +2282,38 @@ class QtOSMWidget(QWidget):
 #            
 #            self.painter.drawPixmap(x, y, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("tunnelPixmap"))
             
+    def displayRoutingPointRefPositions(self, point):
+        if not point.isValid():
+            return
+        
+        y,x=self.getTransformedPixelPosForLocationDeg(point.getClosestRefPos()[0], point.getClosestRefPos()[1])        
+        pen=QPen()
+        pen.setColor(Qt.green)
+        pen.setWidth(self.style.getPenWithForPoints(self.map_zoom))  
+        pen.setCapStyle(Qt.RoundCap)
+        self.painter.setPen(pen)
+        self.painter.drawPoint(x, y)
+
     def displayRoutingPoints(self):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
 
         if self.startPoint!=None:
-            (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.getPos()[0], self.startPoint.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
                 self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("startPixmap")))
+                self.displayRoutingPointRefPositions(self.startPoint)
 
         if self.endPoint!=None:
-            (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.lat, self.endPoint.lon)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.getPos()[0], self.endPoint.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
                 self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("finishPixmap")))
+                self.displayRoutingPointRefPositions(self.endPoint)
             
         for point in self.wayPoints:
-            (y, x)=self.getTransformedPixelPosForLocationDeg(point.lat, point.lon)
+            (y, x)=self.getTransformedPixelPosForLocationDeg(point.getPos()[0], point.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
                 self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("wayPixmap")))
+                self.displayRoutingPointRefPositions(point)
             
     
     def getPixelPosForLocationDeg(self, lat, lon, relativeToEdge):
@@ -2700,6 +2716,8 @@ class QtOSMWidget(QWidget):
 
                 if self.wayInfo!=None:
                     self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
+                    self.gpsPoint.resolveFromPos(osmParserData)
+
                 else:
                     self.gpsPoint=None  
 
@@ -3004,6 +3022,7 @@ class QtOSMWidget(QWidget):
         elif action==recalcRouteAction:
             (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))                
+            currentPoint.resolveFromPos(osmParserData)
             self.recalcRouteFromPoint(currentPoint)
         elif action==recalcRouteGPSAction:
             self.recalcRouteFromPoint(self.gpsPoint)
@@ -3170,6 +3189,7 @@ class QtOSMWidget(QWidget):
         if result==QDialog.Accepted:
             favoriteName=favNameDialog.getResult()
             favoritePoint=OSMRoutingPoint(favoriteName, OSMRoutingPoint.TYPE_FAVORITE, (lat, lon))
+            favoritePoint.resolveFromPos(osmParserData)
             self.osmWidget.favoriteList.append(favoritePoint)
             
     def addRoutingPoint(self, pointType):
@@ -3253,6 +3273,7 @@ class QtOSMWidget(QWidget):
             return 
         
         recalcPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))    
+        recalcPoint.resolveFromPos(osmParserData)
         
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished():
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
@@ -3504,7 +3525,10 @@ class QtOSMWidget(QWidget):
         # make sure all are resolved because we cannot access
         # the db from the thread
         self.currentRoute.resolveRoutingPoints(osmParserData)
+        
         if not self.currentRoute.routingPointValid():
+            msgBox=QMessageBox(QMessageBox.Warning, "Routing Error", "Route has invalid routing points", QMessageBox.Ok, self)
+            msgBox.exec()
             print("route has invalid routing points")
             return
 
@@ -3525,6 +3549,9 @@ class QtOSMWidget(QWidget):
         self.currentRoute.changeRouteFromPoint(currentPoint, osmParserData)
         self.currentRoute.resolveRoutingPoints(osmParserData)
         if not self.currentRoute.routingPointValid():
+            msgBox=QMessageBox(QMessageBox.Warning, "Routing Error", "Route has invalid routing points", QMessageBox.Ok, self)
+            msgBox.exec()
+
             print("route has invalid routing points")
             return
         
@@ -3570,7 +3597,7 @@ class QtOSMWidget(QWidget):
 #            print(self.currentEdgeList)
             
     def currentTargetPointReached(self, lat, lon):
-        targetLat, targetLon=self.currentTargetPoint.getPos()
+        targetLat, targetLon=self.currentTargetPoint.getClosestRefPos()
         if self.osmutils.distance(lat, lon, targetLat, targetLon)<30:
             return True
         return False
@@ -3661,12 +3688,25 @@ class QtOSMWidget(QWidget):
                 if name[:5]=="point":
                     point=OSMRoutingPoint()
                     point.readFromConfig(value)
-                    if point.getType()==0:
+                    if point.getType()==OSMRoutingPoint.TYPE_START:
                         self.startPoint=point
-                    if point.getType()==1:
+                    if point.getType()==OSMRoutingPoint.TYPE_END:
                         self.endPoint=point
-                    if point.getType()==2:
+                    if point.getType()==OSMRoutingPoint.TYPE_WAY:
                         self.wayPoints.append(point)
+                    if point.getType()==OSMRoutingPoint.TYPE_MAP:
+                        self.mapPoint=point
+                    point.resolveFromPos(osmParserData)
+
+        section="mapPoints"
+        if config.hasSection(section):
+            for name, value in config.items(section):
+                if name[:5]=="point":
+                    point=OSMRoutingPoint()
+                    point.readFromConfig(value)
+                    if point.getType()==OSMRoutingPoint.TYPE_MAP:
+                        self.mapPoint=point
+                    point.resolveFromPos(osmParserData)
                     
         section="route"
         self.routeList=list()
@@ -3693,6 +3733,13 @@ class QtOSMWidget(QWidget):
         
         if self.endPoint!=None:
             self.endPoint.saveToConfig(config, section, "point%d"%(i))
+
+        section="mapPoints"
+        config.removeSection(section)
+        config.addSection(section)
+        i=0
+        if self.mapPoint!=None:
+            self.mapPoint.saveToConfig(config, section, "point%d"%(i))
         
         section="route"
         config.removeSection(section)
@@ -4367,16 +4414,20 @@ class OSMWidget(QWidget):
             else:
                 name=streetName
             if pointType==OSMRoutingPoint.TYPE_START:
-                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                routingPoint.resolveFromPos(osmParserData)
                 self.mapWidgetQt.setStartPoint(routingPoint) 
             elif pointType==OSMRoutingPoint.TYPE_END:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                routingPoint.resolveFromPos(osmParserData)
                 self.mapWidgetQt.setEndPoint(routingPoint) 
             elif pointType==OSMRoutingPoint.TYPE_WAY:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                routingPoint.resolveFromPos(osmParserData)
                 self.mapWidgetQt.setWayPoint(routingPoint) 
             elif pointType==pointType:
-                mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                mapPoint.resolveFromPos(osmParserData)
                 self.mapWidgetQt.showPointOnMap(mapPoint)
   
     @pyqtSlot()
@@ -4389,15 +4440,19 @@ class OSMWidget(QWidget):
             if point!=None:
                 if pointType==OSMRoutingPoint.TYPE_START:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    routingPoint.resolveFromPos(osmParserData)
                     self.mapWidgetQt.setStartPoint(routingPoint) 
                 elif pointType==OSMRoutingPoint.TYPE_END:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    routingPoint.resolveFromPos(osmParserData)
                     self.mapWidgetQt.setEndPoint(routingPoint) 
                 elif pointType==OSMRoutingPoint.TYPE_WAY:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    routingPoint.resolveFromPos(osmParserData)
                     self.mapWidgetQt.setWayPoint(routingPoint) 
                 elif pointType==OSMRoutingPoint.TYPE_MAP:
                     mapPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
+                    mapPoint.resolveFromPos(osmParserData)
                     self.mapWidgetQt.showPointOnMap(mapPoint)
 
     @pyqtSlot()
