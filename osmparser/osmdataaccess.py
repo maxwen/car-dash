@@ -199,7 +199,7 @@ class OSMDataAccess(OSMDataSQLite):
         if len(allentries)==1:
             edge=self.edgeFromDBWithCoords(allentries[0])
             return edge
-        print("no edge with %d"%(edgeId))
+
         return (None, None, None, None, None, None, None, None, None, None, None)
         
     def getEdgeEntryForStartPoint(self, startRef, edgeId):

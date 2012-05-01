@@ -119,9 +119,9 @@ class OSMRoute():
             if point.getSource()==0:
                 point.resolveFromPos(osmParserData)
 
-    def routingPointValid(self):
+    def isValid(self):
         for point in self.routingPointList:
-            if point.getSource()==0 or point.getClosestRefPos()==None:
+            if not point.isValid():
                 return False
         return True
     
@@ -229,7 +229,7 @@ class OSMRoutingPoint():
 #        print(self.posOnEdge)
 
     def isValid(self):
-        return self.closestRefPos!=None
+        return self.closestRefPos!=None and self.source!=0
     
     def getPosOnEdge(self):
         return self.posOnEdge

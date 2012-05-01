@@ -2717,6 +2717,8 @@ class QtOSMWidget(QWidget):
                 if self.wayInfo!=None:
                     self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
                     self.gpsPoint.resolveFromPos(osmParserData)
+                    if not self.gpsPoint.isValid():
+                        self.gpsPoint=None
 
                 else:
                     self.gpsPoint=None  
@@ -3023,7 +3025,11 @@ class QtOSMWidget(QWidget):
             (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))                
             currentPoint.resolveFromPos(osmParserData)
-            self.recalcRouteFromPoint(currentPoint)
+            if currentPoint.getClosestRefPos()!=None:
+                self.recalcRouteFromPoint(currentPoint)
+            else:
+                self.showError("Error", "Route has invalid routing points")
+
         elif action==recalcRouteGPSAction:
             self.recalcRouteFromPoint(self.gpsPoint)
         elif action==showAdminHierarchy:
@@ -3190,8 +3196,11 @@ class QtOSMWidget(QWidget):
             favoriteName=favNameDialog.getResult()
             favoritePoint=OSMRoutingPoint(favoriteName, OSMRoutingPoint.TYPE_FAVORITE, (lat, lon))
             favoritePoint.resolveFromPos(osmParserData)
-            self.osmWidget.favoriteList.append(favoritePoint)
-            
+            if favoritePoint.isValid():
+                self.osmWidget.favoriteList.append(favoritePoint)
+            else:
+                self.showError("Error", "Failed to resolve point")
+
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
@@ -3209,10 +3218,11 @@ class QtOSMWidget(QWidget):
 
             point=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             point.resolveFromPos(osmParserData)
-            if point.getSource()!=0:
+            if point.isValid():
                 self.startPoint=point
             else:
-                print("point not usable for routing")
+                self.showError("Error", "Failed to resolve start point")
+
         elif pointType==1:
             if defaultPointTag!=None:
                 defaultName=defaultPointTag
@@ -3221,10 +3231,10 @@ class QtOSMWidget(QWidget):
                 
             point=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             point.resolveFromPos(osmParserData)
-            if point.getSource()!=0:
+            if point.isValid():
                 self.endPoint=point
             else:
-                print("point not usable for routing")
+                self.showError("Error", "Failed to resolve finish point")
 
         elif pointType==2:
             if defaultPointTag!=None:
@@ -3234,10 +3244,10 @@ class QtOSMWidget(QWidget):
 
             wayPoint=OSMRoutingPoint(defaultName, pointType, (lat, lon))
             wayPoint.resolveFromPos(osmParserData)
-            if wayPoint.getSource()!=0:
+            if wayPoint.isValid():
                 self.wayPoints.append(wayPoint)
             else:
-                print("point not usable for routing")
+                self.showError("Error", "Failed to resolve way point")
         
     def showRoutingPointOnMap(self, routingPoint):
         if self.map_zoom<15:
@@ -3274,6 +3284,8 @@ class QtOSMWidget(QWidget):
         
         recalcPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))    
         recalcPoint.resolveFromPos(osmParserData)
+        if not recalcPoint.isValid():
+            return 
         
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished():
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
@@ -3526,13 +3538,9 @@ class QtOSMWidget(QWidget):
         # the db from the thread
         self.currentRoute.resolveRoutingPoints(osmParserData)
         
-        if not self.currentRoute.routingPointValid():
-            msgBox=QMessageBox(QMessageBox.Warning, "Routing Error", "Route has invalid routing points", QMessageBox.Ok, self)
-            msgBox.exec()
-            print("route has invalid routing points")
+        if not self.currentRoute.isValid():
+            self.showError("Error", "Route has invalid routing points")
             return
-
-#            self.currentRoute.calcRouteTest(osmParserData)
 
         self.routeCalculationThread=OSMRouteCalcWorker(self)
         self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
@@ -3548,11 +3556,8 @@ class QtOSMWidget(QWidget):
         # the db from the thread
         self.currentRoute.changeRouteFromPoint(currentPoint, osmParserData)
         self.currentRoute.resolveRoutingPoints(osmParserData)
-        if not self.currentRoute.routingPointValid():
-            msgBox=QMessageBox(QMessageBox.Warning, "Routing Error", "Route has invalid routing points", QMessageBox.Ok, self)
-            msgBox.exec()
-
-            print("route has invalid routing points")
+        if not self.currentRoute.isValid():
+            self.showError("Error", "Route has invalid routing points")
             return
         
         self.routeCalculationThread=OSMRouteCalcWorker(self)
@@ -3688,15 +3693,20 @@ class QtOSMWidget(QWidget):
                 if name[:5]=="point":
                     point=OSMRoutingPoint()
                     point.readFromConfig(value)
-                    if point.getType()==OSMRoutingPoint.TYPE_START:
-                        self.startPoint=point
-                    if point.getType()==OSMRoutingPoint.TYPE_END:
-                        self.endPoint=point
-                    if point.getType()==OSMRoutingPoint.TYPE_WAY:
-                        self.wayPoints.append(point)
-                    if point.getType()==OSMRoutingPoint.TYPE_MAP:
-                        self.mapPoint=point
                     point.resolveFromPos(osmParserData)
+                    
+                    if point.isValid():
+                        if point.getType()==OSMRoutingPoint.TYPE_START:
+                            self.startPoint=point
+                        if point.getType()==OSMRoutingPoint.TYPE_END:
+                            self.endPoint=point
+                        if point.getType()==OSMRoutingPoint.TYPE_WAY:
+                            self.wayPoints.append(point)
+                        if point.getType()==OSMRoutingPoint.TYPE_MAP:
+                            self.mapPoint=point
+                    else:
+                        print("failed to resolve point %s"%(value))
+                    
 
         section="mapPoints"
         if config.hasSection(section):
@@ -3704,9 +3714,12 @@ class QtOSMWidget(QWidget):
                 if name[:5]=="point":
                     point=OSMRoutingPoint()
                     point.readFromConfig(value)
-                    if point.getType()==OSMRoutingPoint.TYPE_MAP:
-                        self.mapPoint=point
                     point.resolveFromPos(osmParserData)
+                    if point.isValid():
+                        if point.getType()==OSMRoutingPoint.TYPE_MAP:
+                            self.mapPoint=point
+                    else:
+                        print("failed to resolve point %s"%(value))
                     
         section="route"
         self.routeList=list()
@@ -3765,6 +3778,12 @@ class QtOSMWidget(QWidget):
         self.wayPoints.append(point)
         self.update()
         
+    def showError(self, title, text):
+        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
+        font = self.font()
+        font.setPointSize(14)
+        msgBox.setFont(font)
+        msgBox.exec()
 
 #---------------------
 
@@ -3799,6 +3818,13 @@ class OSMWidget(QWidget):
         self.test=test
         osmParserData.openAllDB()
 
+    def showError(self, title, text):
+        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
+        font = self.font()
+        font.setPointSize(14)
+        msgBox.setFont(font)
+        msgBox.exec()
+        
     def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
         hbox1.addWidget(self.mapWidgetQt)
@@ -4415,19 +4441,32 @@ class OSMWidget(QWidget):
             if pointType==OSMRoutingPoint.TYPE_START:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))
                 routingPoint.resolveFromPos(osmParserData)
-                self.mapWidgetQt.setStartPoint(routingPoint) 
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setStartPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve start point")
             elif pointType==OSMRoutingPoint.TYPE_END:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 routingPoint.resolveFromPos(osmParserData)
-                self.mapWidgetQt.setEndPoint(routingPoint) 
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setEndPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve finish point")
             elif pointType==OSMRoutingPoint.TYPE_WAY:
                 routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
                 routingPoint.resolveFromPos(osmParserData)
-                self.mapWidgetQt.setWayPoint(routingPoint) 
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setWayPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve way point")
+
             elif pointType==pointType:
                 mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
                 mapPoint.resolveFromPos(osmParserData)
-                self.mapWidgetQt.showPointOnMap(mapPoint)
+                if mapPoint.isValid():
+                    self.mapWidgetQt.showPointOnMap(mapPoint)
+                else:
+                    self.showError("Error", "Failed to resolve map point")
   
     @pyqtSlot()
     def _showFavorites(self):
@@ -4439,20 +4478,32 @@ class OSMWidget(QWidget):
             if point!=None:
                 if pointType==OSMRoutingPoint.TYPE_START:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
-                    routingPoint.resolveFromPos(osmParserData)
-                    self.mapWidgetQt.setStartPoint(routingPoint) 
+                    routingPoint.resolveFromPos(osmParserData)                    
+                    if routingPoint.isValid():
+                        self.mapWidgetQt.setStartPoint(routingPoint) 
+                    else:
+                        self.showError("Error", "Failed to resolve start point")
                 elif pointType==OSMRoutingPoint.TYPE_END:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     routingPoint.resolveFromPos(osmParserData)
-                    self.mapWidgetQt.setEndPoint(routingPoint) 
+                    if routingPoint.isValid():
+                        self.mapWidgetQt.setEndPoint(routingPoint) 
+                    else:
+                        self.showError("Error", "Failed to resolve finish point")
                 elif pointType==OSMRoutingPoint.TYPE_WAY:
                     routingPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     routingPoint.resolveFromPos(osmParserData)
-                    self.mapWidgetQt.setWayPoint(routingPoint) 
+                    if routingPoint.isValid():
+                        self.mapWidgetQt.setWayPoint(routingPoint) 
+                    else:
+                        self.showError("Error", "Failed to resolve way point")
                 elif pointType==OSMRoutingPoint.TYPE_MAP:
                     mapPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
                     mapPoint.resolveFromPos(osmParserData)
-                    self.mapWidgetQt.showPointOnMap(mapPoint)
+                    if mapPoint.isValid():
+                        self.mapWidgetQt.showPointOnMap(mapPoint)
+                    else:
+                        self.showError("Error", "Failed to resolve map point")
 
     @pyqtSlot()
     def _loadRoute(self):
@@ -4464,6 +4515,10 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setRouteList(routeList)
             if route!=None:
                 self.mapWidgetQt.setRoute(route)
+                route.resolveRoutingPoints(osmParserData)
+                if not route.isValid():
+                    self.showError("Error", "Route has invalid routing points")
+
                 # zoom to route
                 self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
                 

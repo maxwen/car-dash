@@ -518,7 +518,7 @@ class OSMAdressDialog(QDialog):
         self.setStartPointButton.setEnabled(False)
         actionButtons.addWidget(self.setStartPointButton)
         
-        self.setEndPointButton=QPushButton("End", self)
+        self.setEndPointButton=QPushButton("Finish", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)
@@ -541,13 +541,6 @@ class OSMAdressDialog(QDialog):
         self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
         self.cancelButton.clicked.connect(self._cancel)
         buttons.addWidget(self.cancelButton)
-
-#        self.okButton=QPushButton("End Point", self)
-#        self.okButton.clicked.connect(self._ok)
-#        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-#        self.okButton.setEnabled(False)
-#        self.okButton.setDefault(True)
-#        buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
         
@@ -866,7 +859,7 @@ class OSMFavoritesDialog(QDialog):
         self.setStartPointButton.setEnabled(False)
         actionButtons2.addWidget(self.setStartPointButton)
         
-        self.setEndPointButton=QPushButton("End", self)
+        self.setEndPointButton=QPushButton("Finish", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)

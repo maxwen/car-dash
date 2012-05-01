@@ -270,6 +270,7 @@ class OSMDataImport(OSMDataSQLite):
 #        None
         
     def addToPOIRefTable(self, refid, lat, lon, tags, nodeType, layer):   
+        # dont add it twice
         if self.hasPOIRefEntryForPos(refid, lat, lon, nodeType):
             return
         
