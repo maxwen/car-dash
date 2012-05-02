@@ -1110,20 +1110,21 @@ class OSMDataAccess(OSMDataSQLite):
             routeInfoEntry["length"]=allLength
     
     def isAccessRestricted(self, tags):
+        value=None
         if "vehicle" in tags:
-            if tags["vehicle"]!="yes":
-                return True
+            value=tags["vehicle"]
 
         if "motorcar" in tags:
-            if tags["motorcar"]!="yes":
-                return True
+            value=tags["motorcar"]
                 
         if "motor_vehicle" in tags:
-            if tags["motor_vehicle"]!="yes":
-                return True
+            value=tags["motor_vehicle"]
             
         if "access" in tags:
-            if tags["access"]!="yes":
+            value=tags["access"]
+        
+        if value!=None:
+            if value!="yes":
                 return True
 
         return False

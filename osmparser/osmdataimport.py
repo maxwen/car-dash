@@ -1209,6 +1209,11 @@ class OSMDataImport(OSMDataSQLite):
                             break
                         
                         cPolygonOuter=refRingEntry["polygon"]
+                        if cPolygonOuter==None:
+                            self.log("skip outer multipolygon: %d invalid Polygon"%(osmid))
+                            skipArea=True
+                            break
+                        
                         newRefList=refRingEntry["newRefs"]
                         outerCoords=refRingEntry["coords"]
                         if len(refs)!=len(newRefList):
@@ -1230,6 +1235,10 @@ class OSMDataImport(OSMDataSQLite):
                                     continue
                                 
                                 cPolygonInner=innerRefRingEntry["polygon"]
+                                if cPolygonInner==None:
+                                    self.log("skip inner multipolygon: %d invalid Polygon"%(osmid))
+                                    continue
+                                
                                 if not cPolygonOuter.covers(cPolygonInner):
                                     continue
                                 
@@ -1342,10 +1351,13 @@ class OSMDataImport(OSMDataSQLite):
                 refRingEntry["refs"]=refs
                 refRingEntry["wayIdList"]=wayIdList
                 coords, newRefList=self.createRefsCoords(refs)
-                cPolygon=Polygon(coords)
+                if len(coords)>=3:
+                    cPolygon=Polygon(coords)
+                    refRingEntry["polygon"]=cPolygon
+                else:
+                    refRingEntry["polygon"]=None
                 refRingEntry["coords"]=coords
                 refRingEntry["newRefs"]=newRefList
-                refRingEntry["polygon"]=cPolygon
                 
                 refRings.append(refRingEntry)
                 allRefs.remove(refEntry)
@@ -1422,10 +1434,14 @@ class OSMDataImport(OSMDataSQLite):
                 refRingEntry["refs"]=refRing
                 refRingEntry["wayIdList"]=wayIdList
                 coords, newRefList=self.createRefsCoords(refRing)
-                cPolygon=Polygon(coords)
+                if len(coords)>=3:
+                    cPolygon=Polygon(coords)
+                    refRingEntry["polygon"]=cPolygon
+                else:
+                    refRingEntry["polygon"]=None
+                    
                 refRingEntry["coords"]=coords
                 refRingEntry["newRefs"]=newRefList
-                refRingEntry["polygon"]=cPolygon
                 refRings.append(refRingEntry)
             
             refRingEntry=dict()
@@ -1906,46 +1922,33 @@ class OSMDataImport(OSMDataSQLite):
         return maxspeed
     
     def getAccessFactor(self, tags, streetTypeId):
+        value=None
         if "vehicle" in tags:
-            if tags["vehicle"]=="destination":
-                return 1000
-            if tags["vehicle"]=="permissive":
-                return 1000
-            if tags["vehicle"]=="private":
-                return 10000
-            if tags["vehicle"]=="no":
-                return 10000
+            value=tags["vehicle"]
 
         if "motorcar" in tags:
-            if tags["motorcar"]=="destination":
-                return 1000
-            if tags["motorcar"]=="permissive":
-                return 1000
-            if tags["motorcar"]=="private":
-                return 10000
-            if tags["motorcar"]=="no":
-                return 10000
+            value=tags["motorcar"]
                 
         if "motor_vehicle" in tags:
-            if tags["motor_vehicle"]=="destination":
-                return 1000
-            if tags["motor_vehicle"]=="permissive":
-                return 1000
-            if tags["motor_vehicle"]=="private":
-                return 10000
-            if tags["motor_vehicle"]=="no":
-                return 10000
+            value=tags["motor_vehicle"]
             
         if "access" in tags:
-            if tags["access"]=="destination":
+            value=tags["access"]
+            
+        if value!=None:
+            if value=="destination":
                 return 1000
-            if tags["access"]=="permissive":
+            if value=="permissive":
                 return 1000
-            if tags["access"]=="private":
+            if value=="private":
                 return 10000
-            if tags["access"]=="no":
+            if value=="no":
                 return 10000
+            
+            # TODO: everything else
+            return 10000
 
+        # avoid living streets
         if streetTypeId==Constants.STREET_TYPE_LIVING_STREET:
             # living_street
             return 1000
