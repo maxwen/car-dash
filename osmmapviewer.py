@@ -1494,6 +1494,7 @@ class QtOSMWidget(QWidget):
         
         start=time.time()
         resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
+#        resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
         
         if WITH_TIMING_DEBUG==True:
             print("getWaysInBboxWithGeom: %f"%(time.time()-start))
@@ -1991,6 +1992,7 @@ class QtOSMWidget(QWidget):
         
         start=time.time()
         resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
+#        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 50.0)
         
         if WITH_TIMING_DEBUG==True:
             print("getAreasInBboxWithGeom: %f"%(time.time()-start))
@@ -2455,7 +2457,7 @@ class QtOSMWidget(QWidget):
             painterPath=QPainterPath()
             coordsList=list()
             if geomType==0:
-                coordsList=self.gisUtils.createCoordsFromMultiPolygon(polyStr)
+                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
             else:
                 coords=self.gisUtils.createCoordsFromLineString(polyStr)     
                 coordsList.append((coords, list()))

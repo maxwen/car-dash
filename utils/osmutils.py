@@ -370,36 +370,11 @@ class OSMUtils():
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
         return points
-    
-    def createLineStringFromCoords(self, coords):
-        lineString="'LINESTRING("
         
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])
-        
-#        for lat, lon in coords:
-#            lineString=lineString+"%f %f"%(lon, lat)+","
-            
-        coordString=coordString[:-1]
-        lineString=lineString+coordString+")'"
-        return lineString
+    def degToMeter(self, meter):
+        deg_to_meter = (40000 * 1000) / 360
+        return meter / deg_to_meter
     
-    def createLineStringFromCoords1(self, coords):
-        lineString="'LINESTRING("
-                
-        for lat, lon in coords:
-            lineString=lineString+"%f %f"%(lon, lat)+","
-            
-        lineString=lineString[:-1]
-        lineString=lineString+")'"
-        return lineString
-    
-    def createMultiPolygonFromCoords(self, coords):
-        polyString="'MULTIPOLYGON((("
-        coordString=''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords])    
-        coordString=coordString[:-1]
-        polyString=polyString+coordString+")))'"        
-        return polyString
-        
 def main():    
 #    # 84194738 
 #    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
@@ -496,10 +471,6 @@ def main():
 #    start=time.time()
 #    print(osmutils.createTemporaryPoints1(latFrom, lonFrom, latTo, lonTo, 0.1))
 #    print("createTemporaryPoints1:%f"%(time.time()-start))
-    
-    coords=[(1.0, 2.0), (2.0, 3.0), (4.0, 5.0)]
-    print(osmutils.createLineStringFromCoords(coords))
-    print(osmutils.createMultiPolygonFromCoords(coords))
     
 if __name__ == "__main__":
     main()  

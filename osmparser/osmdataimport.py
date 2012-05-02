@@ -521,12 +521,20 @@ class OSMDataImport(OSMDataSQLite):
             self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable')
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE osmId=136661')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            if areaType==Constants.AREA_TYPE_AMENITY:
-                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+            print(polyStr)
+#            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+
+        tolerance=self.osmutils.degToMeter(10.0)
+        print(tolerance)
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE osmId=136661'%(tolerance))
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+            print(polyStr)
 
 #        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
 #        allentries=self.cursorArea.fetchall()
@@ -1196,8 +1204,8 @@ class OSMDataImport(OSMDataSQLite):
                         self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
-                    outerRefRings=self.mergeWayRefs(allOuterRefs)
-                    innerRefRings=self.mergeWayRefs(allInnerRefs)
+                    outerRefRings=self.gisUtils.mergeRelationRefs(allOuterRefs, self)
+                    innerRefRings=self.gisUtils.mergeRelationRefs(allInnerRefs, self)
 
                     # convert to multipolygon
                     polyString="'MULTIPOLYGON("
@@ -1301,155 +1309,7 @@ class OSMDataImport(OSMDataSQLite):
                                     if storedRefId!=None:
                                         tags["deviceRef"]=deviceRef
                                         self.addToPOIRefTable(fromRefId, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
-           
-    def resolveRefRings(self, allRefs, refsDictStart):
-        refRings=list()
-        refRing=list()
-        
-        refs=allRefs[0]
-        refRing.extend(refs)
-        allRefs.remove(refs)
-        del refsDictStart[refRing[0]]
-        lastRef=refs[-1]
-        while len(allRefs)!=0:
-            if lastRef in refsDictStart.keys():
-                refRing.extend(refsDictStart[lastRef][1:])
-                newLastRef=refsDictStart[lastRef][-1]
-                allRefs.remove(refsDictStart[lastRef])
-                del refsDictStart[lastRef]
-                lastRef=newLastRef
-            else:
-                if refRing[0]==refRing[-1]:
-                    refRings.append(refRing)
-                refRing=list()
-                refRing.extend(allRefs[0])
-                allRefs.remove(allRefs[0])
-        
-        if len(refRing)!=0:
-            if refRing[0]==refRing[-1]:
-                refRings.append(refRing)
-                
-        return refRings
-    
-    def mergeWayRefs(self, allRefs):
-        refRings=list()
-        refRingEntry=dict()
-        refRing=list()
-        wayIdList=list()
-                
-        while len(allRefs)!=0:
-            refEntry=allRefs[0]
-            
-            wayId=refEntry[0]
-            refs=refEntry[1]   
-#            oneway=refEntry[2]  
-            roundAbout=refEntry[3]
-            wayIdList.append(wayId)
-            refRingEntry["wayId"]=wayId
-            
-            if roundAbout==1 and refs[-1]==refs[0]:
-                refRingEntry["refs"]=refs
-                refRingEntry["wayIdList"]=wayIdList
-                coords, newRefList=self.createRefsCoords(refs)
-                if len(coords)>=3:
-                    cPolygon=Polygon(coords)
-                    refRingEntry["polygon"]=cPolygon
-                else:
-                    refRingEntry["polygon"]=None
-                refRingEntry["coords"]=coords
-                refRingEntry["newRefs"]=newRefList
-                
-                refRings.append(refRingEntry)
-                allRefs.remove(refEntry)
-                refRingEntry=dict()
-                refRing=list()
-                wayIdList=list()
-                continue
-            
-            refRing.extend(refs)
-            allRefs.remove(refEntry)
-
-            roundAboutClosed=False
-            while True and roundAboutClosed==False:
-                removedRefs=list()
-
-                for refEntry in allRefs:
-                    wayId=refEntry[0]
-                    refs=refEntry[1]   
-                    oneway=refEntry[2] 
-                    newRoundAbout=refEntry[3]
-                    
-                    if roundAbout==1 and newRoundAbout==0:
-                        continue
-                    
-                    if roundAbout==0 and newRoundAbout==1:
-                        continue
-                    
-                    if roundAbout==1 and refRing[-1]==refRing[0]:
-                        removedRefs.append(refEntry)
-                        roundAboutClosed=True
-                        break
-                    
-                    if refRing[-1]==refs[0]:
-                        wayIdList.append(wayId)
-                        refRing.extend(refs[1:])
-                        removedRefs.append(refEntry)
-                        continue
-                    
-                    if refRing[0]==refs[-1]:
-                        wayIdList.append(wayId)
-                        removedRefs.append(refEntry)
-                        newRefRing=list()
-                        newRefRing.extend(refs[:-1])
-                        newRefRing.extend(refRing)
-                        refRing=newRefRing
-                        continue
-                            
-                    if (oneway==0 or oneway==2) and roundAbout==0:        
-                        reversedRefs=list()
-                        reversedRefs.extend(refs)
-                        reversedRefs.reverse()
-                        if refRing[-1]==reversedRefs[0]:
-                            wayIdList.append(wayId)
-                            refRing.extend(reversedRefs[1:])
-                            removedRefs.append(refEntry)
-                            continue
-                        
-                        if refRing[0]==reversedRefs[-1]:
-                            wayIdList.append(wayId)
-                            removedRefs.append(refEntry)
-                            newRefRing=list()
-                            newRefRing.extend(reversedRefs[:-1])
-                            newRefRing.extend(refRing)
-                            refRing=newRefRing
-                            continue
-
-                if len(removedRefs)==0:
-                    break
-                
-                for refEntry in removedRefs:
-                    allRefs.remove(refEntry)
-                
-            if len(refRing)!=0:
-                refRingEntry["refs"]=refRing
-                refRingEntry["wayIdList"]=wayIdList
-                coords, newRefList=self.createRefsCoords(refRing)
-                if len(coords)>=3:
-                    cPolygon=Polygon(coords)
-                    refRingEntry["polygon"]=cPolygon
-                else:
-                    refRingEntry["polygon"]=None
-                    
-                refRingEntry["coords"]=coords
-                refRingEntry["newRefs"]=newRefList
-                refRings.append(refRingEntry)
-            
-            refRingEntry=dict()
-            refRing=list()
-            wayIdList=list()
-            
-        return refRings
-    
+                   
     def getStreetNameInfo(self, tags, streetTypeId):
 
         name=None
@@ -2651,8 +2511,8 @@ class OSMDataImport(OSMDataSQLite):
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
-                for coords in coordsList:
+                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+                for coords, _ in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
         
@@ -2771,8 +2631,8 @@ class OSMDataImport(OSMDataSQLite):
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
-                for coords in coordsList:
+                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+                for coords, _ in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
         
@@ -2854,8 +2714,8 @@ class OSMDataImport(OSMDataSQLite):
             adminLevel=area[2]
             polyStr=area[3]
             
-            coordsList=self.gisUtils.createOuterCoordsFromMultiPolygon(polyStr)
-            for coords in coordsList:
+            coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+            for coords, _ in coordsList:
                 cPolygon=Polygon(coords)
                 polyList[adminLevel].append((osmId, cPolygon, tags))
 
@@ -3255,7 +3115,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-#    p.testAreaTable()
+    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -3273,7 +3133,6 @@ def main(argv):
 #    p.recreateCrossings()
 #    p.recreateEdges()
     
-#    p.testAreaTable()
 #    p.testRoutes()
 #    p.testWayTable()
 #    p.recreateCostsForEdges()

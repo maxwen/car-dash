@@ -5,6 +5,7 @@ Created on Apr 30, 2012
 '''
 
 import re
+from Polygon import Polygon
 
 class GISUtils():
     
@@ -17,10 +18,17 @@ class GISUtils():
             i=i+4
         return coords
     
+    def createCoordsFromPolygonGeom(self, coordsStr):
+        x=coordsStr[:len("MULTIPOLYGON")]
+        if x=="MULTIPOLYGON":
+            return self.createCoordsFromMultiPolygon(coordsStr[15:-3])
+        x=coordsStr[:len("POLYGON")]
+        if x=="POLYGON":
+            return self.createCoordsFromMultiPolygon(coordsStr[9:-2])
+        return None
+    
     def createCoordsFromMultiPolygon(self, coordsStr):
         allCoordsList=list()
-        #MULTYPOLYGON(((
-        coordsStr=coordsStr[15:-3]
         polyParts=coordsStr.split(")), ((")
         if len(polyParts)==1:
             polyParts2=coordsStr.split("), (")
@@ -53,29 +61,29 @@ class GISUtils():
         coords=self.parseCoords(coordsStr)
         return coords
 
-    def createCoordsFromPolygon(self, polyString):
-        coordsStr=polyString[9:-2] # POLYGON
-        coords=self.parseCoords(coordsStr)
-        return coords
+#    def createCoordsFromPolygon(self, polyString):
+#        coordsStr=polyString[9:-2] # POLYGON
+#        coords=self.parseCoords(coordsStr)
+#        return coords
     
-    def createOuterCoordsFromMultiPolygon(self, coordsStr):
-        allCoordsList=list()
-        #MULTYPOLYGON(((
-        coordsStr=coordsStr[15:-3]
-        polyParts=coordsStr.split(")), ((")
-        if len(polyParts)==1:
-            polyParts2=coordsStr.split("), (")                
-            poly=polyParts2[0]
-            coords=self.parseCoords(poly)
-            allCoordsList.append(coords)
-        else:
-            for poly in polyParts:
-                polyParts2=poly.split("), (")
-                poly2=polyParts2[0]
-                coords=self.parseCoords(poly2)
-                allCoordsList.append(coords)
-        
-        return allCoordsList
+#    def createOuterCoordsFromMultiPolygon(self, coordsStr):
+#        allCoordsList=list()
+#        #MULTYPOLYGON(((
+#        coordsStr=coordsStr[15:-3]
+#        polyParts=coordsStr.split(")), ((")
+#        if len(polyParts)==1:
+#            polyParts2=coordsStr.split("), (")                
+#            poly=polyParts2[0]
+#            coords=self.parseCoords(poly)
+#            allCoordsList.append(coords)
+#        else:
+#            for poly in polyParts:
+#                polyParts2=poly.split("), (")
+#                poly2=polyParts2[0]
+#                coords=self.parseCoords(poly2)
+#                allCoordsList.append(coords)
+#        
+#        return allCoordsList
     
     def createCoordsString(self, coords):
         return ''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords]) 
@@ -113,3 +121,205 @@ class GISUtils():
         
         polyString=polyString+coordString+")),"                
         return polyString
+    
+    def mergeWayRefs(self, allRefs, osmDataImport):
+        refRings=list()
+        refRingEntry=dict()
+        refRing=list()
+        wayIdList=list()
+                
+        while len(allRefs)!=0:
+            refEntry=allRefs[0]
+            
+            wayId=refEntry[0]
+            refs=refEntry[1]   
+#            oneway=refEntry[2]  
+            roundAbout=refEntry[3]
+            wayIdList.append(wayId)
+            refRingEntry["wayId"]=wayId
+            
+            if roundAbout==1 and refs[-1]==refs[0]:
+                refRingEntry["refs"]=refs
+                refRingEntry["wayIdList"]=wayIdList
+                coords, newRefList=osmDataImport.createRefsCoords(refs)
+                if len(coords)>=3:
+                    cPolygon=Polygon(coords)
+                    refRingEntry["polygon"]=cPolygon
+                else:
+                    refRingEntry["polygon"]=None
+                refRingEntry["coords"]=coords
+                refRingEntry["newRefs"]=newRefList
+                
+                refRings.append(refRingEntry)
+                allRefs.remove(refEntry)
+                refRingEntry=dict()
+                refRing=list()
+                wayIdList=list()
+                continue
+            
+            refRing.extend(refs)
+            allRefs.remove(refEntry)
+
+            roundAboutClosed=False
+            while True and roundAboutClosed==False:
+                removedRefs=list()
+
+                for refEntry in allRefs:
+                    wayId=refEntry[0]
+                    refs=refEntry[1]   
+                    oneway=refEntry[2] 
+                    newRoundAbout=refEntry[3]
+                    
+                    if roundAbout==1 and newRoundAbout==0:
+                        continue
+                    
+                    if roundAbout==0 and newRoundAbout==1:
+                        continue
+                    
+                    if roundAbout==1 and refRing[-1]==refRing[0]:
+                        removedRefs.append(refEntry)
+                        roundAboutClosed=True
+                        break
+                    
+                    if refRing[-1]==refs[0]:
+                        wayIdList.append(wayId)
+                        refRing.extend(refs[1:])
+                        removedRefs.append(refEntry)
+                        continue
+                    
+                    if refRing[0]==refs[-1]:
+                        wayIdList.append(wayId)
+                        removedRefs.append(refEntry)
+                        newRefRing=list()
+                        newRefRing.extend(refs[:-1])
+                        newRefRing.extend(refRing)
+                        refRing=newRefRing
+                        continue
+                            
+                    if (oneway==0 or oneway==2) and roundAbout==0:        
+                        reversedRefs=list()
+                        reversedRefs.extend(refs)
+                        reversedRefs.reverse()
+                        if refRing[-1]==reversedRefs[0]:
+                            wayIdList.append(wayId)
+                            refRing.extend(reversedRefs[1:])
+                            removedRefs.append(refEntry)
+                            continue
+                        
+                        if refRing[0]==reversedRefs[-1]:
+                            wayIdList.append(wayId)
+                            removedRefs.append(refEntry)
+                            newRefRing=list()
+                            newRefRing.extend(reversedRefs[:-1])
+                            newRefRing.extend(refRing)
+                            refRing=newRefRing
+                            continue
+
+                if len(removedRefs)==0:
+                    break
+                
+                for refEntry in removedRefs:
+                    allRefs.remove(refEntry)
+                
+            if len(refRing)!=0:
+                refRingEntry["refs"]=refRing
+                refRingEntry["wayIdList"]=wayIdList
+                coords, newRefList=osmDataImport.createRefsCoords(refRing)
+                if len(coords)>=3:
+                    cPolygon=Polygon(coords)
+                    refRingEntry["polygon"]=cPolygon
+                else:
+                    refRingEntry["polygon"]=None
+                    
+                refRingEntry["coords"]=coords
+                refRingEntry["newRefs"]=newRefList
+                refRings.append(refRingEntry)
+            
+            refRingEntry=dict()
+            refRing=list()
+            wayIdList=list()
+            
+        return refRings
+
+    def mergeRelationRefs(self, allRefs, osmDataImport):
+        refRings=list()
+        refRingEntry=dict()
+        refRing=list()
+        wayIdList=list()
+                
+        while len(allRefs)!=0:
+            refEntry=allRefs[0]
+            
+            wayId=refEntry[0]
+            refs=refEntry[1]   
+            wayIdList.append(wayId)
+            refRingEntry["wayId"]=wayId
+            
+            refRing.extend(refs)
+            allRefs.remove(refEntry)
+
+            while True:
+                removedRefs=list()
+
+                for refEntry in allRefs:
+                    wayId=refEntry[0]
+                    refs=refEntry[1]   
+                    
+                    if refRing[-1]==refs[0]:
+                        wayIdList.append(wayId)
+                        refRing.extend(refs[1:])
+                        removedRefs.append(refEntry)
+                        continue
+                    
+                    if refRing[0]==refs[-1]:
+                        wayIdList.append(wayId)
+                        removedRefs.append(refEntry)
+                        newRefRing=list()
+                        newRefRing.extend(refs[:-1])
+                        newRefRing.extend(refRing)
+                        refRing=newRefRing
+                        continue
+                            
+                    reversedRefs=list()
+                    reversedRefs.extend(refs)
+                    reversedRefs.reverse()
+                    if refRing[-1]==reversedRefs[0]:
+                        wayIdList.append(wayId)
+                        refRing.extend(reversedRefs[1:])
+                        removedRefs.append(refEntry)
+                        continue
+                    
+                    if refRing[0]==reversedRefs[-1]:
+                        wayIdList.append(wayId)
+                        removedRefs.append(refEntry)
+                        newRefRing=list()
+                        newRefRing.extend(reversedRefs[:-1])
+                        newRefRing.extend(refRing)
+                        refRing=newRefRing
+                        continue
+
+                if len(removedRefs)==0:
+                    break
+                
+                for refEntry in removedRefs:
+                    allRefs.remove(refEntry)
+                
+            if len(refRing)!=0:
+                refRingEntry["refs"]=refRing
+                refRingEntry["wayIdList"]=wayIdList
+                coords, newRefList=osmDataImport.createRefsCoords(refRing)
+                if len(coords)>=3:
+                    cPolygon=Polygon(coords)
+                    refRingEntry["polygon"]=cPolygon
+                else:
+                    refRingEntry["polygon"]=None
+                    
+                refRingEntry["coords"]=coords
+                refRingEntry["newRefs"]=newRefList
+                refRings.append(refRingEntry)
+            
+            refRingEntry=dict()
+            refRing=list()
+            wayIdList=list()
+            
+        return refRings
