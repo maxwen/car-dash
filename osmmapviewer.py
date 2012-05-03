@@ -975,13 +975,11 @@ class QtOSMWidget(QWidget):
                 self.displayCoords(coords, pen)
 
     # only use if transform is active
-    def displayApproachingRef(self, approachingRef):
-        if approachingRef!=None:
+    def displayApproachingRef(self, approachingRefPos):
+        if approachingRefPos!=None:
             pen=QPen()
             pen.setWidth(3)
-            storedRef, lat, lon=osmParserData.getCoordsEntry(approachingRef)
-            if storedRef==None:
-                return False
+            lat, lon=approachingRefPos
             
             y,x=self.getPixelPosForLocationDeg(lat, lon, True)
             if self.isPointVisible(x, y):
@@ -1272,8 +1270,8 @@ class QtOSMWidget(QWidget):
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
             self.displayCoords(self.currentCoords, self.style.getStylePen("edgePen"))
                         
-        approachingRef=osmRouting.getApproachingRef()
-        nextCrossingVisible=self.displayApproachingRef(approachingRef)
+        approachingRef, approachingRefPos=osmRouting.getApproachingRef()
+        nextCrossingVisible=self.displayApproachingRef(approachingRefPos)
                 
         if WITH_CROSSING_DEBUG==True:
             if osmRouting.getCurrentSearchEdgeList()!=None:

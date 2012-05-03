@@ -17,8 +17,6 @@ class OSMDataSQLite():
         self.cursorArea=None
         self.connectionAdress=None
         self.cursorAdress=None
-        self.connectionCoords=None
-        self.cursorCoords=None
         self.cursorWay=None
         self.connectionWay=None
         self.cursorNode=None
@@ -63,12 +61,6 @@ class OSMDataSQLite():
         self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
         self.cursorAdress=self.connectionAdress.cursor()
         self.setPragmaForDB(self.cursorAdress)
-
-    def openCoordsDB(self):
-        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
-#        self.connectionCoords=sqlite3.connect(":memory:")
-        self.cursorCoords=self.connectionCoords.cursor()
-        self.setPragmaForDB(self.cursorCoords)
     
     def closeEdgeDB(self):
         if self.connectionEdge!=None:
@@ -104,13 +96,6 @@ class OSMDataSQLite():
             self.cursorAdress.close()
             self.connectionAdress=None
             self.cursorAdress=None
-                
-    def closeCoordsDB(self):
-        if self.connectionCoords!=None:
-            self.connectionCoords.commit()
-            self.cursorCoords.close()
-            self.connectionCoords=None
-            self.cursorCoords=None   
                  
     def openAllDB(self):
         self.openWayDB()
@@ -118,7 +103,6 @@ class OSMDataSQLite():
         self.openEdgeDB()
         self.openAreaDB()
         self.openAdressDB()
-        self.openCoordsDB()
         
     def closeAllDB(self):
         self.closeWayDB()
@@ -126,7 +110,6 @@ class OSMDataSQLite():
         self.closeEdgeDB()
         self.closeAreaDB()
         self.closeAdressDB()
-        self.closeCoordsDB()  
         
     def wayFromDB(self, x):
         wayId=x[0]
@@ -387,13 +370,6 @@ class OSMDataSQLite():
 #        osmDataList[3]=osmData
 
         return osmDataList
-    
-    def getCoordsEntry(self, ref):
-        self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))
-        allentries=self.cursorCoords.fetchall()
-        if len(allentries)==1:
-            return(allentries[0][0], allentries[0][1], allentries[0][2])
-        return None, None, None
     
     def getWayEntryForId(self, wayId):
         self.cursorWay.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))

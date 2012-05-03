@@ -179,7 +179,7 @@ class OSMDataAccess(OSMDataSQLite):
         self.roundaboutEnterItem=None
         self.currentSearchBBox=None
         self.gisUtils=GISUtils() 
-                                 
+        
     def getLenOfAddressTable(self):
         self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
         allentries=self.cursorAdress.fetchall()
@@ -447,16 +447,16 @@ class OSMDataAccess(OSMDataSQLite):
         
         return False
     
-    # true if any point is closer then maxDistance
-    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
-        storedRefId, lat1, lon1=self.getCoordsEntry(ref1)
-        if storedRefId==None:
-            return False
-        storedRefId, lat2, lon2=self.getCoordsEntry(ref2)
-        if storedRefId==None:
-            return False
-        
-        return self.isOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+#    # true if any point is closer then maxDistance
+#    def isOnLineBetweenRefs(self, lat, lon, ref1, ref2, maxDistance):
+#        storedRefId, lat1, lon1=self.getCoordsEntry(ref1)
+#        if storedRefId==None:
+#            return False
+#        storedRefId, lat2, lon2=self.getCoordsEntry(ref2)
+#        if storedRefId==None:
+#            return False
+#        
+#        return self.isOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
     
     def isMinimalDistanceOnLineBetweenPoints(self, lat, lon, lat1, lon1, lat2, lon2, maxDistance, addStart=True, addEnd=True):        
         nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, addStart=addStart, addEnd=addEnd)
@@ -543,16 +543,20 @@ class OSMDataAccess(OSMDataSQLite):
                 print("routeEndRef %d not in refListPart %s"%(routeEndRefId, refListPart))
                 routeEndRefId=refListPart[0]
             else:
-                index=refListPart.index(routeEndRefId)                
+                index=refListPart.index(routeEndRefId)
+                endLat, endLon=coords[index]
+                
                 if index!=0:
                     # use one ref before
                     prevRefId=refListPart[index-1]
+                    prevLat, prevLon=coords[index-1]
                 else:
                     prevRefId=routeEndRefId
-                     
+                    prevLat=endLat
+                    prevLon=endLon
                 if prevRefId!=routeEndRefId:
                     lat, lon=endPoint.getClosestRefPos()
-                    onLine=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
+                    onLine=self.isOnLineBetweenPoints(lat, lon, endLat, endLon, prevLat, prevLon, 10.0)
                     if onLine==True:
                         routeEndRefId=prevRefId
         
@@ -565,14 +569,18 @@ class OSMDataAccess(OSMDataSQLite):
                 routeStartRefId=refListPart[0]
             else:
                 index=refListPart.index(routeStartRefId)
+                startLat, startLon=coords[index]
                 if index!=len(refListPart)-1:
                     nextRefId=refListPart[index+1]
+                    nextLat, nextLon=coords[index+1]
                 else:
                     nextRefId=routeStartRefId
+                    nextLat=startLat
+                    nextLon=startLon
                                     
                 if nextRefId!=routeStartRefId:
                     lat, lon=startPoint.getClosestRefPos()
-                    onLine=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
+                    onLine=self.isOnLineBetweenPoints(lat, lon, startLat, startLon, nextLat, nextLon, 10.0)
                     if onLine==True:
                         routeStartRefId=nextRefId
         
@@ -812,8 +820,10 @@ class OSMDataAccess(OSMDataSQLite):
         routeStartRefId=startPoint.getRefId()
         routeEndRefId=endPoint.getRefId()
         indexStart=refListPart.index(routeStartRefId)
+        startLat=coords[indexStart]
         indexEnd=refListPart.index(routeEndRefId)
-
+        endLat, endLon=coords[indexEnd]
+        
         if indexEnd-indexStart<=1 or len(refListPart)==2:
             startLat, startLon=startPoint.getClosestRefPos()
             preTrackItemRef=dict()
@@ -831,23 +841,29 @@ class OSMDataAccess(OSMDataSQLite):
             if indexEnd!=0:
                 # use one ref before
                 prevRefId=refListPart[indexEnd-1]
+                prevLat, prevLon=coords[indexEnd-1]
             else:
                 prevRefId=routeEndRefId
+                prevLat=endLat
+                prevLon=endLon
                  
             if prevRefId!=routeEndRefId:
                 lat, lon=endPoint.getClosestRefPos()
-                onLine=self.isOnLineBetweenRefs(lat, lon, routeEndRefId, prevRefId, 10.0)
+                onLine=self.isOnLineBetweenPoints(lat, lon, endLat, endLon, prevLat, prevLon, 10.0)
                 if onLine==True:
                     routeEndRefId=prevRefId
                         
             if indexStart!=len(refListPart)-1:
                 nextRefId=refListPart[indexStart+1]
+                nextLat, nextLon=coords[indexStart+1]
             else:
                 nextRefId=routeStartRefId
+                nextLat=startLat
+                nextLon=startLon
                                 
             if nextRefId!=routeStartRefId:
                 lat, lon=startPoint.getClosestRefPos()
-                onLine=self.isOnLineBetweenRefs(lat, lon, routeStartRefId, nextRefId, 10.0)
+                onLine=self.isOnLineBetweenPoints(lat, lon, startLat, startLon, nextLat, nextLon, 10.0)
                 if onLine==True:
                     routeStartRefId=nextRefId
                         

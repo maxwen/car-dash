@@ -304,6 +304,7 @@ class OSMRouting():
         self.crosingWithoutExpected=False
         self.checkExpectedEdge=False
         self.approachingRef=None
+        self.approachingRefPos=None
         self.currentEdgeData=None
         self.possibleEdges=None
         self.nearPossibleEdges=None
@@ -333,12 +334,13 @@ class OSMRouting():
         # since we ony check when coming to a crossing 
         # but not on leaving
         ref=None
+        refPos=None
         if useLastValue==False or self.lastApproachingRef==None:
             # f no previous value is available use close range
             onEdge=self.checkEdgeDataForPosWithCoords(lat, lon, coords, DECISION_EDGE_RANGE)
             if onEdge==False:
                 self.debugPrint(lat, lon, "calcApproachingRef: not on edge")
-                return ref
+                return ref, refPos
             
             lat1, lon1=coords[0]
             heading1=self.osmutils.headingDegrees(lat, lon, lat1, lon1)
@@ -352,17 +354,21 @@ class OSMRouting():
             if headingDiff1<CLOSE_HEADING_RANGE or headingDiff2<CLOSE_HEADING_RANGE:
                 if headingDiff1<headingDiff2:
                     ref=startRef
+                    refPos=coords[0]
                 else:
                     ref=endRef
+                    refPos=coords[-1]
             else:
                 self.debugPrint(lat, lon, "calcApproachingRef: headingDiff=%d %d"%(headingDiff1, headingDiff2))
         else:
             if self.lastApproachingRef==startRef:
                 ref=endRef
+                refPos=coords[-1]
             elif self.lastApproachingRef==endRef:
                 ref=startRef
-                            
-        return ref
+                refPos=coords[0]
+                  
+        return ref, refPos
     
     def checkForPosOnEdgeId(self, lat, lon, coords, maxDistance):
         if len(coords)!=0:
@@ -576,6 +582,7 @@ class OSMRouting():
             self.lastApproachingRef=None
             
         self.approachingRef=None
+        self.approachingRefPos=None
         self.expectedNextEdgeId=None
         self.expectedNextEdge=None
         self.possibleEdges=None
@@ -702,7 +709,7 @@ class OSMRouting():
         edgeId, startRef, endRef, _, wayId, _, _, _, _, _, coords=self.currentEdgeData
         
         # can be None if is not clear
-        self.approachingRef=self.calcApproachingRef(lat, lon, startRef, endRef, coords, track, True)
+        self.approachingRef, self.approachingRefPos=self.calcApproachingRef(lat, lon, startRef, endRef, coords, track, True)
         
         # check if approaching ref is valid
         if self.approachingRef!=None:
@@ -767,7 +774,7 @@ class OSMRouting():
     
     def isChangedApproachingRef(self, lat, lon, track):
         _, startRef, endRef, _, _, _, _, _, _, _, coords=self.currentEdgeData
-        approachingRef=self.calcApproachingRef(lat, lon, startRef, endRef, coords, track, False)
+        approachingRef, _=self.calcApproachingRef(lat, lon, startRef, endRef, coords, track, False)
         if approachingRef!=self.approachingRef:
             return True, approachingRef
             
@@ -930,7 +937,7 @@ class OSMRouting():
         return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
 
     def getApproachingRef(self):
-        return self.approachingRef
+        return self.approachingRef, self.approachingRefPos
     
     def debugPrint(self, lat, lon, text):
         if WITH_CROSSING_DEBUG==True:

@@ -28,6 +28,8 @@ class OSMDataImport(OSMDataSQLite):
     def __init__(self):
         self.cursorTmp=None
         self.connectionTmp=None
+        self.connectionCoords=None
+        self.cursorCoords=None
         self.edgeId=1
         self.restrictionId=0
         self.nodeId=1
@@ -55,18 +57,34 @@ class OSMDataImport(OSMDataSQLite):
         self.addressCache=set()
         self.gisUtils=GISUtils()
 
+    def openAllDB(self):
+        super(OSMDataImport, self).openAllDB()
+        self.openTmpDB()
+        self.openCoordsDB()
+        
+    def closeAllDB(self):
+        super(OSMDataImport, self).closeAllDB()
+        self.closeTmpDB()
+        self.closeCoordsDB()  
+        
     def createEdgeTables(self):
         self.createEdgeTable()
         self.createRestrictionTable()
 
     def createAdressTable(self):
         self.createAddressTable()
-        
+
     def openTmpDB(self):
 #        self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
         self.connectionTmp=sqlite3.connect(":memory:")
         self.cursorTmp=self.connectionTmp.cursor()
-        self.setPragmaForDB(self.cursorTmp)
+#        self.setPragmaForDB(self.cursorTmp)
+
+    def openCoordsDB(self):
+#        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
+        self.connectionCoords=sqlite3.connect(":memory:")
+        self.cursorCoords=self.connectionCoords.cursor()
+#        self.setPragmaForDB(self.cursorCoords)
         
     def createCoordsDBTables(self):
         self.createCoordsTable()
@@ -96,11 +114,25 @@ class OSMDataImport(OSMDataSQLite):
             self.connectionTmp=None
             self.cursorTmp=None   
 
+    def closeCoordsDB(self):
+        if self.connectionCoords!=None:
+            self.connectionCoords.commit()
+            self.cursorCoords.close()
+            self.connectionCoords=None
+            self.cursorCoords=None   
+            
     def createCoordsTable(self):
         self.cursorCoords.execute('CREATE TABLE coordsTable (refId INTEGER PRIMARY KEY, lat REAL, lon REAL)')
         
     def addToCoordsTable(self, ref, lat, lon):
         self.cursorCoords.execute('INSERT OR IGNORE INTO coordsTable VALUES( ?, ?, ?)', (ref, lat, lon))
+
+    def getCoordsEntry(self, ref):
+        self.cursorCoords.execute('SELECT * FROM coordsTable WHERE refId=%d'%(ref))
+        allentries=self.cursorCoords.fetchall()
+        if len(allentries)==1:
+            return(allentries[0][0], allentries[0][1], allentries[0][2])
+        return None, None, None
     
     def addToTmpWayRefTable(self, wayId, refs):
         self.cursorTmp.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
@@ -3115,7 +3147,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-    p.testAreaTable()
+#    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -3154,7 +3186,7 @@ def main(argv):
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
-    p.testPOIRefTable()
+#    p.testPOIRefTable()
 
 #    p.mergeEqualWayEntries()
     
