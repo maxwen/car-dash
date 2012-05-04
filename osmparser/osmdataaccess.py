@@ -7,7 +7,6 @@ import sys
 import os
 import sqlite3
 from utils.osmutils import OSMUtils
-from utils.gisutils import GISUtils
 import pickle
 from utils.env import getDataRoot
 import re
@@ -171,6 +170,7 @@ class Constants():
             
 class OSMDataAccess(OSMDataSQLite):
     def __init__(self):
+        super(OSMDataAccess, self).__init__()
         self.trackItemList=list()
         self.dWrapperTrsp=TrspWrapper(self.getDataDir())
         self.osmutils=OSMUtils()
@@ -178,7 +178,6 @@ class OSMDataAccess(OSMDataSQLite):
         self.roundaboutExitNumber=None
         self.roundaboutEnterItem=None
         self.currentSearchBBox=None
-        self.gisUtils=GISUtils() 
         
     def getLenOfAddressTable(self):
         self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
@@ -313,11 +312,12 @@ class OSMDataAccess(OSMDataSQLite):
         
         # add self
         cityList.append((osmId, None, None))
-        filterString='('
-        for cityId, cityName, adminLevel in cityList:
-            filterString=filterString+str(cityId)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
+        
+        cityIdList=list()
+        for cityId, _, _ in cityList:
+            cityIdList.append(cityId)
+            
+        filterString=self.createSQLFilterStringForIN(cityIdList)
         
         self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city IN %s'%(countryId, filterString))
         allentries=self.cursorAdress.fetchall()
@@ -1214,11 +1214,7 @@ class OSMDataAccess(OSMDataSQLite):
         if len(nodeTypeList)==0:
             self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
-            filterString='('
-            for nodeType in nodeTypeList:
-                filterString=filterString+str(nodeType)+','
-            filterString=filterString[:-1]
-            filterString=filterString+')'
+            filterString=self.createSQLFilterStringForIN(nodeTypeList)
             
             self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
             
@@ -1280,11 +1276,7 @@ class OSMDataAccess(OSMDataSQLite):
                 self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(Simplify(geom, %f)) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
 
         else:
-            filterString='('
-            for streetType in streetTypeList:
-                filterString=filterString+str(streetType)+','
-            filterString=filterString[:-1]
-            filterString=filterString+')'
+            filterString=self.createSQLFilterStringForIN(streetTypeList)
             
             if withSimplify==False:
                 self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
@@ -1327,11 +1319,7 @@ class OSMDataAccess(OSMDataSQLite):
         filterString=None
         
         if areaTypeList!=None and len(areaTypeList)!=0:
-            filterString='('
-            for areaType in areaTypeList:
-                filterString=filterString+str(areaType)+','
-            filterString=filterString[:-1]
-            filterString=filterString+')'
+            filterString=self.createSQLFilterStringForIN(areaTypeList)
             
         if withSimplify==False:
             if filterString==None:
@@ -1370,11 +1358,7 @@ class OSMDataAccess(OSMDataSQLite):
     def getAdminAreasInBboxWithGeom(self, bbox, margin, adminLevelList):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
-        filterString='('
-        for adminLevel in adminLevelList:
-            filterString=filterString+str(adminLevel)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
+        filterString=self.createSQLFilterStringForIN(adminLevelList)
         
         self.cursorArea.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
              
@@ -1390,11 +1374,7 @@ class OSMDataAccess(OSMDataSQLite):
     def getAdminAreasOnPointWithGeom(self, lat, lon, margin, adminLevelList, sortByAdminLevel):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 
-        filterString='('
-        for adminLevel in adminLevelList:
-            filterString=filterString+str(adminLevel)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
+        filterString=self.createSQLFilterStringForIN(adminLevelList)
 
         if sortByAdminLevel==True:
             sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Contains(geom, MakePoint(%f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lon, lat)

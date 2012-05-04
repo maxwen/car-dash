@@ -8,6 +8,7 @@ import sqlite3
 import pickle
 import os
 from utils.env import getDataRoot
+from utils.gisutils import GISUtils
 
 class OSMDataSQLite():
     def __init__(self):
@@ -21,7 +22,11 @@ class OSMDataSQLite():
         self.connectionWay=None
         self.cursorNode=None
         self.connectionNode=None
+        self.gisUtils=GISUtils()
 
+    def getGISUtils(self):
+        return self.gisUtils
+    
     def setPragmaForDB(self, cursor):
 #        cursor.execute('PRAGMA journal_mode=OFF')
 #        cursor.execute('PRAGMA synchronous=OFF')
@@ -149,43 +154,11 @@ class OSMDataSQLite():
         
         nodeType=int(x[2])            
         layer=int(x[3])
-        pointStr=x[4]
 
-        pointStr=pointStr[6:-1]
-        coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
+        pointStr=x[4]
+        lat, lon=self.getGISUtils().createPointFromPointString(pointStr)
 
         return (refId, lat, lon, tags, nodeType, layer)
-
-    def poiRefFromDB2(self, x):
-        poiId=int(x[0]) 
-        refId=int(x[1])
-        
-        tags=None
-        if x[2]!=None:
-            tags=pickle.loads(x[2])
-        
-        nodeType=int(x[3])            
-        layer=int(x[4])
-        if x[5]!=None:
-            country=int(x[5])
-        else:
-            country=None
-        
-        if x[6]!=None:
-            city=int(x[6])
-        else:
-            city=None
-            
-        pointStr=x[7]
-
-        pointStr=pointStr[6:-1]
-        coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
-
-        return (poiId, refId, lat, lon, tags, nodeType, layer, country, city)    
     
     def crossingFromDB(self, x):
         crossingEntryId=x[0]
@@ -218,7 +191,7 @@ class OSMDataSQLite():
         reverseCost=x[8]
         streetInfo=x[9]
         coordsStr=x[10]
-        coords=self.gisUtils.createCoordsFromLineString(coordsStr)
+        coords=self.getGISUtils().createCoordsFromLineString(coordsStr)
         return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords)
 
     def areaFromDBWithCoordsString(self, x):
@@ -307,10 +280,6 @@ class OSMDataSQLite():
         file="adress.db"
         return os.path.join(self.getDataDir(), file)
     
-    def getCoordsDBFile(self):
-        file="coords.db"
-        return os.path.join(self.getDataDir(), file)
-
     def getWayDBFile(self):
         file="ways.db"
         return os.path.join(self.getDataDir(), file)
@@ -319,9 +288,6 @@ class OSMDataSQLite():
         file="nodes.db"
         return os.path.join(self.getDataDir(), file)
                         
-    def coordsDBExists(self):
-        return os.path.exists(self.getCoordsDBFile())
-
     def edgeDBExists(self):
         return os.path.exists(self.getEdgeDBFile())
 
@@ -414,12 +380,7 @@ class OSMDataSQLite():
         return tags
 
     def getAllAdminAreas(self, adminLevelList, sortByAdminLevel):
-
-        filterString='('
-        for adminLevel in adminLevelList:
-            filterString=filterString+str(adminLevel)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
+        filterString=self.createSQLFilterStringForIN(adminLevelList)
 
         if sortByAdminLevel==True:
             sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE adminLevel IN %s ORDER BY adminLevel'%(filterString)
@@ -434,3 +395,12 @@ class OSMDataSQLite():
             resultList.append(self.adminAreaFromDBWithCoordsString(x))
             
         return resultList     
+    
+    def createSQLFilterStringForIN(self, typeIdList):
+        filterString='('
+        for typeId in typeIdList:
+            filterString=filterString+str(typeId)+','
+            
+        filterString=filterString[:-1]
+        filterString=filterString+')'
+        return filterString

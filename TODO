@@ -123,6 +123,21 @@ lanes tag is not consitently used -> ignore for now
  TODO split DBs
  -split global into way and node db      
  DONE
+ 
+ TODO: remove need of coords.db
+DONE
+
+TODO: we store way areas and multiplogon areas with
+wayId and relationId which could be the same for 
+different areas
+-added an areaId 0=way 1=relation and make it a multi
+column constrain
+DONE
+
+TODO: we store poi nodes of ways with the wayId
+which could be same as a node refId
+-added an refType 0=node 1=way
+DONE
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -221,7 +236,4 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO:
   landuse overrides natural?
 
-TODO: remove need of coords.db
 
-TODO: we store poi nodes of ways with the wayId
-which could be same as a node refId

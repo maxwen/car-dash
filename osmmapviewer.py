@@ -2455,7 +2455,7 @@ class QtOSMWidget(QWidget):
             painterPath=QPainterPath()
             coordsList=list()
             if geomType==0:
-                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+                coordsList=self.gisUtils.createCoordsFromPolygonString(polyStr)
             else:
                 coords=self.gisUtils.createCoordsFromLineString(polyStr)     
                 coordsList.append((coords, list()))

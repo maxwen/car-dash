@@ -18,7 +18,7 @@ class GISUtils():
             i=i+4
         return coords
     
-    def createCoordsFromPolygonGeom(self, coordsStr):
+    def createCoordsFromPolygonString(self, coordsStr):
         x=coordsStr[:len("MULTIPOLYGON")]
         if x=="MULTIPOLYGON":
             return self.createCoordsFromMultiPolygon(coordsStr[15:-3])
@@ -56,37 +56,26 @@ class GISUtils():
         
         return allCoordsList
 
+    def createPointFromPointString(self, pointStr):
+        pointStr=pointStr[6:-1]
+        coordsPairs=pointStr.split(" ")
+        lon=float(coordsPairs[0].lstrip().rstrip())
+        lat=float(coordsPairs[1].lstrip().rstrip())
+        return (lat, lon)
+    
     def createCoordsFromLineString(self, lineString):
         coordsStr=lineString[11:-1] # LINESTRING
         coords=self.parseCoords(coordsStr)
         return coords
-
-#    def createCoordsFromPolygon(self, polyString):
-#        coordsStr=polyString[9:-2] # POLYGON
-#        coords=self.parseCoords(coordsStr)
-#        return coords
-    
-#    def createOuterCoordsFromMultiPolygon(self, coordsStr):
-#        allCoordsList=list()
-#        #MULTYPOLYGON(((
-#        coordsStr=coordsStr[15:-3]
-#        polyParts=coordsStr.split(")), ((")
-#        if len(polyParts)==1:
-#            polyParts2=coordsStr.split("), (")                
-#            poly=polyParts2[0]
-#            coords=self.parseCoords(poly)
-#            allCoordsList.append(coords)
-#        else:
-#            for poly in polyParts:
-#                polyParts2=poly.split("), (")
-#                poly2=polyParts2[0]
-#                coords=self.parseCoords(poly2)
-#                allCoordsList.append(coords)
-#        
-#        return allCoordsList
     
     def createCoordsString(self, coords):
         return ''.join(["%f %f"%(lon, lat)+"," for lat, lon in coords]) 
+    
+    def createPointStringFromCoords(self, lat, lon):
+        pointString="'POINT("
+        pointString=pointString+"%f %f"%(lon, lat)
+        pointString=pointString+")'"
+        return pointString
     
     def createLineStringFromCoords(self, coords):
         lineString="'LINESTRING("

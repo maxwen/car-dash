@@ -13,7 +13,6 @@ import cProfile
 from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
 from utils.osmutils import OSMUtils
-from utils.gisutils import GISUtils
 from osmparser.parser.xml.parser import XMLParser
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
@@ -26,6 +25,7 @@ importLog=ImportLog(True)
 
 class OSMDataImport(OSMDataSQLite):
     def __init__(self):
+        super(OSMDataImport, self).__init__()
         self.cursorTmp=None
         self.connectionTmp=None
         self.connectionCoords=None
@@ -34,7 +34,6 @@ class OSMDataImport(OSMDataSQLite):
         self.restrictionId=0
         self.nodeId=1
         self.addressId=0
-        self.poiId=0
         self.osmutils=OSMUtils()
         self.initBoarders()
         self.osmList=self.getOSMDataInfo()
@@ -54,8 +53,9 @@ class OSMDataImport(OSMDataSQLite):
         self.skipAddress=False
         self.skipAreas=False
         self.skipPOINodes=False
+        self.disableMemoryDB=False
         self.addressCache=set()
-        self.gisUtils=GISUtils()
+        self.highestAdminRelationNumber=0
 
     def openAllDB(self):
         super(OSMDataImport, self).openAllDB()
@@ -75,17 +75,35 @@ class OSMDataImport(OSMDataSQLite):
         self.createAddressTable()
 
     def openTmpDB(self):
-#        self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
-        self.connectionTmp=sqlite3.connect(":memory:")
+        if self.disableMemoryDB==True:
+            self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
+        else:
+            self.connectionTmp=sqlite3.connect(":memory:")
         self.cursorTmp=self.connectionTmp.cursor()
 #        self.setPragmaForDB(self.cursorTmp)
 
+    def getTmpDBFile(self):
+        file="tmp.db"
+        return os.path.join(self.getDataDir(), file)
+
+    def tmpDBExists(self):
+        return os.path.exists(self.getTmpDBFile())
+    
     def openCoordsDB(self):
-#        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
-        self.connectionCoords=sqlite3.connect(":memory:")
+        if self.disableMemoryDB==True:
+            self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
+        else:
+            self.connectionCoords=sqlite3.connect(":memory:")
         self.cursorCoords=self.connectionCoords.cursor()
 #        self.setPragmaForDB(self.cursorCoords)
-        
+
+    def getCoordsDBFile(self):
+        file="coords.db"
+        return os.path.join(self.getDataDir(), file)
+
+    def coordsDBExists(self):
+        return os.path.exists(self.getCoordsDBFile())
+
     def createCoordsDBTables(self):
         self.createCoordsTable()
 
@@ -167,11 +185,8 @@ class OSMDataImport(OSMDataSQLite):
         
     def createNodeDBTables(self):
         self.cursorNode.execute("SELECT InitSpatialMetaData()")
-        
-#        self.cursorNode.execute('CREATE TABLE refTable (refId INTEGER PRIMARY KEY, layer INTEGER)')
-#        self.cursorNode.execute("SELECT AddGeometryColumn('refTable', 'geom', 4326, 'POINT', 2)")
 
-        self.cursorNode.execute('CREATE TABLE poiRefTable (id INTEGER PRIMARY KEY, refId INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER)')
+        self.cursorNode.execute('CREATE TABLE poiRefTable (refId INTEGER, refType INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER, UNIQUE (refId, refType, type) ON CONFLICT IGNORE)')
         self.cursorNode.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
         self.cursorNode.execute("CREATE INDEX type_idx ON poiRefTable (type)")
         self.cursorNode.execute("CREATE INDEX country_idx ON poiRefTable (country)")
@@ -260,7 +275,8 @@ class OSMDataImport(OSMDataSQLite):
 
     def createAreaTable(self):
         self.cursorArea.execute("SELECT InitSpatialMetaData()")
-        self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, layer INTEGER)')
+        self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER, areaId INTEGER, type INTEGER, tags BLOB, layer INTEGER, UNIQUE (osmId, areaId) ON CONFLICT IGNORE)')
+        self.cursorArea.execute("CREATE INDEX osmId_idx ON areaTable (osmId)")
         self.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
         self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
         
@@ -287,37 +303,15 @@ class OSMDataImport(OSMDataSQLite):
         for x in allentries:
             restrictionId, target, viaPath, toCost=self.restrictionFromDB(x)
             self.log("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
-    
-#    def getCountryOfPos(self, lat, lon):
-#        polyCountry=self.countryNameOfPoint(lat, lon)
-#        return self.getCountryForPolyCountry(polyCountry)
-
-#    def addToRefTable(self, refid, lat, lon, layer):   
-#        # make complete point
-##        pointString="'POINT("
-##        pointString=pointString+"%f %f"%(lon, lat)
-##        pointString=pointString+")'"
-##
-##        self.cursorNode.execute('INSERT OR IGNORE INTO refTable VALUES( ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, layer))
-#        None
-        
-    def addToPOIRefTable(self, refid, lat, lon, tags, nodeType, layer):   
-        # dont add it twice
-        if self.hasPOIRefEntryForPos(refid, lat, lon, nodeType):
-            return
-        
-        # make complete point
-        pointString="'POINT("
-        pointString=pointString+"%f %f"%(lon, lat)
-        pointString=pointString+")'"
+            
+    def addToPOIRefTable(self, refid, refType, lat, lon, tags, nodeType, layer):           
+        pointString=self.getGISUtils().createPointStringFromCoords(lat, lon)
 
         tagsString=None
         if tags!=None:
             tagsString=pickle.dumps(tags)
 
-        self.cursorNode.execute('INSERT INTO poiRefTable VALUES( ?, ?, ?, ?, ?, ?, ?, PointFromText(%s, 4326))'%(pointString), (self.poiId, refid, tagsString, nodeType, layer, None, None))
-
-        self.poiId=self.poiId+1
+        self.cursorNode.execute('INSERT INTO poiRefTable VALUES( ?, ?, ?, ?, ?, ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, refType, tagsString, nodeType, layer, None, None))
         
     def updateWayTableEntryPOIList(self, wayId, poiList):
         wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _, layer, coordsStr=self.getWayEntryForIdWithCoords(wayId)
@@ -328,13 +322,8 @@ class OSMDataImport(OSMDataSQLite):
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer):
         name=self.encodeStreetName(name)
         streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
-        lineString=self.gisUtils.createLineStringFromCoords(coords)
+        lineString=self.getGISUtils().createLineStringFromCoords(coords)
         self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
-
-#    def addToTmpWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge):
-#        name=self.encodeStreetName(name)
-#        streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
-#        self.cursorTmp.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?)', (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed))
     
     def encodeStreetName(self, name):
         if name!=None:
@@ -348,15 +337,15 @@ class OSMDataImport(OSMDataSQLite):
     def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, streetInfo, coords):
         resultList=self.getEdgeEntryForStartAndEndPointAndWayId(startRef, endRef, wayId)
         if len(resultList)==0:
-            lineString=self.gisUtils.createLineStringFromCoords(coords)
+            lineString=self.getGISUtils().createLineStringFromCoords(coords)
             
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, streetInfo))
             self.edgeId=self.edgeId+1
         
-    def addPolygonToAreaTable(self, areaType, osmId, tags, polyString, layer):
-        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaType, pickle.dumps(tags), layer))
+    def addPolygonToAreaTable(self, osmId, areaId, areaType, tags, polyString, layer):
+        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaId, areaType, pickle.dumps(tags), layer))
 
-    def addLineToAreaTable(self, areaType, osmId, tags, lineString, layer):
+    def addLineToAreaTable(self, osmId, areaType, tags, lineString, layer):
         self.cursorArea.execute('INSERT OR IGNORE INTO areaLineTable VALUES( ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (osmId, areaType, pickle.dumps(tags), layer))
 
     def addPolygonToAdminAreaTable(self, osmId, tags, adminLevel, polyString):
@@ -364,11 +353,6 @@ class OSMDataImport(OSMDataSQLite):
         
     def updateAdminAreaParent(self, osmId, parent):
         self.cursorArea.execute('UPDATE adminAreaTable SET parent=%d WHERE osmId=%d'%(parent, osmId))
-        
-#    def isAreaEntryInDB(self, osmId, areaType):
-#        self.cursorArea.execute('SELECT id FROM areaTable WHERE osmId=%d AND type=%d'%(osmId, areaType))
-#        allentries=self.cursorArea.fetchall()
-#        return len(allentries)!=0
     
     def createSpatialIndexForEdgeTable(self):
         self.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
@@ -382,7 +366,6 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorWay.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
 
     def createSpatialIndexForNodeTables(self):
-#        self.cursorNode.execute('SELECT CreateSpatialIndex("refTable", "geom")')
         self.cursorNode.execute('SELECT CreateSpatialIndex("poiRefTable", "geom")')
                             
     def updateSourceOfEdge(self, edgeId, sourceId):
@@ -464,32 +447,16 @@ class OSMDataImport(OSMDataSQLite):
     # in theory could be more then one if there 
     # is a wayId same to a node refId
     # so use it only with wayrefs
-    def getPOIRefEntryForId(self, refId, nodeType):
-        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, nodeType))
+    def getPOIRefEntryForId(self, refId, refType, nodeType):
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=%d AND type=%d AND refType=%d'%(refId, nodeType, refType))
         allentries=self.cursorNode.fetchall()
         if len(allentries)==1:
             return self.poiRefFromDB(allentries[0])
 
         return None, None, None, None, None, None
-
-    # check ref and position because 
-    # wayId and node refId could be the same
-    def hasPOIRefEntryForPos(self, refId, lat, lon, nodeType):
-        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=%d AND type=%d'%(refId, nodeType))
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            _, storedLat, storedLon, _, _, _=self.poiRefFromDB(x)
-            if storedLat==lat and storedLon==lon:
-                return True
-            
-        return False
     
     def getAllPOIRefEntrysDict(self, nodeTypeList):
-        filterString='('
-        for nodeType in nodeTypeList:
-            filterString=filterString+str(nodeType)+','
-        filterString=filterString[:-1]
-        filterString=filterString+')'
+        filterString=self.createSQLFilterStringForIN(nodeTypeList)
 
         self.cursorNode.execute('SELECT refId, tags, type FROM poiRefTable WHERE type IN %s'%(filterString))
         allentries=self.cursorNode.fetchall()
@@ -503,8 +470,8 @@ class OSMDataImport(OSMDataSQLite):
 
         return resultDict
     
-    def updatePOIRefEntry(self, poiId, country, city):
-        self.cursorNode.execute('UPDATE OR IGNORE poiRefTable SET country=%d,city=%d WHERE id=%d'%(country, city, poiId))
+    def updatePOIRefEntry(self, refId, refType, poiType, country, city):
+        self.cursorNode.execute('UPDATE OR IGNORE poiRefTable SET country=%d,city=%d WHERE refId=%d AND refType=%d AND type=%d'%(country, city, refId, refType, poiType))
     
     def getWayEntryForIdWithCoords(self, wayId):
         self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable where wayId=%d'%(wayId))
@@ -525,11 +492,12 @@ class OSMDataImport(OSMDataSQLite):
         return resultList
     
     def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable WHERE refId=265396681')
+        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
-            poiId, refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
+            print("%s %s %s"%(x[0], x[1], x[3]))
+#            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
+#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
     def testWayTable(self):
         self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
@@ -553,20 +521,21 @@ class OSMDataImport(OSMDataSQLite):
             self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE osmId=136661')
+        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print(polyStr)
+            print("%s %s"%(x[0],x[1]))
+#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+#            print(polyStr)
 #            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
-        tolerance=self.osmutils.degToMeter(10.0)
-        print(tolerance)
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE osmId=136661'%(tolerance))
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print(polyStr)
+#        tolerance=self.osmutils.degToMeter(10.0)
+#        print(tolerance)
+#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE osmId=136661'%(tolerance))
+#        allentries=self.cursorArea.fetchall()
+#        for x in allentries:
+#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+#            print(polyStr)
 
 #        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
 #        allentries=self.cursorArea.fetchall()
@@ -660,40 +629,40 @@ class OSMDataImport(OSMDataSQLite):
                 if "highway" in tags:
                     nodeType=self.getHighwayNodeTypeId(tags["highway"])
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
                             
                 if "barrier" in tags:
                     if tags["barrier"] in self.isUsableBarierType():
-                        self.addToPOIRefTable(ref, lat, lon, tags, Constants.POI_TYPE_BARRIER, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, Constants.POI_TYPE_BARRIER, layer)
                       
                 if "amenity" in tags:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
                 
                 if "place" in tags:
                     if tags["place"] in self.isUsablePlaceNodeType():
-                        self.addToPOIRefTable(ref, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
  
                 if "shop" in tags:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
 
                 if "aeroway" in tags:
                     nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
 
                 if "railway" in tags:
                     nodeType=self.getRailwayNodeTypeId(tags["railway"])
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
                 
                 if "tourism" in tags:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
-                        self.addToPOIRefTable(ref, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
                     
             if self.skipAddress==False:
                 if "addr:street" in tags:
@@ -840,7 +809,7 @@ class OSMDataImport(OSMDataSQLite):
             if len(refs)<2:
                 self.log("way with len(ref)<2 %d"%(wayid))
                 continue
-            
+                            
             isBuilding=False
             isLanduse=False
             isNatural=False
@@ -862,28 +831,28 @@ class OSMDataImport(OSMDataSQLite):
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "shop" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "aeroway" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "tourism" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, lat, lon, tags, nodeType, layer)
+                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if not "highway" in tags:   
                 # could be part of a relation                    
@@ -950,12 +919,12 @@ class OSMDataImport(OSMDataSQLite):
                     # e.g. waterway=riverbank ist missing then for Salzach
                     if isPolygon==True:
                         if newRefList[0]==newRefList[-1]:
-                            geomString=self.gisUtils.createMultiPolygonFromCoords(coords)
+                            geomString=self.getGISUtils().createMultiPolygonFromCoords(coords)
                         else:
                             self.log("parse_ways: skipping polygon area %d %s newRefList[0]!=newRefList[-1]"%(wayid, newRefList))
                             continue
                     else:
-                        geomString=self.gisUtils.createLineStringFromCoords(coords)
+                        geomString=self.getGISUtils().createLineStringFromCoords(coords)
                         
                     areaType=None
                     if isNatural==True:
@@ -975,9 +944,9 @@ class OSMDataImport(OSMDataSQLite):
                         
                     if areaType!=None:
                         if isPolygon==True:
-                            self.addPolygonToAreaTable(areaType, wayid, tags, geomString, layer)
+                            self.addPolygonToAreaTable(wayid, 0, areaType, tags, geomString, layer)
                         else:
-                            self.addLineToAreaTable(areaType, wayid, tags, geomString, layer)
+                            self.addLineToAreaTable(wayid, areaType, tags, geomString, layer)
                         
             # highway
             else:             
@@ -998,8 +967,8 @@ class OSMDataImport(OSMDataSQLite):
                                     self.log("parse_ways: skipping area %d %s len(coords)<2"%(wayid, refs))
                                     continue
                     
-                                geomString=self.gisUtils.createMultiPolygonFromCoords(coords)
-                                self.addPolygonToAreaTable(Constants.AREA_TYPE_HIGHWAY_AREA, wayid, tags, geomString, layer)
+                                geomString=self.getGISUtils().createMultiPolygonFromCoords(coords)
+                                self.addPolygonToAreaTable(wayid, 0, Constants.AREA_TYPE_HIGHWAY_AREA, tags, geomString, layer)
                             
                             continue
                 
@@ -1055,7 +1024,7 @@ class OSMDataImport(OSMDataSQLite):
             self.firstRelation=True
             self.log("Parsing relations...")
 
-        for osmid, tags, ways in relation:
+        for osmid, tags, ways in relation:                
             if "type" in tags:     
                 if tags["type"]=="restriction":
                     restrictionType=None
@@ -1236,8 +1205,8 @@ class OSMDataImport(OSMDataSQLite):
                         self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
-                    outerRefRings=self.gisUtils.mergeRelationRefs(allOuterRefs, self)
-                    innerRefRings=self.gisUtils.mergeRelationRefs(allInnerRefs, self)
+                    outerRefRings=self.getGISUtils().mergeRelationRefs(allOuterRefs, self)
+                    innerRefRings=self.getGISUtils().mergeRelationRefs(allInnerRefs, self)
 
                     # convert to multipolygon
                     polyString="'MULTIPOLYGON("
@@ -1284,7 +1253,7 @@ class OSMDataImport(OSMDataSQLite):
                                 
                                 innerCoords.append(innerRefRingEntry["coords"])
                                 
-                        polyStringPart=self.gisUtils.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
+                        polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
 
                         polyString=polyString+polyStringPart
                                                         
@@ -1296,6 +1265,9 @@ class OSMDataImport(OSMDataSQLite):
                     
                     if isAdminBoundary==True:
                         if adminLevel!=None:
+                            # to add our own admin infor later without clashing
+                            if osmid>self.highestAdminRelationNumber:
+                                self.highestAdminRelationNumber=osmid
                             self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
                         else:
                             self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
@@ -1316,7 +1288,9 @@ class OSMDataImport(OSMDataSQLite):
                             areaType=Constants.AREA_TYPE_AMENITY
                             
                         if areaType!=None:
-                            self.addPolygonToAreaTable(areaType, osmid, tags, polyString, layer)
+                            # make sure th osmid does not clash with a way area
+                            # polygon added before
+                            self.addPolygonToAreaTable(osmid, 1, areaType, tags, polyString, layer)
                    
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
@@ -1340,7 +1314,7 @@ class OSMDataImport(OSMDataSQLite):
                                     storedRefId, lat, lon=self.getCoordsEntry(fromRefId)
                                     if storedRefId!=None:
                                         tags["deviceRef"]=deviceRef
-                                        self.addToPOIRefTable(fromRefId, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
+                                        self.addToPOIRefTable(fromRefId, 0, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
                    
     def getStreetNameInfo(self, tags, streetTypeId):
 
@@ -2138,44 +2112,10 @@ class OSMDataImport(OSMDataSQLite):
                         self.addToCrossingsTable(wayid, ref, wayList)
         
         print("")
-        
-    def createPOIEntriesForWays(self):
-        self.cursorWay.execute('SELECT * FROM wayTable')
-        allWays=self.cursorWay.fetchall()
-        
-        allWaysLength=len(allWays)
-        allWaysCount=0
-
-        prog = ProgressBar(0, allWaysLength, 77)
-        
-        for way in allWays:
-            wayId, tags, refs, _, _, _, _, poiList=self.wayFromDB(way)
-
-            prog.updateAmount(allWaysCount)
-            print(prog, end="\r")
-            allWaysCount=allWaysCount+1
-
-            if poiList==None:
-                poiList=list()
-            
-            for ref in refs:
-                storedRefId, _, _, _, _, _=self.getPOIRefEntryForId(ref, Constants.POI_TYPE_ENFORCEMENT_WAYREF)
-                if storedRefId!=None:
-                    # enforcement
-                    poiList.append((ref, Constants.POI_TYPE_ENFORCEMENT_WAYREF))
-                
-                storedRefId, _, _, _, _, _=self.getPOIRefEntryForId(ref, Constants.POI_TYPE_BARRIER)
-                if storedRefId!=None:
-                    # barrier
-                    poiList.append((ref, Constants.POI_TYPE_BARRIER))
-                            
-            if len(poiList)!=0:
-                self.updateWayTableEntryPOIList(wayId, poiList)
-            
-        print("")
           
-    def createPOIEntriesForWays2(self):
-        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE type=%d OR type=%d'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_BARRIER))
+    def createPOIEntriesForWays(self):
+        self.log("create POI way entries")
+        self.cursorNode.execute('SELECT refId, tags, type, layer, AsText(geom) FROM poiRefTable WHERE (type=%d OR type=%d) AND refType=0'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_BARRIER))
         allRefs=self.cursorNode.fetchall()
         
         allRefsLength=len(allRefs)
@@ -2233,18 +2173,12 @@ class OSMDataImport(OSMDataSQLite):
     
     def initDB(self):
         self.log(self.getDataDir())
-        
-#        self.openCoordsDB()
-#        self.createCoordsDBTables()
-        
-        createCoordsDB=not self.coordsDBExists()
-        if createCoordsDB:
-            self.openCoordsDB()
-            self.createCoordsDBTables()
-            self.skipCoords=False
-        else:
-            self.openCoordsDB()
-            self.skipCoords=True
+                    
+        self.openCoordsDB()
+        self.createCoordsDBTables()
+
+        self.openTmpDB()
+        self.createTmpTable()
 
         createEdgeDB=not self.edgeDBExists()
         if createEdgeDB:
@@ -2280,16 +2214,6 @@ class OSMDataImport(OSMDataSQLite):
             self.createNodeDBTables()
         else:
             self.openNodeDB()
-
-        self.openTmpDB()
-        self.createTmpTable()
-        
-#        createTmpWayDB=not self.tmpDBExists()
-#        if createTmpWayDB:
-#            self.openTmpDB()
-#            self.createTmpTable()
-#        else:
-#            self.openTmpDB()
 
         if createWayDB==True:
             self.skipNodes=False
@@ -2390,13 +2314,8 @@ class OSMDataImport(OSMDataSQLite):
             self.vacuumAddressDB()
 
         if createWayDB==True:
-            self.log("create POI entries")
-            self.createPOIEntriesForWays2()
+            self.createPOIEntriesForWays()
             self.resolvePOIRefs()
-            
-        if createCoordsDB==True:
-            self.log("vacuum coords DB")
-            self.vacuumCoordsDB()
             
         self.closeCoordsDB()
         self.closeAllDB()
@@ -2543,7 +2462,7 @@ class OSMDataImport(OSMDataSQLite):
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+                coordsList=self.getGISUtils().createCoordsFromPolygonString(polyStr)
                 for coords, _ in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
@@ -2642,10 +2561,18 @@ class OSMDataImport(OSMDataSQLite):
                         
             print("")
 
+    def poiRefFromDB2(self, x):
+        refId=int(x[0])
+        refType=int(x[1])
+        poiType=int(x[2])      
+        city=x[3]      
+        lat, lon=self.getGISUtils().createPointFromPointString(x[4])
+        return (refId, refType, poiType, lat, lon, city)    
+    
     def resolvePOIRefs(self):
         self.log("resolve POI refs from admin boundaries")
         adminLevelList=[4, 6, 8]
-        self.cursorNode.execute('SELECT id, refId, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        self.cursorNode.execute('SELECT refId, refType, type, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         
         allPOIRefsLength=len(allentries)
@@ -2663,14 +2590,14 @@ class OSMDataImport(OSMDataSQLite):
             polyStr=area[3]
             
             if "name" in tags:
-                coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+                coordsList=self.getGISUtils().createCoordsFromPolygonString(polyStr)
                 for coords, _ in coordsList:
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
         
         countryCache=dict()
         for x in allentries:
-            (poiId, _, lat, lon, _, _, _, _, storedCity)=self.poiRefFromDB2(x)
+            (refId, refType, poiType, lat, lon, storedCity)=self.poiRefFromDB2(x)
                         
             prog.updateAmount(allPOIRefCount)
             print(prog, end="\r")
@@ -2692,7 +2619,7 @@ class OSMDataImport(OSMDataSQLite):
                         country=countryCache[osmId]
                     
                     if country!=None:
-                        self.updatePOIRefEntry(poiId, country, osmId)
+                        self.updatePOIRefEntry(refId, refType, poiType, country, osmId)
 #                    else:
 #                        self.log("unknown country for %d"%(osmId))
   
@@ -2726,7 +2653,6 @@ class OSMDataImport(OSMDataSQLite):
         i=0
         for polyCountryName in polyCountryList:
             if not polyCountryName in osmCountryList:
-                osmId=999999+i
                 self.log("add country %s from polylist"%(polyCountryName))
                 polyString=self.bu.createMultiPolygonFromPoly(polyCountryName)
                 tags=dict()
@@ -2734,8 +2660,8 @@ class OSMDataImport(OSMDataSQLite):
                 tags["name:de"]=polyCountryName
                 tags["name"]=polyCountryName
                 adminLevel=2
-                # TODO: must not clash with other admin area ids
-                self.addPolygonToAdminAreaTable(osmId, tags, adminLevel, polyString)
+                # make sure it does not clash with other admin relations
+                self.addPolygonToAdminAreaTable(self.highestAdminRelationNumber+1+i, tags, adminLevel, polyString)
                 i=i+1
 
         adminList=self.getAllAdminAreas(adminLevelList, True)
@@ -2746,7 +2672,7 @@ class OSMDataImport(OSMDataSQLite):
             adminLevel=area[2]
             polyStr=area[3]
             
-            coordsList=self.gisUtils.createCoordsFromPolygonGeom(polyStr)
+            coordsList=self.getGISUtils().createCoordsFromPolygonString(polyStr)
             for coords, _ in coordsList:
                 cPolygon=Polygon(coords)
                 polyList[adminLevel].append((osmId, cPolygon, tags))
@@ -2868,7 +2794,7 @@ class OSMDataImport(OSMDataSQLite):
     def removeOrphanedPOIs(self):
         if len(self.usedBarrierList)!=0:
             barrierSet=set(self.usedBarrierList)
-            self.cursorNode.execute('SELECT refId FROM poiRefTable WHERE type=%d'%(Constants.POI_TYPE_BARRIER))
+            self.cursorNode.execute('SELECT refId FROM poiRefTable WHERE type=%d AND refType=0'%(Constants.POI_TYPE_BARRIER))
             allBarrierRefs=self.cursorNode.fetchall()
             
             allRefLength=len(allBarrierRefs)
@@ -2884,7 +2810,7 @@ class OSMDataImport(OSMDataSQLite):
                 allRefsCount=allRefsCount+1
                 
                 if not refId in barrierSet:
-                    self.cursorNode.execute('DELETE FROM poiRefTable WHERE refId NOTNULL AND refId=%d AND type=%d'%(refId, Constants.POI_TYPE_BARRIER))
+                    self.cursorNode.execute('DELETE FROM poiRefTable WHERE refId NOTNULL AND refId=%d AND type=%d AND refType=0'%(refId, Constants.POI_TYPE_BARRIER))
                     removeCount=removeCount+1
             print("")
             self.log("removed %d nodes"%(removeCount))
@@ -3187,7 +3113,6 @@ def main(argv):
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
 #    p.testPOIRefTable()
-
 #    p.mergeEqualWayEntries()
     
 #    p.mergeWayEntries()
