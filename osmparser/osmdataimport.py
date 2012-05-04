@@ -13,7 +13,9 @@ import cProfile
 from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
 from utils.osmutils import OSMUtils
-from osmparser.parser.xml.parser import XMLParser
+from imposm.parser.xml.parser import XMLParser
+from imposm.parser import OSMParser
+
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
 from osmparser.osmdatasqlite import OSMDataSQLite
@@ -2166,6 +2168,12 @@ class OSMDataImport(OSMDataSQLite):
                       ways_callback=self.parse_ways, 
                       relations_callback=self.parse_relations,
                       coords_callback=self.parse_coords)
+            
+#            p = OSMParser(4, nodes_callback=self.parse_nodes, 
+#                      ways_callback=self.parse_ways, 
+#                      relations_callback=self.parse_relations,
+#                      coords_callback=self.parse_coords)
+            
             p.parse(osmFile)
 
     def getOSMFile(self, country):

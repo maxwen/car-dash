@@ -49,38 +49,7 @@ class OSMUtils():
         lat_m = ((-( pixel_y - ( z * (TILESIZE/2) ) ) * PI2) /(TILESIZE * z))
         lat = math.asin(math.tanh(lat_m))
         return lat
-   
-    def crossproduct(self, x1, y1, z1, x2, y2, z2):
-        xa = y1*z2-y2*z1
-        ya = z1*x2-z2*x1
-        za = x1*y2-y1*x2
-        return (xa, ya, za)
-
-    def dotproduct(self, x1, y1, z1, x2, y2, z2 ):
-        return (x1*x2+y1*y2+z1*z2);
-    
-    def distance1(self,  lat1, lon1, lat2, lon2 ):
-        lat1 = self.deg2rad(lat1)
-        lon1 = self.deg2rad(lon1)
-        lat2 = self.deg2rad(lat2)
-        lon2 = self.deg2rad(lon2)
         
-        sdlat = math.sin((lat1 - lat2) / 2.0)
-        sdlon = math.sin((lon1 - lon2) / 2.0)
-
-        res = math.sqrt(sdlat * sdlat + math.cos(lat1) * math.cos(lat2) * sdlon * sdlon)
-
-        if res > 1.0:
-            res = 1.0
-        elif res < -1.0:
-            res = -1.0
-
-        res = math.asin(res)
-
-        c= 2.0 * res
-        d = (RADIUS_EARTH * c)*1000
-        return int(d)
-
     def distance(self,  lat1, lon1, lat2, lon2 ):
         lat1 = self.deg2rad(lat1)
         lon1 = self.deg2rad(lon1)
@@ -96,92 +65,6 @@ class OSMUtils():
         x = (lon2-lon1) * math.cos((lat1+lat2)/2)
         y = (lat2-lat1)
         return math.sqrt(x*x + y*y)
-                       
-    #  Compute the position of a point partially along the geodesic from 
-    #  lat1,lon1 to lat2,lon2
-    #  
-    #  Ref: http://mathworld.wolfram.com/RotationFormula.html
-    def linepart1(self, lat1, lon1, lat2,  lon2, frac):
-        x1=0.0
-        y1=0.0
-        z1=0.0
-        x2=0.0
-        y2=0.0
-        z2=0.0
-        xa=0.0
-        ya=0.0
-        za=0.0
-        la=0.0
-        xr=0.0
-        yr=0.0
-        zr=0.0
-        xx=0.0
-        yx=0.0
-        zx=0.0
-        reslat=0.0
-        reslon=0.0
-        theta = 0.0
-        phi = 0.0
-        cosphi = 0.0
-        sinphi = 0.0
-        
-          
-        lat1 = self.deg2rad(lat1)
-        lon1 = self.deg2rad(lon1)
-        lat2 = self.deg2rad(lat2)
-        lon2 = self.deg2rad(lon2)
-        
-        x1 = math.cos(lon1)*math.cos(lat1)
-        y1 = math.sin(lat1)
-        z1 = math.sin(lon1)*math.cos(lat1)
-        
-        x2 = math.cos(lon2)*math.cos(lat2) 
-        y2 = math.sin(lat2)
-        z2 = math.sin(lon2)*math.cos(lat2)
-        
-        (xa, ya, za)=self.crossproduct( x1, y1, z1, x2, y2, z2)
-        la = math.sqrt(xa*xa+ya*ya+za*za)
-        
-        if la!=0.0:
-            xa=xa/la
-            ya=ya/la
-            za=za/la
-          
-        if la!=0.0:
-            (xx, yx, zx)=self.crossproduct( x1, y1, z1, xa, ya, za)
-           
-            theta = math.atan2( self.dotproduct(xx,yx,zx,x2,y2,z2),
-                   self.dotproduct(x1,y1,z1,x2,y2,z2))
-            
-            phi = frac * theta
-            cosphi = math.cos(phi)
-            sinphi = math.sin(phi)
-            
-            
-            xr = x1*cosphi + xx * sinphi
-            yr = y1*cosphi + yx * sinphi
-            zr = z1*cosphi + zx * sinphi
-            
-            if xr > 1:
-                xr = 1
-            if xr < -1: 
-                xr = -1
-            if yr > 1:
-                yr = 1
-            if yr < -1: 
-                yr = -1
-            if zr > 1:
-                zr = 1
-            if zr < -1:
-                zr = -1
-            
-            reslat = self.rad2deg(math.asin(yr))
-            if xr == 0 and zr == 0:
-                reslon = 0.0
-            else:
-                reslon = self.rad2deg(math.atan2( zr, xr ))
-            
-        return (reslat, reslon)
     
     def linepart(self, lat1, lon1, lat2,  lon2, frac):
         lat1 = self.deg2rad(lat1)
@@ -333,50 +216,46 @@ class OSMUtils():
 
 #        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
         return points
-    
-    def createTemporaryPoints1(self, lat, lon, lat1, lon1, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
-        distance=int(self.distance(lat, lon, lat1, lon1))
-        pointsToIgnoreStart=0
-        pointsToIgnoreEnd=0
-        
-        if offsetStart!=0.0:
-            pointsToIgnoreStart=int(offsetStart/frac)
-        if offsetEnd!=0.0:
-            pointsToIgnoreEnd=int(offsetEnd/frac)
-       
-        pointsToCreate=int(distance/frac)
-
-        points=list()
-        if offsetStart==0.0 and addStart==True:
-            points.append((lat, lon))
-        if distance>frac:
-            doneDistance=0
-            i=0
-            while doneDistance<distance:
-                newLat, newLon=self.linepart1(lat, lon, lat1, lon1, doneDistance/distance)
-                if pointsToIgnoreStart!=0:
-                    if i>pointsToIgnoreStart:
-                        points.append((newLat, newLon))
-                if pointsToIgnoreEnd!=0:
-                    if i<pointsToCreate-pointsToIgnoreEnd:
-                        points.append((newLat, newLon))
-                else:
-                    points.append((newLat, newLon))
-                    
-                doneDistance=doneDistance+frac
-                i=i+1
-        if offsetEnd==0.0 and addEnd==True:
-            points.append((lat1, lon1))
-
-#        print("%d %s %d"%(pointsToCreate, str(pointsToIgnore), len(points)))
-        return points
-        
+            
     def degToMeter(self, meter):
         deg_to_meter = (40000 * 1000) / 360
         return meter / deg_to_meter
     
+    def mod(self, y, x):
+        return y - x*math.floor(y/x)
+    
+#     lat=asin(sin(lat1)*cos(d)+cos(lat1)*sin(d)*cos(tc))
+#     IF (cos(lat)=0)
+#        lon=lon1      // endpoint a pole
+#     ELSE
+#        lon=mod(lon1+asin(sin(tc)*sin(d)/cos(lat))+pi,2*pi)-pi
+#     ENDIF
+    def getPosInDistanceAndTrack(self, lat1, lon1, distance, track):
+        trackRad=self.deg2rad(track)
+        distanceRad=(distance/(RADIUS_EARTH *1000))
+        rLat1=self.deg2rad(lat1)
+        rLon1=self.deg2rad(lon1)
+        lat=math.asin(math.sin(rLat1)*math.cos(distanceRad)+math.cos(rLat1)*math.sin(distanceRad)*math.cos(trackRad))
+        if math.cos(lat)==0:
+            lon=rLon1
+        else:
+            lon=self.mod(rLon1+math.asin(math.sin(trackRad)*math.sin(distanceRad)/math.cos(rLat1))+math.pi, 2*math.pi)-math.pi
+     
+        return (self.rad2deg(lat), self.rad2deg(lon))
+
+    def getPosInDistanceAndTrackRad(self, rLat1, rLon1, distance, track):
+        trackRad=self.deg2rad(track)
+        distanceRad=(distance/(RADIUS_EARTH *1000))
+        lat=math.asin(math.sin(rLat1)*math.cos(distanceRad)+math.cos(rLat1)*math.sin(distanceRad)*math.cos(trackRad))
+        if math.cos(lat)==0:
+            lon=rLon1
+        else:
+            lon=self.mod(rLon1+math.asin(math.sin(trackRad)*math.sin(distanceRad)/math.cos(rLat1))+math.pi, 2*math.pi)-math.pi
+     
+        return (self.rad2deg(lat), self.rad2deg(lon))
+    
 def main():    
-#    # 84194738 
+#    # 841947t38 
 #    #47.802747-13.029014 47.802747-13.029014 47.803394-13.028636
 #
 #    latCross=47.8027471
@@ -441,7 +320,27 @@ def main():
 #    print(osmutils.headingDiffAbsolute(270, 45))
 
 #    start=time.time()
-#    print(osmutils.distance(latFrom, lonFrom, latTo, lonTo))
+    print("from %f %f"%(latFrom, lonFrom))
+    print("to %f %f"%(latTo, lonTo))
+
+    distance=osmutils.distance(latFrom, lonFrom, latTo, lonTo)
+    headingDeg=osmutils.headingDegrees(latFrom, lonFrom, latTo, lonTo)
+    print("heading %d"%(headingDeg))
+    lat1, lon1=osmutils.getPosInDistanceAndTrack(latFrom, lonFrom, distance, headingDeg)
+    
+    print("%f %f"%(lat1, lon1))
+    
+    rLatFrom = osmutils.deg2rad(latFrom)
+    rLonFrom = osmutils.deg2rad(lonFrom)
+    rLatTo = osmutils.deg2rad(latTo)
+    rLonTo = osmutils.deg2rad(lonTo)
+    headingRad=osmutils.headingRad(rLatFrom, rLonFrom, rLatTo, rLonTo)
+    distanceRad=osmutils.distanceRadRad(rLatFrom, rLonFrom, rLatTo, rLonTo)
+    lat1, lon1=osmutils.getPosInDistanceAndTrackRad(rLatFrom, rLonFrom, distance, headingDeg)
+    
+    print("%f %f"%(lat1, lon1))
+
+    
 #    for i in range(0, 100000):
 #        osmutils.distance(latFrom, lonFrom, latTo, lonTo)
 #    print("distance:%f"%(time.time()-start))
