@@ -408,12 +408,12 @@ class OSMStyle():
     
     def getWaterwayPenWidthForZoom(self, zoom, tags):
         waterwayType=tags["waterway"]
-        if "width" in tags:
-            try:
-                value=int(tags["width"])
-                return self.meterToPixel(value, zoom)
-            except ValueError:
-                None
+#        if "width" in tags:
+#            try:
+#                value=int(tags["width"])
+#                return self.meterToPixel(value, zoom)
+#            except ValueError:
+#                None
         
         if waterwayType=="river":
             if zoom==18:
@@ -424,9 +424,11 @@ class OSMStyle():
                 return 8
             if zoom==15:
                 return 4
-            if zoom==14:
-                return 1
             
+        elif waterwayType=="ditch":
+            if zoom==18:
+                return 2
+                    
         else:
             if zoom==18:
                 return 8
@@ -436,8 +438,6 @@ class OSMStyle():
                 return 4
             if zoom==15:
                 return 2
-            if zoom==14:
-                return 1
         
         return 1
     
