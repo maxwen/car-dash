@@ -26,7 +26,6 @@ from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 from utils.config import Config
 from utils.osmutils import OSMUtils
 from utils.gpsutils import getGPSUpdateThread, GPSData, gpsRunState, gpsStoppedState
-from gps import gps, misc
 from osmdialogs import *
 
 from mapnik.mapnikwrapper import MapnikWrapper, disableMappnik

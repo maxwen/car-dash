@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANSocketWorker, CANDecoder, canIdleState, canRunState, canStoppedState
-from utils.gpsutils import getGPSUpdateThread, GPSMonitor, GPSData, gpsIdleState, gpsRunState, gpsStoppedState
+from utils.gpsutils import getGPSUpdateThread, GPSMonitor, GPSData, gpsRunState, gpsStoppedState
 from utils.config import Config
 from log import Log, DebugLogWidget
 
@@ -1181,9 +1181,7 @@ class CANMonitor(QMainWindow):
             
     def updateGPSThreadState(self, state):
         if state!=self.lastGPSState:
-            if state==gpsIdleState:
-                self.connectGPSButton.setIcon(self.ampelGelb)
-            elif state==gpsRunState:
+            if state==gpsRunState:
                 self.connectGPSButton.setIcon(self.ampelGruen)
             elif state==gpsStoppedState:
                 self.connectGPSButton.setIcon(self.ampelRot)

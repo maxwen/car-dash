@@ -12,11 +12,11 @@ import os
 from datetime import datetime
 
 
-USE_GPSD=False
-USE_NMEA=True
+USE_GPSD=True
+USE_NMEA=False
 
 try:
-    from gps import gps, misc
+    import gpsd
 except ImportError:
     USE_GPSD=False
 
@@ -33,7 +33,6 @@ from gaugecompass import QtPngCompassGauge
 from utils.osmutils import OSMUtils
 from utils.config import Config
 
-gpsIdleState="idle"
 gpsRunState="run"
 gpsStoppedState="stopped"
 
@@ -117,8 +116,7 @@ class GPSUpateWorkerGPSD(QThread):
         self.connected=False
         self.reconnecting=False
         self.reconnectTry=0
-        self.lastLat=None
-        self.lastLon=None
+        self.lastGPSData=None
         
     def __del__(self):
         self.exiting = True
@@ -162,9 +160,9 @@ class GPSUpateWorkerGPSD(QThread):
     def connectGPS(self):
         if self.session==None:
             try:
-                self.session = gps.gps()
+                self.session = gpsd.gps()
                 self.updateStatusLabel("GPS connect ok")
-                self.session.stream(gps.WATCH_ENABLE)
+                self.session.stream(gpsd.WATCH_ENABLE)
                 self.connected=True
             except socket.error:
                 if self.reconnecting==True:
@@ -213,25 +211,19 @@ class GPSUpateWorkerGPSD(QThread):
         lat=0.0
         lon=0.0
         
-        if not gps.isnan(session.fix.track):
+        if not gpsd.isnan(session.fix.track):
             track=int(session.fix.track)
         
-        if not gps.isnan(session.fix.speed):
+        if not gpsd.isnan(session.fix.speed):
             speed=int(session.fix.speed*3.6)
         
-        if not gps.isnan(session.fix.altitude):
+        if not gpsd.isnan(session.fix.altitude):
             altitude=session.fix.altitude
      
-        if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
+        if not gpsd.isnan(session.fix.latitude) and not gpsd.isnan(session.fix.longitude):
             lat=session.fix.latitude
             lon=session.fix.longitude
         
-        if self.lastLat!=None and self.lastLon!=None:
-            if lat==self.lastLat and lon==self.lastLon:
-                return None
-        
-        self.lastLat=lat
-        self.lastLon=lon
         return GPSData(timeStamp, lat, lon, track, speed, altitude)
     
     def run(self):
@@ -242,25 +234,23 @@ class GPSUpateWorkerGPSD(QThread):
                 try:
                     self.session.__next__()
                     gpsData=self.createGPSData(self.session)
-                    if gpsData!=None:
+                    if gpsData!=self.lastGPSData:
                         self.updateGPSDisplay(gpsData)
+                        self.lastGPSData=gpsData
                         self.updateGPSThreadState(gpsRunState)
                 except StopIteration:
                     self.updateStatusLabel("GPS connection lost")
-                    self.updateGPSThreadState(gpsIdleState)
                     self.connected=False
                     self.session=None
                     self.reconnectGPS()
                 except socket.timeout:
                     self.updateStatusLabel("GPS thread socket.timeout")
-                    self.updateGPSThreadState(gpsIdleState)
                     continue
                 except socket.error:
                     if self.exiting==True:
                         self.updateStatusLabel("GPS thread stop request")
                         continue
             else:
-                self.updateStatusLabel("GPS thread idle")
                 self.msleep(1000)
             
         self.updateStatusLabel("GPS thread stopped")
@@ -411,7 +401,6 @@ class GPSUpateWorkerNMEA(QThread):
                     continue
 
             else:
-                self.updateStatusLabel("GPS thread idle")
                 self.msleep(1000)
             
         self.updateStatusLabel("GPS thread stopped")
