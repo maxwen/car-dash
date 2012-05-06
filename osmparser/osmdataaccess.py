@@ -336,31 +336,47 @@ class OSMDataAccess(OSMDataSQLite):
         return streetList
     
     # bbox for spatial DB (left, bottom, right, top)
-    def createBBoxForRoute(self, route):
-        bbox=[None, None, None, None]
+#    def createBBoxForRoute(self, route):
+#        bbox=[None, None, None, None]
+#        routingPointList=route.getRoutingPointList()
+#        for point in routingPointList:
+#            (lat, lon)=point.getPos()
+#            if bbox[0]==None:
+#                bbox[0]=lon
+#            if bbox[1]==None:
+#                bbox[1]=lat
+#            if bbox[2]==None:
+#                bbox[2]=lon
+#            if bbox[3]==None:
+#                bbox[3]=lat
+#            
+#            if lon<bbox[0]:
+#                bbox[0]=lon
+#            if lon>bbox[2]:
+#                bbox[2]=lon
+#            if lat<bbox[1]:
+#                bbox[1]=lat
+#            if lat>bbox[3]:
+#                bbox[3]=lat
+#                                
+#        return bbox
+              
+    def createBBoxForRoute2(self, route):
+        lonList=list()
+        latList=list()
         routingPointList=route.getRoutingPointList()
         for point in routingPointList:
             (lat, lon)=point.getPos()
-            if bbox[0]==None:
-                bbox[0]=lon
-            if bbox[1]==None:
-                bbox[1]=lat
-            if bbox[2]==None:
-                bbox[2]=lon
-            if bbox[3]==None:
-                bbox[3]=lat
-            
-            if lon<bbox[0]:
-                bbox[0]=lon
-            if lon>bbox[2]:
-                bbox[2]=lon
-            if lat<bbox[1]:
-                bbox[1]=lat
-            if lat>bbox[3]:
-                bbox[3]=lat
-                                
-        return bbox
-                
+            lonList.append(lon)
+            latList.append(lat)
+        
+        bboxLon1=min(lonList)
+        bboxLat1=min(latList)
+        bboxLon2=max(lonList)
+        bboxLat2=max(latList)
+                    
+        return [bboxLon1, bboxLat1, bboxLon2, bboxLat2]  
+    
     def calcRoute(self, route):  
         routingPointList=route.getRoutingPointList()                
       
@@ -376,7 +392,8 @@ class OSMDataAccess(OSMDataSQLite):
             sourceEdge=startPoint.getEdgeId()
             sourcePos=startPoint.getPosOnEdge()
             
-            bbox=self.createBBoxForRoute(route)
+            bbox=self.createBBoxForRoute2(route)
+            print(bbox)
                     
             for targetPoint in routingPointList[1:]:
                 if targetPoint.getTarget()==0:

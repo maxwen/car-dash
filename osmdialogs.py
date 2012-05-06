@@ -4,9 +4,11 @@ Created on Jan 17, 2012
 @author: maxl
 '''
 
-import fnmatch
+#from fnmatch import fnmatch
+from utils.fnmatch import fnmatch
 import re
 import os
+import time
 
 from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
@@ -382,7 +384,7 @@ class OSMAdressDialog(QDialog):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
 
         self.selectedAddress=None
-        self.lastFilterValue=None
+        self.lastFilterValueText=None
         self.lastFilteredStreetList=None
         self.initUI()
          
@@ -395,6 +397,8 @@ class OSMAdressDialog(QDialog):
             self.streetList=list()
         
         self.filteredStreetList=self.streetList
+        self.lastFilterValueText=None
+        self.lastFilteredStreetList=None
 
     def updateAddressListForCountry(self):
         if self.currentCountryId!=None:
@@ -404,7 +408,9 @@ class OSMAdressDialog(QDialog):
             self.streetList=list()
         
         self.filteredStreetList=self.streetList
-    
+        self.lastFilterValueText=None
+        self.lastFilteredStreetList=None
+
     def updateCityListForCountry(self):
         if self.currentCountryId!=None:
             self.cityList=list()
@@ -585,7 +591,11 @@ class OSMAdressDialog(QDialog):
         self.cityViewModel.update(self.filteredCityList, self.cityModel)
         
         self.currentCityId=None
-        self.updateAdressListForCity()
+        value=self.ignoreCityButton.isChecked()
+        if value==True:
+            self.updateAddressListForCountry()
+        else:
+            self.updateAdressListForCity()
         self._applyFilterStreet()
         self._applyFilterCity()
         
@@ -675,9 +685,11 @@ class OSMAdressDialog(QDialog):
         
     @pyqtSlot()
     def _applyFilterStreet(self):
+        start=time.time()
         self._clearStreetTableSelection()
-        filterValue=self.streetFilterEdit.text()
-        if len(filterValue)!=0:
+        filterValueText=self.streetFilterEdit.text()
+        if len(filterValueText)!=0:
+            filterValue=filterValueText
             if filterValue[-1]!="*":
                 filterValue=filterValue+"*"
             filterValueMod=None
@@ -685,20 +697,24 @@ class OSMAdressDialog(QDialog):
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
 
             newFilterList=True
-            if self.lastFilterValue!=None and self.lastFilteredStreetList!=None:
-                if filterValue[:len(self.lastFilterValue)-1]==self.lastFilterValue:
+            if self.lastFilterValueText!=None and self.lastFilteredStreetList!=None:
+#                print(filterValueText[:len(self.lastFilterValueText)])
+#                print(self.lastFilterValueText)
+                if filterValueText[:len(self.lastFilterValueText)]==self.lastFilterValueText:
                     newFilterList=False
                     
             if newFilterList==True:
+#                print("use all")
                 currentStreetList=self.streetList
             else:
+#                print("use last")
                 currentStreetList=self.lastFilteredStreetList
             self.filteredStreetList=list()
             for (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon) in currentStreetList:
                 match=False
-                if fnmatch.fnmatch(streetName.upper(), filterValue.upper()):
+                if fnmatch(streetName.upper(), filterValue.upper()):
                     match=True
-                if match==False and filterValueMod!=None and fnmatch.fnmatch(streetName.upper(), filterValueMod.upper()):
+                if match==False and filterValueMod!=None and fnmatch(streetName.upper(), filterValueMod.upper()):
                     match=True
                 
                 if match==True:
@@ -707,8 +723,9 @@ class OSMAdressDialog(QDialog):
             self.filteredStreetList=self.streetList
                 
         self.streetViewModel.update(self.filteredStreetList)
-        self.lastFilterValue=filterValue
+        self.lastFilterValueText=filterValueText
         self.lastFilteredStreetList=self.filteredStreetList
+        print("%f"%(time.time()-start))
 
     @pyqtSlot()
     def _applyFilterCity(self):
@@ -724,9 +741,9 @@ class OSMAdressDialog(QDialog):
             
             for (cityId, cityName, adminLevel) in self.cityList:
                 match=False
-                if fnmatch.fnmatch(cityName.upper(), filterValue.upper()):
+                if fnmatch(cityName.upper(), filterValue.upper()):
                     match=True
-                if match==False and filterValueMod!=None and fnmatch.fnmatch(cityName.upper(), filterValueMod.upper()):
+                if match==False and filterValueMod!=None and fnmatch(cityName.upper(), filterValueMod.upper()):
                     match=True
                 
                 if match==True:
@@ -974,7 +991,7 @@ class OSMFavoritesDialog(QDialog):
             
             for point in self.favoriteList:
                 name=point.getName()
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+                if not fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch(name.upper(), filterValueMod.upper()):
                     continue
                 self.filteredFavoriteList.append(point)
         else:
@@ -1280,7 +1297,7 @@ class OSMRouteListDialog(QDialog):
             
             for route in self.routeList:
                 name=route.getName()
-                if not fnmatch.fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch.fnmatch(name.upper(), filterValueMod.upper()):
+                if not fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch(name.upper(), filterValueMod.upper()):
                     continue
                 self.filteredRouteList.append(route)
         else:

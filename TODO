@@ -138,6 +138,11 @@ TODO: we store poi nodes of ways with the wayId
 which could be same as a node refId
 -added an refType 0=node 1=way
 DONE
+
+  TODO: choosing of osmId for poly countries
+   -ensure the id the polygon is saved does not clash with other areas
+   -> count all admin relations and add with id higher
+  DONE
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -220,9 +225,6 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO: matching between poly files and osm admin areas
   -multilanguage support
   
-  TODO: choosing of osmId for poly countries
-   -ensure the id the polygon is saved does not clash with other areas
-  
   TODO: address dialog
   -expand city nodes?
   -matching city and/or streets is too slow
@@ -236,4 +238,6 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO:
   landuse overrides natural?
 
+TODO: create prefetch box based on track
 
+TODO: create tables with simplified polygons

@@ -300,8 +300,6 @@ class OSMStyle():
             return 0.6
         if zoom==14:
             return 0.5
-
-        return 0.4
     
     def getStreetWidth(self, streetTypeId, zoom, tags):
 #        laneWidth=self.meterToPixel(5, zoom)
@@ -316,6 +314,10 @@ class OSMStyle():
 #                
 #            except TypeError:
 #                None
+    
+        if zoom<=13:
+            return 1
+
         width=14
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
             width=width*1.6
@@ -344,7 +346,11 @@ class OSMStyle():
         else:
             width=width*0.6
             
-        return int(self.getRelativePenWidthForZoom(zoom)*width)
+        penWidth=int(self.getRelativePenWidthForZoom(zoom)*width)
+        if penWidth<1:
+            penWidth=1
+            
+        return penWidth
     
     def getStreetPenWidthForZoom(self, zoom):
         if zoom==18:
@@ -374,12 +380,12 @@ class OSMStyle():
 
     def getAerowayPenWidthForZoom(self, zoom, tags):
         aerowayType=tags["aeroway"]
-        if "width" in tags:
-            try:
-                value=int(tags["width"])
-                return self.meterToPixel(value, zoom)
-            except ValueError:
-                None
+#        if "width" in tags:
+#            try:
+#                value=int(tags["width"])
+#                return self.meterToPixel(value, zoom)
+#            except ValueError:
+#                None
                 
         if aerowayType=="runway":
             if zoom==18:
@@ -485,7 +491,10 @@ class OSMStyle():
             else:
                 if tunnel==True:
                     brush=QBrush(self.getStyleColor("tunnelColor"), Qt.Dense2Pattern)
-                    pen.setWidth(width-2)
+                    if width>2:
+                        pen.setWidth(width-2)
+                    else:
+                        pen.setWidth(width)
                 elif bridge==True:
                     brush=QBrush(self.getStyleColor("bridgeCasingColor"), Qt.SolidPattern)
                     pen.setCapStyle(Qt.FlatCap)
@@ -734,28 +743,28 @@ class OSMStyle():
     # TODO: values for lat 45 dec north
     # http://wiki.openstreetmap.org/wiki/FAQ#What_is_the_map_scale_for_a_particular_zoom_level_of_the_map.3F
     # * cos(lat)
-    def meterToPixel(self, value, zoom):
-        mpp=None
-        if zoom==18: 
-            mpp=0.844525     
-        elif zoom==17:
-            mpp=1.689051
-        elif zoom==16:
-            mpp=3.378103
-        elif zoom==15:
-            mpp=6.756207
-        elif zoom==14:
-            mpp=13.512415   
-        elif zoom==13:
-            mpp=27.024829    
-        
-        pixel=1
-        if mpp!=None:
-            pixel=value/mpp
-            if pixel < 1:
-                pixel=1
-            
-        return int(pixel)
+#    def meterToPixel(self, value, zoom):
+#        mpp=None
+#        if zoom==18: 
+#            mpp=0.844525     
+#        elif zoom==17:
+#            mpp=1.689051
+#        elif zoom==16:
+#            mpp=3.378103
+#        elif zoom==15:
+#            mpp=6.756207
+#        elif zoom==14:
+#            mpp=13.512415   
+#        elif zoom==13:
+#            mpp=27.024829    
+#        
+#        pixel=1
+#        if mpp!=None:
+#            pixel=value/mpp
+#            if pixel < 1:
+#                pixel=1
+#            
+#        return int(pixel)
     
 #    def getLaneWith(self, zoom):
 #        print(zoom)

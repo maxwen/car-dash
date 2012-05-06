@@ -1097,8 +1097,43 @@ class QtOSMWidget(QWidget):
         self.visibleCPolygon2 = Polygon(cont)
         
     def calcPrefetchBox(self, bbox):
+#        if self.track!=None:
+#            self.prefetchBBox=self.calcTrackBasedPrefetchBox(self.track, bbox)
+#        else:
         self.prefetchBBox=osmParserData.createBBoxWithMargin(bbox, self.getPrefetchBoxMargin())
         self.prefetchBBoxCPolygon=Polygon([(self.prefetchBBox[0], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[3]), (self.prefetchBBox[2], self.prefetchBBox[1]), (self.prefetchBBox[0], self.prefetchBBox[1])])
+        
+    def calcTrackBasedPrefetchBox(self, track, bbox):
+        xmargin1=0
+        ymargin1=0
+        xmargin2=0
+        ymargin2=0
+        
+        margin=self.getPrefetchBoxMargin()
+        
+        if (track>315 and track<=359) or (track>=0 and track<=45):
+            xmargin1=margin
+            xmargin2=margin
+            ymargin2=margin
+        elif track>45 and track<=135:
+            ymargin1=margin
+            xmargin2=margin
+            ymargin2=margin
+        elif track>135 and track <=225:
+            xmargin1=margin
+            ymargin1=margin
+            xmargin2=margin
+        elif track>225 and track<=315:
+            xmargin1=margin
+            ymargin1=margin
+            ymargin2=margin
+        
+        latRangeMax=bbox[3]+ymargin2
+        lonRangeMax=bbox[2]+xmargin2
+        latRangeMin=bbox[1]-ymargin1
+        lonRangeMin=bbox[0]-xmargin1 
+        
+        return lonRangeMin, latRangeMin, lonRangeMax, latRangeMax
         
     def isNewBBox(self, bbox):
         bboxCPolyon=Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])    
@@ -1108,6 +1143,7 @@ class QtOSMWidget(QWidget):
         else:
             newBBox=not self.prefetchBBoxCPolygon.covers(bboxCPolyon)
             if newBBox==True:
+#                print("newbbox")
                 self.calcPrefetchBox(bbox)
                 return True
             
@@ -1182,7 +1218,8 @@ class QtOSMWidget(QWidget):
             
             if self.withShowAreas==True:
                 if newBBox==True:
-                    self.getVisibleAreas(self.prefetchBBox)
+                    if self.map_zoom>=10:
+                        self.getVisibleAreas(self.prefetchBBox)
                 
                 if WITH_TIMING_DEBUG==True:
                     print("paintEvent fetch polygons:%f"%(time.time()-fetchStart))
@@ -1355,7 +1392,7 @@ class QtOSMWidget(QWidget):
             
         #if self.gpsUpdateStartTime!=None:
         #    print("paintEvent:%f"%(time.time()-self.gpsUpdateStartTime))
-    
+            
     def displayLocationBredCrumbs(self):
         for gpsData in self.locationBreadCrumbs:
             lat=gpsData.lat
@@ -1476,8 +1513,12 @@ class QtOSMWidget(QWidget):
             return 
         
         start=time.time()
-        resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
-#        resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
+        if self.map_zoom>=14:
+            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
+        elif self.map_zoom>=12:
+            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
+        elif self.map_zoom>=10:
+            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 100.0)        
         
         if WITH_TIMING_DEBUG==True:
             print("getWaysInBboxWithGeom: %f"%(time.time()-start))
@@ -1974,8 +2015,12 @@ class QtOSMWidget(QWidget):
             return
         
         start=time.time()
-        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
-#        resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 50.0)
+        if self.map_zoom>=14:
+            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
+        elif self.map_zoom>=12:
+            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 50.0)
+        elif self.map_zoom>=10:
+            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 100.0)
         
         if WITH_TIMING_DEBUG==True:
             print("getAreasInBboxWithGeom: %f"%(time.time()-start))
@@ -4568,11 +4613,15 @@ class OSMWidget(QWidget):
         if self.trackLogReplayThread.isRunning():
             self.trackLogReplayThread.pauseReplay()
 
+        if self.updateLocationThread.isRunning():
+            self.updateLocationThread.stop()
+
     @pyqtSlot()
     def _continueReplayLog(self):
         if not self.trackLogReplayThread.isRunning():
             self.trackLogReplayThread.continueReplay()
-            
+            self.updateLocationThread.setup()
+
     def updateGPSThreadState(self, state):
         if state==gpsRunState:
             self.gpsConnected=True
