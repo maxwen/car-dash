@@ -92,10 +92,11 @@ class Gps(object):
         """
         lines = self.port.read_buffered()
         for line in lines:
+#            print(line)
             try:
                 sentence = Sentence(line)
             except ParseError as ex:
-                self.error_message(str(ex))
+                self.__log_error(str(ex))
             else:
                 if sentence.source != "GP":
                     self.__log_error("Invalid source")

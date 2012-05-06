@@ -12,8 +12,8 @@ import os
 from datetime import datetime
 
 
-USE_GPSD=True
-USE_NMEA=False
+USE_GPSD=False
+USE_NMEA=True
 
 try:
     import gpsd
@@ -136,6 +136,7 @@ class GPSUpateWorkerGPSD(QThread):
         self.connected=False
         self.reconnecting=False
         self.reconnectTry=0
+        self.lastGPSData=None
         
         if connect==True:
             self.connectGPS()
@@ -146,7 +147,6 @@ class GPSUpateWorkerGPSD(QThread):
                 
     def updateStatusLabel(self, text):
         self.emit(SIGNAL("updateStatus(QString)"), text)
-#        print(text)
         
     def updateGPSThreadState(self, state):
         self.emit(SIGNAL("updateGPSThreadState(QString)"), state)
@@ -260,10 +260,10 @@ class GPSUpateWorkerGPSD(QThread):
 class GpsObject():
     def __init__(self, port):
         self.gps_device = nmea.gps.Gps(port, callbacks={
-            'fix_update': self.__fix_update,
+            #'fix_update': self.__fix_update,
             'transit_update': self.__transit_update,
-            'satellite_update': self.__satellite_update,
-            'satellite_status_update': self.__satellite_status_update,
+            #'satellite_update': self.__satellite_update,
+            #'satellite_status_update': self.__satellite_status_update,
             'log_error': self.__log_error
 
         })
@@ -376,10 +376,9 @@ class GPSUpateWorkerNMEA(QThread):
         while not self.exiting and True:
             if self.connected==True:
                 try:
-                    self.gpsObject.gps_device.handle_io()
+                    self.gpsObject.gps_device.parse_data()
                     gpsData=self.gpsObject.createGPSData()
                     if gpsData!=self.lastGPSData:
-                        #print("update gps data")
                         self.updateGPSDisplay(gpsData)
                         self.lastGPSData=gpsData
                         
@@ -520,7 +519,7 @@ class GPSMonitor(QWidget):
         self.valueLabelList[0].setText(str(lat))
         self.valueLabelList[1].setText(str(lon))
    
-        if not gps.isnan(lat) and not gps.isnan(lon):
+        if not gpsd.isnan(lat) and not gpsd.isnan(lon):
             self.updateDistanceDisplay(lat, lon)
 
     def update(self, gpsData):
