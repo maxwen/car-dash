@@ -4,10 +4,27 @@ Created on Dec 7, 2011
 @author: maxl
 '''
 
-from gps import gps, misc
 import socket
 import signal
 import sys
+import time
+from datetime import datetime
+
+
+USE_GPSD=False
+USE_NMEA=True
+
+try:
+    from gps import gps, misc
+except ImportError:
+    USE_GPSD=False
+
+try:
+    import nmea.gps
+    from nmea.serialport import SerialPort
+    from nmea._port import PortError
+except ImportError:
+    USE_NMEA=False
 
 from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
 from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
@@ -19,7 +36,80 @@ gpsIdleState="idle"
 gpsRunState="run"
 gpsStoppedState="stopped"
 
-class GPSMonitorUpateWorker(QThread):
+
+def getGPSUpdateThread(parent):
+    if USE_NMEA==True:
+        return GPSUpateWorkerNMEA(parent)
+    if USE_GPSD==True:
+        return GPSUpateWorkerGPSD(parent)
+    return None
+
+class GPSData():
+    def __init__(self, time=None, lat=None, lon=None, track=None, speed=None, altitude=None, predicted=False):
+        self.time=time
+        self.lat=lat
+        self.lon=lon
+        self.track=track
+        self.speed=speed
+        self.altitude=altitude
+        self.predicted=predicted
+        
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
+            
+    def isValid(self):
+        return self.lat!=None and self.lon!=None and self.lat!=0.0 and self.lon!=0.0
+    
+    def getTime(self):
+        return self.time()
+    
+    def getLat(self):
+        return self.lat
+    
+    def getLon(self):
+        return self.lon
+    
+    def getTrack(self):
+        return self.track
+    
+    def getSpeed(self):
+        return self.speed
+    
+    def getAltitude(self):
+        return self.altitude
+    
+    def fromTrackLogLine(self, line):
+        lineParts=line.split(":")
+        self.time=time.time()
+        if len(lineParts)==6:
+            self.lat=float(lineParts[1])
+            self.lon=float(lineParts[2])
+            self.track=int(lineParts[3])
+            self.speed=int(lineParts[4])
+            if lineParts[5]!="\n":
+                self.altitude=int(lineParts[5])
+            else:
+                self.altitude=0
+        else:
+            self.lat=0.0
+            self.lon=0.0
+            self.track=0
+            self.speed=0
+            self.altitude=0
+            
+    def createTimeStamp(self):
+        stamp=datetime.fromtimestamp(self.time)
+        return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
+
+    def toLogLine(self):
+        return "%s:%f:%f:%d:%d:%d"%(self.createTimeStamp(), self.lat, self.lon, self.track, self.speed, self.altitude)
+
+    def __repr__(self):
+        return self.toLogLine()
+
+class GPSUpateWorkerGPSD(QThread):
     def __init__(self, parent): 
         QThread.__init__(self, parent)
         self.exiting = False
@@ -63,8 +153,8 @@ class GPSMonitorUpateWorker(QThread):
     def connectGPSFailed(self):
         self.emit(SIGNAL("connectGPSFailed()"))
     
-    def updateGPSDisplay(self, session):
-        self.emit(SIGNAL("updateGPSDisplay(PyQt_PyObject)"), session)
+    def updateGPSDisplay(self, gpsData):
+        self.emit(SIGNAL("updateGPSDisplay(PyQt_PyObject)"), gpsData)
         
     def connectGPS(self):
         if self.session==None:
@@ -111,6 +201,30 @@ class GPSMonitorUpateWorker(QThread):
         self.connectGPSFailed()
         self.updateStatusLabel("GPS reconnect failed - exiting thread")
         
+    def createGPSData(self, session):
+        timeStamp=time.time()
+
+        speed=0
+        altitude=0
+        track=0
+        lat=0.0
+        lon=0.0
+        
+        if not gps.isnan(session.fix.track):
+            track=int(session.fix.track)
+        
+        if not gps.isnan(session.fix.speed):
+            speed=int(session.fix.speed*3.6)
+        
+        if not gps.isnan(session.fix.altitude):
+            altitude=session.fix.altitude
+     
+        if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
+            lat=session.fix.latitude
+            lon=session.fix.longitude
+            
+        return GPSData(timeStamp, lat, lon, track, speed, altitude)
+    
     def run(self):
         self.updateGPSThreadState(gpsRunState)
 
@@ -118,7 +232,8 @@ class GPSMonitorUpateWorker(QThread):
             if self.connected==True and self.session!=None:
                 try:
                     self.session.__next__()
-                    self.updateGPSDisplay(self.session)
+                    
+                    self.updateGPSDisplay(self.createGPSData(self.session))
                     self.updateGPSThreadState(gpsRunState)
                 except StopIteration:
                     self.updateStatusLabel("GPS connection lost")
@@ -134,6 +249,146 @@ class GPSMonitorUpateWorker(QThread):
                     if self.exiting==True:
                         self.updateStatusLabel("GPS thread stop request")
                         continue
+            else:
+                self.updateStatusLabel("GPS thread idle")
+                self.msleep(1000)
+            
+        self.updateStatusLabel("GPS thread stopped")
+        self.updateGPSThreadState(gpsStoppedState)
+        self.updateGPSDisplay(None)
+
+class GpsObject():
+    def __init__(self, port):
+        self.gps_device = nmea.gps.Gps(port, callbacks={
+            'fix_update': self.__fix_update,
+            'transit_update': self.__transit_update,
+            'satellite_update': self.__satellite_update,
+            'satellite_status_update': self.__satellite_status_update,
+            'log_error': self.__log_error
+
+        })
+        self.lat=0.0
+        self.lon=0.0
+        self.track=0
+        self.speed=0
+        self.altitude=0.0
+
+    def __log_error(self, msg, info):
+        pass
+        
+    def __fix_update(self, gps_device):
+        pass
+
+    def __transit_update(self, gps_device):
+        self.lat=gps_device.position.get_value()[0]
+        self.lon=gps_device.position.get_value()[1]
+        self.track=int(gps_device.track)
+        self.speed=int(gps_device.speed.kilometers_per_hour())
+        self.altitude=gps_device.altitude
+
+    def __satellite_update(self, gps_device):
+        pass
+
+    def __satellite_status_update(self, gps_device):
+        pass
+    
+    def createGPSData(self):
+        timeStamp=time.time()            
+        return GPSData(timeStamp, self.lat, self.lon, self.track, self.speed, self.altitude)
+    
+class GPSUpateWorkerNMEA(QThread):
+    def __init__(self, parent): 
+        QThread.__init__(self, parent)
+        self.exiting = False
+        self.connected=False
+        self.reconnecting=False
+        self.reconnectTry=0
+        self.device="/dev/ttyUSB0"
+        self.timeout=3
+        self.baud=9600
+        self.port=None
+        self.gpsObject=None
+        
+    def __del__(self):
+        self.exiting = True
+        self.wait()
+        
+    def stop(self):
+        if self.connected==True:
+            self.disconnectGPS()
+        self.exiting = True
+        self.wait()
+        
+    def setup(self, connect):
+        self.updateStatusLabel("GPS thread setup")
+
+        self.session=None
+        self.exiting = False
+        self.connected=False
+        self.reconnecting=False
+        self.reconnectTry=0
+        
+        if connect==True:
+            self.connectGPS()
+
+        if self.connected==True:
+            self.updateStatusLabel("GPS thread started")
+            self.start()
+                
+    def updateStatusLabel(self, text):
+        self.emit(SIGNAL("updateStatus(QString)"), text)
+        
+    def updateGPSThreadState(self, state):
+        self.emit(SIGNAL("updateGPSThreadState(QString)"), state)
+
+    def connectGPSFailed(self):
+        self.emit(SIGNAL("connectGPSFailed()"))
+    
+    def updateGPSDisplay(self, gpsData):
+        self.emit(SIGNAL("updateGPSDisplay(PyQt_PyObject)"), gpsData)
+        
+    def connectGPS(self):
+        try:
+            self.port=SerialPort(self.device, self.baud, self.timeout)
+            self.connected=True
+            self.gpsObject=GpsObject(self.port)
+        except PortError:
+            self.connectGPSFailed()
+                      
+    def disconnectGPS(self):
+        if self.connected==True:
+            self.port.close()
+            self.connected=False
+            self.updateStatusLabel("GPS disconnect ok")
+          
+#    def reconnectGPS(self):
+#        self.reconnecting=True
+#        while self.reconnectTry<42 and self.connected==False and self.exiting==False:
+#            self.sleep(1)
+#            self.connectGPS()
+#            if self.connected==True:
+#                self.reconnectTry=0
+#                self.reconnecting=False
+#                return
+#            self.reconnectTry=self.reconnectTry+1
+#
+#        self.connected=False
+#        self.reconnectTry=0
+#        self.reconnecting=False
+#        self.session=None
+#        self.exiting=True
+#        self.connectGPSFailed()
+#        self.updateStatusLabel("GPS reconnect failed - exiting thread")
+        
+    def run(self):
+        self.updateGPSThreadState(gpsRunState)
+
+        while not self.exiting and True:
+            if self.connected==True:
+                self.gpsObject.gps_device.handle_io()
+                self.updateGPSDisplay(self.gpsObject.createGPSData())
+#                self.msleep(500)
+
             else:
                 self.updateStatusLabel("GPS thread idle")
                 self.msleep(1000)
@@ -195,10 +450,8 @@ class GPSMonitor(QWidget):
 
         hbox.addLayout(form)
         
-        self.createGPSLabel(form, "Status", "Not connected")
         self.createGPSLabel(form, "Latitude", "")
         self.createGPSLabel(form, "Longitude", "")
-        self.createGPSLabel(form, "Time UTC", "")
         self.createGPSLabel(form, "Altitude", "")
         self.createGPSLabel(form, "Speed", "")
         self.createGPSLabel(form, "Track", "")
@@ -254,76 +507,39 @@ class GPSMonitor(QWidget):
         self.lastLon=lon
         
     def updateGPSPositionTest(self, lat,lon):
-        self.valueLabelList[0].setText("Connected test")
-        self.valueLabelList[1].setText(str(lat))
-        self.valueLabelList[2].setText(str(lon))
+        self.valueLabelList[0].setText(str(lat))
+        self.valueLabelList[1].setText(str(lon))
    
         if not gps.isnan(lat) and not gps.isnan(lon):
             self.updateDistanceDisplay(lat, lon)
 
-    def update(self, session):
-        if session!=None:
-            self.valueLabelList[0].setText("Connected ("+str(session.satellites_used)+" satelites)")
-            self.valueLabelList[1].setText(str(session.fix.latitude))
-            self.valueLabelList[2].setText(str(session.fix.longitude))
+    def update(self, gpsData):
+        if gpsData!=None:
+            self.valueLabelList[0].setText(str(gpsData.lat))
+            self.valueLabelList[1].setText(str(gpsData.lon))
+            self.valueLabelList[2].setText(str(gpsData.altitude))
+            self.valueLabelList[3].setText(str(gpsData.speed))
+            self.valueLabelList[4].setText(str(gpsData.track))
             
-#            print(session.utc)
-            if type(session.utc)==type(1.0):
-                try:
-                    timeString=misc.isotime(session.utc)
-                except IndexError:
-                    timeString=""
-                except ValueError:
-                    timeString=""
-            else:
-                timeString=str(session.utc)
-            
-            speed=0
-            altitude=0
-            track=0
-            self.valueLabelList[3].setText(timeString)
-            self.valueLabelList[4].setText(str(session.fix.altitude))
-            self.valueLabelList[5].setText(str(session.fix.speed))
-            #self.valueLabelList[6].setText(str(session.fix.climb))
-            self.valueLabelList[6].setText(str(session.fix.track))
-            
-            if not gps.isnan(session.fix.track):
-                track=int(session.fix.track)
-            
+            track=int(gpsData.track)
             self.compassGauge.setValue(track)
-                
-            if not gps.isnan(session.fix.speed):
-                speed=int(session.fix.speed*3.6)
             
+            speed=int(gpsData.speed)
             self.speedDisplay.display(speed)
-
-            if not gps.isnan(session.fix.altitude):
-                altitude=session.fix.altitude
                 
-            if self.canMonitor.hasOSMWidget():
-                if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                    self.canMonitor.osmWidget.updateGPSDataDisplay(session.fix.latitude, session.fix.longitude, altitude, speed, track)
-                else:
-                    self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0, altitude, speed, track)
-
-            if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                self.updateDistanceDisplay(session.fix.latitude, session.fix.longitude)
-#            else:
-#                self.distanceDisplay.setValue(0)
-
+            self.updateDistanceDisplay(gpsData.lat, gpsData.lon)
+                
         else:
-            self.valueLabelList[0].setText("Not connected")
+            self.valueLabelList[0].setText("")
             self.valueLabelList[1].setText("")
             self.valueLabelList[2].setText("")
             self.valueLabelList[3].setText("")
             self.valueLabelList[4].setText("")
-            self.valueLabelList[5].setText("")
-            self.valueLabelList[6].setText("")
             self.compassGauge.setValue(0)
             self.speedDisplay.display(0)
             
-            if self.canMonitor.hasOSMWidget():
-                self.canMonitor.osmWidget.updateGPSDataDisplay(0.0, 0.0, 0, 0, 0)
+        if self.canMonitor.hasOSMWidget():
+            self.canMonitor.osmWidget.updateGPSDataDisplay(gpsData, False)
 
     def loadConfig(self, config):
         self.globalDistance=config.getDefaultSection().getint("globalDistance", 0)
@@ -390,43 +606,26 @@ class GPSSimpleMonitor(QWidget):
 
         hbox.addLayout(form)
         
-        self.createGPSLabel(form, "Status", "Not connected")
         self.createGPSLabel(form, "Latitude", "")
         self.createGPSLabel(form, "Longitude", "")
-        self.createGPSLabel(form, "Time UTC", "")
         self.createGPSLabel(form, "Altitude", "")
         self.createGPSLabel(form, "Speed", "")
         self.createGPSLabel(form, "Track", "")
         
-    def update(self, session):
-        if session!=None:
-            self.valueLabelList[0].setText("Connected ("+str(session.satellites_used)+" satelites)")
-            self.valueLabelList[1].setText(str(session.fix.latitude))
-            self.valueLabelList[2].setText(str(session.fix.longitude))
-            
-            if type(session.utc)==type(1.0):
-                try:
-                    timeString=misc.isotime(session.utc)
-                except IndexError:
-                    timeString=""
-                except ValueError:
-                    timeString=""
-            else:
-                timeString=str(session.utc)
-                
-            self.valueLabelList[3].setText(timeString)
-            self.valueLabelList[4].setText(str(session.fix.altitude))
-            self.valueLabelList[5].setText(str(session.fix.speed))
-            self.valueLabelList[6].setText(str(session.fix.track))
+    def update(self, gpsData):
+        if gpsData!=None:
+            self.valueLabelList[0].setText(str(gpsData.lat))
+            self.valueLabelList[1].setText(str(gpsData.lon))
+            self.valueLabelList[2].setText(str(gpsData.altitude))
+            self.valueLabelList[3].setText(str(gpsData.speed))
+            self.valueLabelList[4].setText(str(gpsData.track))
                 
         else:
-            self.valueLabelList[0].setText("Not connected")
+            self.valueLabelList[0].setText("")
             self.valueLabelList[1].setText("")
             self.valueLabelList[2].setText("")
             self.valueLabelList[3].setText("")
             self.valueLabelList[4].setText("")
-            self.valueLabelList[5].setText("")
-            self.valueLabelList[6].setText("")
         
 class GPSWindow(QMainWindow):
     def __init__(self, parent):
@@ -479,7 +678,7 @@ class GPSWindow(QMainWindow):
         self.setGeometry(0, 0, 800, 400)
         self.setWindowTitle('GPS Test')
         
-        self.updateGPSThread=GPSMonitorUpateWorker(self)
+        self.updateGPSThread=GPSUpateWorkerGPSD(self)
         self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
         self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
         self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
@@ -512,8 +711,8 @@ class GPSWindow(QMainWindow):
 #                self.connectGPSButton.setDisabled(True)
                 self.updateGPSThread.stop()
                 
-    def updateGPSDisplay(self, session):
-        self.osmWidget.update(session)
+    def updateGPSDisplay(self, gpsData):
+        self.osmWidget.update(gpsData)
         
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)

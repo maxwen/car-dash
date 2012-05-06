@@ -2057,8 +2057,8 @@ class OSMGPSDataDialog(QDialog):
         
         self.connect(self.parent().parent().updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         
-    def updateGPSDisplay(self, session):
-        self.gpsBox.update(session)
+    def updateGPSDisplay(self, gpsData):
+        self.gpsBox.update(gpsData)
                 
     @pyqtSlot()
     def _ok(self):

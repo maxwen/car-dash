@@ -25,14 +25,13 @@ from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from utils.config import Config
 from utils.osmutils import OSMUtils
-from utils.gpsutils import GPSMonitorUpateWorker, gpsRunState, gpsStoppedState
+from utils.gpsutils import getGPSUpdateThread, GPSData, GPSUpateWorkerNMEA, GPSUpateWorkerGPSD, gpsRunState, gpsStoppedState
 from gps import gps, misc
 from osmdialogs import *
 
 from mapnik.mapnikwrapper import MapnikWrapper, disableMappnik
 #from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
-from datetime import datetime
 from Polygon import Polygon
 
 TILESIZE=256
@@ -378,70 +377,6 @@ class OSMUpdateLocationWorker(QThread):
             self.updateLocation()
             self.msleep(self.timeout)
 
-class GPSData():
-    def __init__(self, time=None, lat=None, lon=None, track=None, speed=None, altitude=None, predicted=False):
-        self.time=time
-        self.lat=lat
-        self.lon=lon
-        self.track=track
-        self.speed=speed
-        self.altitude=altitude
-        self.predicted=predicted
-        
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        return self.lat==other.lat and self.lon==other.lon and self.track==other.track and self.speed==other.speed and self.altitude==other.altitude
-            
-    def isValid(self):
-        return self.lat!=None and self.lon!=None and self.lat!=0.0 and self.lon!=0.0
-    
-    def getTime(self):
-        return self.time()
-    
-    def getLat(self):
-        return self.lat
-    
-    def getLon(self):
-        return self.lon
-    
-    def getTrack(self):
-        return self.track
-    
-    def getSpeed(self):
-        return self.speed
-    
-    def getAltitude(self):
-        return self.altitude
-    
-    def fromTrackLogLine(self, line):
-        lineParts=line.split(":")
-        self.time=time.time()
-        if len(lineParts)==6:
-            self.lat=float(lineParts[1])
-            self.lon=float(lineParts[2])
-            self.track=int(lineParts[3])
-            self.speed=int(lineParts[4])
-            if lineParts[5]!="\n":
-                self.altitude=int(lineParts[5])
-            else:
-                self.altitude=0
-        else:
-            self.lat=0.0
-            self.lon=0.0
-            self.track=0
-            self.speed=0
-            self.altitude=0
-            
-    def createTimeStamp(self):
-        stamp=datetime.fromtimestamp(self.time)
-        return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
-
-    def toLogLine(self):
-        return "%s:%f:%f:%d:%d:%d"%(self.createTimeStamp(), self.lat, self.lon, self.track, self.speed, self.altitude)
-
-    def __repr__(self):
-        return self.toLogLine()
     
 class OSMRouteCalcWorker(QThread):
     def __init__(self, parent): 
@@ -2721,7 +2656,9 @@ class QtOSMWidget(QWidget):
         self.stepInDirection(step, 0)
                 
     def updateGPSLocation(self, gpsData, debug):
-#        print("%f %d"%(gpsData.time, gpsData.predicted))
+        if gpsData==None:
+            return 
+        
         self.locationBreadCrumbs.append(gpsData)
         
         lat=gpsData.getLat()
@@ -3826,13 +3763,6 @@ class OSMWidget(QWidget):
         self.lastGPSData=None
         self.osmUtils=OSMUtils()
         osmParserData.openAllDB()
-
-    def showError(self, title, text):
-        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
-        font = self.font()
-        font.setPointSize(14)
-        msgBox.setFont(font)
-        msgBox.exec()
         
     def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
@@ -4085,36 +4015,8 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.clearLastEdgeInfo()
             self.mapWidgetQt.update()
     
-    def updateGPSDisplay(self, session):
-        if session!=None:   
-            timeStamp=time.time()
-            if self.lastGPSDataTime!=None:
-                # 500msec
-                if timeStamp-self.lastGPSDataTime<GPS_SIGNAL_MINIMAL_DIFF:
-                    return
-            
-            #print(session)
-            speed=0
-            altitude=0
-            track=0
-            lat=0.0
-            lon=0.0
-            
-            if not gps.isnan(session.fix.track):
-                track=int(session.fix.track)
-            
-            if not gps.isnan(session.fix.speed):
-                speed=int(session.fix.speed*3.6)
-            
-            if not gps.isnan(session.fix.altitude):
-                altitude=session.fix.altitude
-         
-            if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
-                lat=session.fix.latitude
-                lon=session.fix.longitude
-                
-            gpsData=GPSData(timeStamp, lat, lon, track, speed, altitude)
-                
+    def updateGPSDisplay(self, gpsData):
+        if gpsData!=None:   
             if gpsData.isValid():
                 self.gpsSignalInvalid=False                                    
                 self.updateGPSDataDisplay(gpsData, False)
@@ -4123,7 +4025,7 @@ class OSMWidget(QWidget):
                 self.handleMissingGPSSignal()
 
 
-            self.lastGPSDataTime=timeStamp
+            self.lastGPSDataTime=gpsData.time
             trackLog.addTrackLogLine(gpsData.toLogLine())
 
     def updateGPSDataDisplaySimulated(self, gpsData):        
@@ -4167,9 +4069,12 @@ class OSMWidget(QWidget):
 #            print("predictedLocation %f %f %f"%(tmpGPSData.time, lat1, lon1))
             self.updateGPSDataDisplay(tmpGPSData, False)
 
-    def updateGPSDataDisplay(self, gpsData, debug):     
-        self.lastGPSData=gpsData
-                   
+    def updateGPSDataDisplay(self, gpsData, debug): 
+        if self.lastGPSData==gpsData:
+            return
+        
+#        print("%f %d"%(gpsData.time, gpsData.predicted))
+        self.lastGPSData=gpsData                   
         self.mapWidgetQt.updateGPSLocation(gpsData, debug)
             
     def init(self, lat, lon, zoom):        
@@ -4718,8 +4623,9 @@ class OSMWindow(QMainWindow):
         self.setCentralWidget(self.osmWidget)
 
         # 47.820630:13.016850
-        self.osmWidget.setStartLatitude(47.820154)
-        self.osmWidget.setStartLongitude(13.020982)
+        #47.8209383, 13.0165364
+        self.osmWidget.setStartLatitude(47.8209383)
+        self.osmWidget.setStartLongitude(13.0165364)
 
         top=QVBoxLayout(self.osmWidget)        
         self.osmWidget.addToWidget(top)
@@ -4752,11 +4658,12 @@ class OSMWindow(QMainWindow):
         self.setGeometry(0, 0, 900, 500)
         self.setWindowTitle('OSM')
         
-        self.updateGPSThread=GPSMonitorUpateWorker(self)
-        self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
-        self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
-        self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.osmWidget.updateGPSDisplay)
+        self.updateGPSThread=getGPSUpdateThread(self)
+        if self.updateGPSThread!=None:
+            self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
+            self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
+            self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
+            self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.osmWidget.updateGPSDisplay)
 
         self.show()
         
@@ -4788,6 +4695,7 @@ class OSMWindow(QMainWindow):
     
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)
+        self.showError("GPS Error", "Error connecing to GPS")
                 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
@@ -4806,6 +4714,13 @@ class OSMWindow(QMainWindow):
         self.osmWidget.saveConfig(self.config)
         self.config.writeConfig()
         
+    def showError(self, title, text):
+        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
+        font = self.font()
+        font.setPointSize(14)
+        msgBox.setFont(font)
+        msgBox.exec()
+
 def main(argv): 
     test=False
     try:

@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANSocketWorker, CANDecoder, canIdleState, canRunState, canStoppedState
-from utils.gpsutils import GPSMonitor, GPSMonitorUpateWorker, gpsIdleState, gpsRunState, gpsStoppedState
+from utils.gpsutils import getGPSUpdateThread, GPSMonitor, GPSData, GPSUpateWorkerNMEA, GPSUpateWorkerGPSD, gpsIdleState, gpsRunState, gpsStoppedState
 from utils.config import Config
 from log import Log, DebugLogWidget
 
@@ -842,12 +842,13 @@ class CANMonitor(QMainWindow):
         self.connect(self.updateCANThread, SIGNAL("processCANData(PyQt_PyObject)"), self.canDecoder.scan_can_frame)
         self._connectCAN()
         
-        self.updateGPSThread=GPSMonitorUpateWorker(self)
-        self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
-        self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
-        self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
-        self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
-        self._connectGPS()
+        self.updateGPSThread=getGPSUpdateThread(self)
+        if self.updateGPSThread!=None:
+            self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusBarLabel)
+            self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
+            self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
+            self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
+            self._connectGPS()
 
     #def mousePressEvent(self, event):
     #    print("CANMonitor mousePressEvent")
@@ -1137,8 +1138,8 @@ class CANMonitor(QMainWindow):
     def canIdIsInKnownList(self, canId):
         return canId in self.canIdList
 
-    def updateGPSDisplay(self, session):
-        self.gpsBox.update(session)
+    def updateGPSDisplay(self, gpsData):
+        self.gpsBox.update(gpsData)
         
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)

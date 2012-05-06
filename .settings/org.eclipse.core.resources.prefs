@@ -1,4 +1,6 @@
 eclipse.preferences.version=1
 encoding//gps/gps.py=utf-8
 encoding//imposm/parser/test/test_simple_parser.py=utf8
+encoding//nmea/_types.py=utf-8
+encoding//nmea/tests.py=utf-8
 encoding//pygl/textures/textures_rc.py=utf-8

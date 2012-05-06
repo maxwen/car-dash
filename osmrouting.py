@@ -803,10 +803,10 @@ class OSMRouting():
     def checkEdge(self, lat, lon, track, speed, edge, fromMouse, margin):
         # use a large maxDistance to make sure we match the
         # epected edge in most cases
+        # we already know that we have only one matching edge
+        # in the case of close edges so no need to use a
+        # smaler distance
         maxDistance=NORMAL_EDGE_RANGE
-        if self.otherNearHeading==True:
-            # except other near edges
-            maxDistance=DECISION_EDGE_RANGE
             
         # check the current expected
         if not self.checkEdgeDataForPos(lat, lon, edge, maxDistance):
