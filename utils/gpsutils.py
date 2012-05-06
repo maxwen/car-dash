@@ -8,6 +8,7 @@ import socket
 import signal
 import sys
 import time
+import os
 from datetime import datetime
 
 
@@ -116,6 +117,8 @@ class GPSUpateWorkerGPSD(QThread):
         self.connected=False
         self.reconnecting=False
         self.reconnectTry=0
+        self.lastLat=None
+        self.lastLon=None
         
     def __del__(self):
         self.exiting = True
@@ -222,7 +225,13 @@ class GPSUpateWorkerGPSD(QThread):
         if not gps.isnan(session.fix.latitude) and not gps.isnan(session.fix.longitude):
             lat=session.fix.latitude
             lon=session.fix.longitude
-            
+        
+        if self.lastLat!=None and self.lastLon!=None:
+            if lat==self.lastLat and lon==self.lastLon:
+                return None
+        
+        self.lastLat=lat
+        self.lastLon=lon
         return GPSData(timeStamp, lat, lon, track, speed, altitude)
     
     def run(self):
@@ -232,9 +241,10 @@ class GPSUpateWorkerGPSD(QThread):
             if self.connected==True and self.session!=None:
                 try:
                     self.session.__next__()
-                    
-                    self.updateGPSDisplay(self.createGPSData(self.session))
-                    self.updateGPSThreadState(gpsRunState)
+                    gpsData=self.createGPSData(self.session)
+                    if gpsData!=None:
+                        self.updateGPSDisplay(gpsData)
+                        self.updateGPSThreadState(gpsRunState)
                 except StopIteration:
                     self.updateStatusLabel("GPS connection lost")
                     self.updateGPSThreadState(gpsIdleState)
@@ -295,19 +305,22 @@ class GpsObject():
     def createGPSData(self):
         timeStamp=time.time()            
         return GPSData(timeStamp, self.lat, self.lon, self.track, self.speed, self.altitude)
-    
+        
 class GPSUpateWorkerNMEA(QThread):
     def __init__(self, parent): 
         QThread.__init__(self, parent)
         self.exiting = False
         self.connected=False
-        self.reconnecting=False
-        self.reconnectTry=0
-        self.device="/dev/ttyUSB0"
+        self.deviceList=["/dev/ttyACM0", 
+                         "/dev/ttyACM1", 
+                         "/dev/ttyUSB0", 
+                         "/dev/ttyUSB1",
+                         "/dev/gps"]
         self.timeout=3
         self.baud=9600
         self.port=None
         self.gpsObject=None
+        self.lastGPSData=None
         
     def __del__(self):
         self.exiting = True
@@ -322,11 +335,9 @@ class GPSUpateWorkerNMEA(QThread):
     def setup(self, connect):
         self.updateStatusLabel("GPS thread setup")
 
-        self.session=None
+        self.lastGPSData=None
         self.exiting = False
         self.connected=False
-        self.reconnecting=False
-        self.reconnectTry=0
         
         if connect==True:
             self.connectGPS()
@@ -348,46 +359,56 @@ class GPSUpateWorkerNMEA(QThread):
         self.emit(SIGNAL("updateGPSDisplay(PyQt_PyObject)"), gpsData)
         
     def connectGPS(self):
-        try:
-            self.port=SerialPort(self.device, self.baud, self.timeout)
-            self.connected=True
-            self.gpsObject=GpsObject(self.port)
-        except PortError:
-            self.connectGPSFailed()
-                      
+        for device in self.deviceList:
+            print("trying %s"%(device))
+            if not os.path.exists(device):
+                continue
+            try:
+                self.port=SerialPort(device, self.baud, self.timeout)
+                self.connected=True
+                self.gpsObject=GpsObject(self.port)
+                print("Found NMEA gps device at %s"%(device))
+                return
+            except PortError:
+                continue
+        
+        self.connectGPSFailed()
+            
     def disconnectGPS(self):
         if self.connected==True:
             self.port.close()
             self.connected=False
             self.updateStatusLabel("GPS disconnect ok")
-          
-#    def reconnectGPS(self):
-#        self.reconnecting=True
-#        while self.reconnectTry<42 and self.connected==False and self.exiting==False:
-#            self.sleep(1)
-#            self.connectGPS()
-#            if self.connected==True:
-#                self.reconnectTry=0
-#                self.reconnecting=False
-#                return
-#            self.reconnectTry=self.reconnectTry+1
-#
-#        self.connected=False
-#        self.reconnectTry=0
-#        self.reconnecting=False
-#        self.session=None
-#        self.exiting=True
-#        self.connectGPSFailed()
-#        self.updateStatusLabel("GPS reconnect failed - exiting thread")
         
     def run(self):
         self.updateGPSThreadState(gpsRunState)
 
         while not self.exiting and True:
             if self.connected==True:
-                self.gpsObject.gps_device.handle_io()
-                self.updateGPSDisplay(self.gpsObject.createGPSData())
-#                self.msleep(500)
+                try:
+                    self.gpsObject.gps_device.handle_io()
+                    gpsData=self.gpsObject.createGPSData()
+                    if gpsData!=self.lastGPSData:
+                        #print("update gps data")
+                        self.updateGPSDisplay(gpsData)
+                        self.lastGPSData=gpsData
+                        
+                except socket.timeout:
+                    self.updateStatusLabel("GPS thread socket.timeout")
+                    self.disconnectGPS()
+                    self.updateGPSThreadState(gpsStoppedState)
+                    self.updateGPSDisplay(None)
+                    self.connectGPSFailed()
+                    self.exiting=True
+                    continue
+                except socket.error:
+                    self.updateStatusLabel("GPS thread socket.error")
+                    self.disconnectGPS()
+                    self.updateGPSThreadState(gpsStoppedState)
+                    self.updateGPSDisplay(None)
+                    self.connectGPSFailed()
+                    self.exiting=True
+                    continue
 
             else:
                 self.updateStatusLabel("GPS thread idle")

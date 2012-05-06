@@ -25,7 +25,7 @@ from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from utils.config import Config
 from utils.osmutils import OSMUtils
-from utils.gpsutils import getGPSUpdateThread, GPSData, GPSUpateWorkerNMEA, GPSUpateWorkerGPSD, gpsRunState, gpsStoppedState
+from utils.gpsutils import getGPSUpdateThread, GPSData, gpsRunState, gpsStoppedState
 from gps import gps, misc
 from osmdialogs import *
 
@@ -81,7 +81,6 @@ stoppedState="stopped"
 osmParserData = OSMDataAccess()
 trackLog=TrackLog(False)
 osmRouting=OSMRouting(osmParserData)
-threadMutex=QMutex()
 
 class OSMRoutingPointAction(QAction):
     def __init__(self, text, routingPoint, style, parent):
@@ -549,6 +548,8 @@ class QtOSMWidget(QWidget):
 
         self.gisUtils=GISUtils()
         self.locationBreadCrumbs=deque("", 10)
+        #self.gpsUpdateStartTime=None
+
     
     def getSidebarWidth(self):
         if self.sidebarVisible==True:
@@ -1352,6 +1353,9 @@ class QtOSMWidget(QWidget):
             print("displayedWays: %d hiddenWays: %d"%(self.numVisibleWays, self.numHiddenWays))
         
             print("paintEvent:%f"%(time.time()-start))
+            
+        #if self.gpsUpdateStartTime!=None:
+        #    print("paintEvent:%f"%(time.time()-self.gpsUpdateStartTime))
     
     def displayLocationBredCrumbs(self):
         for gpsData in self.locationBreadCrumbs:
@@ -2658,19 +2662,17 @@ class QtOSMWidget(QWidget):
     def updateGPSLocation(self, gpsData, debug):
         if gpsData==None:
             return 
-        
-        self.locationBreadCrumbs.append(gpsData)
-        
-        lat=gpsData.getLat()
-        lon=gpsData.getLon()
-        self.speed=gpsData.getSpeed()
-        track=gpsData.getTrack()
-        self.altitude=gpsData.getAltitude()
-                
-        if debug==True:
-            self.track=track
+                        
+        if gpsData.isValid():            
+            lat=gpsData.getLat()
+            lon=gpsData.getLon()
+            track=gpsData.getTrack()
+            self.speed=gpsData.getSpeed()
+            self.altitude=gpsData.getAltitude()
 
-        if lat!=0.0 and lon!=0.0:
+            if debug==True:
+                self.track=track
+
             if self.speed==0:
                 self.stop=True
             else:
@@ -2686,15 +2688,23 @@ class QtOSMWidget(QWidget):
             gps_rlon_new=self.osmutils.deg2rad(lon)
             
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
-                        
+                
+                #self.gpsUpdateStartTime=time.time()
+                self.locationBreadCrumbs.append(gpsData)
+
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
+                if self.drivingMode==True and self.autocenterGPS==True and (self.stop==False or firstGPSData==True):
+                    self.osm_autocenter_map()
+                else:
+                    self.update()  
+
                 if gpsData.predicted==False:
                     if debug==False:
                         if self.stop==False:  
                             self.showTrackOnGPSPos(lat, lon, False)
-    
+
                     if self.wayInfo!=None:
                         self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
                         self.gpsPoint.resolveFromPos(osmParserData)
@@ -2702,12 +2712,7 @@ class QtOSMWidget(QWidget):
                             self.gpsPoint=None
     
                     else:
-                        self.gpsPoint=None  
-
-                if self.drivingMode==True and self.autocenterGPS==True and (self.stop==False or firstGPSData==True):
-                    self.osm_autocenter_map()
-                else:
-                    self.update()   
+                        self.gpsPoint=None   
            
         else:
             self.gps_rlat=0.0
@@ -4017,13 +4022,13 @@ class OSMWidget(QWidget):
     
     def updateGPSDisplay(self, gpsData):
         if gpsData!=None:   
+            #print(gpsData)
             if gpsData.isValid():
                 self.gpsSignalInvalid=False                                    
                 self.updateGPSDataDisplay(gpsData, False)
             else:
                 self.gpsSignalInvalid=True                
                 self.handleMissingGPSSignal()
-
 
             self.lastGPSDataTime=gpsData.time
             trackLog.addTrackLogLine(gpsData.toLogLine())
@@ -4070,10 +4075,10 @@ class OSMWidget(QWidget):
             self.updateGPSDataDisplay(tmpGPSData, False)
 
     def updateGPSDataDisplay(self, gpsData, debug): 
-        if self.lastGPSData==gpsData:
-            return
+        #if self.lastGPSData==gpsData:
+        #    return
         
-#        print("%f %d"%(gpsData.time, gpsData.predicted))
+        #print("%f %d"%(gpsData.time, gpsData.predicted))
         self.lastGPSData=gpsData                   
         self.mapWidgetQt.updateGPSLocation(gpsData, debug)
             

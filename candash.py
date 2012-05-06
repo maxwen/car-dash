@@ -7,12 +7,12 @@ import os
 from datetime import datetime
 import fnmatch
 from canutils import CANSocketWorker, CANDecoder, canIdleState, canRunState, canStoppedState
-from utils.gpsutils import getGPSUpdateThread, GPSMonitor, GPSData, GPSUpateWorkerNMEA, GPSUpateWorkerGPSD, gpsIdleState, gpsRunState, gpsStoppedState
+from utils.gpsutils import getGPSUpdateThread, GPSMonitor, GPSData, gpsIdleState, gpsRunState, gpsStoppedState
 from utils.config import Config
 from log import Log, DebugLogWidget
 
 from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
-from PyQt4.QtGui import QProgressBar, QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
+from PyQt4.QtGui import QMessageBox, QProgressBar, QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
 
 from collections import deque
 from gaugepng import QtPngDialGauge
@@ -1140,13 +1140,21 @@ class CANMonitor(QMainWindow):
 
     def updateGPSDisplay(self, gpsData):
         self.gpsBox.update(gpsData)
+
+    def showError(self, title, text):
+        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
+        font = self.font()
+        font.setPointSize(14)
+        msgBox.setFont(font)
+        msgBox.exec()
         
     def connectGPSFailed(self):
         self.connectGPSButton.setChecked(False)
         self.connectGPSEnable=False
 #        self.connectGPSButton.setDisabled(False)
         self.connectGPSButton.setIcon(self.ampelRot)
-    
+        self.showError("GPS Error", "Error connecing to GPS")
+
 #    def connectGPSSuccesful(self):
 ##        self.connectGPSButton.setChecked(True)
 #        self.connectGPSEnable=True

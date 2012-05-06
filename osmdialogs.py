@@ -2055,6 +2055,8 @@ class OSMGPSDataDialog(QDialog):
         self.setWindowTitle('GPS Data')
         self.setGeometry(0, 0, 400, 300)
         
+        # init else we need to wait for the first change
+        self.updateGPSDisplay(self.parent().lastGPSData)
         self.connect(self.parent().parent().updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
         
     def updateGPSDisplay(self, gpsData):
