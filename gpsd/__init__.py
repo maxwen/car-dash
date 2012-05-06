@@ -6,7 +6,7 @@
 api_major_version = 5   # bumped on incompatible changes
 api_minor_version = 0   # bumped on compatible changes
 
-from gps import *
+from .gps import *
 from .misc import *
 
 # The 'client' module exposes some C utility functions for Python clients.
