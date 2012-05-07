@@ -396,7 +396,6 @@ class OSMAdressDialog(QDialog):
         else:
             self.streetList=list()
         
-        self.filteredStreetList=self.streetList
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
 
@@ -407,7 +406,6 @@ class OSMAdressDialog(QDialog):
         else:
             self.streetList=list()
         
-        self.filteredStreetList=self.streetList
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
 
@@ -420,9 +418,7 @@ class OSMAdressDialog(QDialog):
 
         else:
             self.cityList=list()
-        
-        self.filteredCityList=self.cityList
-        
+                
     def streetNameSort(self, item):
         if item[5]==None:
             return ""
@@ -588,16 +584,19 @@ class OSMAdressDialog(QDialog):
         
         self.updateCityListForCountry()
         self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
-        self.cityViewModel.update(self.filteredCityList, self.cityModel)
+        self.cityViewModel.update(self.cityList, self.cityModel)
         
         self.currentCityId=None
         value=self.ignoreCityButton.isChecked()
         if value==True:
             self.updateAddressListForCountry()
+            self._applyFilterStreet()
+
         else:
             self.updateAdressListForCity()
-        self._applyFilterStreet()
-        self._applyFilterCity()
+            self._applyFilterCity()
+            self._applyFilterStreet()
+
         
     @pyqtSlot()
     def _cityChanged(self):

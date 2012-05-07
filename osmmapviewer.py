@@ -17,7 +17,7 @@ from utils.env import getTileRoot, getImageRoot, getRoot
 from utils.gisutils import GISUtils
 import cProfile
 
-from PyQt4.QtCore import QMutex, QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtCore import QTimer, QMutex, QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
@@ -4752,7 +4752,7 @@ class OSMWindow(QMainWindow):
                 
     def updateStatusLabel(self, text):
         self.statusbar.showMessage(text)
-#        print(text)
+        print(text)
 
     @pyqtSlot()
     def _cleanup(self):
@@ -4774,6 +4774,12 @@ class OSMWindow(QMainWindow):
         msgBox.setFont(font)
         msgBox.exec()
 
+#    def signal_handler(self, signal, frame):
+#        print("signal_handler %d"%(signal))
+#        if self.updateGPSThread.isRunning():
+#            self.updateGPSThread.disconnectGPS()
+#            self.updateGPSThread.reconnectGPS()
+        
 def main(argv): 
     test=False
     try:
@@ -4781,13 +4787,16 @@ def main(argv):
             test=True
     except IndexError:
         test=False
-        
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     app = QApplication(sys.argv)
-
     osmWindow = OSMWindow(None, test)
     app.aboutToQuit.connect(osmWindow._cleanup)
+    #signal.signal(signal.SIGUSR1, osmWindow.signal_handler)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    #timer = QTimer()
+    #timer.start(2000)  # You may change this if you wish.
+    #timer.timeout.connect(lambda: None)  # Let the interpreter run each 2000 ms.
 
     sys.exit(app.exec_())
 
