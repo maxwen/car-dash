@@ -65,11 +65,11 @@ class latitude(float):
             raise ValueError("Value %d out of range(-90.0, 90.0)" % value)
         raise ValueError("Expected type float or latitude")
 
-    def __repr__(self):
-        return "%.6f" % self
-
-    def __str__(self):
-        return "%.6f" % self
+#    def __repr__(self):
+#        return "%.6f" % self
+#
+#    def __str__(self):
+#        return "%.6f" % self
 
 
 class longitude(float):
@@ -86,11 +86,11 @@ class longitude(float):
             raise ValueError("Value %d out of range(-180.0, 180.0)" % value)
         raise ValueError("Expected type float or longitude")
 
-    def __repr__(self):
-        return "%.6f" % self
-
-    def __str__(self):
-        return "%.6f" % self
+#    def __repr__(self):
+#        return "%.6f" % self
+#
+#    def __str__(self):
+#        return "%.6f" % self
 
 
 class latlng(object):
