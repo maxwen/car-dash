@@ -675,6 +675,11 @@ class OSMRouting():
         
         # past crossing
         crossingRange=self.getFromCrossingCheckDistance(speed)
+        if self.nextEdgeLength!=None and self.nextEdgeLength<crossingRange:
+            self.crossingPassed=True
+            self.debugPrint(lat, lon, "past crossing for short edge %d"%self.distanceFromCrossing)
+            return
+        
         if self.distanceFromCrossing > crossingRange:
             self.crossingPassed=True
             self.debugPrint(lat, lon, "past crossing %d"%self.distanceFromCrossing)

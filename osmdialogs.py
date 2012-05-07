@@ -234,13 +234,14 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
     def citySort(self, item):
         return item[1]
     
-    def update(self, filteredCityList, treeModel):
+    def update(self, filteredCityList, treeModel, saveState=True):
         self.layoutAboutToBeChanged.emit()
         
         itemList=list()
-        for index in self.persistentIndexList():
-            if index.isValid():
-                itemList.append((index.row(), index.column(), index.internalPointer()))
+#        if saveState==True:
+#            for index in self.persistentIndexList():
+#                if index.isValid():
+#                    itemList.append((index.row(), index.column(), index.internalPointer()))
 
         self.rootItem=OSMTreeItem(-1, "ALL", None, 0)
         
@@ -256,10 +257,11 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 self.rootItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
              
-        for row, column, item in itemList:
-            toIndex=self.searchModel(item.osmId)
-            if toIndex!=None:
-                self.changePersistentIndex(self.createIndex(row, column, item), toIndex)
+#        if saveState==True:
+#            for row, column, item in itemList:
+#                toIndex=self.searchModel(item.osmId)
+#                if toIndex!=None:
+#                    self.changePersistentIndex(self.createIndex(row, column, item), toIndex)
         
         self.layoutChanged.emit()
         
@@ -584,18 +586,17 @@ class OSMAdressDialog(QDialog):
         
         self.updateCityListForCountry()
         self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
-        self.cityViewModel.update(self.cityList, self.cityModel)
+        self.cityViewModel.update(self.cityList, self.cityModel, False)
         
         self.currentCityId=None
         value=self.ignoreCityButton.isChecked()
         if value==True:
             self.updateAddressListForCountry()
-            self._applyFilterStreet()
-
         else:
             self.updateAdressListForCity()
-            self._applyFilterCity()
-            self._applyFilterStreet()
+        
+        self._applyFilterCity()
+        self._applyFilterStreet()
 
         
     @pyqtSlot()
@@ -749,7 +750,8 @@ class OSMAdressDialog(QDialog):
                     self.filteredCityList.append((cityId, cityName, adminLevel))
         
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
-        
+            self.cityView.expandAll()
+
         else:
             self.filteredCityList=self.cityList
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
