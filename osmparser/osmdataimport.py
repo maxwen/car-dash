@@ -494,10 +494,12 @@ class OSMDataImport(OSMDataSQLite):
         return resultList
     
     def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE (type=%d OR type=%d)'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_ENFORCEMENT))
+
+#        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
-            print("%s %s %s"%(x[0], x[1], x[3]))
+            print("%s %s %s"%(x[0], x[1], pickle.loads(x[2])))
 #            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
 #            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
@@ -1297,26 +1299,25 @@ class OSMDataImport(OSMDataSQLite):
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
-                            if "maxspeed" in tags:
-                                deviceRef=None
-                                fromRefId=None
-                                for part in ways:
-                                    roleId=int(part[0])
-                                    roleType=part[1]
-                                    roleTag=part[2]
-    
-                                    if roleType=="node":
-                                        if roleTag=="from":
-                                            fromRefId=roleId
-                                            
-                                        elif roleTag=="device":
-                                            deviceRef=roleId
-                                            
-                                if deviceRef!=None and fromRefId!=None:
-                                    storedRefId, lat, lon=self.getCoordsEntry(fromRefId)
-                                    if storedRefId!=None:
-                                        tags["deviceRef"]=deviceRef
-                                        self.addToPOIRefTable(fromRefId, 0, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
+                            deviceRef=None
+                            fromRefId=None
+                            for part in ways:
+                                roleId=int(part[0])
+                                roleType=part[1]
+                                roleTag=part[2]
+
+                                if roleType=="node":
+                                    if roleTag=="from":
+                                        fromRefId=roleId
+                                        
+                                    elif roleTag=="device":
+                                        deviceRef=roleId
+                                        
+                            if deviceRef!=None and fromRefId!=None:
+                                storedRefId, lat, lon=self.getCoordsEntry(fromRefId)
+                                if storedRefId!=None:
+                                    tags["deviceRef"]=deviceRef
+                                    self.addToPOIRefTable(fromRefId, 0, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
                    
     def getStreetNameInfo(self, tags, streetTypeId):
 

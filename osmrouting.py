@@ -21,6 +21,7 @@ NORMAL_HEADING_RANGE=60
 NO_CROSSING_SPEED=60
 NEAR_CROSSING_LENGTH_MIN=NORMAL_EDGE_RANGE
 PAST_CROSSING_LENGTH_MIN=15.0
+PAST_CROSSING_LENGTH_MIN_SHORT=10.0
 CROSSING_CALC_LENGTH_MIN=NORMAL_EDGE_RANGE*2
 CLOSE_SEARCH_MARGIN=0.0001
 DEFAULT_SEARCH_MARGIN=0.0003
@@ -675,10 +676,13 @@ class OSMRouting():
         
         # past crossing
         crossingRange=self.getFromCrossingCheckDistance(speed)
-        if self.nextEdgeLength!=None and self.nextEdgeLength<crossingRange:
-            self.crossingPassed=True
-            self.debugPrint(lat, lon, "past crossing for short edge %d"%self.distanceFromCrossing)
-            return
+        if self.distanceFromCrossing >= PAST_CROSSING_LENGTH_MIN_SHORT:
+            # if the edge is shorter then the minimal mast crossing range
+            # decide earlier - which is maybe wrong
+            if self.nextEdgeLength!=None and self.nextEdgeLength<crossingRange:
+                self.crossingPassed=True
+                self.debugPrint(lat, lon, "past crossing for short edge %d"%self.distanceFromCrossing)
+                return
         
         if self.distanceFromCrossing > crossingRange:
             self.crossingPassed=True

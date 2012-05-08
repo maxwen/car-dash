@@ -388,12 +388,15 @@ class OSMAdressDialog(QDialog):
         self.selectedAddress=None
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
+        self.cityRecursive=False
         self.initUI()
          
     def updateAdressListForCity(self):
         if self.currentCityId!=None:
-#            self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
-            self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+            if self.cityRecursive==True:
+                self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+            else:
+                self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
@@ -415,7 +418,6 @@ class OSMAdressDialog(QDialog):
         if self.currentCountryId!=None:
             self.cityList=list()
             self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
-#            self.cityList=self.osmParserData.getAdminChildsForId(self.currentCountryId)
             self.cityList.sort(key=self.citySort)
 
         else:
@@ -467,9 +469,14 @@ class OSMAdressDialog(QDialog):
         self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
         hbox.addWidget(self.cityFilterEdit)
         
-        self.ignoreCityButton=QCheckBox("Show All", self)
+        self.ignoreCityButton=QCheckBox("No Area", self)
         self.ignoreCityButton.clicked.connect(self._ignoreCity)
         hbox.addWidget(self.ignoreCityButton)
+
+        self.cityRecursiveButton=QCheckBox("Recursive", self)
+        self.cityRecursiveButton.clicked.connect(self._setCityRecursive)
+        hbox.addWidget(self.cityRecursiveButton)
+
         top.addLayout(hbox)
 
         self.cityView=QTreeView(self)
@@ -559,7 +566,14 @@ class OSMAdressDialog(QDialog):
         self.setGeometry(0, 0, 700, 500)
         
         self._countryChanged()
-                
+           
+    @pyqtSlot()
+    def _setCityRecursive(self):
+        self.cityRecursive=self.cityRecursiveButton.isChecked()
+        if self.currentCityId!=None:
+            self.updateAdressListForCity()
+            self._applyFilterStreet()
+             
     @pyqtSlot()
     def _ignoreCity(self):
         self._clearCityTableSelection()

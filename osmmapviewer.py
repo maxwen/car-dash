@@ -1255,11 +1255,12 @@ class QtOSMWidget(QWidget):
 
         else:
             self.showTiles()
-                    
+               
         if self.currentRoute!=None and not self.currentRoute.isRouteFinished() and self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
-            if self.currentEdgeIndexList!=None:
-                self.displayRouteOverlay(self.currentTrackList, self.currentEdgeIndexList)
+            if self.drivingMode==True:
+                if self.currentEdgeIndexList!=None:
+                    self.displayRouteOverlay(self.currentTrackList, self.currentEdgeIndexList)
         
         if self.currentCoords!=None:
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
@@ -3663,7 +3664,7 @@ class QtOSMWidget(QWidget):
         print("end:")
 
     def showTrackOnMousePos(self, x, y):
-        if self.drivingMode==False:
+        if self.drivingMode==False or self.osmWidget.test==True:
             (lat, lon)=self.getPosition(x, y)
             self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)
 
@@ -4649,7 +4650,8 @@ class OSMWindow(QMainWindow):
         self.setFont(font)
         self.config=Config("osmmapviewer.cfg")
         self.updateGPSThread=None
-        self.initUI(test)
+        self.test=test
+        self.initUI()
         self.gpsConnected=False
 
 #    def paintEvent(self, event):
@@ -4665,13 +4667,13 @@ class OSMWindow(QMainWindow):
         self.progress.setMinimum(0)
         self.progress.setMaximum(0)
         
-    def initUI(self, test):
+    def initUI(self):
         self.statusbar=self.statusBar()
         self.progress=QProgressBar()
         self.statusbar.addPermanentWidget(self.progress)
 
         
-        self.osmWidget=OSMWidget(self, test)
+        self.osmWidget=OSMWidget(self, self.test)
         self.osmWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self.setCentralWidget(self.osmWidget)
 
