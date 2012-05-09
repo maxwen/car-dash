@@ -971,8 +971,12 @@ class OSMRouting():
             if currentEdgeData!=None and edge==currentEdgeData:
                 return currentEdgeData
             
-            streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
-                                                
+            streetTypeId, oneway, roundabout, tunnel, bridge=self.osmParserData.decodeStreetInfo2(streetInfo)
+                    
+            # dont match tunnels in driving mode
+            if tunnel==1:
+                continue
+                                        
             lat1, lon1=coords[0]
             for lat2, lon2 in coords[1:]:
                 onLine, distance, point=self.osmParserData.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance, addStart, addEnd)

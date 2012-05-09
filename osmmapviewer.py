@@ -4116,6 +4116,8 @@ class OSMWidget(QWidget):
             if timeStamp-self.lastGPSData.time<0.5:
                 return
             
+            # only use location worker if in tunnel
+            # just use last track and speed
             if self.mapWidgetQt.isInTunnel==False:
                 if self.gpsSignalInvalid==True: 
                     return 
