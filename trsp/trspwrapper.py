@@ -20,14 +20,20 @@ class TrspWrapper():
     def getDB(self):
         return os.path.join(self.dataDir, "edge.db")
     
-    def calcQueryBBox(self, bbox, margin=0.1):
-        ymin=bbox[1]-margin
-        xmin=bbox[0]-margin
-        ymax=bbox[3]+margin
-        xmax=bbox[2]+margin
+    def getRoutingBBoxMargin(self):
+        return 0.5
+    
+    def calcQueryBBox(self, bbox):
+        ymin=bbox[1]-self.getRoutingBBoxMargin()
+        xmin=bbox[0]-self.getRoutingBBoxMargin()
+        ymax=bbox[3]+self.getRoutingBBoxMargin()
+        xmax=bbox[2]+self.getRoutingBBoxMargin()
         bboxNew=[xmin, ymin, xmax, ymax]
         self.lastBBoxCPolygon=Polygon([(bboxNew[0], bboxNew[3]), (bboxNew[2], bboxNew[3]), (bboxNew[2], bboxNew[1]), (bboxNew[0], bboxNew[1])])    
         self.lastBBox=bboxNew
+    
+    def getCurrentRoutingBBox(self):
+        return self.lastBBox
         
     def getSQLQueryEdgeShortest(self):
         if self.lastBBox!=None:
@@ -73,7 +79,9 @@ class TrspWrapper():
         else:
             self.lastBBoxCPolygon=None
             lib_routing.clean_edges()
-            
+#            
+#        lib_routing.clean_edges()
+#        self.calcQueryBBox(bbox)
 #        print(self.lastBBox)
 
         doVertexC=c_int(0)

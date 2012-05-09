@@ -275,7 +275,7 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 self.addChilds(filterdCitySet, treeItem, treeModel)
             
     def columnCount(self, parent=None):
-        return 2
+        return 1
 
     def data(self, index, role):
         if not index.isValid():
@@ -384,7 +384,8 @@ class OSMAdressDialog(QDialog):
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
         self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
-
+        self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
+        
         self.selectedAddress=None
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
@@ -464,11 +465,14 @@ class OSMAdressDialog(QDialog):
         
         self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]        
 
-        hbox=QHBoxLayout()
+        dataArea=QHBoxLayout()
+        
+        cityBox=QVBoxLayout()
         self.cityFilterEdit=QLineEdit(self)
         self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
-        hbox.addWidget(self.cityFilterEdit)
+        cityBox.addWidget(self.cityFilterEdit)
         
+        hbox=QHBoxLayout()
         self.ignoreCityButton=QCheckBox("No Area", self)
         self.ignoreCityButton.clicked.connect(self._ignoreCity)
         hbox.addWidget(self.ignoreCityButton)
@@ -477,11 +481,15 @@ class OSMAdressDialog(QDialog):
         self.cityRecursiveButton.clicked.connect(self._setCityRecursive)
         hbox.addWidget(self.cityRecursiveButton)
 
-        top.addLayout(hbox)
+        cityBox.addLayout(hbox)
 
         self.cityView=QTreeView(self)
-        top.addWidget(self.cityView)
+        cityBox.addWidget(self.cityView)
         
+        dataArea.addLayout(cityBox)
+        
+        streetBox=QVBoxLayout()
+
         self.cityViewModel=OSMAdressTreeModelCity(self)
         self.cityView.setModel(self.cityViewModel)
 #        self.cityViewModel.update(self.filteredCityList, None)
@@ -500,10 +508,12 @@ class OSMAdressDialog(QDialog):
 
         self.streetFilterEdit=QLineEdit(self)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
-        top.addWidget(self.streetFilterEdit)
+        streetBox.addWidget(self.streetFilterEdit)
                 
         self.streetView=QTableView(self)
-        top.addWidget(self.streetView)
+        streetBox.addWidget(self.streetView)
+        
+        dataArea.addLayout(streetBox)
         
         self.streetViewModel=OSMAdressTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self)
         self.streetViewModel.update(self.filteredStreetList)
@@ -514,8 +524,19 @@ class OSMAdressDialog(QDialog):
         self.streetView.setColumnWidth(0, 300)
         self.streetView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
+        dataArea.setStretch(0, 1)
+        dataArea.setStretch(1, 3)
+
+        top.addLayout(dataArea)
+
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.addFavButton=QPushButton("Favorite", self)
+        self.addFavButton.clicked.connect(self._addFavPoint)
+        self.addFavButton.setIcon(self.favoriteIcon)
+        self.addFavButton.setEnabled(False)
+        actionButtons.addWidget(self.addFavButton)
         
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
@@ -563,7 +584,7 @@ class OSMAdressDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Addresses')
-        self.setGeometry(0, 0, 700, 500)
+        self.setGeometry(0, 0, 800, 500)
         
         self._countryChanged()
            
@@ -632,7 +653,7 @@ class OSMAdressDialog(QDialog):
         self.setStartPointButton.setEnabled(current.isValid())
         self.setWayPointButton.setEnabled(current.isValid())
         self.showPointButton.setEnabled(current.isValid())
-
+        self.addFavButton.setEnabled(current.isValid())
         
     @pyqtSlot()
     def _cancel(self):
@@ -645,6 +666,15 @@ class OSMAdressDialog(QDialog):
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_MAP
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _addFavPoint(self):
+        selmodel = self.streetView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedAddress=self.filteredStreetList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_FAVORITE
         self.done(QDialog.Accepted)
 
 #    def _ok(self):

@@ -484,7 +484,7 @@ class QtOSMWidget(QWidget):
         self.mousePos=(0, 0)
         self.startPoint=None
         self.endPoint=None
-        self.gpsPoint=None
+#        self.gpsPoint=None
         self.wayPoints=list()
         self.routeCalculationThread=None
                         
@@ -890,7 +890,7 @@ class QtOSMWidget(QWidget):
     
     # bbox in deg (left, top, right, bottom)
     # only use if transform active
-    def displayBBox(self, bbox):
+    def displayBBox(self, bbox, color):
         y,x=self.getPixelPosForLocationDeg(bbox[1], bbox[0], True)
         y1,x1=self.getPixelPosForLocationDeg(bbox[3], bbox[2], True)
         
@@ -899,7 +899,7 @@ class QtOSMWidget(QWidget):
 
         rect=QRectF(point0, point1)
         
-        self.painter.setPen(QPen(Qt.red))
+        self.painter.setPen(QPen(color))
         self.painter.drawRect(rect)
         
     def displayTrack(self, trackList):
@@ -1274,7 +1274,10 @@ class QtOSMWidget(QWidget):
                 self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
     
             if osmParserData.getCurrentSearchBBox()!=None:
-                self.displayBBox(osmParserData.getCurrentSearchBBox())
+                self.displayBBox(osmParserData.getCurrentSearchBBox(), Qt.green)
+                
+#            if osmParserData.getRoutingWapper().getCurrentRoutingBBox()!=None:
+#                self.displayBBox(osmParserData.getRoutingWapper().getCurrentRoutingBBox(), Qt.red)
 
 #        if self.osmWidget.trackLogLines!=None:
 #            self.displayTrack(self.osmWidget.trackLogLines)
@@ -2750,19 +2753,19 @@ class QtOSMWidget(QWidget):
                         if self.stop==False:  
                             self.showTrackOnGPSPos(lat, lon, False)
 
-                    if self.wayInfo!=None:
-                        self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
-                        self.gpsPoint.resolveFromPos(osmParserData)
-                        if not self.gpsPoint.isValid():
-                            self.gpsPoint=None
-    
-                    else:
-                        self.gpsPoint=None   
+#                    if self.wayInfo!=None:
+#                        self.gpsPoint=OSMRoutingPoint(self.wayInfo, OSMRoutingPoint.TYPE_GPS, (lat, lon))
+#                        self.gpsPoint.resolveFromPos(osmParserData)
+#                        if not self.gpsPoint.isValid():
+#                            self.gpsPoint=None
+#    
+#                    else:
+#                        self.gpsPoint=None   
            
         else:
             self.gps_rlat=0.0
             self.gps_rlon=0.0
-            self.gpsPoint=None
+#            self.gpsPoint=None
             self.stop=True
             self.track=None
             self.update()
@@ -2939,13 +2942,13 @@ class QtOSMWidget(QWidget):
         clearMapPointAction=QAction("Clear Map Point", self)
         editRoutingPointAction=QAction("Edit Current Route", self)
         saveRouteAction=QAction("Save Current Route", self)
-        showRouteAction=QAction("Show Route", self)
+        showRouteAction=QAction("Calc Route", self)
         clearRouteAction=QAction("Clear Current Route", self)
         gotoPosAction=QAction("Goto Position", self)
         showPosAction=QAction("Show Position", self)
         zoomToCompleteRoute=QAction("Zoom to Route", self)
-        recalcRouteAction=QAction("Recalc Route from here", self)
-        recalcRouteGPSAction=QAction("Recalc Route from GPS", self)
+        recalcRouteAction=QAction("Calc Route from here", self)
+        recalcRouteGPSAction=QAction("Calc Route from GPS", self)
         
         routingPointSubMenu=QMenu(self)
         routingPointSubMenu.setTitle("Map Points")
@@ -3009,8 +3012,10 @@ class QtOSMWidget(QWidget):
         
         showRouteDisabled=(self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or routeIncomplete
         showRouteAction.setDisabled(showRouteDisabled)
-        recalcRouteAction.setDisabled(showRouteDisabled or self.currentRoute==None)
-        recalcRouteGPSAction.setDisabled(showRouteDisabled or self.currentRoute==None or self.gpsPoint==None)
+        
+        recalcRouteDisabled=(self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or self.endPoint==None
+        recalcRouteAction.setDisabled(recalcRouteDisabled)
+        recalcRouteGPSAction.setDisabled(recalcRouteDisabled or self.gps_rlat==0.0 or self.gps_rlon==0.0)
 
         action = menu.exec_(self.mapToGlobal(event.pos()))
 #        print(action.text())
@@ -3049,15 +3054,33 @@ class QtOSMWidget(QWidget):
             self.clearCurrentRoute()
         elif action==recalcRouteAction:
             (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
-            currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_TMP, (lat, lon))                
+            currentPoint=OSMRoutingPoint("tmp", OSMRoutingPoint.TYPE_START, (lat, lon))                
             currentPoint.resolveFromPos(osmParserData)
-            if currentPoint.getClosestRefPos()!=None:
-                self.recalcRouteFromPoint(currentPoint)
+            if currentPoint.isValid():
+                _, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(currentPoint.getWayId())
+                defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+                currentPoint.name=defaultPointTag
+                self.startPoint=currentPoint
+                    
+                self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
             else:
                 self.showError("Error", "Route has invalid routing points")
 
         elif action==recalcRouteGPSAction:
-            self.recalcRouteFromPoint(self.gpsPoint)
+            lat=self.osmutils.rad2deg(self.gps_rlat)
+            lon=self.osmutils.rad2deg(self.gps_rlon)
+            gpsPoint=OSMRoutingPoint("gps", OSMRoutingPoint.TYPE_START, (lat, lon))
+            gpsPoint.resolveFromPos(osmParserData)
+            if gpsPoint.isValid():
+                _, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(gpsPoint.getWayId())
+                defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+                gpsPoint.name=defaultPointTag
+                self.startPoint=gpsPoint
+                    
+                self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
+            else:
+                self.showError("Error", "Route has invalid routing points")
+                
         elif action==showAdminHierarchy:
             (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
             self.getAdminBoundaries(lat, lon)
@@ -3134,26 +3157,19 @@ class QtOSMWidget(QWidget):
         posDialog.exec()
 
     def getCompleteRoutingPoints(self):
-        if self.startPoint==None and self.gpsPoint==None:
-            return None
-        if self.endPoint==None:
+        if self.startPoint==None or self.endPoint==None:
             return None
         
         routingPointList=list()
-        if self.startPoint!=None:
-            routingPointList.append(self.startPoint)
-        else:
-            routingPointList.append(self.gpsPoint)
-        routingPointList.extend(self.wayPoints)
+        routingPointList.append(self.startPoint)
+        if len(self.wayPoints)!=0:
+            routingPointList.extend(self.wayPoints)
         routingPointList.append(self.endPoint)
         return routingPointList
 
     def getMapPoints(self):        
         routingPointList=list()
         
-        if self.gpsPoint!=None:
-            routingPointList.append(self.gpsPoint)
-
         if self.startPoint!=None:
             routingPointList.append(self.startPoint)
                     
@@ -3301,7 +3317,7 @@ class QtOSMWidget(QWidget):
         elif nameRef!=None and name==None:
             return "%s"%(nameRef)
         else:
-            return ""
+            return "No Name"
         return None
     
     def recalcRoute(self, lat, lon, edgeId):
@@ -4448,13 +4464,21 @@ class OSMWidget(QWidget):
                 else:
                     self.showError("Error", "Failed to resolve way point")
 
-            elif pointType==pointType:
+            elif pointType==OSMRoutingPoint.TYPE_MAP:
                 mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
                 mapPoint.resolveFromPos(osmParserData)
                 if mapPoint.isValid():
                     self.mapWidgetQt.showPointOnMap(mapPoint)
                 else:
                     self.showError("Error", "Failed to resolve map point")
+  
+            elif pointType==OSMRoutingPoint.TYPE_FAVORITE:
+                favoritePoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                favoritePoint.resolveFromPos(osmParserData)
+                if favoritePoint.isValid():
+                    self.favoriteList.append(favoritePoint)
+                else:
+                    self.showError("Error", "Failed to resolve favorite point")
   
     @pyqtSlot()
     def _showFavorites(self):

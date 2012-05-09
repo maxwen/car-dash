@@ -178,7 +178,11 @@ class OSMDataAccess(OSMDataSQLite):
         self.roundaboutExitNumber=None
         self.roundaboutEnterItem=None
         self.currentSearchBBox=None
+        self.currentRoutingBBox=None
         
+    def getRoutingWapper(self):
+        return self.dWrapperTrsp
+    
     def getLenOfAddressTable(self):
         self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
         allentries=self.cursorAdress.fetchall()
@@ -295,6 +299,9 @@ class OSMDataAccess(OSMDataSQLite):
 
     def getCurrentSearchBBox(self):
         return self.currentSearchBBox
+    
+    def getCurrentRoutingBBox(self):
+        return self.currentRoutingBBox
                 
     def getAdressListForCity(self, countryId, cityId):
         streetList=list()
@@ -361,7 +368,7 @@ class OSMDataAccess(OSMDataSQLite):
 #                                
 #        return bbox
               
-    def createBBoxForRoute2(self, route):
+    def createBBoxForRoute(self, route):
         lonList=list()
         latList=list()
         routingPointList=route.getRoutingPointList()
@@ -375,6 +382,7 @@ class OSMDataAccess(OSMDataSQLite):
         bboxLon2=max(lonList)
         bboxLat2=max(latList)
                     
+        # TODO: should be a square
         return [bboxLon1, bboxLat1, bboxLon2, bboxLat2]  
     
     def calcRoute(self, route):  
@@ -392,8 +400,8 @@ class OSMDataAccess(OSMDataSQLite):
             sourceEdge=startPoint.getEdgeId()
             sourcePos=startPoint.getPosOnEdge()
             
-            bbox=self.createBBoxForRoute2(route)
-            print(bbox)
+            bbox=self.createBBoxForRoute(route)
+            self.currentRoutingBBox=bbox
                     
             for targetPoint in routingPointList[1:]:
                 if targetPoint.getTarget()==0:
@@ -1210,6 +1218,7 @@ class OSMDataAccess(OSMDataSQLite):
         return countryDict      
                    
     def createBBoxAroundPoint(self, lat, lon, margin):
+        # make it nearly a square
         latRangeMax=lat+margin
         lonRangeMax=lon+margin*1.4
         latRangeMin=lat-margin
