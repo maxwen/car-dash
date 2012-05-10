@@ -784,8 +784,9 @@ class OSMDataImport(OSMDataSQLite):
             try:
                 lat, lon=cPolygon.center()
                 return lat, lon
-            except cPolygon.Error:
-                return refs[0]
+            except:
+                print(refs)
+                return coords[0]
     
         # lat = Sum(lat_1..lat_n)/n , lon=Sum(lon_1, lon_n)/n 
         n=len(coords)

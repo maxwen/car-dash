@@ -378,7 +378,7 @@ class OSMAdressDialog(QDialog):
         self.currentCountryId=None
         self.currentCityId=None
         
-        self.pointType=-1
+        self.pointType=None
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
@@ -2264,7 +2264,7 @@ class OSMPOITableModel(QAbstractTableModel):
                 self.displayPOITypeList.remove(self.poiList[index.row()][1])
             elif value==Qt.Checked:
                 self.displayPOITypeList.append(self.poiList[index.row()][1])
-            self.emit(SIGNAL("dataChanged(const &QModelIndex index, const &QModelIndex index)"), index, index)
+            self.emit(SIGNAL("dataChanged(QModelIndex, QModelIndex)"), index, index)
             return True
      
         return False
@@ -2456,3 +2456,369 @@ class OSMAreaDisplayDialog(QDialog):
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
+#-------------------------------------------
+
+class OSMPOIListTableModel(QAbstractTableModel):
+    def __init__(self, adminAreaDict, reverseAdminAreaDict, nearestMode, parent):
+        QAbstractTableModel.__init__(self, parent)
+        self.adminAreaDict=adminAreaDict
+        self.reverseAdminAreaDict=reverseAdminAreaDict
+        self.nearestMode=nearestMode
+        
+    def rowCount(self, parent): 
+        return len(self.poiList)
+    
+    def columnCount(self, parent): 
+        return 3
+      
+    def data(self, index, role):
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignLeft|Qt.AlignVCenter
+        elif role != Qt.DisplayRole:
+            return None
+        
+        if index.row() >= len(self.poiList):
+            return ""
+        (refId, nodeLat, nodeLon, tags, nodeType, cityId, distance)=self.poiList[index.row()]
+        city=None
+        if cityId!=None:
+            city=self.adminAreaDict[cityId]
+#        else:
+#            print(refId)
+
+        if index.column()==0:
+            if "name" in tags:
+                return tags["name"]
+            return str(tags)
+        elif index.column()==1:
+            return distance
+        elif index.column()==2:
+            if city!=None:
+                return city
+            return ""
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if col==0:
+                    return "Name"
+                if col==1:
+                    return "Distance"
+                if col==2:
+                    return "City"
+            elif role == Qt.TextAlignmentRole:
+                return Qt.AlignLeft
+        return None
+    
+   
+    def update(self, poiList):
+        self.poiList=poiList
+        self.reset()
+
+class OSMPOISearchDialog(QDialog):
+    def __init__(self, parent, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearestMode):
+        QDialog.__init__(self, parent) 
+
+        self.osmParserData=osmParserData
+        font = self.font()
+        font.setPointSize(14)
+        self.setFont(font)
+        
+        self.nearestMode=nearestMode
+        self.currentCountryId=None
+        self.defaultCountryId=defaultCountryId
+        self.gpsPosition=gpsPosition
+        self.mapPosition=mapPosition
+        self.usedPosition=self.mapPosition
+        
+        self.currentPOITypeList=list()
+        
+        self.adminAreaDict, self.reverseAdminAreaDict=osmParserData.getAdminAreaConversion()
+
+        self.countryDict=osmParserData.getAdminCountryList()
+        self.reverseCountryDict=dict()
+        for osmId, countryName in self.countryDict.items():
+            self.reverseCountryDict[countryName]=osmId
+
+        self.poiList=list()
+        self.filteredPOIList=list()
+        
+        self.pointType=None
+        self.selectedPOI=None
+        
+        self.style=OSMStyle()
+        self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
+        self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
+        self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
+        self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
+        self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
+
+        self.initUI()
+
+    def initUI(self):
+        top=QVBoxLayout()
+        top.setAlignment(Qt.AlignTop)
+        top.setSpacing(2)
+        
+        if self.nearestMode==False:
+            self.countryCombo=QComboBox(self)
+            
+            defaultCountryName=None
+            if self.defaultCountryId!=None:
+                defaultCountryName=self.countryDict[self.defaultCountryId]
+                
+            countryList=sorted(self.reverseCountryDict.keys())
+            i=0
+            defaultIndex=0
+            for countryName in countryList:
+                self.countryCombo.addItem(countryName)
+                if countryName==defaultCountryName:
+                    defaultIndex=i
+                i=i+1
+                
+            self.countryCombo.setCurrentIndex(defaultIndex)
+            self.countryCombo.activated.connect(self._countryChanged)
+            top.addWidget(self.countryCombo)
+        
+            self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]        
+
+        dataArea=QHBoxLayout()
+        
+        self.poiView=QTableView(self)
+        dataArea.addWidget(self.poiView)
+        
+        self.poiViewModel=OSMPOITableModel(self, self.currentPOITypeList)
+        self.poiView.setModel(self.poiViewModel)
+        header=QHeaderView(Qt.Horizontal, self.poiView)
+        header.setStretchLastSection(True)
+        self.poiView.setHorizontalHeader(header)
+        self.poiView.setColumnWidth(0, 300)
+        
+        poiArea=QVBoxLayout()        
+        positionButtons=QHBoxLayout()
+
+        self.mapPositionButton=QRadioButton("Map", self)
+        self.mapPositionButton.setChecked(True)
+        self.mapPositionButton.clicked.connect(self._useMapPosition)
+        positionButtons.addWidget(self.mapPositionButton) 
+
+        self.gpsPositionButton=QRadioButton("GPS", self)
+        self.gpsPositionButton.clicked.connect(self._useGPSPosition)
+        positionButtons.addWidget(self.gpsPositionButton) 
+
+        if self.gpsPosition==None:
+            self.gpsPositionButton.setDisabled(True)
+            
+        poiArea.addLayout(positionButtons)
+
+        self.poiFilterEdit=QLineEdit(self)
+        self.poiFilterEdit.textChanged.connect(self._applyFilterPOI)
+        poiArea.addWidget(self.poiFilterEdit)
+        
+        self.poiEntryView=QTableView(self)
+        poiArea.addWidget(self.poiEntryView)
+        dataArea.addLayout(poiArea)
+        
+        self.poiEntryViewModel=OSMPOIListTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self.nearestMode, self)
+        self.poiEntryViewModel.update(self.poiList)
+        self.poiEntryView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.poiEntryView.setModel(self.poiEntryViewModel)
+        header=QHeaderView(Qt.Horizontal, self.poiEntryView)
+        header.setStretchLastSection(True)
+        self.poiEntryView.setHorizontalHeader(header)
+        self.poiEntryView.setColumnWidth(0, 300)
+
+        dataArea.setStretch(0, 1)
+        dataArea.setStretch(1, 3)
+
+        top.addLayout(dataArea)
+        
+        actionButtons=QHBoxLayout()
+        actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        self.addFavButton=QPushButton("Favorite", self)
+        self.addFavButton.clicked.connect(self._addFavPoint)
+        self.addFavButton.setIcon(self.favoriteIcon)
+        self.addFavButton.setEnabled(False)
+        actionButtons.addWidget(self.addFavButton)
+        
+        self.showPointButton=QPushButton("Show", self)
+        self.showPointButton.clicked.connect(self._showPoint)
+        self.showPointButton.setIcon(self.mapPointIcon)
+        self.showPointButton.setEnabled(False)
+        actionButtons.addWidget(self.showPointButton)
+
+        self.setStartPointButton=QPushButton("Start", self)
+        self.setStartPointButton.clicked.connect(self._setStartPoint)
+        self.setStartPointButton.setIcon(self.startPointIcon)
+        self.setStartPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setStartPointButton)
+        
+        self.setEndPointButton=QPushButton("Finish", self)
+        self.setEndPointButton.clicked.connect(self._setEndPoint)
+        self.setEndPointButton.setIcon(self.endPointIcon)
+        self.setEndPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setEndPointButton)
+        
+        self.setWayPointButton=QPushButton("Way", self)
+        self.setWayPointButton.clicked.connect(self._setWayPoint)
+        self.setWayPointButton.setIcon(self.wayPointIcon)
+        self.setWayPointButton.setEnabled(False)
+        actionButtons.addWidget(self.setWayPointButton)
+
+        top.addLayout(actionButtons)
+
+        buttons=QHBoxLayout()
+        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
+        
+        style=QCommonStyle()
+                
+        self.cancelButton=QPushButton("Close", self)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        self.cancelButton.clicked.connect(self._cancel)
+        buttons.addWidget(self.cancelButton)
+
+        top.addLayout(buttons)
+        
+        self.setLayout(top)
+        self.setWindowTitle('POI Search')
+        self.setGeometry(0, 0, 800, 500)
+        
+        self.connect(self.poiViewModel,
+            SIGNAL("dataChanged(QModelIndex, QModelIndex)"), self._poiListChanged)
+        self.connect(self.poiEntryView.selectionModel(),
+            SIGNAL("selectionChanged(QItemSelection, QItemSelection)"), self._selectionChanged)
+
+        if self.nearestMode==False:
+            self._countryChanged()
+        
+    def distanceSort(self, item):
+        return item[6]
+    
+    @pyqtSlot()
+    def _applyFilterPOI(self):
+        filterValue=self.poiFilterEdit.text()
+        if len(filterValue)!=0:
+            if filterValue[-1]!="*":
+                filterValue=filterValue+"*"
+            self.filteredPOIList=list()
+            filterValueMod=None
+            if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
+                filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for (refId, lat, lon, tags, nodeType, cityId, distance) in self.poiList:
+                match=False
+                if "name" in tags:
+                    matchValue=tags["name"]
+                else:
+                    matchValue=str(tags)
+                if fnmatch(matchValue.upper(), filterValue.upper()):
+                    match=True
+                if match==False and filterValueMod!=None and fnmatch(matchValue.upper(), filterValueMod.upper()):
+                    match=True
+                
+                if match==True:
+                    self.filteredPOIList.append((refId, lat, lon, tags, nodeType, cityId, distance))
+        
+            self.poiEntryViewModel.update(self.filteredPOIList)
+
+        else:
+            self.filteredPOIList=self.poiList
+            self.poiEntryViewModel.update(self.filteredPOIList)
+        
+    @pyqtSlot()
+    def _useMapPosition(self):
+        self.usedPosition=self.mapPosition
+        self._poiListChanged()
+
+    @pyqtSlot()
+    def _useGPSPosition(self):
+        self.usedPosition=self.gpsPosition
+        self._poiListChanged()
+
+    @pyqtSlot()
+    def _countryChanged(self):
+        if self.nearestMode==False:
+            self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
+            
+            if len(self.currentPOITypeList)!=0:    
+                self._poiListChanged()
+        
+    @pyqtSlot()
+    def _cancel(self):
+        self.done(QDialog.Rejected)
+
+    def getResult(self):
+        return (self.selectedPOI, self.pointType)
+    
+    @pyqtSlot()
+    def _showPoint(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedPOI=self.filteredPOIList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_MAP
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _addFavPoint(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedPOI=self.filteredPOIList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_FAVORITE
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _setWayPoint(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedPOI=self.filteredPOIList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_WAY
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setStartPoint(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedPOI=self.filteredPOIList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_START
+        self.done(QDialog.Accepted)
+
+    @pyqtSlot()
+    def _setEndPoint(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.selectedPOI=self.filteredPOIList[current.row()]
+            self.pointType=OSMRoutingPoint.TYPE_END
+        self.done(QDialog.Accepted)
+        
+    @pyqtSlot()
+    def _selectionChanged(self):
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        self.setEndPointButton.setEnabled(current.isValid())
+        self.setStartPointButton.setEnabled(current.isValid())
+        self.setWayPointButton.setEnabled(current.isValid())
+        self.showPointButton.setEnabled(current.isValid())
+        self.addFavButton.setEnabled(current.isValid())
+        
+    @pyqtSlot()
+    def _poiListChanged(self):
+        if len(self.currentPOITypeList)!=0:    
+            self.poiList=self.osmParserData.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId)
+            if self.nearestMode==True:
+                self.poiList=sorted(self.poiList, key=self.distanceSort)
+        else:
+            self.poiList=list()
+        
+        self._applyFilterPOI()
+          
+#    def event(self, event):
+#        if event.type()==QEvent.ToolTip:
+#            mousePos=QPoint(event.x(), event.y())
+#  
+#        return True

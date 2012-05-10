@@ -241,3 +241,10 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
 TODO: create prefetch box based on track
 
 TODO: create tables with simplified polygons
+
+TODO: find nearest POI should use no country
+DONE
+
+TODO: search POI by name should include
+-name filter
+-city filter

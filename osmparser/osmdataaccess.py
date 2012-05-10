@@ -1266,6 +1266,37 @@ class OSMDataAccess(OSMDataSQLite):
             resultList.append((refId, nodeLat, nodeLon, tags, nodeType, distance))
             
         return resultList
+
+    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId):
+        filterString=self.createSQLFilterStringForIN(nodeTypeList)
+        if countryId!=None:
+            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND type IN %s'%(lon, lat, countryId, filterString))
+        else:
+            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE type IN %s'%(lon, lat, filterString))
+
+        allentries=self.cursorNode.fetchall()
+        resultList=list()
+
+        for x in allentries:
+            refId=int(x[0])
+            tags=None
+            if x[1]!=None:
+                tags=pickle.loads(x[1])
+            
+            nodeType=int(x[2])            
+            layer=int(x[3])
+            if x[4]!=None:
+                cityId=int(x[4])
+            else:
+                cityId=None
+                
+            pointStr=x[5]
+            lat, lon=self.getGISUtils().createPointFromPointString(pointStr)
+            distance=int(x[6])
+            
+            resultList.append((refId, lat, lon, tags, nodeType, cityId, distance))
+            
+        return resultList
         
     def getEdgesInBboxWithGeom(self, bbox, margin):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
@@ -1415,6 +1446,19 @@ class OSMDataAccess(OSMDataSQLite):
             resultList.append(self.adminAreaFromDBWithCoordsString(x))
             
         return resultList               
+    
+    def getCountryOnPointWithGeom(self, lat, lon):
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)      
+
+        sql='SELECT osmId FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel=2 AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat)
+
+        self.cursorArea.execute(sql)
+             
+        allentries=self.cursorArea.fetchall()
+        if len(allentries)==1:
+            return int(allentries[0][0])
+            
+        return None 
     
     def getAdminAreaConversion(self):
         areaNameDict=dict()

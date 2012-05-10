@@ -1466,7 +1466,7 @@ class QtOSMWidget(QWidget):
         altitude=self.altitude
         
         self.painter.setPen(self.style.getStylePen("textPen"))
-        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.5f %.5f %3dkm/h %4dm"%(lat, lon, speed, altitude))
+        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm"%(lat, lon, speed, altitude))
         
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -3965,6 +3965,14 @@ class OSMWidget(QWidget):
         self.stopReplayTrackLogButton.clicked.connect(self._stopReplayLog)
         self.testButtons.addWidget(self.stopReplayTrackLogButton)
 
+        self.poiSearchButton=QPushButton("POI1", self)
+        self.poiSearchButton.clicked.connect(self._searchPOIName)
+        self.testButtons.addWidget(self.poiSearchButton)
+
+        self.poiSearchButton=QPushButton("POI2", self)
+        self.poiSearchButton.clicked.connect(self._searchPOINearest)
+        self.testButtons.addWidget(self.poiSearchButton)
+
         vbox.addLayout(self.testButtons)
         
     def disableTestButtons(self):
@@ -4017,6 +4025,73 @@ class OSMWidget(QWidget):
     def stopProgress(self):
         self.emit(SIGNAL("stopProgress()"))
 
+    @pyqtSlot()
+    def _searchPOIName(self):
+        self.searchPOI(False)
+
+    @pyqtSlot()
+    def _searchPOINearest(self):
+        self.searchPOI(True)
+        
+    def searchPOI(self, nearest):
+        mapPosition=(self.osmUtils.rad2deg(self.mapWidgetQt.center_rlat), self.osmUtils.rad2deg(self.mapWidgetQt.center_rlon))
+        gpsPosition=None
+        if self.mapWidgetQt.gps_rlat!=0.0 and self.mapWidgetQt.gps_rlon!=0.0:
+            gpsPosition=(self.osmUtils.rad2deg(self.mapWidgetQt.gps_rlat), self.osmUtils.rad2deg(self.mapWidgetQt.gps_rlon))
+
+        # TODO: we always use map position
+        defaultCountryId=osmParserData.getCountryOnPointWithGeom(mapPosition[0], mapPosition[1])
+        poiDialog=OSMPOISearchDialog(self, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearest)
+        result=poiDialog.exec()
+        if result==QDialog.Accepted:
+            poiEntry, pointType=poiDialog.getResult()
+            (refId, lat, lon, tags, nodeType, cityId, distance)=poiEntry
+            print(poiEntry)
+            if "name" in tags:
+                name=tags["name"]
+            else:
+                name="Unknown"
+            if pointType==OSMRoutingPoint.TYPE_START:
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                routingPoint.resolveFromPos(osmParserData)
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setStartPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve start point")
+            elif pointType==OSMRoutingPoint.TYPE_END:
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                routingPoint.resolveFromPos(osmParserData)
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setEndPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve finish point")
+            elif pointType==OSMRoutingPoint.TYPE_WAY:
+                routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
+                routingPoint.resolveFromPos(osmParserData)
+                if routingPoint.isValid():
+                    self.mapWidgetQt.setWayPoint(routingPoint) 
+                else:
+                    self.showError("Error", "Failed to resolve way point")
+
+            elif pointType==OSMRoutingPoint.TYPE_MAP:
+                mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                self.mapWidgetQt.showPointOnMap(mapPoint)
+  
+            elif pointType==OSMRoutingPoint.TYPE_FAVORITE:
+                favoritePoint=OSMRoutingPoint(name, pointType, (lat, lon))
+                favoritePoint.resolveFromPos(osmParserData)
+                if favoritePoint.isValid():
+                    self.favoriteList.append(favoritePoint)
+                else:
+                    self.showError("Error", "Failed to resolve favorite point")
+
+    def showError(self, title, text):
+        msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
+        font = self.font()
+        font.setPointSize(14)
+        msgBox.setFont(font)
+        msgBox.exec()
+        
     @pyqtSlot()
     def _showGPSData(self):
         gpsDataDialog=OSMGPSDataDialog(self)
@@ -4468,11 +4543,7 @@ class OSMWidget(QWidget):
 
             elif pointType==OSMRoutingPoint.TYPE_MAP:
                 mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
-                mapPoint.resolveFromPos(osmParserData)
-                if mapPoint.isValid():
-                    self.mapWidgetQt.showPointOnMap(mapPoint)
-                else:
-                    self.showError("Error", "Failed to resolve map point")
+                self.mapWidgetQt.showPointOnMap(mapPoint)
   
             elif pointType==OSMRoutingPoint.TYPE_FAVORITE:
                 favoritePoint=OSMRoutingPoint(name, pointType, (lat, lon))
@@ -4513,11 +4584,7 @@ class OSMWidget(QWidget):
                         self.showError("Error", "Failed to resolve way point")
                 elif pointType==OSMRoutingPoint.TYPE_MAP:
                     mapPoint=OSMRoutingPoint(point.getName(), pointType, point.getPos())  
-                    mapPoint.resolveFromPos(osmParserData)
-                    if mapPoint.isValid():
-                        self.mapWidgetQt.showPointOnMap(mapPoint)
-                    else:
-                        self.showError("Error", "Failed to resolve map point")
+                    self.mapWidgetQt.showPointOnMap(mapPoint)
 
     @pyqtSlot()
     def _loadRoute(self):
