@@ -1826,6 +1826,11 @@ class OSMDataImport(OSMDataSQLite):
             # living_street
             return 1000
         
+        # never route over parking_aisle
+        if "service" in tags:
+            if tags["service"]=="parking_aisle":
+                return 10000
+            
         return 1
     
     def getCostsOfWay(self, wayId, tags, distance, crossingFactor, streetInfo, maxspeed):

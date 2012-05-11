@@ -1267,10 +1267,27 @@ class OSMDataAccess(OSMDataSQLite):
             
         return resultList
 
-    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId):
+    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId, cityId, recursive):
         filterString=self.createSQLFilterStringForIN(nodeTypeList)
         if countryId!=None:
-            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND type IN %s'%(lon, lat, countryId, filterString))
+            if cityId!=None:
+                if recursive==True:
+                    cityList=list()
+                    self.getAdminChildsForIdRecursive(cityId, cityList)
+        
+                    # add self
+                    cityList.append((cityId, None, None))
+        
+                    cityIdList=list()
+                    for cityId, _, _ in cityList:
+                        cityIdList.append(cityId)
+            
+                    cityFilterString=self.createSQLFilterStringForIN(cityIdList)
+                    self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND city IN %s AND type IN %s'%(lon, lat, countryId, cityFilterString, filterString))
+                else:
+                    self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND city=%d AND type IN %s'%(lon, lat, countryId, cityId, filterString))
+            else:
+                self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND type IN %s'%(lon, lat, countryId, filterString))
         else:
             self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE type IN %s'%(lon, lat, filterString))
 

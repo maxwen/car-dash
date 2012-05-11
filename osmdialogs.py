@@ -355,7 +355,7 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         return searchNode(self.rootItem)
     
 class OSMAdressDialog(QDialog):
-    def __init__(self, parent, osmParserData):
+    def __init__(self, parent, osmParserData, defaultCountryId):
         QDialog.__init__(self, parent) 
 
         self.osmParserData=osmParserData
@@ -363,6 +363,7 @@ class OSMAdressDialog(QDialog):
         font.setPointSize(14)
         self.setFont(font)
 
+        self.defaultCountryId=defaultCountryId
         self.adminAreaDict, self.reverseAdminAreaDict=osmParserData.getAdminAreaConversion()
 
         self.countryDict=osmParserData.getAdminCountryList()
@@ -456,9 +457,20 @@ class OSMAdressDialog(QDialog):
         
         self.countryCombo=QComboBox(self)
         
+        defaultCountryName=None
+        if self.defaultCountryId!=None:
+            defaultCountryName=self.countryDict[self.defaultCountryId]
+            
         countryList=sorted(self.reverseCountryDict.keys())
+        i=0
+        defaultIndex=0
         for countryName in countryList:
             self.countryCombo.addItem(countryName)
+            if countryName==defaultCountryName:
+                defaultIndex=i
+            i=i+1
+            
+        self.countryCombo.setCurrentIndex(defaultIndex)
             
         self.countryCombo.activated.connect(self._countryChanged)
         top.addWidget(self.countryCombo)
@@ -485,26 +497,18 @@ class OSMAdressDialog(QDialog):
 
         self.cityView=QTreeView(self)
         cityBox.addWidget(self.cityView)
-        
-        dataArea.addLayout(cityBox)
-        
-        streetBox=QVBoxLayout()
-
+                
         self.cityViewModel=OSMAdressTreeModelCity(self)
         self.cityView.setModel(self.cityViewModel)
-#        self.cityViewModel.update(self.filteredCityList, None)
-#        self.proxyModel = QSortFilterProxyModel(self)
-#        self.proxyModel.setSourceModel(self.cityViewModel)
-#        self.cityView.setModel(self.proxyModel)
-#        self.cityView.setSortingEnabled(True)
         
         header=QHeaderView(Qt.Horizontal, self.cityView)
         header.setStretchLastSection(True)
         self.cityView.setHeader(header)
         self.cityView.setColumnWidth(0, 300)
 
-#        self.cityView.setSelectionBehavior(QAbstractItemView.SelectRows)
-#        self.cityView.setFixedHeight(150)
+        dataArea.addLayout(cityBox)
+
+        streetBox=QVBoxLayout()
 
         self.streetFilterEdit=QLineEdit(self)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
@@ -2553,6 +2557,11 @@ class OSMPOISearchDialog(QDialog):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
         self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
 
+        self.cityList=list()
+        self.filteredCityList=list()        
+        self.currentCityId=None
+        self.cityRecursive=False
+        
         self.initUI()
 
     def initUI(self):
@@ -2594,6 +2603,35 @@ class OSMPOISearchDialog(QDialog):
         self.poiView.setHorizontalHeader(header)
         self.poiView.setColumnWidth(0, 300)
         
+        if self.nearestMode==False:
+            cityBox=QVBoxLayout()
+            self.cityFilterEdit=QLineEdit(self)
+            self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
+            cityBox.addWidget(self.cityFilterEdit)
+            
+            hbox=QHBoxLayout()
+            self.ignoreCityButton=QCheckBox("No Area", self)
+            self.ignoreCityButton.clicked.connect(self._ignoreCity)
+            hbox.addWidget(self.ignoreCityButton)
+    
+            self.cityRecursiveButton=QCheckBox("Recursive", self)
+            self.cityRecursiveButton.clicked.connect(self._setCityRecursive)
+            hbox.addWidget(self.cityRecursiveButton)
+    
+            cityBox.addLayout(hbox)
+    
+            self.cityView=QTreeView(self)
+            cityBox.addWidget(self.cityView)
+        
+            self.cityViewModel=OSMAdressTreeModelCity(self)
+            self.cityView.setModel(self.cityViewModel)
+            
+            header=QHeaderView(Qt.Horizontal, self.cityView)
+            header.setStretchLastSection(True)
+            self.cityView.setHeader(header)
+            
+            dataArea.addLayout(cityBox)
+
         poiArea=QVBoxLayout()        
         positionButtons=QHBoxLayout()
 
@@ -2628,8 +2666,13 @@ class OSMPOISearchDialog(QDialog):
         self.poiEntryView.setHorizontalHeader(header)
         self.poiEntryView.setColumnWidth(0, 300)
 
-        dataArea.setStretch(0, 1)
-        dataArea.setStretch(1, 3)
+        if self.nearestMode==False:
+            dataArea.setStretch(0, 1)
+            dataArea.setStretch(1, 1)
+            dataArea.setStretch(2, 2)
+        else:
+            dataArea.setStretch(0, 1)
+            dataArea.setStretch(1, 3)
 
         top.addLayout(dataArea)
         
@@ -2688,6 +2731,10 @@ class OSMPOISearchDialog(QDialog):
             SIGNAL("dataChanged(QModelIndex, QModelIndex)"), self._poiListChanged)
         self.connect(self.poiEntryView.selectionModel(),
             SIGNAL("selectionChanged(QItemSelection, QItemSelection)"), self._selectionChanged)
+        
+        if self.nearestMode==False:
+            self.connect(self.cityView.selectionModel(),
+                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
 
         if self.nearestMode==False:
             self._countryChanged()
@@ -2738,12 +2785,18 @@ class OSMPOISearchDialog(QDialog):
 
     @pyqtSlot()
     def _countryChanged(self):
+        self._clearCityTableSelection()
         if self.nearestMode==False:
             self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
             
+            self.updateCityListForCountry()
+            self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
+            self.cityViewModel.update(self.cityList, self.cityModel, False)
+            self._applyFilterCity()
+
             if len(self.currentPOITypeList)!=0:    
                 self._poiListChanged()
-        
+                
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -2809,7 +2862,7 @@ class OSMPOISearchDialog(QDialog):
     @pyqtSlot()
     def _poiListChanged(self):
         if len(self.currentPOITypeList)!=0:    
-            self.poiList=self.osmParserData.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId)
+            self.poiList=self.osmParserData.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId, self.currentCityId, self.cityRecursive)
             if self.nearestMode==True:
                 self.poiList=sorted(self.poiList, key=self.distanceSort)
         else:
@@ -2822,3 +2875,77 @@ class OSMPOISearchDialog(QDialog):
 #            mousePos=QPoint(event.x(), event.y())
 #  
 #        return True
+
+    def citySort(self, item):
+        return item[1]
+    
+    def updateCityListForCountry(self):
+        if self.currentCountryId!=None:
+            self.cityList=list()
+            self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
+            self.cityList.sort(key=self.citySort)
+
+        else:
+            self.cityList=list()
+            
+    @pyqtSlot()
+    def _applyFilterCity(self):
+        self._clearCityTableSelection()
+        filterValue=self.cityFilterEdit.text()
+        if len(filterValue)!=0:
+            if filterValue[-1]!="*":
+                filterValue=filterValue+"*"
+            self.filteredCityList=list()
+            filterValueMod=None
+            if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
+                filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
+            
+            for (cityId, cityName, adminLevel) in self.cityList:
+                match=False
+                if fnmatch(cityName.upper(), filterValue.upper()):
+                    match=True
+                if match==False and filterValueMod!=None and fnmatch(cityName.upper(), filterValueMod.upper()):
+                    match=True
+                
+                if match==True:
+                    self.filteredCityList.append((cityId, cityName, adminLevel))
+        
+            self.cityViewModel.update(self.filteredCityList, self.cityModel)
+            self.cityView.expandAll()
+
+        else:
+            self.filteredCityList=self.cityList
+            self.cityViewModel.update(self.filteredCityList, self.cityModel)
+            self.cityView.expandAll()
+
+    @pyqtSlot()
+    def _cityChanged(self):
+        selmodel = self.cityView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            self.currentCityId=self.cityViewModel.data(current, Qt.UserRole)
+            self._poiListChanged()
+            
+    @pyqtSlot()
+    def _ignoreCity(self):
+        self._clearCityTableSelection()
+        value=self.ignoreCityButton.isChecked()
+        if value==True:
+            self.cityView.setDisabled(True)
+            self.cityFilterEdit.setDisabled(True)
+        else:
+            self.cityView.setDisabled(False)
+            self.cityFilterEdit.setDisabled(False)
+            
+        self._poiListChanged()
+            
+    @pyqtSlot()
+    def _setCityRecursive(self):
+        self.cityRecursive=self.cityRecursiveButton.isChecked()
+        if self.currentCityId!=None:
+            self._poiListChanged()
+
+    @pyqtSlot()
+    def _clearCityTableSelection(self):
+        self.cityView.clearSelection()
+        self.currentCityId=None
