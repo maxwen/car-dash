@@ -55,7 +55,7 @@ class OSMDataImport(OSMDataSQLite):
         self.skipAddress=False
         self.skipAreas=False
         self.skipPOINodes=False
-        self.disableMemoryDB=False
+        self.disableMemoryDB=True
         self.addressCache=set()
         self.highestAdminRelationNumber=0
 

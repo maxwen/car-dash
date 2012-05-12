@@ -320,9 +320,9 @@ class OSMDataSQLite():
 #        osmDataList[1]=osmData
     
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"

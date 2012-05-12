@@ -143,6 +143,15 @@ DONE
    -ensure the id the polygon is saved does not clash with other areas
    -> count all admin relations and add with id higher
   DONE
+  
+
+TODO: find nearest POI should use no country
+DONE
+
+TODO: search POI by name should include
+-name filter
+-city filter
+DONE
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -242,9 +251,4 @@ TODO: create prefetch box based on track
 
 TODO: create tables with simplified polygons
 
-TODO: find nearest POI should use no country
-DONE
-
-TODO: search POI by name should include
--name filter
--city filter
+TODO: if route is active and we have not reached the start point

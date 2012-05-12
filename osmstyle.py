@@ -100,7 +100,7 @@ class OSMStyle():
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
-        self.colorDict["wayCasingColor"]=QColor(0x99, 0x99, 0x99)
+        self.colorDict["wayCasingColor"]=QColor(0x60, 0x60, 0x60)
         self.colorDict["tunnelColor"]=Qt.white
         self.colorDict["bridgeCasingColor"]=QColor(0x50, 0x50, 0x50)
         self.colorDict["accessWaysColor"]=QColor(255, 0, 0, 100)
@@ -876,3 +876,7 @@ class OSMStyle():
 
         return brush, pen    
     
+    def getPOITagString(self, tags):
+        if "name" in tags:
+            return tags["name"]
+        return "Unknown"

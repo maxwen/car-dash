@@ -2463,18 +2463,21 @@ class OSMAreaDisplayDialog(QDialog):
 #-------------------------------------------
 
 class OSMPOIListTableModel(QAbstractTableModel):
-    def __init__(self, adminAreaDict, reverseAdminAreaDict, nearestMode, parent):
+    def __init__(self, adminAreaDict, reverseAdminAreaDict, nearestMode, style, parent):
         QAbstractTableModel.__init__(self, parent)
         self.adminAreaDict=adminAreaDict
         self.reverseAdminAreaDict=reverseAdminAreaDict
         self.nearestMode=nearestMode
+        self.style=style
         
     def rowCount(self, parent): 
         return len(self.poiList)
     
     def columnCount(self, parent): 
-        return 3
-      
+        if self.nearestMode==True:
+            return 3
+        return 2
+    
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
@@ -2491,11 +2494,15 @@ class OSMPOIListTableModel(QAbstractTableModel):
 #            print(refId)
 
         if index.column()==0:
-            if "name" in tags:
-                return tags["name"]
-            return str(tags)
+            return self.style.getPOITagString(tags)
         elif index.column()==1:
-            return distance
+            if self.nearestMode==True:
+                return distance
+            else:
+                if city!=None:
+                    return city
+                return ""
+                            
         elif index.column()==2:
             if city!=None:
                 return city
@@ -2507,7 +2514,9 @@ class OSMPOIListTableModel(QAbstractTableModel):
                 if col==0:
                     return "Name"
                 if col==1:
-                    return "Distance"
+                    if self.nearestMode==True:
+                        return "Distance"
+                    return "City"
                 if col==2:
                     return "City"
             elif role == Qt.TextAlignmentRole:
@@ -2632,22 +2641,24 @@ class OSMPOISearchDialog(QDialog):
             
             dataArea.addLayout(cityBox)
 
-        poiArea=QVBoxLayout()        
-        positionButtons=QHBoxLayout()
-
-        self.mapPositionButton=QRadioButton("Map", self)
-        self.mapPositionButton.setChecked(True)
-        self.mapPositionButton.clicked.connect(self._useMapPosition)
-        positionButtons.addWidget(self.mapPositionButton) 
-
-        self.gpsPositionButton=QRadioButton("GPS", self)
-        self.gpsPositionButton.clicked.connect(self._useGPSPosition)
-        positionButtons.addWidget(self.gpsPositionButton) 
-
-        if self.gpsPosition==None:
-            self.gpsPositionButton.setDisabled(True)
-            
-        poiArea.addLayout(positionButtons)
+        poiArea=QVBoxLayout()    
+        
+        if self.nearestMode==True:    
+            positionButtons=QHBoxLayout()
+    
+            self.mapPositionButton=QRadioButton("Map", self)
+            self.mapPositionButton.setChecked(True)
+            self.mapPositionButton.clicked.connect(self._useMapPosition)
+            positionButtons.addWidget(self.mapPositionButton) 
+    
+            self.gpsPositionButton=QRadioButton("GPS", self)
+            self.gpsPositionButton.clicked.connect(self._useGPSPosition)
+            positionButtons.addWidget(self.gpsPositionButton) 
+    
+            if self.gpsPosition==None:
+                self.gpsPositionButton.setDisabled(True)
+                
+            poiArea.addLayout(positionButtons)
 
         self.poiFilterEdit=QLineEdit(self)
         self.poiFilterEdit.textChanged.connect(self._applyFilterPOI)
@@ -2657,7 +2668,7 @@ class OSMPOISearchDialog(QDialog):
         poiArea.addWidget(self.poiEntryView)
         dataArea.addLayout(poiArea)
         
-        self.poiEntryViewModel=OSMPOIListTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self.nearestMode, self)
+        self.poiEntryViewModel=OSMPOIListTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self.nearestMode, self.style, self)
         self.poiEntryViewModel.update(self.poiList)
         self.poiEntryView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.poiEntryView.setModel(self.poiEntryViewModel)
