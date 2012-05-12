@@ -1450,8 +1450,8 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("centerGPSPixmap"))
             self.centerGPSRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("gpsDataPixmap"))
-            self.showGPSDataRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+#            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("gpsDataPixmap"))
+#            self.showGPSDataRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
             self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
@@ -1475,9 +1475,12 @@ class QtOSMWidget(QWidget):
         lon=self.osmutils.rad2deg(self.gps_rlon)
         speed=self.speed
         altitude=self.altitude
+        track=self.track
+        if track==None:
+            track=0
         
         self.painter.setPen(self.style.getStylePen("textPen"))
-        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm"%(lat, lon, speed, altitude))
+        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm %3d"%(lat, lon, speed, altitude, track))
         
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -1718,7 +1721,6 @@ class QtOSMWidget(QWidget):
                                 
     def displayWays(self):
         showCasing=self.map_zoom in range(OSMStyle.SHOW_CASING_START_ZOOM, 19)
-#        showCasing=True
         showStreetOverlays=self.map_zoom in range(OSMStyle.SHOW_STREET_OVERLAY_START_ZOOM, 19)
         
         # casing
@@ -1772,7 +1774,6 @@ class QtOSMWidget(QWidget):
                         self.displayWayWithCache(way, pen)
             
     def displayTunnelWays(self):                    
-#        showCasing=self.map_zoom in range(15, 19)
         showCasing=True
         if showCasing==True:
             for way in self.tunnelWays:   
@@ -1788,10 +1789,7 @@ class QtOSMWidget(QWidget):
             self.displayWayWithCache(way, pen)
 
     def getDisplayPOITypeListForZoom(self):
-        if self.map_zoom in range(self.tileStartZoom+1, 19):
-            return self.style.getDisplayPOIListForZoom(self.map_zoom)
-
-        return None
+        return self.style.getDisplayPOIListForZoom(self.map_zoom)
     
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
@@ -1861,9 +1859,9 @@ class QtOSMWidget(QWidget):
                 elif self.centerGPSRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Center map to GPS")
                     return True
-                elif self.showGPSDataRect.contains(mousePos):
-                    QToolTip.showText(event.globalPos(), "Show GPS data")
-                    return True
+#                elif self.showGPSDataRect.contains(mousePos):
+#                    QToolTip.showText(event.globalPos(), "Show GPS data")
+#                    return True
                 elif self.optionsRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Settings")
                     return True
@@ -2818,8 +2816,8 @@ class QtOSMWidget(QWidget):
                         self.osmWidget._loadRoute()
                     elif self.centerGPSRect.contains(eventPos):
                         self.osmWidget._centerGPS()
-                    elif self.showGPSDataRect.contains(eventPos):
-                        self.osmWidget._showGPSData()
+#                    elif self.showGPSDataRect.contains(eventPos):
+#                        self.osmWidget._showGPSData()
                     elif self.optionsRect.contains(eventPos):
                         self.osmWidget._showSettings()
                     return
@@ -3232,12 +3230,13 @@ class QtOSMWidget(QWidget):
     
     def addToFavorite(self, mousePos):
         (lat, lon)=self.getPosition(mousePos[0], mousePos[1])
-        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
-        if edgeId==None:
-            return 
-                
-        wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-        defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+        
+        defaultPointTag=None
+        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, OSMRoutingPoint.DEFAULT_RESOLVE_POINT_MARGIN, OSMRoutingPoint.DEFAULT_RESOLVE_MAX_DISTANCE)
+        if edgeId!=None:
+            wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
+            defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+        
         if defaultPointTag==None:
             defaultPointTag=""
             
@@ -3250,13 +3249,12 @@ class QtOSMWidget(QWidget):
 
     def addRoutingPoint(self, pointType):
         (lat, lon)=self.getPosition(self.mousePos[0], self.mousePos[1])
-        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, DEFAULT_SEARCH_MARGIN, 30.0)
-        if edgeId==None:
-            self.showError("Error", "Point not usable for routing")
-            return
 
-        wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-        defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+        defaultPointTag=None
+        edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, OSMRoutingPoint.DEFAULT_RESOLVE_POINT_MARGIN, OSMRoutingPoint.DEFAULT_RESOLVE_MAX_DISTANCE)
+        if edgeId!=None:
+            wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
+            defaultPointTag=self.getDefaultPositionTag(name, nameRef)
 
         if pointType==0:
             if defaultPointTag!=None:
@@ -3268,7 +3266,7 @@ class QtOSMWidget(QWidget):
             point.resolveFromPos(osmParserData)
             self.startPoint=point
             if not point.isValid():
-                self.showError("Error", "Failed to resolve start point")
+                self.showError("Error", "Failed to resolve way for start point")
 
         elif pointType==1:
             if defaultPointTag!=None:
@@ -3280,7 +3278,7 @@ class QtOSMWidget(QWidget):
             point.resolveFromPos(osmParserData)
             self.endPoint=point
             if not point.isValid():
-                self.showError("Error", "Failed to resolve finish point")
+                self.showError("Error", "Failed to resolve way for finish point")
 
         elif pointType==2:
             if defaultPointTag!=None:
@@ -3292,7 +3290,7 @@ class QtOSMWidget(QWidget):
             wayPoint.resolveFromPos(osmParserData)
             self.wayPoints.append(wayPoint)
             if not wayPoint.isValid():
-                self.showError("Error", "Failed to resolve way point")
+                self.showError("Error", "Failed to resolve way for way point")
         
     def showPointOnMap(self, point):
         if self.map_zoom<15:
@@ -4495,7 +4493,7 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setStartPoint(routingPoint) 
             self.mapWidgetQt.showPointOnMap(routingPoint)
             if not routingPoint.isValid():
-                self.showError("Error", "Point not usable for routing")
+                self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
                 
         elif pointType==OSMRoutingPoint.TYPE_END:
             routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
@@ -4503,7 +4501,7 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setEndPoint(routingPoint) 
             self.mapWidgetQt.showPointOnMap(routingPoint)
             if not routingPoint.isValid():
-                self.showError("Error", "Point not usable for routing")
+                self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
                 
         elif pointType==OSMRoutingPoint.TYPE_WAY:
             routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
@@ -4511,11 +4509,11 @@ class OSMWidget(QWidget):
             self.mapWidgetQt.setWayPoint(routingPoint) 
             self.mapWidgetQt.showPointOnMap(routingPoint)
             if not routingPoint.isValid():
-                self.showError("Error", "Point not usable for routing")
+                self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
         
         elif pointType==OSMRoutingPoint.TYPE_MAP:
             mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
-            self.mapPoint=mapPoint
+            self.mapWidgetQt.mapPoint=mapPoint
             self.mapWidgetQt.showPointOnMap(mapPoint)
         
         elif pointType==OSMRoutingPoint.TYPE_FAVORITE:

@@ -308,24 +308,21 @@ class OSMDataImport(OSMDataSQLite):
             
     def addToPOIRefTable(self, refid, refType, lat, lon, tags, nodeType, layer):           
         pointString=self.getGISUtils().createPointStringFromCoords(lat, lon)
-
-        tagsString=None
-        if tags!=None:
-            tagsString=pickle.dumps(tags)
-
+        tags=self.stripUnneededNodeTags(tags)
+        tagsString=self.encodeTags(tags)
         self.cursorNode.execute('INSERT INTO poiRefTable VALUES( ?, ?, ?, ?, ?, ?, ?, PointFromText(%s, 4326))'%(pointString), (refid, refType, tagsString, nodeType, layer, None, None))
         
     def updateWayTableEntryPOIList(self, wayId, poiList):
         wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _, layer, coordsStr=self.getWayEntryForIdWithCoords(wayId)
         if wayId!=None:
             streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
-            self.cursorWay.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList), streetTypeId, layer))
+            self.cursorWay.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList), streetTypeId, layer))
         
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer):
         name=self.encodeStreetName(name)
         streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
         lineString=self.getGISUtils().createLineStringFromCoords(coords)
-        self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeWayTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
+        self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
     
     def encodeStreetName(self, name):
         if name!=None:
@@ -345,13 +342,15 @@ class OSMDataImport(OSMDataSQLite):
             self.edgeId=self.edgeId+1
         
     def addPolygonToAreaTable(self, osmId, areaId, areaType, tags, polyString, layer):
-        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaId, areaType, pickle.dumps(tags), layer))
+        tags=self.stripUnneededAreaTags(tags)
+        self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaId, areaType, self.encodeTags(tags), layer))
 
     def addLineToAreaTable(self, osmId, areaType, tags, lineString, layer):
-        self.cursorArea.execute('INSERT OR IGNORE INTO areaLineTable VALUES( ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (osmId, areaType, pickle.dumps(tags), layer))
+        tags=self.stripUnneededAreaTags(tags)
+        self.cursorArea.execute('INSERT OR IGNORE INTO areaLineTable VALUES( ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (osmId, areaType, self.encodeTags(tags), layer))
 
     def addPolygonToAdminAreaTable(self, osmId, tags, adminLevel, polyString):
-        self.cursorArea.execute('INSERT OR IGNORE INTO adminAreaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, pickle.dumps(tags), adminLevel, None))
+        self.cursorArea.execute('INSERT OR IGNORE INTO adminAreaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, self.encodeTags(tags), adminLevel, None))
         
     def updateAdminAreaParent(self, osmId, parent):
         self.cursorArea.execute('UPDATE adminAreaTable SET parent=%d WHERE osmId=%d'%(parent, osmId))
@@ -465,8 +464,7 @@ class OSMDataImport(OSMDataSQLite):
         resultDict=dict()
         for x in allentries:
             refId=int(x[0])
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
+            tags=self.decodeTags(x[1])
             nodeType=int(x[2])
             resultDict["%d:%d"%(refId, nodeType)]=tags
 
@@ -494,7 +492,7 @@ class OSMDataImport(OSMDataSQLite):
         return resultList
     
     def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE (type=%d OR type=%d)'%(Constants.POI_TYPE_ENFORCEMENT_WAYREF, Constants.POI_TYPE_ENFORCEMENT))
+        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
 
 #        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
@@ -728,19 +726,40 @@ class OSMDataImport(OSMDataSQLite):
     def getRequiredWayTags(self):
         return Constants.REQUIRED_HIGHWAY_TAGS_SET
 
-    def stripUnneededTags(self, tags):
+    def stripUnneededWayTags(self, tags):
         newTags=dict()
         tagList=self.getRequiredWayTags()
         for key, value in tags.items():
             if key in tagList:
                 newTags[key]=value
         return newTags
+
+    def getRequiredAreaTags(self):
+        return Constants.REQUIRED_AREA_TAGS_SET
+
+    def stripUnneededAreaTags(self, tags):
+        newTags=dict()
+        tagList=self.getRequiredAreaTags()
+        for key, value in tags.items():
+            if key in tagList:
+                newTags[key]=value
+        return newTags    
+
+    def getRequiredNodeTags(self):
+        return Constants.REQUIRED_NODE_TAGS_SET
+
+    def stripUnneededNodeTags(self, tags):
+        newTags=dict()
+        tagList=self.getRequiredNodeTags()
+        for key, value in tags.items():
+            if key in tagList:
+                newTags[key]=value
+        return newTags       
     
-    def encodeWayTags(self, tags):
+    def encodeTags(self, tags):
         if len(tags.keys())==0:
             return None
         pickeledTags=pickle.dumps(tags)
-#        compressedTags=zlib.compress(pickeledTags)
         return pickeledTags
         
     def getWaterwayTypes(self):
@@ -861,6 +880,11 @@ class OSMDataImport(OSMDataSQLite):
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
                         self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
+
+            if "place" in tags:
+                if tags["place"] in self.isUsablePlaceNodeType():
+                    lat, lon=self.getCenterOfPolygon(refs)
+                    self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
 
             if not "highway" in tags:   
                 # could be part of a relation                    
@@ -1019,7 +1043,7 @@ class OSMDataImport(OSMDataSQLite):
                     
                     coords, newRefList=self.createRefsCoords(refs)
                     if len(coords)>=2:
-                        requiredTags=self.stripUnneededTags(tags)
+                        requiredTags=self.stripUnneededWayTags(tags)
                         self.addToWayTable(wayid, requiredTags, newRefList, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer)   
                     else:
                         self.log("parse_ways: skipping way %d %s len(coords)<2"%(wayid, refs))
@@ -2002,11 +2026,10 @@ class OSMDataImport(OSMDataSQLite):
                         majorCrossingType=Constants.CROSSING_TYPE_MOTORWAY_EXIT
                         highwayExitRef=None
                         highwayExitName=None
-                        if nodeTags!=None:
-                            if "ref" in nodeTags:
-                                highwayExitRef=nodeTags["ref"]
-                            if "name" in nodeTags:
-                                highwayExitName=nodeTags["name"]
+                        if "ref" in nodeTags:
+                            highwayExitRef=nodeTags["ref"]
+                        if "name" in nodeTags:
+                            highwayExitName=nodeTags["name"]
                         majorCrossingInfo="%s:%s"%(highwayExitName, highwayExitRef)                             
                                 
                     # Constants.POI_TYPE_BARRIER

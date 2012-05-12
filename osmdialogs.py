@@ -588,7 +588,7 @@ class OSMAdressDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('Addresses')
-        self.setGeometry(0, 0, 800, 500)
+        self.setGeometry(0, 0, 850, 550)
         
         self._countryChanged()
            
@@ -647,6 +647,7 @@ class OSMAdressDialog(QDialog):
             self.currentCityId=self.cityViewModel.data(current, Qt.UserRole)
             self.updateAdressListForCity()
             self._applyFilterStreet()
+            print(self.currentCityId)
                     
     @pyqtSlot()
     def _selectionChanged(self):
@@ -2207,16 +2208,19 @@ class OSMInputDialog(QDialog):
         
 #----------------------------
 class OSMPOITableModel(QAbstractTableModel):
-    def __init__(self, parent, displayPOITypeList):
+    def __init__(self, parent, displayPOITypeList, withZoom):
         QAbstractTableModel.__init__(self, parent)
         self.style=OSMStyle()
         self.poiList=self.style.getPOIDictAsList()
         self.displayPOITypeList=displayPOITypeList
+        self.withZoom=withZoom
         
     def rowCount(self, parent): 
         return len(self.poiList)
     
     def columnCount(self, parent): 
+        if self.withZoom==True:
+            return 2
         return 1
       
     def data(self, index, role):
@@ -2226,28 +2230,34 @@ class OSMPOITableModel(QAbstractTableModel):
             if index.row() >= len(self.poiList):
                 return None
             
-            pixmapName=self.poiList[index.row()][2]
-            if pixmapName!=None:
-                return self.style.getStylePixmap(pixmapName)
+            if index.column()==0:
+                pixmapName=self.poiList[index.row()][2]
+                if pixmapName!=None:
+                    return self.style.getStylePixmap(pixmapName)
             
             return None
         elif role==Qt.CheckStateRole:
             if index.row() >= len(self.poiList):
                 return None
             
-            poiType=self.poiList[index.row()][1]
-            if poiType in self.displayPOITypeList:
-                return Qt.Checked
-            return Qt.Unchecked
+            if index.column()==0:
+                poiType=self.poiList[index.row()][1]
+                if poiType in self.displayPOITypeList:
+                    return Qt.Checked
+                return Qt.Unchecked
+            
+            return None
             
         elif role == Qt.DisplayRole:
             if index.row() >= len(self.poiList):
                 return ""
             desc=self.poiList[index.row()][3]
+            zoom=self.poiList[index.row()][4]
             
             if index.column()==0:
                 return desc
-        
+            if index.column()==1:
+                return zoom  
         return None
        
     def headerData(self, col, orientation, role):
@@ -2255,6 +2265,9 @@ class OSMPOITableModel(QAbstractTableModel):
             if role == Qt.DisplayRole:
                 if col==0:
                     return "POI"
+                if self.withZoom==True:
+                    if col==1:
+                        return "Zoom"
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
@@ -2293,12 +2306,13 @@ class OSMPOIDisplayDialog(QDialog):
         self.poiView=QTableView(self)
         top.addWidget(self.poiView)
         
-        self.poiViewModel=OSMPOITableModel(self, self.displayPOITypeList)
+        self.poiViewModel=OSMPOITableModel(self, self.displayPOITypeList, True)
         self.poiView.setModel(self.poiViewModel)
         header=QHeaderView(Qt.Horizontal, self.poiView)
         header.setStretchLastSection(True)
         self.poiView.setHorizontalHeader(header)
         self.poiView.setColumnWidth(0, 300)
+        self.poiView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         style=QCommonStyle()
 
@@ -2319,7 +2333,7 @@ class OSMPOIDisplayDialog(QDialog):
 
         self.setLayout(top)
         self.setWindowTitle('POI Display Selection')
-        self.setGeometry(0, 0, 400, 500)
+        self.setGeometry(0, 0, 500, 500)
         
     @pyqtSlot()
     def _ok(self):
@@ -2431,6 +2445,7 @@ class OSMAreaDisplayDialog(QDialog):
         header.setStretchLastSection(True)
         self.areaView.setHorizontalHeader(header)
         self.areaView.setColumnWidth(0, 200)
+        self.areaView.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         style=QCommonStyle()
 
@@ -2605,7 +2620,7 @@ class OSMPOISearchDialog(QDialog):
         self.poiView=QTableView(self)
         dataArea.addWidget(self.poiView)
         
-        self.poiViewModel=OSMPOITableModel(self, self.currentPOITypeList)
+        self.poiViewModel=OSMPOITableModel(self, self.currentPOITypeList, False)
         self.poiView.setModel(self.poiViewModel)
         header=QHeaderView(Qt.Horizontal, self.poiView)
         header.setStretchLastSection(True)
@@ -2736,7 +2751,7 @@ class OSMPOISearchDialog(QDialog):
         
         self.setLayout(top)
         self.setWindowTitle('POI Search')
-        self.setGeometry(0, 0, 800, 500)
+        self.setGeometry(0, 0, 850, 550)
         
         self.connect(self.poiViewModel,
             SIGNAL("dataChanged(QModelIndex, QModelIndex)"), self._poiListChanged)

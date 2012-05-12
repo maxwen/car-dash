@@ -92,7 +92,10 @@ class Constants():
     BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
     BOUNDARY_TYPE_SET=set(["administrative"])
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb", "hamlet"])
+    
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
+    REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building"])
+    REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
     
     PARKING_LIMITATIONS_DICT={"access":"yes",
                               "fee":"no"}
@@ -249,32 +252,16 @@ class OSMDataAccess(OSMDataSQLite):
         self.cursorWay.execute('SELECT tags FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
-            return self.decodeWayTags(allentries[0][0])
+            return self.decodeTags(allentries[0][0])
         
         return None
         
     def getEdgeIdOnPos(self, lat, lon, margin, maxDistance):  
-        resultList=self.getEdgesAroundPointWithGeom(lat, lon, margin)  
-        usedEdgeId=None
-        usedWayId=None
-        minDistance=maxDistance
-        
-        for edge in resultList:
-            edgeId, _, _, _, wayId, _, _, _, _, _, coords=edge
-
-            lat1, lon1=coords[0]
-            for lat2, lon2 in coords[1:]:
-                onLine, distance, _=self.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
-                if onLine==True:
-                    if distance<minDistance:
-                        minDistance=distance
-                        usedEdgeId=edgeId
-                        usedWayId=wayId
-                    
-                lat1=lat2
-                lon1=lon2
+        edge=self.getEdgeOnPos(lat, lon, margin, maxDistance)
+        if edge!=None:
+            return edge[0], edge[4]
                      
-        return usedEdgeId, usedWayId
+        return None, None
     
     def getEdgeOnPos(self, lat, lon, margin, maxDistance):  
         resultList=self.getEdgesAroundPointWithGeom(lat, lon, margin)  
@@ -1184,10 +1171,9 @@ class OSMDataAccess(OSMDataSQLite):
         for x in allentries:
             childId=int(x[0])
             adminLevel=int(x[2])
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
-                if "name" in tags:
-                    childList.append((childId, tags["name"], adminLevel))
+            tags=self.decodeTags(x[1])
+            if "name" in tags:
+                childList.append((childId, tags["name"], adminLevel))
                     
         return childList
 
@@ -1197,11 +1183,10 @@ class OSMDataAccess(OSMDataSQLite):
         for x in allentries:
             childId=int(x[0])
             adminLevel=int(x[2])
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
-                if "name" in tags:
-                    childList.append((childId, tags["name"], adminLevel))
-                    self.getAdminChildsForIdRecursive(childId, childList)
+            tags=self.decodeTags(x[1])
+            if "name" in tags:
+                childList.append((childId, tags["name"], adminLevel))
+                self.getAdminChildsForIdRecursive(childId, childList)
                     
     
     def getAdminCountryList(self):
@@ -1296,10 +1281,7 @@ class OSMDataAccess(OSMDataSQLite):
 
         for x in allentries:
             refId=int(x[0])
-            tags=None
-            if x[1]!=None:
-                tags=pickle.loads(x[1])
-            
+            tags=self.decodeTags(x[1])
             nodeType=int(x[2])            
             layer=int(x[3])
             if x[4]!=None:
@@ -1372,16 +1354,14 @@ class OSMDataAccess(OSMDataSQLite):
         self.cursorArea.execute('SELECT tags FROM areaTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
         if len(allentries)==1:
-            if allentries[0][0]!=None:
-                tags=pickle.loads(allentries[0][0])
-                return tags
+            tags=self.decodeTags(allentries[0][0])
+            return tags
 
         self.cursorArea.execute('SELECT tags FROM areaLineTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
         if len(allentries)==1:
-            if allentries[0][0]!=None:
-                tags=pickle.loads(allentries[0][0])
-                return tags
+            tags=self.decodeTags(allentries[0][0])
+            return tags
             
         return None
     
@@ -1487,9 +1467,7 @@ class OSMDataAccess(OSMDataSQLite):
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId=x[0]
-            if x[1]==None:
-                continue
-            tags=pickle.loads(x[1])
+            tags=self.decodeTags(x[1])
             if "name" in tags:
                 adminName=tags["name"]
                 areaNameDict[osmId]=adminName
@@ -1587,11 +1565,22 @@ class OSMDataAccess(OSMDataSQLite):
             edgeList.append(data)
 
             self.followEdge(edgeId, nextEndRef, edgeList, followEdgeCheck, data)
-  
+
+    def testPOIRefTable(self):
+        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
+
+#        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
+        allentries=self.cursorNode.fetchall()
+        for x in allentries:
+            print("%s %s %s"%(x[0], x[1], self.decodeTags(x[2])))
+#            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
+#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
+
 def main(argv):    
     p = OSMDataAccess()
     
     p.openAllDB()
+#    p.testPOIRefTable()
     p.closeAllDB()
 
 

@@ -13,22 +13,31 @@ from osmparser.osmdataaccess import Constants
 from utils.env import getImageRoot
 
 class OSMStyle():
-    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":15},
-                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":15},
-                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":15},
-                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":15},
-                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":15},
+    SHOW_CASING_START_ZOOM=14
+    SHOW_BRIDGES_START_ZOOM=14
+    SHOW_STREET_OVERLAY_START_ZOOM=17
+    USE_ANTIALIASING_START_ZOOM=17
+    SHOW_BUILDING_START_ZOOM=18
+    SHOW_REF_LABEL_WAYS_START_ZOOM=14
+    SHOW_NAME_LABEL_WAYS_START_ZOOM=17
+    SHOW_POI_START_ZOOM=14
+    
+    POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":10},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Highway Exit", "zoom":15},
-                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":15},
-                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":15},
-                   Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":15},
-                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":15},
-                   Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":15},
-                   Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":15}}
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Highway Exit", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":SHOW_POI_START_ZOOM}}
     
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
-                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":18},
+                    Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":SHOW_BUILDING_START_ZOOM},
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
                     Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
@@ -37,7 +46,6 @@ class OSMStyle():
                     Constants.AREA_TYPE_TOURISM:{"desc":"Tourism", "zoom":None}}
     
     def __init__(self):
-        selfDict=dict()
         self.colorDict=dict()
         self.pixmapDict=dict()
         self.penDict=dict()
@@ -301,6 +309,8 @@ class OSMStyle():
         if zoom==14:
             return 0.5
     
+        return 0.3
+    
     def getStreetWidth(self, streetTypeId, zoom, tags):
 #        laneWidth=self.meterToPixel(5, zoom)
 #        width=laneWidth*2
@@ -315,8 +325,8 @@ class OSMStyle():
 #            except TypeError:
 #                None
     
-        if zoom<=13:
-            return 1
+        if zoom<=12:
+            return 2
 
         width=14
         if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
@@ -731,14 +741,6 @@ class OSMStyle():
         font.setPointSize(14)
         font.setStyleHint(QFont.TypeWriter)
         self.fontDict["monoFont"]=font     
-           
-    SHOW_CASING_START_ZOOM=14
-    SHOW_BRIDGES_START_ZOOM=16
-    SHOW_STREET_OVERLAY_START_ZOOM=17
-    USE_ANTIALIASING_START_ZOOM=17
-    SHOW_BUILDING_START_ZOOM=17
-    SHOW_REF_LABEL_WAYS_START_ZOOM=15
-    SHOW_NAME_LABEL_WAYS_START_ZOOM=17
         
     # TODO: values for lat 45 dec north
     # http://wiki.openstreetmap.org/wiki/FAQ#What_is_the_map_scale_for_a_particular_zoom_level_of_the_map.3F
@@ -869,7 +871,7 @@ class OSMStyle():
         pen=Qt.NoPen
         
         tourism=tags["tourism"]
-        if tourism=="camping" or tourism=="camp_site":    
+        if tourism=="camp_site" or tourism=="caravan_site":    
             brush=self.getStyleBrush("tourismCampingArea")
         else:
             brush=self.getStyleBrush("tourismArea")

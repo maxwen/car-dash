@@ -119,7 +119,7 @@ class OSMDataSQLite():
     def wayFromDB(self, x):
         wayId=x[0]
         refs=pickle.loads(x[2])
-        tags=self.decodeWayTags(x[1])
+        tags=self.decodeTags(x[1])
         streetInfo=x[3]
         name=x[4]
         nameRef=x[5]
@@ -133,7 +133,7 @@ class OSMDataSQLite():
     def wayFromDBWithCoordsString(self, x):
         wayId=x[0]
         refs=pickle.loads(x[2])
-        tags=self.decodeWayTags(x[1])
+        tags=self.decodeTags(x[1])
         streetInfo=x[3]
         name=x[4]
         nameRef=x[5]
@@ -147,14 +147,9 @@ class OSMDataSQLite():
     
     def poiRefFromDB(self, x):
         refId=int(x[0])
-            
-        tags=None
-        if x[1]!=None:
-            tags=pickle.loads(x[1])
-        
+        tags=self.decodeTags(x[1])
         nodeType=int(x[2])            
         layer=int(x[3])
-
         pointStr=x[4]
         lat, lon=self.getGISUtils().createPointFromPointString(pointStr)
 
@@ -197,21 +192,21 @@ class OSMDataSQLite():
     def areaFromDBWithCoordsString(self, x):
         osmId=x[0]
         areaType=x[1]
-        tags=pickle.loads(x[2])  
+        tags=self.decodeTags(x[2])
         layer=int(x[3])
         polyStr=x[4]
         return (osmId, areaType, tags, layer, polyStr)
 
     def adminAreaFromDBWithCoordsString(self, x):
         osmId=x[0]
-        tags=pickle.loads(x[1])
+        tags=self.decodeTags(x[1])
         adminLevel=int(x[2])  
         polyStr=x[3]
         return (osmId, tags, adminLevel, polyStr)
     
     def adminAreaFromDBWithParent(self, x):
         osmId=x[0]
-        tags=pickle.loads(x[1])
+        tags=self.decodeTags(x[1])
         if x[2]!=None:
             adminLevel=int(x[2])  
         else:
@@ -225,7 +220,7 @@ class OSMDataSQLite():
     def areaFromDB(self, x):
         osmId=x[0]
         areaType=x[1]
-        tags=pickle.loads(x[2])  
+        tags=self.decodeTags(x[2])
         return (osmId, areaType, tags)
     
     def decodeStreetInfo(self, streetInfo):
@@ -266,7 +261,7 @@ class OSMDataSQLite():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data2")
+        return os.path.join(getDataRoot(), "data3")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -372,10 +367,9 @@ class OSMDataSQLite():
                 return True
         return False
 
-    def decodeWayTags(self, plainTags):
+    def decodeTags(self, plainTags):
         if plainTags==None:
             return dict()
-#        plainTags=zlib.decompress(compressedTags)
         tags=pickle.loads(plainTags)
         return tags
 

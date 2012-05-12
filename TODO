@@ -94,11 +94,6 @@ TODO: incomplete countries in search
  TODO: use admin area hierarchy in search dialogs
  DONE
  
- TODO:
- solve cases where build and node exists for same POI
- -actually OSM says alterantivly node or way
- NOACTION
- 
  TODO: use lanes tags for street width if available
 -else use usefull defaults
 lanes tag is not consitently used -> ignore for now
@@ -152,6 +147,10 @@ TODO: search POI by name should include
 -name filter
 -city filter
 DONE
+
+TODO: create prefetch box based on track
+-no performance improve
+NOACTION
 ------------------------------------------------------------------
  
  TODO: search for nearest POI type
@@ -247,8 +246,18 @@ relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], '
   TODO:
   landuse overrides natural?
 
-TODO: create prefetch box based on track
-
 TODO: create tables with simplified polygons
 
-TODO: if route is active and we have not reached the start point
+TODO: admin area display is only geographic not politically
+-admin area can have only one parent 
+-maybe filter out admin areas that have no entries
+
+TODO: strip unneded area tags
+
+TODO: points are not stored with resolved lat, lon
+-can multiple resolve calls return different resolved pos?
+
+ TODO:
+ solve cases where area and node exists for same POI
+ -actually OSM says alterantivly node or way
+ -but there are so many cases that we need to handle it

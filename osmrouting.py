@@ -23,8 +23,6 @@ NEAR_CROSSING_LENGTH_MIN=NORMAL_EDGE_RANGE
 PAST_CROSSING_LENGTH_MIN=15.0
 PAST_CROSSING_LENGTH_MIN_SHORT=10.0
 CROSSING_CALC_LENGTH_MIN=NORMAL_EDGE_RANGE*2
-CLOSE_SEARCH_MARGIN=0.0001
-DEFAULT_SEARCH_MARGIN=0.0003
 HEADING_CALC_LENGTH=20.0
 CHECK_TURN_SPEED=10
 
@@ -175,6 +173,9 @@ class OSMRoutingPoint():
     TYPE_FAVORITE=4
     TYPE_TMP=5
     TYPE_MAP=6
+
+    DEFAULT_RESOLVE_POINT_MARGIN=0.001
+    DEFAULT_RESOLVE_MAX_DISTANCE=30.0
     
     def __init__(self, name="", pointType=0, pos=(0.0, 0.0)):
         self.lat=pos[0]
@@ -199,15 +200,15 @@ class OSMRoutingPoint():
         self.closestRefPos=None
     
     def resolveFromPos(self, osmParserData):
-        edgeId, _=osmParserData.getEdgeIdOnPos(self.lat, self.lon, DEFAULT_SEARCH_MARGIN, 30.0)
+        edgeId, _=osmParserData.getEdgeIdOnPos(self.lat, self.lon, self.DEFAULT_RESOLVE_POINT_MARGIN, self.DEFAULT_RESOLVE_MAX_DISTANCE)
         if edgeId==None:
-            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
+#            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
 
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         wayId, _, refs, _, _, _, _, _=osmParserData.getWayEntryForId(wayId)
         if wayId==None:
-            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
+#            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
         
         refList=osmParserData.getRefListSubset(refs, startRef, endRef)
