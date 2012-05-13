@@ -932,11 +932,11 @@ class OSMDataImport(OSMDataSQLite):
                     if "junction" in tags:
                         if tags["junction"]=="roundabout":
                             roundabout=1
-                    
-#                    if roundabout==0:
-#                        if refs[0]==refs[-1]:
-#                            self.log("highway + closed: %d %s"%(wayid, tags))
-                    
+                            if "oneway" in tags:
+                                print("roundabout with oneway %d"%(wayid))
+                                if tags["oneway"]=="-1":
+                                    print("roundabout with oneway=-1 %d"%(wayid))
+                                                        
 
                     tunnel=0
                     if "tunnel" in tags:
@@ -2850,7 +2850,7 @@ class OSMDataImport(OSMDataSQLite):
                         removeRef=None
                         # a node POI "overrules" a way POI 
                         # except it has no tags and the way POI has
-                        print("POI node %d %s is inside of POI area %d %s"%(refId, tags, refId1, tags1))
+#                        print("POI node %d %s is inside of POI area %d %s"%(refId, tags, refId1, tags1))
                         if len(tags1)==0:
                             removeRef=refId1
                         elif len(tags)==0:
@@ -2868,7 +2868,7 @@ class OSMDataImport(OSMDataSQLite):
                                 removeRef=refId1
                         
                         if removeRef!=None:
-                            print("remove %d"%(removeRef))
+#                            print("remove %d"%(removeRef))
                             self.cursorNode.execute("DELETE FROM poiRefTable WHERE refId=%d"%(removeRef))
                             removeCount=removeCount+1
                             

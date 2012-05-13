@@ -301,8 +301,8 @@ class OSMDataSQLite():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
@@ -315,9 +315,9 @@ class OSMDataSQLite():
 #        osmDataList[1]=osmData
     
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
