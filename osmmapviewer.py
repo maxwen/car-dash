@@ -845,7 +845,7 @@ class QtOSMWidget(QWidget):
         
         y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])        
         if self.isPointVisibleTransformed(x, y):
-            self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("mapPointPixmap")))        
+            self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, None, self.style.getStylePixmap("mapPointPixmap")))        
             self.displayRoutingPointRefPositions(mapPoint)
         
     def osm_autocenter_map(self, update=True):
@@ -1809,15 +1809,15 @@ class QtOSMWidget(QWidget):
     def nodeSortByYCoordinate(self, item):
         return item[1]
     
-    def getNodeTagsForPos(self, pos):
+    def getNodeInfoForPos(self, pos):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_HEIGHT_SMALL)
 
-        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType, pixmap in self.orderedNodeList:
+        for  x, y, pixmapWidth, pixmapHeight, refId, tags, _, _ in self.orderedNodeList:
             rect=QRect(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight)
             if rect.contains(pos, proper=False):
-                return tags
+                return refId, tags
         
-        return None
+        return None, None
     
     # for debugging
     def getAreaTagsForPos(self, pos):
@@ -1825,23 +1825,13 @@ class QtOSMWidget(QWidget):
         point0=self.transformHeading.inverted()[0].map(pos)
         map_x, map_y=self.getMapZeroPos()
         
-        for osmId, (cPolygon, painterPath, geomType) in self.areaPolygonCache.items():
+        for osmId, (_, painterPath, geomType) in self.areaPolygonCache.items():
             if geomType==0:
-#                p=Polygon(cPolygon)
-#                p.shift(-map_x, -map_y)
-#                if p.isInside(point0.x(), point0.y()):
-#                    tags=osmParserData.getAreaTagsWithId(osmId)
-#                    if tags!=None:
-#                        print("%d %s"%(osmId, tags))
-#                        break
                 painterPath=painterPath.translated(-map_x, -map_y)
-                if painterPath.contains(point0):
-#                    self.controlAreaRect=painterPath.controlPointRect()
-                    
+                if painterPath.contains(point0):                    
                     tags=osmParserData.getAreaTagsWithId(osmId)
                     if tags!=None:
                         print("%d %s"%(osmId, tags))
-#                        break
         
     def event(self, event):
         if event.type()==QEvent.ToolTip:
@@ -1882,9 +1872,13 @@ class QtOSMWidget(QWidget):
                 QToolTip.showText(event.globalPos(), "- Zoom %d"%(self.map_zoom))
                 return True
                 
-            tags=self.getNodeTagsForPos(mousePos)
+            refId, tags=self.getNodeInfoForPos(mousePos)
             if tags!=None:
-                displayString=self.style.getPOITagString(tags)
+                if self.osmWidget.test==True:
+                    displayString="%s:%d"%(osmParserData.getPOITagString(tags), refId)
+                else:
+                    displayString=osmParserData.getPOITagString(tags)
+                   
                 QToolTip.showText(event.globalPos(), displayString)
                     
             else:
@@ -1913,10 +1907,10 @@ class QtOSMWidget(QWidget):
         numHiddenNodes=0
         
         for node in resultList:
-            _, lat, lon, tags, nodeType=node
+            refId, lat, lon, tags, nodeType=node
             (y, x)=self.getTransformedPixelPosForLocationDeg(lat, lon)
             if self.isPointVisibleTransformed(x, y):  
-                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, tags, nodeType, None))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, refId, tags, nodeType, None))
                 numVisibleNodes=numVisibleNodes+1
             else:
                 numHiddenNodes=numHiddenNodes+1
@@ -1927,7 +1921,7 @@ class QtOSMWidget(QWidget):
     def displayNodes(self):
         start=time.time()
         
-        for  x, y, pixmapWidth, pixmapHeight, tags, nodeType, pixmap in self.orderedNodeList:
+        for  x, y, pixmapWidth, pixmapHeight, refId, tags, nodeType, pixmap in self.orderedNodeList:
             if pixmap==None:
                 self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
             else:
@@ -2341,19 +2335,19 @@ class QtOSMWidget(QWidget):
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.getPos()[0], self.startPoint.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
-                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("startPixmap")))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, None, self.style.getStylePixmap("startPixmap")))
                 self.displayRoutingPointRefPositions(self.startPoint)
 
         if self.endPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.endPoint.getPos()[0], self.endPoint.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
-                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("finishPixmap")))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, None, self.style.getStylePixmap("finishPixmap")))
                 self.displayRoutingPointRefPositions(self.endPoint)
             
         for point in self.wayPoints:
             (y, x)=self.getTransformedPixelPosForLocationDeg(point.getPos()[0], point.getPos()[1])
             if self.isPointVisibleTransformed(x, y):
-                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, self.style.getStylePixmap("wayPixmap")))
+                self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, None, self.style.getStylePixmap("wayPixmap")))
                 self.displayRoutingPointRefPositions(point)
             
     
@@ -4041,8 +4035,8 @@ class OSMWidget(QWidget):
         result=poiDialog.exec()
         if result==QDialog.Accepted:
             poiEntry, pointType=poiDialog.getResult()
-            (refId, lat, lon, tags, nodeType, cityId, distance)=poiEntry
-            displayString=self.mapWidgetQt.style.getPOITagString(tags)
+            (refId, lat, lon, tags, nodeType, cityId, distance, displayString)=poiEntry
+            displayString=osmParserData.getPOITagString(tags)
             self.setPoint(displayString, pointType, lat, lon)
 
     def showError(self, title, text):

@@ -253,13 +253,6 @@ class OSMDataImport(OSMDataSQLite):
     def updateAddressEntry(self, addressId, country, city):
         self.cursorAdress.execute('UPDATE OR IGNORE addressTable SET country=%d,city=%d WHERE id=%d'%(country, city, addressId))
 
-    def testAddressTable(self):
-        self.cursorAdress.execute('SELECT * FROM addressTable')
-        allentries=self.cursorAdress.fetchall()
-        for x in allentries:
-            addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
-            self.log( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
-
     def getLenOfAddressTable(self):
         self.cursorAdress.execute('SELECT COUNT(*) FROM addressTable')
         allentries=self.cursorAdress.fetchall()
@@ -298,14 +291,7 @@ class OSMDataImport(OSMDataSQLite):
     def addToRestrictionTable(self, target, viaPath, toCost):
         self.cursorEdge.execute('INSERT INTO restrictionTable VALUES( ?, ?, ?, ?)', (self.restrictionId, target, viaPath, toCost))
         self.restrictionId=self.restrictionId+1
-    
-    def testRestrictionTable(self):
-        self.cursorEdge.execute('SELECT * from restrictionTable ORDER by target')
-        allentries=self.cursorEdge.fetchall()
-        for x in allentries:
-            restrictionId, target, viaPath, toCost=self.restrictionFromDB(x)
-            self.log("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
-            
+                
     def addToPOIRefTable(self, refid, refType, lat, lon, tags, nodeType, layer):           
         pointString=self.getGISUtils().createPointStringFromCoords(lat, lon)
         tags=self.stripUnneededNodeTags(tags)
@@ -490,78 +476,7 @@ class OSMDataImport(OSMDataSQLite):
             resultList.append(crossing)
             
         return resultList
-    
-    def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
-
-#        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            print("%s %s %s"%(x[0], x[1], pickle.loads(x[2])))
-#            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
-    def testWayTable(self):
-        self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
-        allentries=self.cursorWay.fetchall()
-        for x in allentries:
-            wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
-            self.log( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
-
-    def testCrossingTable(self):
-        self.cursorWay.execute('SELECT * FROM crossingTable')
-        allentries=self.cursorWay.fetchall()
-        for x in allentries:
-            crossingEntryId, wayid, refId, wayIdList=self.crossingFromDB(x)
-            self.log( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
-        
-    def testEdgeTable(self):
-        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, AsText(geom) FROM edgeTable')
-        allentries=self.cursorEdge.fetchall()
-        for x in allentries:
-            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoordsString(x)
-            self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
-            
-    def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable')
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            print("%s %s"%(x[0],x[1]))
-#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-#            print(polyStr)
-#            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
-
-#        tolerance=self.osmutils.degToMeter(10.0)
-#        print(tolerance)
-#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE osmId=136661'%(tolerance))
-#        allentries=self.cursorArea.fetchall()
-#        for x in allentries:
-#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-#            print(polyStr)
-
-#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
-#        allentries=self.cursorArea.fetchall()
-#        for x in allentries:
-#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-#            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
-#                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
-
-    def testAdminAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            osmId, tags, adminLevel, parent=self.adminAreaFromDBWithParent(x)
-            self.log("%d %s"%(osmId, tags["name"]))
-#            self.log("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
-
-    def testCoordsTable(self):
-#        self.cursorCoords.execute('SELECT * from coordsTable WHERE refId=98110819')
-#        allentries=self.cursorCoords.fetchall()  
-#        self.cursorCoords.execute('SELECT * from wayRefTable WHERE wayId=31664992')
-#        allentries=self.cursorCoords.fetchall()  
-#        self.log(allentries)
-        None
-    
     def isUsableBarierType(self):
         return Constants.BARIER_NODES_TYPE_SET
 
@@ -2304,8 +2219,8 @@ class OSMDataImport(OSMDataSQLite):
             self.log("create barrier restriction entries")
             self.createBarrierRestrictions()
             
-            self.log('remove orphaned POIs')
-            self.removeOrphanedPOIs()
+            self.log('remove orphaned barriers')
+            self.removeOrphanedBarriers()
 
             self.log("create way restrictions")
             self.createWayRestrictionsDB()              
@@ -2317,12 +2232,9 @@ class OSMDataImport(OSMDataSQLite):
             self.log("remove orphaned ways")
             self.removeOrphanedWays()
             self.commitWayDB()
-            
+                        
             self.log("vacuum way DB")
             self.vacuumWayDB()
-
-            self.log("vaccum node DB")
-            self.vacuumNodeDB()
             
             self.log("vacuum edge DB")
             self.vacuumEdgeDB()
@@ -2354,10 +2266,13 @@ class OSMDataImport(OSMDataSQLite):
             self.commitAdressDB()
             self.vacuumAddressDB()
 
-        if createWayDB==True:
-            self.createPOIEntriesForWays()
-            self.resolvePOIRefs()
-            
+        self.removeUnnededPOIs()        
+        self.createPOIEntriesForWays()
+        self.resolvePOIRefs()
+        
+        self.log("vaccum node DB")
+        self.vacuumNodeDB()
+
         self.closeCoordsDB()
         self.closeAllDB()
 
@@ -2832,7 +2747,7 @@ class OSMDataImport(OSMDataSQLite):
         print("")
         self.log("removed %d ways"%(removeCount))
         
-    def removeOrphanedPOIs(self):
+    def removeOrphanedBarriers(self):
         if len(self.usedBarrierList)!=0:
             barrierSet=set(self.usedBarrierList)
             self.cursorNode.execute('SELECT refId FROM poiRefTable WHERE type=%d AND refType=0'%(Constants.POI_TYPE_BARRIER))
@@ -2888,13 +2803,78 @@ class OSMDataImport(OSMDataSQLite):
             self.updateCostsOfEdge(edgeId, cost, reverseCost)
 
         print("")
-                      
-    def testEdgeTableGeom(self):
-        self.cursorEdge.execute('SELECT AsText(geom) FROM edgeTable')
-        allentries=self.cursorEdge.fetchall()
-        for x in allentries:
-            self.log(x)
-                   
+        
+    def poiRefFromDB3(self, x):
+        refId=int(x[0])
+        tags=self.decodeTags(x[1])
+        poiType=int(x[2])      
+        lat, lon=self.getGISUtils().createPointFromPointString(x[3])
+        return (refId, tags, poiType, lat, lon)    
+      
+    # check all pois of refType=node
+    # inside an area with refType=way
+    # with the same tags. If yes remove the entry for the way                             
+    def removeUnnededPOIs(self):
+        self.log("remove unneeded POIs")
+        nodeTypeList=self.createSQLFilterStringForIN([Constants.POI_TYPE_PARKING, Constants.POI_TYPE_CAMPING, Constants.POI_TYPE_SUPERMARKET, Constants.POI_TYPE_PLACE])
+        self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refType=0 AND type in %s'%(nodeTypeList))
+        allPOIRefs=self.cursorNode.fetchall()
+        
+        allRefLength=len(allPOIRefs)
+        allRefsCount=0
+        removeCount=0
+
+        prog = ProgressBar(0, allRefLength, 77)
+        
+        for x in allPOIRefs:
+            (refId, tags, poiType, lat, lon)=self.poiRefFromDB3(x)
+            prog.updateAmount(allRefsCount)
+            print(prog, end="\r")
+            allRefsCount=allRefsCount+1
+
+            lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)      
+            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+
+            areaList=self.cursorArea.fetchall()
+            for y in areaList:
+                # in case of a wayRef polygon this is the wayId
+                areaId=int(y[0])   
+                # check if there is a poi node with this wayId         
+                self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=%d AND refType=1'%(areaId))
+                allPOIWayRefs=self.cursorNode.fetchall()
+            
+                for z in allPOIWayRefs:
+                    (refId1, tags1, poiType1, lat1, lon1)=self.poiRefFromDB3(z)
+                    # same poi type
+                    if poiType==poiType1:
+                        removeRef=None
+                        # a node POI "overrules" a way POI 
+                        # except it has no tags and the way POI has
+                        print("POI node %d %s is inside of POI area %d %s"%(refId, tags, refId1, tags1))
+                        if len(tags1)==0:
+                            removeRef=refId1
+                        elif len(tags)==0:
+                            removeRef=refId
+                        else:  
+                            if poiType==Constants.POI_TYPE_PLACE:
+                                if "name" in tags and "name" in tags1:
+                                    if tags["place"]==tags1["place"] and tags["name"]==tags1["name"]:
+                                        removeRef=refId1
+
+                            else:
+#                                if not "name" in tags and "name" in tags1:
+#                                    removeRef=refId
+                                    
+                                removeRef=refId1
+                        
+                        if removeRef!=None:
+                            print("remove %d"%(removeRef))
+                            self.cursorNode.execute("DELETE FROM poiRefTable WHERE refId=%d"%(removeRef))
+                            removeCount=removeCount+1
+                            
+        print("")   
+        self.log("removed %d nodes"%(removeCount))
+
     def createBBoxAroundPoint(self, lat, lon, margin):
         latRangeMax=lat+margin
         lonRangeMax=lon+margin*1.4

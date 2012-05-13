@@ -253,6 +253,7 @@ TODO: admin area display is only geographic not politically
 -maybe filter out admin areas that have no entries
 
 TODO: strip unneded area tags
+DONE
 
 TODO: points are not stored with resolved lat, lon
 -can multiple resolve calls return different resolved pos?

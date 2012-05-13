@@ -1293,7 +1293,8 @@ class OSMDataAccess(OSMDataSQLite):
             lat, lon=self.getGISUtils().createPointFromPointString(pointStr)
             distance=int(x[6])
             
-            resultList.append((refId, lat, lon, tags, nodeType, cityId, distance))
+            displayString=self.getPOITagString(tags)
+            resultList.append((refId, lat, lon, tags, nodeType, cityId, distance, displayString))
             
         return resultList
         
@@ -1566,21 +1567,15 @@ class OSMDataAccess(OSMDataSQLite):
 
             self.followEdge(edgeId, nextEndRef, edgeList, followEdgeCheck, data)
 
-    def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
-
-#        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
-        allentries=self.cursorNode.fetchall()
-        for x in allentries:
-            print("%s %s %s"%(x[0], x[1], self.decodeTags(x[2])))
-#            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
-
+    def getPOITagString(self, tags):
+        if "name" in tags:
+            return tags["name"]
+        return "Unknown"
+    
 def main(argv):    
     p = OSMDataAccess()
     
     p.openAllDB()
-#    p.testPOIRefTable()
     p.closeAllDB()
 
 

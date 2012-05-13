@@ -877,8 +877,3 @@ class OSMStyle():
             brush=self.getStyleBrush("tourismArea")
 
         return brush, pen    
-    
-    def getPOITagString(self, tags):
-        if "name" in tags:
-            return tags["name"]
-        return "Unknown"

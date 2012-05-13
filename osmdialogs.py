@@ -2501,7 +2501,7 @@ class OSMPOIListTableModel(QAbstractTableModel):
         
         if index.row() >= len(self.poiList):
             return ""
-        (refId, nodeLat, nodeLon, tags, nodeType, cityId, distance)=self.poiList[index.row()]
+        (refId, nodeLat, nodeLon, tags, nodeType, cityId, distance, displayString)=self.poiList[index.row()]
         city=None
         if cityId!=None:
             city=self.adminAreaDict[cityId]
@@ -2509,7 +2509,7 @@ class OSMPOIListTableModel(QAbstractTableModel):
 #            print(refId)
 
         if index.column()==0:
-            return self.style.getPOITagString(tags)
+            return displayString
         elif index.column()==1:
             if self.nearestMode==True:
                 return distance
@@ -2768,6 +2768,9 @@ class OSMPOISearchDialog(QDialog):
     def distanceSort(self, item):
         return item[6]
     
+    def displayStringSort(self, item):
+        return item[7]
+    
     @pyqtSlot()
     def _applyFilterPOI(self):
         filterValue=self.poiFilterEdit.text()
@@ -2779,19 +2782,16 @@ class OSMPOISearchDialog(QDialog):
             if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
             
-            for (refId, lat, lon, tags, nodeType, cityId, distance) in self.poiList:
+            for (refId, lat, lon, tags, nodeType, cityId, distance, displayString) in self.poiList:
                 match=False
-                if "name" in tags:
-                    matchValue=tags["name"]
-                else:
-                    matchValue=str(tags)
+                matchValue=displayString
                 if fnmatch(matchValue.upper(), filterValue.upper()):
                     match=True
                 if match==False and filterValueMod!=None and fnmatch(matchValue.upper(), filterValueMod.upper()):
                     match=True
                 
                 if match==True:
-                    self.filteredPOIList.append((refId, lat, lon, tags, nodeType, cityId, distance))
+                    self.filteredPOIList.append((refId, lat, lon, tags, nodeType, cityId, distance, displayString))
         
             self.poiEntryViewModel.update(self.filteredPOIList)
 
@@ -2891,6 +2891,9 @@ class OSMPOISearchDialog(QDialog):
             self.poiList=self.osmParserData.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId, self.currentCityId, self.cityRecursive)
             if self.nearestMode==True:
                 self.poiList=sorted(self.poiList, key=self.distanceSort)
+            else:
+                self.poiList=sorted(self.poiList, key=self.displayStringSort)
+                
         else:
             self.poiList=list()
         
