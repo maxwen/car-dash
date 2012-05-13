@@ -268,7 +268,7 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorEdge.execute("CREATE INDEX target_idx ON edgeTable (target)")        
         self.cursorEdge.execute("SELECT AddGeometryColumn('edgeTable', 'geom', 4326, 'LINESTRING', 2)")
 
-    def createAreaTable(self):
+    def createAreaDBTables(self):
         self.cursorArea.execute("SELECT InitSpatialMetaData()")
         self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER, areaId INTEGER, type INTEGER, tags BLOB, layer INTEGER, UNIQUE (osmId, areaId) ON CONFLICT IGNORE)')
         self.cursorArea.execute("CREATE INDEX osmId_idx ON areaTable (osmId)")
@@ -279,11 +279,13 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorArea.execute("CREATE INDEX areaLineType_idx ON areaLineTable (type)")
         self.cursorArea.execute("SELECT AddGeometryColumn('areaLineTable', 'geom', 4326, 'LINESTRING', 2)")
 
-        self.cursorArea.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags BLOB, adminLevel INTEGER, parent INTEGER)')
-        self.cursorArea.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
-        self.cursorArea.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
-        self.cursorArea.execute("SELECT AddGeometryColumn('adminAreaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
-
+    def createAdminDBTables(self):
+        self.cursorAdmin.execute("SELECT InitSpatialMetaData()")
+        self.cursorAdmin.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags BLOB, adminLevel INTEGER, parent INTEGER)')
+        self.cursorAdmin.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
+        self.cursorAdmin.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
+        self.cursorAdmin.execute("SELECT AddGeometryColumn('adminAreaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
+        
     def createRestrictionTable(self):
         self.cursorEdge.execute('CREATE TABLE restrictionTable (id INTEGER PRIMARY KEY, target INTEGER, viaPath TEXT, toCost REAL)')
         self.cursorEdge.execute("CREATE INDEX restrictionTarget_idx ON restrictionTable (target)")
@@ -336,10 +338,10 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorArea.execute('INSERT OR IGNORE INTO areaLineTable VALUES( ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (osmId, areaType, self.encodeTags(tags), layer))
 
     def addPolygonToAdminAreaTable(self, osmId, tags, adminLevel, polyString):
-        self.cursorArea.execute('INSERT OR IGNORE INTO adminAreaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, self.encodeTags(tags), adminLevel, None))
+        self.cursorAdmin.execute('INSERT OR IGNORE INTO adminAreaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, self.encodeTags(tags), adminLevel, None))
         
     def updateAdminAreaParent(self, osmId, parent):
-        self.cursorArea.execute('UPDATE adminAreaTable SET parent=%d WHERE osmId=%d'%(parent, osmId))
+        self.cursorAdmin.execute('UPDATE adminAreaTable SET parent=%d WHERE osmId=%d'%(parent, osmId))
     
     def createSpatialIndexForEdgeTable(self):
         self.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
@@ -347,7 +349,9 @@ class OSMDataImport(OSMDataSQLite):
     def createSpatialIndexForAreaTable(self):
         self.cursorArea.execute('SELECT CreateSpatialIndex("areaTable", "geom")')
         self.cursorArea.execute('SELECT CreateSpatialIndex("areaLineTable", "geom")')
-        self.cursorArea.execute('SELECT CreateSpatialIndex("adminAreaTable", "geom")')
+        
+    def createSpatialIndexForAdminTable(self):
+        self.cursorAdmin.execute('SELECT CreateSpatialIndex("adminAreaTable", "geom")')
 
     def createSpatialIndexForWayTables(self):
         self.cursorWay.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
@@ -527,6 +531,12 @@ class OSMDataImport(OSMDataSQLite):
         
         return -1
 
+    def getLeisureNodeTypeId(self, nodeTag):
+        if nodeTag in Constants.LEISURE_POI_TYPE_DICT.keys():
+            return Constants.LEISURE_POI_TYPE_DICT[nodeTag]
+        
+        return -1
+
     def parse_nodes(self, node):
         if self.skipNodes==True:
             return
@@ -690,16 +700,19 @@ class OSMDataImport(OSMDataSQLite):
         return Constants.BOUNDARY_TYPE_SET
     
     def getRailwayTypes(self):
-        return Constants.RAILWAY_TYPE_SET
+        return Constants.RAILWAY_AREA_TYPE_SET
 
     def getAerowayTypes(self):
-        return Constants.AEROWAY_TYPE_SET
+        return Constants.AEROWAY_AREA_TYPE_SET
     
     def getTourismTypes(self):
-        return Constants.TOURISM_TYPE_SET
+        return Constants.TOURISM_AREA_TYPE_SET
     
     def getAmenityTypes(self):
         return Constants.AMENITY_AREA_TYPE_SET
+
+    def getLeisureTypes(self):
+        return Constants.LEISURE_AREA_TYPE_SET
     
     def getLayerValue(self, tags):
         layer=0
@@ -713,24 +726,15 @@ class OSMDataImport(OSMDataSQLite):
     
     def getCenterOfPolygon(self, refs):
         coords, _=self.createRefsCoords(refs)
-        if len(coords)>2:
-            cPolygon=Polygon(coords)
-            try:
-                lat, lon=cPolygon.center()
-                return lat, lon
-            except:
-                print(refs)
-                return coords[0]
-    
-        # lat = Sum(lat_1..lat_n)/n , lon=Sum(lon_1, lon_n)/n 
-        n=len(coords)
-        sumLat=0
-        sumLon=0
-        for lat, lon in coords:
-            sumLat=sumLat+lat
-            sumLon=sumLon+lon
-            
-        return sumLat/n, sumLon/n
+        if len(coords)<=2:
+            return None, None
+        
+        cPolygon=Polygon(coords)
+        try:
+            lat, lon=cPolygon.center()
+            return lat, lon
+        except:
+            return coords[0]
     
     def parseBooleanTag(self, tags, key):
         if key in tags:
@@ -759,6 +763,7 @@ class OSMDataImport(OSMDataSQLite):
             isAeroway=False
             isTourism=False
             isAmenity=False
+            isLeisure=False
                        
             layer=self.getLayerValue(tags)
                 
@@ -766,40 +771,54 @@ class OSMDataImport(OSMDataSQLite):
                 if self.skipAddress==False:
                     if "addr:street" in tags:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.parseFullAddress(tags, None, lat, lon)
+                        if lat!=None and lon!=None:
+                            self.parseFullAddress(tags, None, lat, lon)
                         
             if "amenity" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "shop" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "aeroway" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAerowayNodeTypeId(tags["aeroway"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "tourism" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
                         lat, lon=self.getCenterOfPolygon(refs)
-                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if "place" in tags:
                 if tags["place"] in self.isUsablePlaceNodeType():
                     lat, lon=self.getCenterOfPolygon(refs)
-                    self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
+                    if lat!=None and lon!=None:
+                        self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
+
+            if "leisure" in tags:
+                if self.skipPOINodes==False:
+                    nodeType=self.getLeisureNodeTypeId(tags["leisure"])
+                    if nodeType!=-1:
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
             if not "highway" in tags:   
                 # could be part of a relation                    
@@ -835,6 +854,10 @@ class OSMDataImport(OSMDataSQLite):
                     if "amenity" in tags:
                         if tags["amenity"] in self.getAmenityTypes():
                             isAmenity=True
+
+                    if "leisure" in tags:
+                        if tags["leisure"] in self.getLeisureTypes():
+                            isLeisure=True
                             
                     if "building" in tags:
                         isBuilding=True
@@ -844,8 +867,9 @@ class OSMDataImport(OSMDataSQLite):
                         isAeroway=False
                         isTourism=False
                         isAmenity=False
-               
-                    if isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
+                        isLeisure=False
+                        
+                    if isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
                         continue
                     
                     isPolygon=False
@@ -888,6 +912,8 @@ class OSMDataImport(OSMDataSQLite):
                         areaType=Constants.AREA_TYPE_TOURISM
                     elif isAmenity==True:
                         areaType=Constants.AREA_TYPE_AMENITY
+                    elif isLeisure==True:
+                        areaType=Constants.AREA_TYPE_LEISURE
                         
                     if areaType!=None:
                         if isPolygon==True:
@@ -924,16 +950,17 @@ class OSMDataImport(OSMDataSQLite):
                     
                     oneway=0
                     roundabout=0
+                    
                     if "oneway" in tags:
                         if tags["oneway"]=="yes" or tags["oneway"]=="true" or tags["oneway"]=="1":
                             oneway=1
                         elif tags["oneway"]=="-1":
                             oneway=2
+                            
                     if "junction" in tags:
                         if tags["junction"]=="roundabout":
                             roundabout=1
                             if "oneway" in tags:
-                                print("roundabout with oneway %d"%(wayid))
                                 if tags["oneway"]=="-1":
                                     print("roundabout with oneway=-1 %d"%(wayid))
                                                         
@@ -1041,6 +1068,7 @@ class OSMDataImport(OSMDataSQLite):
                     isAeroway=False
                     isTourism=False
                     isAmenity=False
+                    isLeisure=False
                     adminLevel=None
                     layer=self.getLayerValue(tags)
 
@@ -1091,6 +1119,10 @@ class OSMDataImport(OSMDataSQLite):
                         if tags["amenity"] in self.getAmenityTypes():
                             isAmenity=True
 
+                    if "leisure" in tags:
+                        if tags["leisure"] in self.getLeisureTypes():
+                            isLeisure=True
+
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
@@ -1099,8 +1131,9 @@ class OSMDataImport(OSMDataSQLite):
                         isAeroway=False
                         isTourism=False
                         isAmenity=False
+                        isLeisure=False
                         
-                    if isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
+                    if isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
                         if len(tags)!=1:
                             self.log("skip multipolygon: %d %s unknwon type"%(osmid, tags))
                         continue
@@ -1233,6 +1266,8 @@ class OSMDataImport(OSMDataSQLite):
                             areaType=Constants.AREA_TYPE_TOURISM
                         elif isAmenity==True:
                             areaType=Constants.AREA_TYPE_AMENITY
+                        elif isLeisure==True:
+                            areaType=Constants.AREA_TYPE_LEISURE
                             
                         if areaType!=None:
                             # make sure th osmid does not clash with a way area
@@ -2146,7 +2181,7 @@ class OSMDataImport(OSMDataSQLite):
         createAreaDB=not self.areaDBExists()
         if createAreaDB:
             self.openAreaDB()
-            self.createAreaTable()
+            self.createAreaDBTables()
         else:
             self.openAreaDB()
         
@@ -2170,6 +2205,13 @@ class OSMDataImport(OSMDataSQLite):
             self.createNodeDBTables()
         else:
             self.openNodeDB()
+
+        createAdminDB=not self.adminDBExists()
+        if createAdminDB:
+            self.openAdminDB()
+            self.createAdminDBTables()
+        else:
+            self.openAdminDB()
 
         if createWayDB==True:
             self.skipNodes=False
@@ -2258,12 +2300,19 @@ class OSMDataImport(OSMDataSQLite):
             self.log("create spatial index for edge table")
             self.createSpatialIndexForEdgeTable()
 
+        if createAdminDB==True:
+            self.log("create spatial index for admin table")
+            self.createSpatialIndexForAdminTable()
+
         if createAreaDB==True:
             self.resolveAdminAreas()
+            self.log("vacuum admin DB")
+            self.vacuumAdminDB()
             
         if createAdressDB==True:
             self.resolveAddresses(True)
             self.commitAdressDB()
+            self.log("vacuum address DB")
             self.vacuumAddressDB()
 
         self.removeUnnededPOIs()        
@@ -2659,8 +2708,8 @@ class OSMDataImport(OSMDataSQLite):
         print("") 
                 
     def getAdminListForId(self, osmId, adminDict):
-        self.cursorArea.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
-        allentries=self.cursorArea.fetchall()
+        self.cursorAdmin.execute('SELECT osmId, adminLevel, parent FROM adminAreaTable WHERE osmId=%d'%(osmId))
+        allentries=self.cursorAdmin.fetchall()
         if len(allentries)==1:
             x=allentries[0]
             osmId=int(x[0])
@@ -2691,6 +2740,9 @@ class OSMDataImport(OSMDataSQLite):
 
     def vacuumCoordsDB(self):
         self.cursorCoords.execute('VACUUM')
+
+    def vacuumAdminDB(self):
+        self.cursorAdmin.execute('VACUUM')
                                 
     def removeOrphanedEdges(self):
         self.cursorEdge.execute('SELECT * FROM edgeTable')

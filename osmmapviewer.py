@@ -66,6 +66,7 @@ GPS_SIGNAL_MINIMAL_DIFF=0.5
 SKY_WIDTH=100
 WITH_LOCATION_PREDICTION=True
 WITH_LOCATION_BREADCRUMBS=True
+PREDICTION_USE_START_ZOOM=15
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 defaultTileServer="tile.openstreetmap.org"
@@ -2109,7 +2110,10 @@ class QtOSMWidget(QWidget):
 
             elif areaType==Constants.AREA_TYPE_AMENITY:
                 brush, pen=self.style.getBrushForAmenityArea(tags, self.map_zoom)
-                                
+            
+            elif areaType==Constants.AREA_TYPE_LEISURE:
+                brush, pen=self.style.getBrushForLeisureArea(tags, self.map_zoom) 
+                             
             else:
                 continue
             
@@ -4138,6 +4142,10 @@ class OSMWidget(QWidget):
 #            self.updateGPSDataDisplay(gpsData, False)
         
     def createPredictedLocation(self):
+        # use predicition only in higher zooms
+        if self.mapWidgetQt.map_zoom<PREDICTION_USE_START_ZOOM:
+            return 
+        
         if self.lastGPSData!=None:
             timeStamp=time.time()
             # update only after a max time of 500ms

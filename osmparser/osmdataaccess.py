@@ -67,6 +67,9 @@ class Constants():
     POI_TYPE_RAILWAYSTATION=13
     POI_TYPE_VETERIANERY=14
     POI_TYPE_CAMPING=15
+    POI_TYPE_PARK=16
+    POI_TYPE_DOG_PARK=17
+    POI_TYPE_NATURE_RESERVE=18
     
     AREA_TYPE_LANDUSE=1
     AREA_TYPE_NATURAL=2
@@ -76,8 +79,9 @@ class Constants():
     AREA_TYPE_TOURISM=6
     AREA_TYPE_AMENITY=7
     AREA_TYPE_BUILDING=8
+    AREA_TYPE_LEISURE=9
     
-    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "grave_yard", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction"])
+    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction", "gravel", "quarry", "rock"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
@@ -85,12 +89,17 @@ class Constants():
     NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland", "marsh", "mud"])
     
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain", "ditch"])
-    RAILWAY_TYPE_SET=set(["rail"])
-    AEROWAY_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
-    TOURISM_TYPE_SET=set(["camp_site", "caravan_site"])
+    
+    RAILWAY_POI_TYPE_DICT={"station": POI_TYPE_RAILWAYSTATION}
+    RAILWAY_AREA_TYPE_SET=set(["rail"])
+    
+    AEROWAY_POI_TYPE_DICT={"aerodrome": POI_TYPE_AIRPORT}
+    AEROWAY_AREA_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
     
     BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
+    
     BOUNDARY_TYPE_SET=set(["administrative"])
+    
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb", "hamlet"])
     
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
@@ -99,27 +108,27 @@ class Constants():
     
     PARKING_LIMITATIONS_DICT={"access":"yes",
                               "fee":"no"}
-    
     AMENITY_POI_TYPE_DICT={"fuel": (POI_TYPE_GAS_STATION, None),
                        "parking": (POI_TYPE_PARKING, PARKING_LIMITATIONS_DICT),
                        "hospital": (POI_TYPE_HOSPITAL, None),
                        "police": (POI_TYPE_POLICE, None),
-                       "veterinary":(POI_TYPE_VETERIANERY, None)}
-    
-    AMENITY_AREA_TYPE_SET=set(["parking"])
+                       "veterinary":(POI_TYPE_VETERIANERY, None)}   
+    AMENITY_AREA_TYPE_SET=set(["parking", "grave_yard"])
     
     TOURISM_POI_TYPE_DICT={"camp_site": POI_TYPE_CAMPING,
-                       "caravan_site": POI_TYPE_CAMPING}
+                       "caravan_site": POI_TYPE_CAMPING} 
+    TOURISM_AREA_TYPE_SET=set(["camp_site", "caravan_site"])
+    
+    LEISURE_POI_TYPE_DICT={"park": POI_TYPE_PARK,
+                       "dog_park": POI_TYPE_DOG_PARK,
+                       "nature_reserve": POI_TYPE_NATURE_RESERVE}
+    LEISURE_AREA_TYPE_SET=set(["dog_park", "park", "nature_reserve"])
     
     SHOP_POI_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
     
     HIGHWAY_POI_TYPE_DICT={"motorway_junction": POI_TYPE_MOTORWAY_JUNCTION, 
                        "speed_camera": POI_TYPE_ENFORCEMENT}
-    
-    AEROWAY_POI_TYPE_DICT={"aerodrome": POI_TYPE_AIRPORT}
-    
-    RAILWAY_POI_TYPE_DICT={"station": POI_TYPE_RAILWAYSTATION}
-    
+        
     STREET_TYPE_DICT={"road": STREET_TYPE_ROAD,
         "unclassified": STREET_TYPE_UNCLASSIFIED,
         "motorway": STREET_TYPE_MOTORWAY,
@@ -1166,8 +1175,8 @@ class OSMDataAccess(OSMDataSQLite):
     def getAdminChildsForId(self, osmId):
         childList=list()
         
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
-        allentries=self.cursorArea.fetchall()
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorAdmin.fetchall()
         for x in allentries:
             childId=int(x[0])
             adminLevel=int(x[2])
@@ -1178,8 +1187,8 @@ class OSMDataAccess(OSMDataSQLite):
         return childList
 
     def getAdminChildsForIdRecursive(self, osmId, childList):        
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
-        allentries=self.cursorArea.fetchall()
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorAdmin.fetchall()
         for x in allentries:
             childId=int(x[0])
             adminLevel=int(x[2])
@@ -1415,9 +1424,9 @@ class OSMDataAccess(OSMDataSQLite):
         
         filterString=self.createSQLFilterStringForIN(adminLevelList)
         
-        self.cursorArea.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
              
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         resultList=list()
         areaIdSet=set()
         for x in allentries:
@@ -1436,9 +1445,9 @@ class OSMDataAccess(OSMDataSQLite):
         else:
             sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lon, lat)
 
-        self.cursorArea.execute(sql)
+        self.cursorAdmin.execute(sql)
              
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         resultList=list()
         for x in allentries:
             resultList.append(self.adminAreaFromDBWithCoordsString(x))
@@ -1450,9 +1459,9 @@ class OSMDataAccess(OSMDataSQLite):
 
         sql='SELECT osmId FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel=2 AND Contains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat)
 
-        self.cursorArea.execute(sql)
+        self.cursorAdmin.execute(sql)
              
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         if len(allentries)==1:
             return int(allentries[0][0])
             
@@ -1463,9 +1472,9 @@ class OSMDataAccess(OSMDataSQLite):
         reverseAdminAreaDict=dict()
         
         sql='SELECT osmId, tags FROM adminAreaTable'
-        self.cursorArea.execute(sql)
+        self.cursorAdmin.execute(sql)
              
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         for x in allentries:
             osmId=x[0]
             tags=self.decodeTags(x[1])

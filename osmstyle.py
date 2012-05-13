@@ -28,14 +28,17 @@ class OSMStyle():
                    Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":10},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Highway Exit", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Motorway Exit", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":SHOW_POI_START_ZOOM}}
-    
+                   Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_PARK:{"pixmap":None, "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_DOG_PARK:{"pixmap":None, "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":None, "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
+                   
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
                     Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":SHOW_BUILDING_START_ZOOM},
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
@@ -43,7 +46,8 @@ class OSMStyle():
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
                     Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None},
                     Constants.AREA_TYPE_AMENITY:{"desc":"Amenity", "zoom":None}, 
-                    Constants.AREA_TYPE_TOURISM:{"desc":"Tourism", "zoom":None}}
+                    Constants.AREA_TYPE_TOURISM:{"desc":"Tourism", "zoom":None},
+                    Constants.AREA_TYPE_LEISURE:{"desc":"Leisure", "zoom":None}}
     
     def __init__(self):
         self.colorDict=dict()
@@ -99,7 +103,6 @@ class OSMStyle():
         self.pixmapDict["barrierPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/barrier.png"))
         self.pixmapDict["parkingPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/parking.png"))
         self.pixmapDict["speedCameraImage"]=QPixmap(os.path.join(getImageRoot(), "poi/trafficcamera.png"))
-        self.pixmapDict["highwayExitImage"]=QPixmap(os.path.join(getImageRoot(), "poi/flag.png"))
         self.pixmapDict["poiPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/flag.png"))
         self.pixmapDict["airportPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/airport.png"))
         self.pixmapDict["railwaystationtPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/train.png"))
@@ -120,15 +123,17 @@ class OSMStyle():
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
         self.colorDict["woodAreaColor"]=QColor(0xae, 0xd1, 0xa0)
         self.colorDict["scrubAreaColor"]=QColor(0xb5, 0xe3, 0xb5)
-        self.colorDict["tourismAreaColor"]=Qt.red
+        self.colorDict["tourismUndefinedColor"]=Qt.red
         self.colorDict["tourismCampingAreaColor"]=QColor(0xcc, 0xff, 0x99)
         self.colorDict["amenityParkingAreaColor"]=QColor(0xf7, 0xef, 0xb7)
-        self.colorDict["amenityAreaColor"]=Qt.red
+        self.colorDict["amenityUndefinedColor"]=Qt.red
+        self.colorDict["naturalUndefinedColor"]=Qt.red
         self.colorDict["buildingColor"]=QColor(0xbc, 0xa9, 0xa9, 200)
         self.colorDict["highwayAreaColor"]=QColor(255, 255, 255)
         self.colorDict["railwayAreaColor"]=QColor(0xdf, 0xd1, 0xd6)
         self.colorDict["railwayColor"]=QColor(0x90, 0x90, 0x90)
         self.colorDict["landuseColor"]=QColor(150, 150, 150)
+        self.colorDict["landuseUndefinedColor"]=Qt.red
         self.colorDict["placeTagColor"]=QColor(78, 167, 255, 150)
         self.colorDict["residentialColor"]=QColor(0xdd, 0xdd, 0xdd)
         self.colorDict["commercialColor"]=QColor(0xef, 0xc8, 0xc8)
@@ -142,6 +147,8 @@ class OSMStyle():
         self.colorDict["villageGreenAreaColor"]=QColor(0xcf, 0xec, 0xa8)
         self.colorDict["cliffColor"]=QColor(Qt.darkGray)
         self.colorDict["militaryColor"]=QColor(0xff, 0x55, 0x55)
+        self.colorDict["leisureUndefinedColor"]=Qt.red
+        
         self.initStreetColors()
         self.initBrush()
         self.initPens()
@@ -528,11 +535,12 @@ class OSMStyle():
     def initBrush(self):
         self.brushDict["water"]=QBrush(self.getStyleColor("waterColor"), Qt.SolidPattern)
         self.brushDict["natural"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
+        self.brushDict["naturalUndefined"]=QBrush(self.getStyleColor("naturalUndefinedColor"), Qt.SolidPattern)
         self.brushDict["adminArea"]=QBrush(self.getStyleColor("adminAreaColor"), Qt.SolidPattern)
         self.brushDict["building"]=QBrush(self.getStyleColor("buildingColor"), Qt.SolidPattern)
         self.brushDict["highwayArea"]=QBrush(self.getStyleColor("highwayAreaColor"), Qt.SolidPattern)
         self.brushDict["railwayLanduse"]=QBrush(self.getStyleColor("railwayAreaColor"), Qt.SolidPattern)
-        self.brushDict["landuse"]=QBrush(self.getStyleColor("landuseColor"), Qt.SolidPattern)
+        self.brushDict["landuseUndefined"]=QBrush(self.getStyleColor("landuseUndefinedColor"), Qt.SolidPattern)
         self.brushDict["residential"]=QBrush(self.getStyleColor("residentialColor"), Qt.SolidPattern)
         self.brushDict["commercial"]=QBrush(self.getStyleColor("commercialColor"), Qt.SolidPattern)
         self.brushDict["farm"]=QBrush(self.getStyleColor("farmColor"), Qt.SolidPattern)
@@ -541,11 +549,11 @@ class OSMStyle():
         self.brushDict["industrial"]=QBrush(self.getStyleColor("industrialColor"), Qt.SolidPattern)
         self.brushDict["aerowayArea"]=QBrush(self.getStyleColor("aerowayAreaColor"), Qt.SolidPattern)
         self.brushDict["placeTag"]=QBrush(self.getStyleColor("placeTagColor"), Qt.SolidPattern)
-        self.brushDict["tourismArea"]=QBrush(self.getStyleColor("tourismAreaColor"), Qt.SolidPattern)
+        self.brushDict["tourismUndefined"]=QBrush(self.getStyleColor("tourismUndefinedColor"), Qt.SolidPattern)
         self.brushDict["tourismCampingArea"]=QBrush(self.getStyleColor("tourismCampingAreaColor"), Qt.SolidPattern)
-        self.brushDict["amenityArea"]=QBrush(self.getStyleColor("amenityAreaColor"), Qt.SolidPattern)
+        self.brushDict["amenityUndefined"]=QBrush(self.getStyleColor("amenityUndefinedColor"), Qt.SolidPattern)
         self.brushDict["amenityParkingArea"]=QBrush(self.getStyleColor("amenityParkingAreaColor"), Qt.SolidPattern)
-        
+        self.brushDict["leisureUndefined"]=QBrush(self.getStyleColor("leisureUndefinedColor"), Qt.SolidPattern)
         self.brushDict["villageGreenArea"]=QBrush(self.getStyleColor("villageGreenAreaColor"), Qt.SolidPattern)
 
         brush=QBrush(self.getStyleColor("scrubAreaColor"))
@@ -592,7 +600,6 @@ class OSMStyle():
             pixmapName=self.POI_INFO_DICT[nodeType]["pixmap"]
             if pixmapName!=None:
                 return self.getStylePixmap(pixmapName)
-            return None
             
         return self.getStylePixmap("poiPixmap")
         
@@ -801,15 +808,15 @@ class OSMStyle():
             brush=self.getStyleBrush("cemeteryPatternArea")
         elif landuse=="village_green":
             brush=self.getStyleBrush("villageGreenArea")
+        elif landuse=="military":
+            brush=self.getStyleBrush("militaryPatternArea")
+            pen=self.getStylePen("militaryPen")                   
         elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
             brush=self.getStyleBrush("natural")
         elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
             brush=self.getStyleBrush("water") 
-        elif landuse=="military":
-            brush=self.getStyleBrush("militaryPatternArea")
-            pen=self.getStylePen("militaryPen")                   
         else:
-            brush=self.getStyleBrush("landuse")
+            brush=self.getStyleBrush("landuseUndefined")
         
         return brush, pen
         
@@ -850,7 +857,7 @@ class OSMStyle():
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
                     brush=self.getStyleBrush("water")
                 else:
-                    brush=self.getStyleBrush("natural")
+                    brush=self.getStyleBrush("naturalUndefined")
         
         return brush, pen
 
@@ -862,7 +869,7 @@ class OSMStyle():
         if amenity=="parking":    
             brush=self.getStyleBrush("amenityParkingArea")
         else:
-            brush=self.getStyleBrush("amenityArea")
+            brush=self.getStyleBrush("amenityUndefined")
 
         return brush, pen
     
@@ -874,6 +881,15 @@ class OSMStyle():
         if tourism=="camp_site" or tourism=="caravan_site":    
             brush=self.getStyleBrush("tourismCampingArea")
         else:
-            brush=self.getStyleBrush("tourismArea")
+            brush=self.getStyleBrush("tourismUndefined")
 
         return brush, pen    
+    
+    def getBrushForLeisureArea(self, tags, zoom):
+        brush=Qt.NoBrush
+        pen=Qt.NoPen
+        
+        leisure=tags["leisure"]
+        brush=self.getStyleBrush("leisureUndefined")
+
+        return brush, pen  

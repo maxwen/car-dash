@@ -22,6 +22,8 @@ class OSMDataSQLite():
         self.connectionWay=None
         self.cursorNode=None
         self.connectionNode=None
+        self.cursorAdmin=None
+        self.connectionAdmin=None
         self.gisUtils=GISUtils()
 
     def getGISUtils(self):
@@ -66,6 +68,13 @@ class OSMDataSQLite():
         self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
         self.cursorAdress=self.connectionAdress.cursor()
         self.setPragmaForDB(self.cursorAdress)
+
+    def openAdminDB(self):
+        self.connectionAdmin=sqlite3.connect(self.getAdminDBFile())
+        self.cursorAdmin=self.connectionAdmin.cursor()
+        self.connectionAdmin.enable_load_extension(True)
+        self.cursorAdmin.execute("SELECT load_extension('libspatialite.so')")
+        self.setPragmaForDB(self.cursorAdmin)
     
     def closeEdgeDB(self):
         if self.connectionEdge!=None:
@@ -101,6 +110,13 @@ class OSMDataSQLite():
             self.cursorAdress.close()
             self.connectionAdress=None
             self.cursorAdress=None
+
+    def closeAdminDB(self):
+        if self.connectionAdmin!=None:
+            self.connectionAdmin.commit()
+            self.cursorAdmin.close()
+            self.connectionAdmin=None
+            self.cursorAdmin=None
                  
     def openAllDB(self):
         self.openWayDB()
@@ -108,6 +124,7 @@ class OSMDataSQLite():
         self.openEdgeDB()
         self.openAreaDB()
         self.openAdressDB()
+        self.openAdminDB()
         
     def closeAllDB(self):
         self.closeWayDB()
@@ -115,6 +132,7 @@ class OSMDataSQLite():
         self.closeEdgeDB()
         self.closeAreaDB()
         self.closeAdressDB()
+        self.closeAdminDB()
         
     def wayFromDB(self, x):
         wayId=x[0]
@@ -282,6 +300,10 @@ class OSMDataSQLite():
     def getNodeDBFile(self):
         file="nodes.db"
         return os.path.join(self.getDataDir(), file)
+
+    def getAdminDBFile(self):
+        file="admin.db"
+        return os.path.join(self.getDataDir(), file)
                         
     def edgeDBExists(self):
         return os.path.exists(self.getEdgeDBFile())
@@ -297,12 +319,15 @@ class OSMDataSQLite():
                 
     def adressDBExists(self):
         return os.path.exists(self.getAdressDBFile())
+
+    def adminDBExists(self):
+        return os.path.exists(self.getAdminDBFile())
     
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/salzburg-2.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/salzburg-2.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
@@ -315,9 +340,9 @@ class OSMDataSQLite():
 #        osmDataList[1]=osmData
     
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/cloudmade/bayern-2.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
@@ -381,9 +406,9 @@ class OSMDataSQLite():
         else:
             sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE adminLevel IN %s'%(filterString)
 
-        self.cursorArea.execute(sql)
+        self.cursorAdmin.execute(sql)
              
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         resultList=list()
         for x in allentries:
             resultList.append(self.adminAreaFromDBWithCoordsString(x))

@@ -174,7 +174,7 @@ class OSMRoutingPoint():
     TYPE_TMP=5
     TYPE_MAP=6
 
-    DEFAULT_RESOLVE_POINT_MARGIN=0.001
+    DEFAULT_RESOLVE_POINT_MARGIN=0.0005
     DEFAULT_RESOLVE_MAX_DISTANCE=30.0
     
     def __init__(self, name="", pointType=0, pos=(0.0, 0.0)):
