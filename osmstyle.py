@@ -804,7 +804,7 @@ class OSMStyle():
                 brush=self.getStyleBrush("forestPatternArea")
             else:
                 brush=self.getStyleBrush("forestArea")
-        elif landuse=="cemetery" or landuse=="grave_yard":
+        elif landuse=="cemetery":
             brush=self.getStyleBrush("cemeteryPatternArea")
         elif landuse=="village_green":
             brush=self.getStyleBrush("villageGreenArea")
@@ -868,6 +868,8 @@ class OSMStyle():
         amenity=tags["amenity"]
         if amenity=="parking":    
             brush=self.getStyleBrush("amenityParkingArea")
+        elif amenity=="grave_yard":
+            brush=self.getStyleBrush("cemeteryPatternArea")
         else:
             brush=self.getStyleBrush("amenityUndefined")
 
