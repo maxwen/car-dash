@@ -151,16 +151,44 @@ DONE
 TODO: create prefetch box based on track
 -no performance improve
 NOACTION
-------------------------------------------------------------------
+
+ TODO: add POI based searching
+DONE
  
- TODO: search for nearest POI type
- -need a way to calculate rtree index distance in degrees in meters
- 1 degree at the equator is 111km
+ TODO: show POI info on map
+  -what to show = - currently tags["name"]
+DONE
+
+  TODO: place POIs could be schown in adress search
+  DONE
+  
+ TODO: strip unneded area tags
+DONE
+
+
+ TODO:
+ solve cases where area and node exists for same POI
+ -actually OSM says alterantivly node or way
+ -but there are so many cases that we need to handle it
+ DONE
+ 
+   
+  TODO: address dialog
+  -expand city nodes?
+  -matching city and/or streets is too slow
+  -> expand all nodes
+  DONE
+ 
+  TODO: POIs to add
+ -leisure park
+ DONE
+ 
+
+------------------------------------------------------------------
  
  TODO: convert map point to routing point
  
  TODO: POIs to add
- -leisure park
  -place_of_worship
  
  TODO: parser config file
@@ -211,40 +239,21 @@ relation with via type way {'to': 144986762, 'viaWay': [144986748], 'type': 'no_
 relation with via type way {'to': 54858215, 'viaWay': [127061650], 'type': 'no_u_turn', 'id': 2065288, 'from': 4789250}
 relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_left_turn', 'id': 2079173, 'from': 154613298}
 relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
-
- 
- TODO: solve problem with multipolygon saved as polygons
- -change back to multipolygon -> drawing must be changed
- -ensure the id the polygon is saved does not clash with other areas
  
  TODO: try QGraphicsView
  
  TODO: correct drawing of overlapping areaes
  -no sense for layer tag
  -but e.g. residential or natural should be drawn before the rest
- 
- TODO: add POI based searching
- 
- TODO: show POI info on map
-  -what to show = - currently tags["name"]
-
-  TODO: place POIs could be schown in adress search
   
   TODO: matching between poly files and osm admin areas
   -multilanguage support
-  
-  TODO: address dialog
-  -expand city nodes?
-  -matching city and/or streets is too slow
-  
+
   TODO: support super relations?
   -relations with member relation
   
   TODO: amenity can also be area and relation
   -added parking
-  
-  TODO:
-  landuse overrides natural?
 
 TODO: create tables with simplified polygons
 
@@ -252,13 +261,13 @@ TODO: admin area display is only geographic not politically
 -admin area can have only one parent 
 -maybe filter out admin areas that have no entries
 
-TODO: strip unneded area tags
-DONE
-
 TODO: points are not stored with resolved lat, lon
 -can multiple resolve calls return different resolved pos?
 
- TODO:
- solve cases where area and node exists for same POI
- -actually OSM says alterantivly node or way
- -but there are so many cases that we need to handle it
+TODO: place can also be in a relation
+TODO: ways with only place and nothing more
+-to resolve unneded place tage we need to store the area
+
+   TODO:
+  landuse overrides natural?
+landuse=meadow+natural=wetland inside landuse=forest  1905113

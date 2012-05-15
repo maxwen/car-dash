@@ -279,7 +279,7 @@ class OSMDataSQLite():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data1")
+        return os.path.join(getDataRoot(), "data2")
 
     def getEdgeDBFile(self):
         file="edge.db"

@@ -1924,16 +1924,17 @@ class QtOSMWidget(QWidget):
         
         for  x, y, pixmapWidth, pixmapHeight, refId, tags, nodeType, pixmap in self.orderedNodeList:
             if pixmap==None:
-                self.displayNode(x, y, pixmapWidth, pixmapHeight, tags, nodeType)
+                self.displayNode(x, y, pixmapWidth, pixmapHeight, refId, tags, nodeType)
             else:
                 self.painter.drawPixmap(int(x-pixmapWidth/2), int(y-pixmapHeight), pixmapWidth, pixmapHeight, pixmap)
 
         if WITH_TIMING_DEBUG==True:
             print("displayNodes: %f"%(time.time()-start))
             
-    def displayNode(self, x, y, pixmapWidth, pixmapHeight, tags, nodeType):
+    def displayNode(self, x, y, pixmapWidth, pixmapHeight, refId, tags, nodeType):
         if nodeType==Constants.POI_TYPE_PLACE:
             if "name" in tags:
+#                print("%d %s"%(refId, tags))
                 text=tags["name"]
                 placeType=tags["place"]
                 

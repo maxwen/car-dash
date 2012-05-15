@@ -80,12 +80,13 @@ class Constants():
     AREA_TYPE_AMENITY=7
     AREA_TYPE_BUILDING=8
     AREA_TYPE_LEISURE=9
+    AREA_TYPE_PLACE=10
     
     LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction", "gravel", "quarry", "rock"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
-    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree", "marsh", "mud", "cliff", "glacier"])
+    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree", "marsh", "mud", "cliff", "glacier", "rock", "beach"])
     NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland", "marsh", "mud"])
     
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain", "ditch"])
@@ -103,7 +104,7 @@ class Constants():
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb", "hamlet"])
     
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
-    REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building"])
+    REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure"])
     REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
     
     PARKING_LIMITATIONS_DICT={"access":"yes",

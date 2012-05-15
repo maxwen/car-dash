@@ -764,6 +764,7 @@ class OSMDataImport(OSMDataSQLite):
             isTourism=False
             isAmenity=False
             isLeisure=False
+            isPlace=False
                        
             layer=self.getLayerValue(tags)
                 
@@ -825,6 +826,10 @@ class OSMDataImport(OSMDataSQLite):
                 self.addToTmpWayRefTable(wayid, refs)
                  
                 if self.skipAreas==False:         
+                    if "place" in tags:
+                        if tags["place"] in self.isUsablePlaceNodeType():
+                            isPlace=True
+
                     if "waterway" in tags:
                         if tags["waterway"] in self.getWaterwayTypes():
                             isNatural=True
@@ -836,8 +841,6 @@ class OSMDataImport(OSMDataSQLite):
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
-                            # landuse overrides natural
-                            isNatural=False
                                                    
                     if "railway" in tags:
                         if tags["railway"] in self.getRailwayTypes():
@@ -868,8 +871,9 @@ class OSMDataImport(OSMDataSQLite):
                         isTourism=False
                         isAmenity=False
                         isLeisure=False
+                        isPlace=False
                         
-                    if isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
+                    if isPlace==False and isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
                         continue
                     
                     isPolygon=False
@@ -898,6 +902,7 @@ class OSMDataImport(OSMDataSQLite):
                         geomString=self.getGISUtils().createLineStringFromCoords(coords)
                         
                     areaType=None
+                    
                     if isNatural==True:
                         areaType=Constants.AREA_TYPE_NATURAL
                     elif isLanduse==True:
@@ -914,6 +919,8 @@ class OSMDataImport(OSMDataSQLite):
                         areaType=Constants.AREA_TYPE_AMENITY
                     elif isLeisure==True:
                         areaType=Constants.AREA_TYPE_LEISURE
+                    elif isPlace==True:
+                        areaType=Constants.AREA_TYPE_PLACE
                         
                     if areaType!=None:
                         if isPolygon==True:
@@ -1069,6 +1076,7 @@ class OSMDataImport(OSMDataSQLite):
                     isTourism=False
                     isAmenity=False
                     isLeisure=False
+                    isPlace=False
                     adminLevel=None
                     layer=self.getLayerValue(tags)
 
@@ -1093,6 +1101,10 @@ class OSMDataImport(OSMDataSQLite):
  
                             isAdminBoundary=True
                         
+                    if "place" in tags:
+                        if tags["place"] in self.isUsablePlaceNodeType():
+                            isPlace=True
+
                     if "waterway" in tags:
                         if tags["waterway"] in self.getWaterwayTypes():
                             isNatural=True
@@ -1104,8 +1116,6 @@ class OSMDataImport(OSMDataSQLite):
                     if "landuse" in tags:
                         if tags["landuse"] in self.getLanduseTypes():
                             isLanduse=True
-                            # landuse overrides natural
-                            isNatural=False
                     
                     if "aeroway" in tags:
                         if tags["aeroway"] in self.getAerowayTypes():
@@ -1122,7 +1132,7 @@ class OSMDataImport(OSMDataSQLite):
                     if "leisure" in tags:
                         if tags["leisure"] in self.getLeisureTypes():
                             isLeisure=True
-
+                            
                     if "building" in tags:
                         isBuilding=True
                         isLanduse=False
@@ -1132,8 +1142,9 @@ class OSMDataImport(OSMDataSQLite):
                         isTourism=False
                         isAmenity=False
                         isLeisure=False
+                        isPlace=False
                         
-                    if isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
+                    if isPlace==False and isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
                         if len(tags)!=1:
                             self.log("skip multipolygon: %d %s unknwon type"%(osmid, tags))
                         continue
@@ -1268,12 +1279,17 @@ class OSMDataImport(OSMDataSQLite):
                             areaType=Constants.AREA_TYPE_AMENITY
                         elif isLeisure==True:
                             areaType=Constants.AREA_TYPE_LEISURE
+                        elif isPlace==True:
+                            areaType=Constants.AREA_TYPE_PLACE
                             
                         if areaType!=None:
-                            # make sure th osmid does not clash with a way area
-                            # polygon added before
                             self.addPolygonToAreaTable(osmid, 1, areaType, tags, polyString, layer)
                    
+                        if isPlace==True:
+                            lat, lon=self.getCenterOfPolygon(outerRefRings[0]["refs"])
+                            if lat!=None and lon!=None:
+                                self.addToPOIRefTable(osmid, 2, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
+
                 elif tags["type"]=="enforcement":
                     if "enforcement" in tags:
                         if tags["enforcement"]=="maxspeed":
@@ -2884,7 +2900,8 @@ class OSMDataImport(OSMDataSQLite):
             print(prog, end="\r")
             allRefsCount=allRefsCount+1
 
-            lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)      
+            lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)       
+#            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND MbrContains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat))
             self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
 
             areaList=self.cursorArea.fetchall()
@@ -2892,11 +2909,11 @@ class OSMDataImport(OSMDataSQLite):
                 # in case of a wayRef polygon this is the wayId
                 areaId=int(y[0])   
                 # check if there is a poi node with this wayId         
-                self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=%d AND refType=1'%(areaId))
+                self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=%d AND (refType=1 OR refType=2)'%(areaId))
                 allPOIWayRefs=self.cursorNode.fetchall()
             
                 for z in allPOIWayRefs:
-                    (refId1, tags1, poiType1, lat1, lon1)=self.poiRefFromDB3(z)
+                    (refId1, tags1, poiType1, _, _)=self.poiRefFromDB3(z)
                     # same poi type
                     if poiType==poiType1:
                         removeRef=None

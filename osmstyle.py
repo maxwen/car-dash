@@ -8,7 +8,7 @@ import os
 import math
 
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush
+from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush, QBitmap
 from osmparser.osmdataaccess import Constants
 from utils.env import getImageRoot
 
@@ -122,7 +122,6 @@ class OSMStyle():
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
         self.colorDict["woodAreaColor"]=QColor(0xae, 0xd1, 0xa0)
-        self.colorDict["scrubAreaColor"]=QColor(0xb5, 0xe3, 0xb5)
         self.colorDict["tourismUndefinedColor"]=Qt.red
         self.colorDict["tourismCampingAreaColor"]=QColor(0xcc, 0xff, 0x99)
         self.colorDict["amenityParkingAreaColor"]=QColor(0xf7, 0xef, 0xb7)
@@ -556,21 +555,20 @@ class OSMStyle():
         self.brushDict["leisureUndefined"]=QBrush(self.getStyleColor("leisureUndefinedColor"), Qt.SolidPattern)
         self.brushDict["villageGreenArea"]=QBrush(self.getStyleColor("villageGreenAreaColor"), Qt.SolidPattern)
 
-        brush=QBrush(self.getStyleColor("scrubAreaColor"))
+        brush=QBrush()
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/scrub.png")))
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["scrubPatternArea"]=brush
         
-        brush=QBrush(self.getStyleColor("naturalColor"))
+        brush=QBrush()
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/forest.png")))
         brush.setStyle(Qt.TexturePattern)        
         self.brushDict["forestPatternArea"]=brush
         
-        self.brushDict["scrubArea"]=QBrush(self.getStyleColor("scrubAreaColor"), Qt.SolidPattern)
         self.brushDict["forestArea"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
         self.brushDict["woodArea"]=QBrush(self.getStyleColor("woodAreaColor"), Qt.SolidPattern)
         
-        brush=QBrush(self.getStyleColor("waterColor"))
+        brush=QBrush()
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/marsh.png")))
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["marshPatternArea"]=brush
@@ -800,7 +798,7 @@ class OSMStyle():
         elif landuse=="industrial":
             brush=self.getStyleBrush("industrial")
         elif landuse=="forest":
-            if zoom>=14:
+            if zoom>=13:
                 brush=self.getStyleBrush("forestPatternArea")
             else:
                 brush=self.getStyleBrush("forestArea")
@@ -831,24 +829,25 @@ class OSMStyle():
                 pen.setWidth(self.getWaterwayPenWidthForZoom(zoom, tags))                      
             
         elif "natural" in tags:
+            landuse=None
+            if "landuse" in tags:
+                landuse=tags["landuse"]
+                
             natural=tags["natural"]
             if natural=="scrub":
-                if zoom>=14:
+                if zoom>=13:
                     brush=self.getStyleBrush("scrubPatternArea")
-                else:
-                    brush=self.getStyleBrush("scrubArea")
                     
             elif natural=="marsh" or natural=="wetland" or natural=="mud":
                 if zoom>=13:
                     brush=self.getStyleBrush("marshPatternArea")
-                else:
-                    brush=self.getStyleBrush("water")
                     
             elif natural=="wood":
                 brush=self.getStyleBrush("woodArea")
             
             elif natural=="glacier":
-                brush=self.getStyleBrush("glacierPatternArea")
+                if zoom>=13:
+                    brush=self.getStyleBrush("glacierPatternArea")
             
             elif natural=="cliff":
                 pen=self.getStylePen("cliffPen")

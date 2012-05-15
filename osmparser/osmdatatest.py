@@ -105,6 +105,78 @@ class OSMDataTest(OSMDataAccess):
         for x in allentries:
             self.log(x)                 
 
+#    def poiRefFromDB3(self, x):
+#        refId=int(x[0])
+#        tags=self.decodeTags(x[1])
+#        poiType=int(x[2])      
+#        lat, lon=self.getGISUtils().createPointFromPointString(x[3])
+#        return (refId, tags, poiType, lat, lon)    
+#      
+#    # check all pois of refType=node
+#    # inside an area with refType=way
+#    # with the same tags. If yes remove the entry for the way                             
+#    def removeUnnededPOIs(self):
+#        nodeTypeList=self.createSQLFilterStringForIN([Constants.POI_TYPE_PARKING, Constants.POI_TYPE_CAMPING, Constants.POI_TYPE_SUPERMARKET, Constants.POI_TYPE_PLACE])
+#        self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=343552101 AND refType=0 AND type in %s'%(nodeTypeList))
+#        allPOIRefs=self.cursorNode.fetchall()
+#        
+#        allRefLength=len(allPOIRefs)
+#        allRefsCount=0
+#        removeCount=0
+#
+#        prog = ProgressBar(0, allRefLength, 77)
+#        
+#        for x in allPOIRefs:
+#            print(x)
+#            (refId, tags, poiType, lat, lon)=self.poiRefFromDB3(x)
+#            prog.updateAmount(allRefsCount)
+#            print(prog, end="\r")
+#            allRefsCount=allRefsCount+1
+#
+#            lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)       
+##            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND MbrContains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat))
+#            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+#
+#            areaList=self.cursorArea.fetchall()
+#            for y in areaList:
+#                print(y)
+#                # in case of a wayRef polygon this is the wayId
+#                areaId=int(y[0])   
+#                # check if there is a poi node with this wayId         
+#                self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=%d AND (refType=1 OR refType=2)'%(areaId))
+#                allPOIWayRefs=self.cursorNode.fetchall()
+#            
+#                for z in allPOIWayRefs:
+#                    (refId1, tags1, poiType1, lat1, lon1)=self.poiRefFromDB3(z)
+#                    # same poi type
+#                    if poiType==poiType1:
+#                        removeRef=None
+#                        # a node POI "overrules" a way POI 
+#                        # except it has no tags and the way POI has
+##                        print("POI node %d %s is inside of POI area %d %s"%(refId, tags, refId1, tags1))
+#                        if len(tags1)==0:
+#                            removeRef=refId1
+#                        elif len(tags)==0:
+#                            removeRef=refId
+#                        else:  
+#                            if poiType==Constants.POI_TYPE_PLACE:
+#                                if "name" in tags and "name" in tags1:
+#                                    if tags["place"]==tags1["place"] and tags["name"]==tags1["name"]:
+#                                        removeRef=refId1
+#
+#                            else:
+##                                if not "name" in tags and "name" in tags1:
+##                                    removeRef=refId
+#                                    
+#                                removeRef=refId1
+#                        
+#                        if removeRef!=None:
+#                            print("remove %d"%(removeRef))
+#                            self.cursorNode.execute("DELETE FROM poiRefTable WHERE refId=%d"%(removeRef))
+#                            removeCount=removeCount+1
+#                            
+#        print("")   
+
 def main(argv):    
     p = OSMDataTest()
       
@@ -213,7 +285,7 @@ def main(argv):
 #    coords=p.createOuterCoordsFromMultiPolygon(polyString)
 #    print(coords)
     
-    p.removeUnnededPOIs()
+#    p.removeUnnededPOIs()
     p.closeAllDB()
 
 
