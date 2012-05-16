@@ -36,7 +36,7 @@ class OSMStyle():
                    Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PARK:{"pixmap":"parkPixmap", "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_DOG_PARK:{"pixmap":None, "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_DOG_PARK:{"pixmap":"dogLeashPixmap", "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":None, "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
                    
     AREA_INFO_DICT={Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
@@ -109,6 +109,7 @@ class OSMStyle():
         self.pixmapDict["veterinaryPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/veterinary.png"))
         self.pixmapDict["campingPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/camping.png"))
         self.pixmapDict["parkPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/park.png"))
+        self.pixmapDict["dogLeashPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/dogs_leash.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)

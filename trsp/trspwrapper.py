@@ -80,9 +80,7 @@ class TrspWrapper():
 #            self.lastBBoxCPolygon=None
 #            lib_routing.clean_edges()
 #            
-#        lib_routing.clean_edges()
-#        self.calcQueryBBox(bbox)
-#        print(self.lastBBox)
+        # TODO: disabled bbox for routing
         self.lastBBox=None
 
         doVertexC=c_int(0)

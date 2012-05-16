@@ -1407,11 +1407,18 @@ class OSMDataAccess(OSMDataSQLite):
             resultList.append((osmId, areaType, tags, layer, polyStr, 0))
             areaIdSet.add(int(x[0]))
                 
-        if filterString==None:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+        if withSimplify==False:
+            if filterString==None:
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            else:
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
         else:
-            self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
-        
+            tolerance=self.osmutils.degToMeter(tolerance)
+            if filterString==None:
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(Simplify(geom, %f)) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+            else:
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(Simplify(geom, %f)) FROM areaLineTable WHERE ROWID IN (SELECT rowid FROM idx_areaLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            
         allentries=self.cursorArea.fetchall()
 
         for x in allentries:
