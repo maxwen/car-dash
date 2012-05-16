@@ -80,13 +80,13 @@ class Constants():
     AREA_TYPE_AMENITY=7
     AREA_TYPE_BUILDING=8
     AREA_TYPE_LEISURE=9
-    AREA_TYPE_PLACE=10
+    AREA_TYPE_PLACE=10 # will not be displayed
     
-    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction", "gravel", "quarry", "rock"])
+    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction", "quarry"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
-    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "park", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree", "marsh", "mud", "cliff", "glacier", "rock", "beach"])
+    NATURAL_TYPE_SET=set(["water", "wood", "tree", "forest", "riverbank", "fell", "scrub", "heath", "grassland", "wetland", "scree", "marsh", "mud", "cliff", "glacier", "rock", "beach"])
     NATURAL_WATER_TYPE_SET=set(["water", "riverbank", "wetland", "marsh", "mud"])
     
     WATERWAY_TYPE_SET=set(["riverbank", "river", "stream", "drain", "ditch"])
@@ -1425,7 +1425,7 @@ class OSMDataAccess(OSMDataSQLite):
         
         filterString=self.createSQLFilterStringForIN(adminLevelList)
         
-        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236)) ORDER BY adminLevel'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
              
         allentries=self.cursorAdmin.fetchall()
         resultList=list()
@@ -1436,6 +1436,21 @@ class OSMDataAccess(OSMDataSQLite):
             
         return resultList, areaIdSet                 
 
+    def getAdminLinesInBboxWithGeom(self, bbox, margin, adminLevelList):
+        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
+        
+        filterString=self.createSQLFilterStringForIN(adminLevelList)
+        
+        self.cursorAdmin.execute('SELECT osmId, adminLevel, AsText(geom) FROM adminLineTable WHERE ROWID IN (SELECT rowid FROM idx_adminLineTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s)'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+             
+        allentries=self.cursorAdmin.fetchall()
+        resultList=list()
+        areaIdSet=set()
+        for x in allentries:
+            resultList.append(self.adminLineFromDBWithCoordsString(x))
+            areaIdSet.add(x[0])
+            
+        return resultList, areaIdSet  
     def getAdminAreasOnPointWithGeom(self, lat, lon, margin, adminLevelList, sortByAdminLevel):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, margin)      
 

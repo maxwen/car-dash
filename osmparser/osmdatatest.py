@@ -60,10 +60,14 @@ class OSMDataTest(OSMDataAccess):
             self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable')
+        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_NATURAL))
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            print("%s %s"%(x[0],x[1]))
+            tags=self.decodeTags(x[3])
+            if "natural" in tags:
+                if tags["natural"]=="rock":
+                    print("%s %s"%(x[0],tags))
+
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
 #            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
@@ -215,7 +219,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-#    p.testAreaTable()
+    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())

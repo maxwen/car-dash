@@ -54,7 +54,7 @@ IMAGE_HEIGHT_TINY=24
 MAX_TILE_CACHE=1000
 TILE_CLEANUP_SIZE=50
 WITH_CROSSING_DEBUG=True
-WITH_TIMING_DEBUG=False
+WITH_TIMING_DEBUG=True
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
 SCREEN_BORDER_WIDTH=50
@@ -84,8 +84,9 @@ osmRouting=OSMRouting(osmParserData)
 
 class OSMRoutingPointAction(QAction):
     def __init__(self, text, routingPoint, style, parent):
-        if not routingPoint.isValid():
+        if routingPoint.getType()!=OSMRoutingPoint.TYPE_MAP and not routingPoint.isValid():
             text=text+"(unresolved)"
+            
         QAction.__init__(self, text, parent)
         self.routingPoint=routingPoint
         self.style=style
@@ -536,8 +537,8 @@ class QtOSMWidget(QWidget):
         self.currentRouteOverlayPath=None
         self.areaPolygonCache=dict()
         self.lastOsmIdSet=None
-        self.adminAreaPolygonCache=dict()
-        self.lastAdminAreaIdSet=None      
+        self.adminPolygonCache=dict()
+        self.lastAdminLineIdSet=None      
         self.tagLabelWays=None
         
         self.style=OSMStyle()
@@ -546,7 +547,6 @@ class QtOSMWidget(QWidget):
         self.virtualZoomValue=2.0
         self.prefetchBBox=None
         self.sidebarVisible=True
-#        self.controlAreaRect=None
 
         self.gisUtils=GISUtils()
         self.locationBreadCrumbs=deque("", 10)
@@ -1204,6 +1204,8 @@ class QtOSMWidget(QWidget):
         self.numVisiblePolygons=0
         self.numHiddenWays=0
         self.numVisibleWays=0
+        self.numHiddenAdminLiness=0
+        self.numVisibleAdminLines=0
                 
         self.orderedNodeList=list()
         
@@ -1223,11 +1225,13 @@ class QtOSMWidget(QWidget):
                 self.buildingList=list()
                 self.aerowayLines=list()
                 self.tagLabelWays=dict()
+                self.adminLineList=list()
                 
                 fetchStart=time.time()
 
                 self.getVisibleWays(self.prefetchBBox)
-            
+                self.getVisibleAdminLines(self.prefetchBBox)
+                
             if self.withShowAreas==True:
                 if newBBox==True:
                     if self.map_zoom>=10:
@@ -1243,6 +1247,8 @@ class QtOSMWidget(QWidget):
                 self.displayTunnelNatural()            
                 self.displayAreas()
  
+            self.displayAdminLines()
+            
             self.setAntialiasing(True)
             self.displayTunnelWays()
             
@@ -1368,9 +1374,6 @@ class QtOSMWidget(QWidget):
                 
                 if WITH_TIMING_DEBUG==True:
                     print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
-
-#        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
-#            osmParserData.getNearestPOINodeOfType(self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon), 1, Constants.POI_TYPE_GAS_STATION)
         
         self.displayGPSPosition()
         
@@ -1392,23 +1395,16 @@ class QtOSMWidget(QWidget):
         
         if self.nightMode==True:
             self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("nightModeColor"))
-
-#        if self.controlAreaRect!=None:
-#            self.painter.setBrush(Qt.NoBrush)
-#            self.painter.setPen(QPen(Qt.red))
-#            self.painter.drawRect(self.controlAreaRect)
         
         self.painter.end()
 
         if WITH_TIMING_DEBUG==True:
             print("displayedPolgons: %d hiddenPolygons: %d"%(self.numVisiblePolygons, self.numHiddenPolygons))
             print("displayedWays: %d hiddenWays: %d"%(self.numVisibleWays, self.numHiddenWays))
+            print("displayedAdminLines: %d hiddenAdminLines: %d"%(self.numVisibleAdminLines, self.numHiddenAdminLiness))
         
             print("paintEvent:%f"%(time.time()-start))
-            
-        #if self.gpsUpdateStartTime!=None:
-        #    print("paintEvent:%f"%(time.time()-self.gpsUpdateStartTime))
-            
+        
     def displayLocationBredCrumbs(self):
         for gpsData in self.locationBreadCrumbs:
             lat=gpsData.lat
@@ -1524,8 +1520,36 @@ class QtOSMWidget(QWidget):
         self.prefetchBBox=None
         self.wayPolygonCache=dict()
         self.areaPolygonCache=dict()
-        self.adminAreaPolygonCache=dict()
+        self.adminPolygonCache=dict()
     
+    def getVisibleAdminLines(self, bbox):
+        start=time.time()
+        adminLineList, adminLineIdSet=osmParserData.getAdminLinesInBboxWithGeom(bbox, 0.0, self.getAdminLevelList())
+        
+        if WITH_TIMING_DEBUG==True:
+            print("getAdminLinesInBboxWithGeom: %f"%(time.time()-start))
+        
+        if self.lastAdminLineIdSet==None:
+            self.lastAdminLineIdSet=adminLineIdSet
+        else:
+            removedLines=self.lastAdminLineIdSet-adminLineIdSet
+            self.lastAdminLineIdSet=adminLineIdSet
+            
+            for lineId in removedLines:
+                if lineId in self.adminPolygonCache.keys():
+                    del self.adminPolygonCache[lineId]
+            
+        self.adminLineList=adminLineList
+
+    def displayAdminLines(self):
+        pen=QPen()
+        pen.setStyle(Qt.DotLine)
+        pen.setColor(Qt.blue)
+        pen.setWidth(2.0)
+        
+        for line in self.adminLineList:
+            self.displayAdminLineWithCache(line, pen)
+        
     def getVisibleWays(self, bbox):
         streetTypeList=self.getStreetTypeListForZoom()
         if streetTypeList==None:
@@ -2094,12 +2118,17 @@ class QtOSMWidget(QWidget):
             tags=area[2]
             brush=Qt.NoBrush
             pen=Qt.NoPen
-            if areaType==Constants.AREA_TYPE_NATURAL:
-                brush, pen=self.style.getBrushForNaturalArea(tags, self.map_zoom)
-            
-            elif areaType==Constants.AREA_TYPE_LANDUSE:
+
+            if areaType==Constants.AREA_TYPE_LANDUSE:
                 brush, pen=self.style.getBrushForLanduseArea(tags, self.map_zoom)
 
+            elif areaType==Constants.AREA_TYPE_NATURAL:
+                brush, pen=self.style.getBrushForNaturalArea(tags, self.map_zoom)
+                # TODO: natural areas with landuse
+                if "landuse" in tags:
+                    landuseBrush, landusePen=self.style.getBrushForLanduseArea(tags, self.map_zoom)
+                    self.displayPolygonWithCache(self.areaPolygonCache, area, landusePen, landuseBrush)
+            
             elif areaType==Constants.AREA_TYPE_HIGHWAY_AREA:
                 brush=self.style.getStyleBrush("highwayArea")
                             
@@ -2568,6 +2597,56 @@ class QtOSMWidget(QWidget):
             # TODO: building as linestring 100155254
             if pen!=Qt.NoPen:
                 self.painter.strokePath(painterPath, pen)
+    
+    def displayAdminLineWithCache(self, line, pen):        
+        cPolygon=None
+        painterPath=None
+        lineId=line[0]
+        coordsStr=line[2]
+        map_x, map_y=self.getMapZeroPos()
+        
+        if not lineId in self.adminPolygonCache.keys():
+            painterPath=QPainterPath()
+
+            coords=self.gisUtils.createCoordsFromLineString(coordsStr)
+                
+            i=0
+            for point in coords:
+                lat, lon=point 
+                (y, x)=self.getPixelPosForLocationDeg(lat, lon, False)
+                point=QPointF(x, y);
+                if i==0:
+                    painterPath.moveTo(point)
+                else:
+                    painterPath.lineTo(point)
+                    
+                i=i+1
+                
+            rect=painterPath.controlPointRect()
+            cont=[(rect.x(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()), 
+                  (rect.x()+rect.width(), rect.y()+rect.height()), 
+                  (rect.x(), rect.y()+rect.height())]
+
+            cPolygon=Polygon(cont)
+
+            self.adminPolygonCache[lineId]=(cPolygon, painterPath)
+        
+        else:
+            cPolygon, painterPath=self.adminPolygonCache[lineId]
+                    
+        if cPolygon!=None:
+            # must create a copy cause shift changes alues intern
+            p=Polygon(cPolygon)
+            p.shift(-map_x, -map_y)
+            if not self.visibleCPolygon.overlaps(p):
+                self.numHiddenAdminLiness=self.numHiddenAdminLiness+1
+                return 
+                    
+        self.numVisibleAdminLines=self.numVisibleAdminLines+1
+
+        painterPath=painterPath.translated(-map_x, -map_y)
+        self.painter.strokePath(painterPath, pen)
         
     def displayRouteOverlay(self, remainingTrackList, edgeIndexList):
         if remainingTrackList!=None:                        
@@ -3732,12 +3811,8 @@ class QtOSMWidget(QWidget):
                 if name[:5]=="point":
                     point=OSMRoutingPoint()
                     point.readFromConfig(value)
-                    point.resolveFromPos(osmParserData)
                     if point.getType()==OSMRoutingPoint.TYPE_MAP:
                         self.mapPoint=point
-                        
-                    if not point.isValid():
-                        print("failed to resolve point %s"%(value))
                     
         section="route"
         self.routeList=list()

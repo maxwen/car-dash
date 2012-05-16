@@ -285,6 +285,10 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorAdmin.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
         self.cursorAdmin.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
         self.cursorAdmin.execute("SELECT AddGeometryColumn('adminAreaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
+
+        self.cursorAdmin.execute('CREATE TABLE adminLineTable (osmId INTEGER PRIMARY KEY, adminLevel INTEGER)')
+        self.cursorAdmin.execute("CREATE INDEX adminLevelLine_idx ON adminLineTable (adminLevel)")
+        self.cursorAdmin.execute("SELECT AddGeometryColumn('adminLineTable', 'geom', 4326, 'LINESTRING', 2)")
         
     def createRestrictionTable(self):
         self.cursorEdge.execute('CREATE TABLE restrictionTable (id INTEGER PRIMARY KEY, target INTEGER, viaPath TEXT, toCost REAL)')
@@ -339,6 +343,9 @@ class OSMDataImport(OSMDataSQLite):
 
     def addPolygonToAdminAreaTable(self, osmId, tags, adminLevel, polyString):
         self.cursorAdmin.execute('INSERT OR IGNORE INTO adminAreaTable VALUES( ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, self.encodeTags(tags), adminLevel, None))
+
+    def addLineToAdminLineTable(self, osmId, adminLevel, polyString):
+        self.cursorAdmin.execute('INSERT OR IGNORE INTO adminLineTable VALUES( ?, ?, LineFromText(%s, 4326))'%(polyString), (osmId, adminLevel))
         
     def updateAdminAreaParent(self, osmId, parent):
         self.cursorAdmin.execute('UPDATE adminAreaTable SET parent=%d WHERE osmId=%d'%(parent, osmId))
@@ -352,6 +359,7 @@ class OSMDataImport(OSMDataSQLite):
         
     def createSpatialIndexForAdminTable(self):
         self.cursorAdmin.execute('SELECT CreateSpatialIndex("adminAreaTable", "geom")')
+        self.cursorAdmin.execute('SELECT CreateSpatialIndex("adminLineTable", "geom")')
 
     def createSpatialIndexForWayTables(self):
         self.cursorWay.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
@@ -775,7 +783,7 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.parseFullAddress(tags, None, lat, lon)
                         
-            if "amenity" in tags:
+            if "amenity" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
@@ -783,7 +791,7 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-            if "shop" in tags:
+            if "shop" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
@@ -799,7 +807,7 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-            if "tourism" in tags:
+            if "tourism" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
@@ -807,13 +815,13 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-            if "place" in tags:
+            if "place" in tags and "name" in tags:
                 if tags["place"] in self.isUsablePlaceNodeType():
                     lat, lon=self.getCenterOfPolygon(refs)
                     if lat!=None and lon!=None:
                         self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
 
-            if "leisure" in tags:
+            if "leisure" in tags and "name" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getLeisureNodeTypeId(tags["leisure"])
                     if nodeType!=-1:
@@ -1093,7 +1101,7 @@ class OSMDataImport(OSMDataSQLite):
                             try:
                                 adminLevel=int(tags["admin_level"])
                                 if adminLevel!=2 and adminLevel!=4 and adminLevel!=6 and adminLevel!=8:
-                                    self.log("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
+#                                    self.log("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
                                     continue                                    
                             except ValueError:
                                 self.log("skip admin multipolygon: %d %s parse error adminLevel %s "%(osmid, tags["name"], tags["admin_level"]))
@@ -1101,7 +1109,7 @@ class OSMDataImport(OSMDataSQLite):
  
                             isAdminBoundary=True
                         
-                    if "place" in tags:
+                    if "place" in tags and "name" in tags:
                         if tags["place"] in self.isUsablePlaceNodeType():
                             isPlace=True
 
@@ -1168,22 +1176,22 @@ class OSMDataImport(OSMDataSQLite):
                             if role=="inner":
                                 wayId, refs=self.getTmpWayRefEntry(relationWayId)
                                 if wayId!=None:
-                                    allInnerRefs.append((wayId, refs, 0, 0))
+                                    allInnerRefs.append((wayId, refs))
                                 else:
                                     wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
                                     if wayId!=None:
-                                        allInnerRefs.append((wayId, refs, 0, 0))
+                                        allInnerRefs.append((wayId, refs))
                                     else:
                                         self.log("failed to resolve way %d from inner relation %d"%(relationWayId, osmid))    
                                         continue
                             else:
                                 wayId, refs=self.getTmpWayRefEntry(relationWayId)
                                 if wayId!=None:
-                                    allOuterRefs.append((wayId, refs, 0, 0))
+                                    allOuterRefs.append((wayId, refs))
                                 else:
                                     wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
                                     if wayId!=None:
-                                        allOuterRefs.append((wayId, refs, 0, 0))
+                                        allOuterRefs.append((wayId, refs))
                                     else:
                                         self.log("failed to resolve way %d from outer relation %d"%(relationWayId, osmid))    
                                         skipArea=True
@@ -1259,7 +1267,14 @@ class OSMDataImport(OSMDataSQLite):
                             # to add our own admin infor later without clashing
                             if osmid>self.highestAdminRelationNumber:
                                 self.highestAdminRelationNumber=osmid
+                                                            
                             self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
+                            
+                            for wayId, refList in allOuterRefs:
+                                coords, newRefList=self.createRefsCoords(refList)
+                                if len(coords)>=2:  
+                                    lineString=self.getGISUtils().createLineStringFromCoords(coords)
+                                    self.addLineToAdminLineTable(wayId, adminLevel, lineString)
                         else:
                             self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
                             continue

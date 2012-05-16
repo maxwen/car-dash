@@ -221,7 +221,13 @@ class OSMDataSQLite():
         adminLevel=int(x[2])  
         polyStr=x[3]
         return (osmId, tags, adminLevel, polyStr)
-    
+
+    def adminLineFromDBWithCoordsString(self, x):
+        osmId=x[0]
+        adminLevel=int(x[2])  
+        polyStr=x[3]
+        return (osmId, adminLevel, polyStr)
+        
     def adminAreaFromDBWithParent(self, x):
         osmId=x[0]
         tags=self.decodeTags(x[1])

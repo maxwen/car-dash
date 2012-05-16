@@ -27,7 +27,7 @@ class OSMStyle():
                    Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":10},
+                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":11},
                    Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Motorway Exit", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":SHOW_POI_START_ZOOM},
@@ -35,7 +35,7 @@ class OSMStyle():
                    Constants.POI_TYPE_RAILWAYSTATION:{"pixmap":"railwaystationtPixmap", "desc":"Railway Station", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_VETERIANERY:{"pixmap":"veterinaryPixmap", "desc":"Veterinary", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_CAMPING:{"pixmap":"campingPixmap", "desc":"Camping", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_PARK:{"pixmap":None, "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_PARK:{"pixmap":"parkPixmap", "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_DOG_PARK:{"pixmap":None, "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":None, "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
                    
@@ -108,6 +108,7 @@ class OSMStyle():
         self.pixmapDict["railwaystationtPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/train.png"))
         self.pixmapDict["veterinaryPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/veterinary.png"))
         self.pixmapDict["campingPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/camping.png"))
+        self.pixmapDict["parkPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/park.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
@@ -121,6 +122,7 @@ class OSMStyle():
         self.colorDict["adminAreaColor"]=QColor(0, 0, 0)
         self.colorDict["warningBackgroundColor"]=QColor(255, 0, 0, 200)
         self.colorDict["naturalColor"]=QColor(0x8d, 0xc5, 0x6c)
+        self.colorDict["forestAreaColor"]=QColor(0x8d, 0xc5, 0x6c)
         self.colorDict["woodAreaColor"]=QColor(0xae, 0xd1, 0xa0)
         self.colorDict["tourismUndefinedColor"]=Qt.red
         self.colorDict["tourismCampingAreaColor"]=QColor(0xcc, 0xff, 0x99)
@@ -147,6 +149,8 @@ class OSMStyle():
         self.colorDict["cliffColor"]=QColor(Qt.darkGray)
         self.colorDict["militaryColor"]=QColor(0xff, 0x55, 0x55)
         self.colorDict["leisureUndefinedColor"]=Qt.red
+        self.colorDict["farmyardColor"]=QColor(0xdd, 0xbf, 0x92)
+        self.colorDict["rockColor"]=QColor(0xc1, 0xbf, 0xbf)
         
         self.initStreetColors()
         self.initBrush()
@@ -258,7 +262,7 @@ class OSMStyle():
         
         pen=QPen()
         pen.setColor(self.getStyleColor("militaryColor"))
-        pen.setWidth(3.0)
+        pen.setWidth(2.0)
         self.penDict["militaryPen"]=pen
                               
     def getStylePen(self, key):
@@ -554,6 +558,8 @@ class OSMStyle():
         self.brushDict["amenityParkingArea"]=QBrush(self.getStyleColor("amenityParkingAreaColor"), Qt.SolidPattern)
         self.brushDict["leisureUndefined"]=QBrush(self.getStyleColor("leisureUndefinedColor"), Qt.SolidPattern)
         self.brushDict["villageGreenArea"]=QBrush(self.getStyleColor("villageGreenAreaColor"), Qt.SolidPattern)
+        self.brushDict["farmyardArea"]=QBrush(self.getStyleColor("farmyardColor"), Qt.SolidPattern)
+        self.brushDict["rockArea"]=QBrush(self.getStyleColor("rockColor"), Qt.SolidPattern)
 
         brush=QBrush()
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/scrub.png")))
@@ -565,7 +571,7 @@ class OSMStyle():
         brush.setStyle(Qt.TexturePattern)        
         self.brushDict["forestPatternArea"]=brush
         
-        self.brushDict["forestArea"]=QBrush(self.getStyleColor("naturalColor"), Qt.SolidPattern)
+        self.brushDict["forestArea"]=QBrush(self.getStyleColor("forestAreaColor"), Qt.SolidPattern)
         self.brushDict["woodArea"]=QBrush(self.getStyleColor("woodAreaColor"), Qt.SolidPattern)
         
         brush=QBrush()
@@ -592,6 +598,22 @@ class OSMStyle():
         brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/military.png")))
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["militaryPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/quarry.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["quarryPatternArea"]=brush
+        
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/rock.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["rockPatternArea"]=brush
+
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/nature_reserve.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["natureReservePatternArea"]=brush
+
 
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -789,7 +811,7 @@ class OSMStyle():
             brush=self.getStyleBrush("residential")
         elif landuse=="commercial" or landuse=="retail":
             brush=self.getStyleBrush("commercial")
-        elif landuse=="field" or landuse=="farmland" or landuse=="farm" or landuse=="farmyard":
+        elif landuse=="field" or landuse=="farmland" or landuse=="farm":
             brush=self.getStyleBrush("farm")
         elif landuse=="grass" or landuse=="meadow" or landuse=="grassland":
             brush=self.getStyleBrush("grass")
@@ -808,7 +830,15 @@ class OSMStyle():
             brush=self.getStyleBrush("villageGreenArea")
         elif landuse=="military":
             brush=self.getStyleBrush("militaryPatternArea")
-            pen=self.getStylePen("militaryPen")                   
+            pen=self.getStylePen("militaryPen")          
+        elif landuse=="farmyard":
+            brush=self.getStyleBrush("farmyardArea")
+        elif landuse=="quarry":
+            if zoom>=11:
+                brush=self.getStyleBrush("quarryPatternArea")
+            else:
+                brush=self.getStyleBrush("rockArea")
+
         elif landuse in Constants.LANDUSE_NATURAL_TYPE_SET:
             brush=self.getStyleBrush("natural")
         elif landuse in Constants.LANDUSE_WATER_TYPE_SET:
@@ -829,19 +859,19 @@ class OSMStyle():
                 pen.setWidth(self.getWaterwayPenWidthForZoom(zoom, tags))                      
             
         elif "natural" in tags:
-            landuse=None
-            if "landuse" in tags:
-                landuse=tags["landuse"]
-                
             natural=tags["natural"]
-            if natural=="scrub":
+            if natural=="scrub" or natural=="fell" or natural=="heath":
                 if zoom>=13:
                     brush=self.getStyleBrush("scrubPatternArea")
+                else:
+                    brush=self.getStyleBrush("natural")
                     
             elif natural=="marsh" or natural=="wetland" or natural=="mud":
                 if zoom>=13:
                     brush=self.getStyleBrush("marshPatternArea")
-                    
+                else:
+                    brush=self.getStyleBrush("natural")
+                   
             elif natural=="wood":
                 brush=self.getStyleBrush("woodArea")
             
@@ -851,7 +881,13 @@ class OSMStyle():
             
             elif natural=="cliff":
                 pen=self.getStylePen("cliffPen")
-                
+
+            elif natural=="rock" or natural=="scree":
+                if zoom>=13:
+                    brush=self.getStyleBrush("rockPatternArea")
+                else:
+                    brush=self.getStyleBrush("rockArea")
+
             else:
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
                     brush=self.getStyleBrush("water")
@@ -891,6 +927,12 @@ class OSMStyle():
         pen=Qt.NoPen
         
         leisure=tags["leisure"]
-        brush=self.getStyleBrush("leisureUndefined")
+        if leisure=="nature_reserve":
+            if zoom>=13:
+                brush=self.getStyleBrush("natureReservePatternArea")
+        elif leisure=="park" or leisure=="dog_park":
+            brush=self.getStyleBrush("natural")
+        else:
+            brush=self.getStyleBrush("leisureUndefined")
 
         return brush, pen  
