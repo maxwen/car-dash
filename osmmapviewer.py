@@ -1524,7 +1524,7 @@ class QtOSMWidget(QWidget):
     
     def getVisibleAdminLines(self, bbox):
         start=time.time()
-        adminLineList, adminLineIdSet=osmParserData.getAdminLinesInBboxWithGeom(bbox, 0.0, self.getAdminLevelList())
+        adminLineList, adminLineIdSet=osmParserData.getAdminLinesInBboxWithGeom(bbox, 0.0, Constants.ADMIN_LEVEL_DISPLAY_SET)
         
         if WITH_TIMING_DEBUG==True:
             print("getAdminLinesInBboxWithGeom: %f"%(time.time()-start))
@@ -1543,9 +1543,15 @@ class QtOSMWidget(QWidget):
 
     def displayAdminLines(self):
         pen=QPen()
-        pen.setStyle(Qt.DotLine)
+        pen.setStyle(Qt.DashDotLine)
         pen.setColor(Qt.blue)
-        pen.setWidth(2.0)
+        if self.map_zoom>17:
+            pen.setWidth(4.0)
+        elif self.map_zoom>15:
+            pen.setWidth(3.0)
+        else:
+            pen.setWidth(2.0)
+            
         
         for line in self.adminLineList:
             self.displayAdminLineWithCache(line, pen)
@@ -2214,12 +2220,9 @@ class QtOSMWidget(QWidget):
                 pen.setWidth(self.style.getAerowayPenWidthForZoom(self.map_zoom, tags))                                     
                 self.displayPolygonWithCache(self.areaPolygonCache, area, pen, brush)
 
-    def getAdminLevelList(self):
-        return Constants.ADMIN_LEVEL_SET
     
     def getAdminBoundaries(self, lat, lon):
-        adminLevelList=[2, 4, 6, 8]
-        resultList=osmParserData.getAdminAreasOnPointWithGeom(lat, lon, 0.0, adminLevelList, True)
+        resultList=osmParserData.getAdminAreasOnPointWithGeom(lat, lon, 0.0, Constants.ADMIN_LEVEL_SET, True)
         resultList.reverse()
 
         for area in resultList:

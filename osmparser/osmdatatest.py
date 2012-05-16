@@ -89,11 +89,19 @@ class OSMDataTest(OSMDataAccess):
 
     def testAdminAreaTable(self):
         self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
-        allentries=self.cursorArea.fetchall()
+        allentries=self.cursorAdmin.fetchall()
         for x in allentries:
             osmId, tags, adminLevel, parent=self.adminAreaFromDBWithParent(x)
             self.log("%d %s"%(osmId, tags["name"]))
 #            self.log("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
+
+    def testAdminLineTable(self):
+        self.cursorAdmin.execute('SELECT osmId, adminLevel, AsText(geom) FROM adminLineTable')
+        allentries=self.cursorAdmin.fetchall()
+        for x in allentries:
+            print(x)
+            osmId, adminLevel, polyString=self.adminLineFromDBWithCoordsString(x)
+
 
     def testCoordsTable(self):
 #        self.cursorCoords.execute('SELECT * from coordsTable WHERE refId=98110819')
@@ -219,7 +227,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-    p.testAreaTable()
+#    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -271,6 +279,7 @@ def main(argv):
 #    p.resolveAdminAreas()
 #    p.resolveAddresses(False)
 #    p.testAdminAreaTable()
+    p.testAdminLineTable()
 
 #    self.log(p.bu.getPolyCountryList())
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))

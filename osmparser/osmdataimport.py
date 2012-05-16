@@ -1100,7 +1100,7 @@ class OSMDataImport(OSMDataSQLite):
                             
                             try:
                                 adminLevel=int(tags["admin_level"])
-                                if adminLevel!=2 and adminLevel!=4 and adminLevel!=6 and adminLevel!=8:
+                                if not adminLevel in Constants.ADMIN_LEVEL_SET:
 #                                    self.log("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
                                     continue                                    
                             except ValueError:
@@ -1204,6 +1204,9 @@ class OSMDataImport(OSMDataSQLite):
                         self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
+                    allOuterRefsCopy=list()
+                    allOuterRefsCopy.extend(allOuterRefs)
+                    
                     outerRefRings=self.getGISUtils().mergeRelationRefs(allOuterRefs, self)
                     innerRefRings=self.getGISUtils().mergeRelationRefs(allInnerRefs, self)
 
@@ -1270,7 +1273,7 @@ class OSMDataImport(OSMDataSQLite):
                                                             
                             self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
                             
-                            for wayId, refList in allOuterRefs:
+                            for wayId, refList in allOuterRefsCopy:
                                 coords, newRefList=self.createRefsCoords(refList)
                                 if len(coords)>=2:  
                                     lineString=self.getGISUtils().createLineStringFromCoords(coords)
@@ -2666,7 +2669,9 @@ class OSMDataImport(OSMDataSQLite):
     def resolveAdminAreas(self):
         self.log("resolve admin area relations")
 
-        adminLevelList=[8, 6, 4, 2]
+        adminLevelList=list()
+        adminLevelList.extend(Constants.ADMIN_LEVEL_SET)
+        adminLevelList.reverse()
         
         adminList=self.getAllAdminAreas(adminLevelList, True)
         
