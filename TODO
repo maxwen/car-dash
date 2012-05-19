@@ -183,6 +183,10 @@ DONE
  -leisure park
  DONE
  
+TODO: place can also be in a relation
+TODO: ways with only place and nothing more
+-to resolve unneded place tage we need to store the area
+DONE
 
 ------------------------------------------------------------------
  
@@ -212,6 +216,7 @@ TODO: create faster create edge table nodes
  can be negative numbers until next edge is selected
  
  TODO: fix tunnel mode
+ use heading info from ways for better prediction
  
  TODO parser
  -pbf parser
@@ -263,10 +268,6 @@ TODO: admin area display is only geographic not politically
 
 TODO: points are not stored with resolved lat, lon
 -can multiple resolve calls return different resolved pos?
-
-TODO: place can also be in a relation
-TODO: ways with only place and nothing more
--to resolve unneded place tage we need to store the area
 
    TODO:
   landuse overrides natural?

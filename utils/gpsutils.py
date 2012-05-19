@@ -45,7 +45,7 @@ def getGPSUpdateThread(parent):
     return None
 
 class GPSData():
-    def __init__(self, time=None, lat=None, lon=None, track=None, speed=None, altitude=None, predicted=False):
+    def __init__(self, time=None, lat=None, lon=None, track=None, speed=None, altitude=None, predicted=False, satellitesInUse=0):
         self.time=time
         self.lat=lat
         self.lon=lon
@@ -53,6 +53,7 @@ class GPSData():
         self.speed=speed
         self.altitude=altitude
         self.predicted=predicted
+        self.satellitesInUse=satellitesInUse
         
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
@@ -80,31 +81,34 @@ class GPSData():
     def getAltitude(self):
         return self.altitude
     
+    def getSatelitesInUse(self):
+        return self.satellitesInUse
+    
     def fromTrackLogLine(self, line):
         lineParts=line.split(":")
         self.time=time.time()
-        if len(lineParts)==6:
+        if len(lineParts)>=6:
             self.lat=float(lineParts[1])
             self.lon=float(lineParts[2])
             self.track=int(lineParts[3])
             self.speed=int(lineParts[4])
-            if lineParts[5]!="\n":
-                self.altitude=int(lineParts[5])
-            else:
-                self.altitude=0
+            self.altitude=int(lineParts[5])
+            if len(lineParts)==7:
+                self.satellitesInUse=int(lineParts[6])
         else:
             self.lat=0.0
             self.lon=0.0
             self.track=0
             self.speed=0
             self.altitude=0
+            self.satellitesInUse=0
             
     def createTimeStamp(self):
         stamp=datetime.fromtimestamp(self.time)
         return "".join(["%02d.%02d.%02d.%06d"%(stamp.hour, stamp.minute, stamp.second, stamp.microsecond)])
 
     def toLogLine(self):
-        return "%s:%f:%f:%d:%d:%d"%(self.createTimeStamp(), self.lat, self.lon, self.track, self.speed, self.altitude)
+        return "%s:%f:%f:%d:%d:%d:%d"%(self.createTimeStamp(), self.lat, self.lon, self.track, self.speed, self.altitude, self.satellitesInUse)
 
     def __repr__(self):
         return self.toLogLine()
@@ -257,13 +261,13 @@ class GPSUpateWorkerGPSD(QThread):
         self.updateGPSThreadState(gpsStoppedState)
         self.updateGPSDisplay(None)
 
-class GpsObject():
+class GpsObject():        
     def __init__(self, port):
         self.gps_device = nmea.gps.Gps(port, callbacks={
             #'fix_update': self.__fix_update,
             'transit_update': self.__transit_update,
             #'satellite_update': self.__satellite_update,
-            #'satellite_status_update': self.__satellite_status_update,
+            'satellite_status_update': self.__satellite_status_update,
             'log_error': self.__log_error
 
         })
@@ -272,6 +276,8 @@ class GpsObject():
         self.track=0
         self.speed=0
         self.altitude=0.0
+        self.satellitesInUse=0
+        self.strongSatelites=0
 
     def __log_error(self, msg, info):
         pass
@@ -290,12 +296,19 @@ class GpsObject():
         pass
 
     def __satellite_status_update(self, gps_device):
-        pass
+#        print("use %s"%gps_device.satellitesInUse)
+#        print("sat %s"%gps_device.satellites.values())
+        self.satellitesInUse=len(gps_device.satellitesInUse)
+        self.strongSatelites=0
+        for sat in gps_device.satellites.values():
+            if sat.in_use==True:
+                if sat.snr>=35:
+                    self.strongSatelites=self.strongSatelites+1
     
     def createGPSData(self):
         timeStamp=time.time()            
-        return GPSData(timeStamp, self.lat, self.lon, self.track, self.speed, self.altitude)
-        
+        return GPSData(timeStamp, self.lat, self.lon, self.track, self.speed, self.altitude, False, self.strongSatelites)
+    
 class GPSUpateWorkerNMEA(QThread):
     def __init__(self, parent): 
         QThread.__init__(self, parent)

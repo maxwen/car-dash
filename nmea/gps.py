@@ -158,7 +158,14 @@ class Gps(object):
         self.dop = (pdop, hdop, vdop)
 
         # Update sats in use
-        self.satellitesInUse = sentence.get_list(2, 12)
+        satellitesInUse = sentence.get_list(2, 12)
+        validEntries=[]
+        for nr in satellitesInUse:
+            if nr!='':
+                validEntries.append(nr)
+                
+        self.satellitesInUse=validEntries
+              
         for prn, sat in self.satellites.items():
             sat.in_use = prn in self.satellitesInUse
 

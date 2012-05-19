@@ -523,6 +523,7 @@ class QtOSMWidget(QWidget):
         self.stop=True
         self.isInTunnel=False
         self.altitude=0
+        self.satelitesInUse=0
         self.currentDisplayBBox=None
         self.show3D=True
 #        self.showBackgroundTiles=True
@@ -1470,14 +1471,12 @@ class QtOSMWidget(QWidget):
         
         lat=self.osmutils.rad2deg(self.gps_rlat)
         lon=self.osmutils.rad2deg(self.gps_rlon)
-        speed=self.speed
-        altitude=self.altitude
         track=self.track
         if track==None:
             track=0
         
         self.painter.setPen(self.style.getStylePen("textPen"))
-        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm %3d"%(lat, lon, speed, altitude, track))
+        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm %3d %2d"%(lat, lon, self.speed, self.altitude, track, self.satelitesInUse))
         
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -2799,12 +2798,13 @@ class QtOSMWidget(QWidget):
         if gpsData==None:
             return 
                         
-        if gpsData.isValid():            
+        if gpsData.isValid():    
             lat=gpsData.getLat()
             lon=gpsData.getLon()
             track=gpsData.getTrack()
             self.speed=gpsData.getSpeed()
             self.altitude=gpsData.getAltitude()
+            self.satelitesInUse=gpsData.getSatelitesInUse()
 
             if debug==True:
                 self.track=track
@@ -3164,7 +3164,6 @@ class QtOSMWidget(QWidget):
                 defaultPointTag=self.getDefaultPositionTag(name, nameRef)
                 gpsPoint.name=defaultPointTag
                 self.startPoint=gpsPoint
-                    
                 self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
             else:
                 self.showError("Error", "Route has invalid routing points")
@@ -3374,10 +3373,11 @@ class QtOSMWidget(QWidget):
                 self.showError("Error", "Failed to resolve way for way point")
         
     def showPointOnMap(self, point):
-        if self.map_zoom<15:
-            self.osm_map_set_zoom(15)
-
-        self.osm_center_map_to_position(point.getPos()[0], point.getPos()[1])       
+        if self.drivingMode==False:
+            if self.map_zoom<15:
+                self.osm_map_set_zoom(15)
+    
+            self.osm_center_map_to_position(point.getPos()[0], point.getPos()[1])       
 
     def getDefaultPositionTag(self, name, nameRef):
         if nameRef!=None and name!=None:
@@ -3453,12 +3453,6 @@ class QtOSMWidget(QWidget):
             self.currentCoords=coords
 
             if self.drivingMode==True and self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                                                       
-                if self.routingStarted==False:
-                    # start route when start point reached
-                    if self.currentStartPointReached(lat, lon):
-                        print("start route")
-                        self.routingStarted=True
-
                 if self.routingStarted==True:                    
                     if edgeId!=self.currentEdgeList[0]:
                         # it is possible that edges are "skipped"
@@ -3497,8 +3491,8 @@ class QtOSMWidget(QWidget):
                                 self.recalcRoute(lat, lon, edgeId)
                                 return
                             else:
-                                self.recalcTrigger=self.recalcTrigger+1
-                                self.routeInfo=(98, "Please turn", 98, 0)
+#                                self.recalcTrigger=self.recalcTrigger+1
+#                                self.routeInfo=(98, "Please turn", 98, 0)
                                 self.update()
                                 return
                             
@@ -3561,8 +3555,6 @@ class QtOSMWidget(QWidget):
             
 #    def calcTunnelData(self, edgeId, ref):
 #        
-###                            ref=osmParserData.getNearerRefToPoint(lat, lon, startRef, endRef)
-###                                self.startTunnelMode(edgeId, ref)
 #
 #        tunnelSpeed=self.speed        
 #        tunnelAltitude=self.altitude
@@ -3676,13 +3668,11 @@ class QtOSMWidget(QWidget):
             self.currentTargetPoint=self.currentRoute.getTargetPoint(self.currentRoutePart)
 #            print(self.currentEdgeList)
 #            print(self.currentTrackList)
-
-            if self.routeRecalculated==False:
-                self.routingStarted=False
                 
             # display inital distances
             # simply use start point as ref
             self.calcRouteDistances(self.startPoint.getPos()[0], self.startPoint.getPos()[1])
+            self.routingStarted=True
             self.update()       
 
     def switchToNextRoutePart(self):
