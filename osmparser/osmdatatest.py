@@ -60,13 +60,13 @@ class OSMDataTest(OSMDataAccess):
             self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
-        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_NATURAL))
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            tags=self.decodeTags(x[3])
-            if "natural" in tags:
-                if tags["natural"]=="rock":
-                    print("%s %s"%(x[0],tags))
+#        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_NATURAL))
+#        allentries=self.cursorArea.fetchall()
+#        for x in allentries:
+#            tags=self.decodeTags(x[3])
+#            if "natural" in tags:
+#                if tags["natural"]=="rock":
+#                    print("%s %s"%(x[0],tags))
 
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
@@ -80,10 +80,11 @@ class OSMDataTest(OSMDataAccess):
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
 
-#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable')
-#        allentries=self.cursorArea.fetchall()
-#        for x in allentries:
-#            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE osmId=101929162')
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
+            print(tags)
 #            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
 #                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
@@ -268,7 +269,7 @@ def main(argv):
 #    p.vacuumGlobalDB()
 #    p.testPOIRefTable()
 #    p.mergeEqualWayEntries()
-    
+    p.testAreaTable()
 #    p.mergeWayEntries()
 
 #    p.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
@@ -279,7 +280,7 @@ def main(argv):
 #    p.resolveAdminAreas()
 #    p.resolveAddresses(False)
 #    p.testAdminAreaTable()
-    p.testAdminLineTable()
+#    p.testAdminLineTable()
 
 #    self.log(p.bu.getPolyCountryList())
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))

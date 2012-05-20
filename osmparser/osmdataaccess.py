@@ -104,7 +104,7 @@ class Constants():
     PLACE_NODES_TYPE_SET=set(["city", "village", "town", "suburb", "hamlet"])
     
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
-    REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure"])
+    REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure", "bridge", "tunnel"])
     REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
     
     PARKING_LIMITATIONS_DICT={"access":"yes",

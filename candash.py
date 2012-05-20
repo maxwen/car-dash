@@ -676,7 +676,8 @@ class CANMonitor(QMainWindow):
 #        self.debugLogWidget.addLine("test")
 
         self.createCANIdEntry(mainTabLayout, 0x353, "0", "Drehzahl", QLCDNumber.Dec)
-        self.createCANIdEntry(mainTabLayout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
+#        self.createCANIdEntry(mainTabLayout, 0x353, "1", "Öltemperatur", QLCDNumber.Dec)
+        self.createCANIdEntry(mainTabLayout, 0x353, "1", "Kuehlwasser Temperatur", QLCDNumber.Dec)
         self.createCANIdEntry(mainTabLayout, 0x351, "0", "Geschwindigkeit", QLCDNumber.Dec)
         self.createCANIdEntry(mainTabLayout, 0x351, "1", "Außentemperatur", QLCDNumber.Dec)
         self.createCANIdEntry(miscTabLayout, 0x635, "0", "Licht, Klemme 58d", QLCDNumber.Dec)

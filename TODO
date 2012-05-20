@@ -269,6 +269,16 @@ TODO: admin area display is only geographic not politically
 TODO: points are not stored with resolved lat, lon
 -can multiple resolve calls return different resolved pos?
 
-   TODO:
-  landuse overrides natural?
+TODO:
 landuse=meadow+natural=wetland inside landuse=forest  1905113
+-> if natural paint landuse before
+DONE
+
+TODO: outer ways of relations could be already stored in parse_ways
+-check and delete them in parse_relations
+DONE
+-> what to do if the type and/or tags are different
+
+TODO: relation way without inner or outer tag
+-need to calculate
+DONE

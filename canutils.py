@@ -51,7 +51,12 @@ class CANDecoder:
         if data[3]==0:
             return 0
         return data[3] - 80
-    
+
+    def calcWaterTemp(self, data):
+        if data[3]==0:
+            return 0
+        return data[3] - 48
+        
     def calcVelocity(self, data):
         return ((data[2] << 8) + data[1] - 1) / 190
     
@@ -119,7 +124,8 @@ class CANDecoder:
         #Byte 3:
         #- Drehzahl oberer Wert OW
         #Byte 4
-        #- Ölthemperatur
+        #- Ölthemperatur -80dec
+        #- Kuehlmittel Temperatur -48dec
         #Byte 5:
         #- Unbekannt
         #Byte 6:
@@ -127,7 +133,8 @@ class CANDecoder:
             rpm=self.calcRpm(data)
             self.widget.displayIntValue(canId, "0", rpm, "%d")
             self.widget.setValueDashDisplayRPM(rpm)
-            self.widget.displayIntValue(canId, "1", self.calcOilTemp(data), "%d")
+#            self.widget.displayIntValue(canId, "1", self.calcOilTemp(data), "%d")
+            self.widget.displayIntValue(canId, "1", self.calcWaterTemp(data), "%d")
 
         elif canId == 0x351:
         #ID 0x351, 8 Bytes

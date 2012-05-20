@@ -333,6 +333,17 @@ class OSMDataImport(OSMDataSQLite):
             self.cursorEdge.execute('INSERT INTO edgeTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (self.edgeId, startRef, endRef, length, wayId, 0, 0, cost, reverseCost, streetInfo))
             self.edgeId=self.edgeId+1
         
+    def getAreaWithId(self, osmId, areaId):
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE osmId=%d AND areaId=%d'%(osmId, areaId))
+        allentries=self.cursorArea.fetchall()
+        if len(allentries)==1:
+            return self.areaFromDBWithCoordsString(allentries[0])
+        
+        return (None, None, None, None, None)
+
+    def deleteAreaWithId(self, osmId, areaId):
+        self.cursorArea.execute('DELETE FROM areaTable WHERE osmId=%d AND areaId=%d'%(osmId, areaId))
+
     def addPolygonToAreaTable(self, osmId, areaId, areaType, tags, polyString, layer):
         tags=self.stripUnneededAreaTags(tags)
         self.cursorArea.execute('INSERT OR IGNORE INTO areaTable VALUES( ?, ?, ?, ?, ?, MultiPolygonFromText(%s, 4326))'%(polyString), (osmId, areaId, areaType, self.encodeTags(tags), layer))
@@ -1153,13 +1164,32 @@ class OSMDataImport(OSMDataSQLite):
                         isPlace=False
                         
                     if isPlace==False and isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isAdminBoundary==False and isBuilding==False and isLanduse==False and isNatural==False:
-                        if len(tags)!=1:
-                            self.log("skip multipolygon: %d %s unknwon type"%(osmid, tags))
+#                        if len(tags)!=1:
+#                            self.log("skip multipolygon: %d %s unknwon type"%(osmid, tags))
                         continue
-                                            
-                    # (59178604, 'way', 'outer')
+                       
+                    areaType=None
+                    if isNatural==True:
+                        areaType=Constants.AREA_TYPE_NATURAL
+                    elif isLanduse==True:
+                        areaType=Constants.AREA_TYPE_LANDUSE
+                    elif isBuilding==True:
+                        areaType=Constants.AREA_TYPE_BUILDING
+                    elif isAeroway==True:
+                        areaType=Constants.AREA_TYPE_AEROWAY
+                    elif isTourism==True:
+                        areaType=Constants.AREA_TYPE_TOURISM
+                    elif isAmenity==True:
+                        areaType=Constants.AREA_TYPE_AMENITY
+                    elif isLeisure==True:
+                        areaType=Constants.AREA_TYPE_LEISURE
+                    elif isPlace==True:
+                        areaType=Constants.AREA_TYPE_PLACE
+                     
+                    # (59178604, 'way', 'outer', '')
                     allOuterRefs=list()
                     allInnerRefs=list()
+                    allUnknownRefs=list()
                     skipArea=False
                         
                     for way in ways:
@@ -1168,40 +1198,29 @@ class OSMDataImport(OSMDataSQLite):
                         role=way[2]
                         
                         if memberType=="relation":
-                            self.log("super relation %d %s"%(osmid, tags))
+#                            self.log("super relation %d %s"%(osmid, tags))
                             skipArea=True
                             break
 
                         if memberType=="way":
+                            wayId, refs=self.getTmpWayRefEntry(relationWayId)
+                            if wayId==None:
+                                wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
+                                if wayId==None:
+                                    continue                                                                                    
+
                             if role=="inner":
-                                wayId, refs=self.getTmpWayRefEntry(relationWayId)
-                                if wayId!=None:
-                                    allInnerRefs.append((wayId, refs))
-                                else:
-                                    wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
-                                    if wayId!=None:
-                                        allInnerRefs.append((wayId, refs))
-                                    else:
-                                        self.log("failed to resolve way %d from inner relation %d"%(relationWayId, osmid))    
-                                        continue
+                                allInnerRefs.append((wayId, refs))
+                            elif role=="outer":
+                                allOuterRefs.append((wayId, refs))
                             else:
-                                wayId, refs=self.getTmpWayRefEntry(relationWayId)
-                                if wayId!=None:
-                                    allOuterRefs.append((wayId, refs))
-                                else:
-                                    wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
-                                    if wayId!=None:
-                                        allOuterRefs.append((wayId, refs))
-                                    else:
-                                        self.log("failed to resolve way %d from outer relation %d"%(relationWayId, osmid))    
-                                        skipArea=True
-                                        break
-                    
+                                allUnknownRefs.append((wayId, refs))
+
                     if skipArea==True:
                         continue
                     
                     if len(allOuterRefs)==0:
-                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
+#                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
                     allOuterRefsCopy=list()
@@ -1209,61 +1228,65 @@ class OSMDataImport(OSMDataSQLite):
                     
                     outerRefRings=self.getGISUtils().mergeRelationRefs(allOuterRefs, self)
                     innerRefRings=self.getGISUtils().mergeRelationRefs(allInnerRefs, self)
-
+                    unknownRefRings=self.getGISUtils().mergeRelationRefs(allUnknownRefs, self)
+                    unknownRefRingsCopy=list()
+                    unknownRefRingsCopy.extend(unknownRefRings)
                     # convert to multipolygon
                     polyString="'MULTIPOLYGON("
                     for refRingEntry in outerRefRings:                                
                         refs=refRingEntry["refs"]
                         if refs[0]!=refs[-1]:
                             self.log("skip outer multipolygon: %d refs[0]!=refs[-1]"%(osmid))
-                            skipArea=True
-                            break
+                            continue
                         
                         cPolygonOuter=refRingEntry["polygon"]
                         if cPolygonOuter==None:
                             self.log("skip outer multipolygon: %d invalid Polygon"%(osmid))
-                            skipArea=True
-                            break
+                            continue
                         
                         newRefList=refRingEntry["newRefs"]
                         outerCoords=refRingEntry["coords"]
                         if len(refs)!=len(newRefList):
                             self.log("skip outer multipolygon: %d coords missing"%(osmid))
-                            skipArea=True
-                            break
+                            continue
                         
                         innerCoords=list()
                         if len(innerRefRings)!=0:
-                            for innerRefRingEntry in innerRefRings:
-                                innerRefs=innerRefRingEntry["refs"]
-                                if innerRefs[0]!=innerRefs[-1]:
-                                    self.log("skip inner multipolygon: %d refs[0]!=refs[-1]"%(osmid))
-                                    continue
+                            self.resolveInnerRings(osmid, innerRefRings, innerCoords, cPolygonOuter, None)
 
-                                innerNewRefs=innerRefRingEntry["newRefs"]
-                                if len(innerRefs)!=len(innerNewRefs):
-                                    self.log("skip inner multipolygon: %d coords missing"%(osmid))
-                                    continue
-                                
-                                cPolygonInner=innerRefRingEntry["polygon"]
-                                if cPolygonInner==None:
-                                    self.log("skip inner multipolygon: %d invalid Polygon"%(osmid))
-                                    continue
-                                
-                                if not cPolygonOuter.covers(cPolygonInner):
-                                    continue
-                                
-                                innerCoords.append(innerRefRingEntry["coords"])
-                                
+                        # find inner from unknown
+                        if len(unknownRefRings)!=0:
+                            self.resolveInnerRings(osmid, unknownRefRings, innerCoords, cPolygonOuter, unknownRefRingsCopy)
+                        
+                        self.removeEqualWayEntryOfRelation(osmid, areaType, refRingEntry)
+
                         polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
-
                         polyString=polyString+polyStringPart
-                                                        
+                    
+                    # remaining unknown must be outer rings
+                    if len(unknownRefRingsCopy)!=0:                                 
+                        for unknownRefRingEntry in unknownRefRingsCopy:                                
+                            refs=unknownRefRingEntry["refs"]
+                            if refs[0]!=refs[-1]:
+                                continue
+                            
+                            cPolygonOuter=unknownRefRingEntry["polygon"]
+                            if cPolygonOuter==None:
+                                continue
+                            
+                            newRefList=unknownRefRingEntry["newRefs"]
+                            outerCoords=unknownRefRingEntry["coords"]
+                            if len(refs)!=len(newRefList):
+                                continue
+                            
+                            self.removeEqualWayEntryOfRelation(osmid, areaType, unknownRefRingEntry)
+
+                            self.log("add unknown relation member %d as outer to relation %d"%(unknownRefRingEntry["wayId"], osmid))
+                            polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, list())
+                            polyString=polyString+polyStringPart
+                        
                     polyString=polyString[:-1]
                     polyString=polyString+")'"
-
-                    if skipArea==True:
-                        continue
                     
                     if isAdminBoundary==True:
                         if adminLevel!=None:
@@ -1281,25 +1304,7 @@ class OSMDataImport(OSMDataSQLite):
                         else:
                             self.log("skip admin multipolygon: %d %s adminLevel=None"%(osmid, tags["name"]))
                             continue
-                    else:    
-                        areaType=None
-                        if isNatural==True:
-                            areaType=Constants.AREA_TYPE_NATURAL
-                        elif isLanduse==True:
-                            areaType=Constants.AREA_TYPE_LANDUSE
-                        elif isBuilding==True:
-                            areaType=Constants.AREA_TYPE_BUILDING
-                        elif isAeroway==True:
-                            areaType=Constants.AREA_TYPE_AEROWAY
-                        elif isTourism==True:
-                            areaType=Constants.AREA_TYPE_TOURISM
-                        elif isAmenity==True:
-                            areaType=Constants.AREA_TYPE_AMENITY
-                        elif isLeisure==True:
-                            areaType=Constants.AREA_TYPE_LEISURE
-                        elif isPlace==True:
-                            areaType=Constants.AREA_TYPE_PLACE
-                            
+                    else:                                
                         if areaType!=None:
                             self.addPolygonToAreaTable(osmid, 1, areaType, tags, polyString, layer)
                    
@@ -1330,7 +1335,47 @@ class OSMDataImport(OSMDataSQLite):
                                 if storedRefId!=None:
                                     tags["deviceRef"]=deviceRef
                                     self.addToPOIRefTable(fromRefId, 0, lat, lon, tags, Constants.POI_TYPE_ENFORCEMENT_WAYREF, 0)
-                   
+          
+    def resolveInnerRings(self, osmid, refRings, innerCoords, cPolygonOuter, unknownRefRingsCopy):
+        for refRingEntry in refRings:
+            refs=refRingEntry["refs"]
+            if refs[0]!=refs[-1]:
+                self.log("skip multipolygon part %d: %d refs[0]!=refs[-1]"%(refRingEntry["wayId"], osmid))
+                continue
+
+            newRefs=refRingEntry["newRefs"]
+            if len(refs)!=len(newRefs):
+                self.log("skip multipolygon part %d: %d coords missing"%(refRingEntry["wayId"], osmid))
+                continue
+            
+            cPolygonInner=refRingEntry["polygon"]
+            if cPolygonInner==None:
+                self.log("skip multipolygon part %d: %d invalid Polygon"%(refRingEntry["wayId"], osmid))
+                continue
+            
+            if not cPolygonOuter.covers(cPolygonInner):
+                continue
+            
+            if unknownRefRingsCopy!=None:
+                self.log("add unknown relation member %d as inner to relation %d"%(refRingEntry["wayId"], osmid))
+                unknownRefRingsCopy.remove(refRingEntry)
+
+            innerCoords.append(refRingEntry["coords"])
+         
+    def removeEqualWayEntryOfRelation(self, osmid, areaType, refRingEntry):
+        # check if an outer relation entry that is an area is already
+        # stored in parse_ways. We can delete the way entry then
+        # TODO: what to do if the type and/or tags are different
+        if areaType!=None and len(refRingEntry["wayIdList"])==1:
+            wayId=refRingEntry["wayIdList"][0]
+            storedWayId, storedType, _, _, _=self.getAreaWithId(wayId, 0)
+            if storedWayId!=None:
+                if storedType==areaType:
+                    self.log("delete way area %d relation %d has outer way with same type"%(wayId, osmid))
+                    self.deleteAreaWithId(wayId, 0)
+                else:
+                    self.log("way %d of relation %d already stored as area with different type"%(wayId, osmid))
+
     def getStreetNameInfo(self, tags, streetTypeId):
 
         name=None

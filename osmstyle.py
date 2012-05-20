@@ -615,6 +615,11 @@ class OSMStyle():
         brush.setStyle(Qt.TexturePattern)
         self.brushDict["natureReservePatternArea"]=brush
 
+        brush=QBrush()
+        brush.setTexture(QPixmap(os.path.join(getImageRoot(), "patterns/beach.png")))
+        brush.setStyle(Qt.TexturePattern)
+        self.brushDict["beachPatternArea"]=brush
+
 
     def getPixmapForNodeType(self, nodeType):
         if nodeType in self.POI_INFO_DICT.keys():
@@ -889,6 +894,9 @@ class OSMStyle():
                 else:
                     brush=self.getStyleBrush("rockArea")
 
+            elif natural=="beach":
+                if zoom>=13:
+                    brush=self.getStyleBrush("beachPatternArea")
             else:
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
                     brush=self.getStyleBrush("water")
