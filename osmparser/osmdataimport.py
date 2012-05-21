@@ -58,6 +58,7 @@ class OSMDataImport(OSMDataSQLite):
         self.disableMemoryDB=True
         self.addressCache=set()
         self.highestAdminRelationNumber=0
+        self.deletedWayAreas=0
 
     def openAllDB(self):
         super(OSMDataImport, self).openAllDB()
@@ -1373,6 +1374,7 @@ class OSMDataImport(OSMDataSQLite):
                 if storedType==areaType:
                     self.log("delete way area %d relation %d has outer way with same type"%(wayId, osmid))
                     self.deleteAreaWithId(wayId, 0)
+                    self.deletedWayAreas=self.deletedWayAreas+1
                 else:
                     self.log("way %d of relation %d already stored as area with different type"%(wayId, osmid))
 
@@ -2231,6 +2233,7 @@ class OSMDataImport(OSMDataSQLite):
                       relations_callback=self.parse_relations,
                       coords_callback=self.parse_coords)
             
+            self.log("deleted %d way areas from relations"%(self.deletedWayAreas))
 #            p = OSMParser(4, nodes_callback=self.parse_nodes, 
 #                      ways_callback=self.parse_ways, 
 #                      relations_callback=self.parse_relations,

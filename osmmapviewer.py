@@ -4239,7 +4239,7 @@ class OSMWidget(QWidget):
             lat=self.lastGPSData.lat
             lon=self.lastGPSData.lon
             lat1, lon1=self.osmUtils.getPosInDistanceAndTrack(lat, lon, distance, track)
-            tmpGPSData=GPSData(timeStamp, lat1, lon1, track, self.lastGPSData.speed, self.lastGPSData.altitude, True)
+            tmpGPSData=GPSData(timeStamp, lat1, lon1, track, self.lastGPSData.speed, self.lastGPSData.altitude, True, self.lastGPSData.satellitesInUse)
 #            print("predictedLocation %f %f %f"%(tmpGPSData.time, lat1, lon1))
             self.updateGPSDataDisplay(tmpGPSData, False)
 
