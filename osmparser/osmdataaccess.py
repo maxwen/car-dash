@@ -107,10 +107,10 @@ class Constants():
     REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure", "bridge", "tunnel"])
     REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
     
-    PARKING_LIMITATIONS_DICT={"access":"yes",
-                              "fee":"no"}
+    PARKING_LIMITATIONS_DICT={"fee":"no"}
+    
     AMENITY_POI_TYPE_DICT={"fuel": (POI_TYPE_GAS_STATION, None),
-                       "parking": (POI_TYPE_PARKING, PARKING_LIMITATIONS_DICT),
+                       "parking": (POI_TYPE_PARKING, None),
                        "hospital": (POI_TYPE_HOSPITAL, None),
                        "police": (POI_TYPE_POLICE, None),
                        "veterinary":(POI_TYPE_VETERIANERY, None)}   

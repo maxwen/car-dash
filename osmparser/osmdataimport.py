@@ -1208,20 +1208,31 @@ class OSMDataImport(OSMDataSQLite):
                             if wayId==None:
                                 wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
                                 if wayId==None:
-                                    continue                                                                                    
+                                    self.log("skip multipolygon %d has unresolved ways"%(osmid))
+                                    skipArea=True
+                                    break                                                                                    
 
                             if role=="inner":
                                 allInnerRefs.append((wayId, refs))
                             elif role=="outer":
                                 allOuterRefs.append((wayId, refs))
                             else:
-                                allUnknownRefs.append((wayId, refs))
+                                # only try to resolve untaged relation entries
+                                # if they are an area
+                                if refs[0]==refs[-1]:
+                                    allUnknownRefs.append((wayId, refs))
+                                    
+                                # add untagged to both inner and outer
+                                # will be used to resolve rings or remain as is
+                                # and will be skipped
+                                allInnerRefs.append((wayId, refs))
+                                allOuterRefs.append((wayId, refs))
 
                     if skipArea==True:
                         continue
                     
                     if len(allOuterRefs)==0:
-#                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
+                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
                         continue
                     
                     allOuterRefsCopy=list()
@@ -1229,26 +1240,33 @@ class OSMDataImport(OSMDataSQLite):
                     
                     outerRefRings=self.getGISUtils().mergeRelationRefs(allOuterRefs, self)
                     innerRefRings=self.getGISUtils().mergeRelationRefs(allInnerRefs, self)
+                    # actually not needed cause it should only contain already rings
                     unknownRefRings=self.getGISUtils().mergeRelationRefs(allUnknownRefs, self)
                     unknownRefRingsCopy=list()
                     unknownRefRingsCopy.extend(unknownRefRings)
+                    
+                    if len(outerRefRings)==0:
+                        self.log("skip multipolygon: %d len(outerRefRings)==0"%(osmid))
+                        continue
+                    
                     # convert to multipolygon
                     polyString="'MULTIPOLYGON("
                     for refRingEntry in outerRefRings:                                
                         refs=refRingEntry["refs"]
                         if refs[0]!=refs[-1]:
-                            self.log("skip outer multipolygon: %d refs[0]!=refs[-1]"%(osmid))
+                            # should not happen
+#                            self.log("skip outer multipolygon part %d: %d refs[0]!=refs[-1]"%(refRingEntry["wayId"], osmid))
                             continue
                         
                         cPolygonOuter=refRingEntry["polygon"]
                         if cPolygonOuter==None:
-                            self.log("skip outer multipolygon: %d invalid Polygon"%(osmid))
+#                            self.log("skip outer multipolygon: %d invalid Polygon"%(osmid))
                             continue
                         
                         newRefList=refRingEntry["newRefs"]
                         outerCoords=refRingEntry["coords"]
                         if len(refs)!=len(newRefList):
-                            self.log("skip outer multipolygon: %d coords missing"%(osmid))
+#                            self.log("skip outer multipolygon: %d coords missing"%(osmid))
                             continue
                         
                         innerCoords=list()
@@ -1263,12 +1281,13 @@ class OSMDataImport(OSMDataSQLite):
 
                         polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoords)
                         polyString=polyString+polyStringPart
-                    
+                                        
                     # remaining unknown must be outer rings
                     if len(unknownRefRingsCopy)!=0:                                 
                         for unknownRefRingEntry in unknownRefRingsCopy:                                
                             refs=unknownRefRingEntry["refs"]
                             if refs[0]!=refs[-1]:
+                                # should not happen
                                 continue
                             
                             cPolygonOuter=unknownRefRingEntry["polygon"]
@@ -1286,6 +1305,10 @@ class OSMDataImport(OSMDataSQLite):
                             polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, list())
                             polyString=polyString+polyStringPart
                         
+                    if polyString=="'MULTIPOLYGON(":
+                        self.log("skip multipolygon %d empty"%(osmid))
+                        continue
+                    
                     polyString=polyString[:-1]
                     polyString=polyString+")'"
                     
@@ -1341,23 +1364,24 @@ class OSMDataImport(OSMDataSQLite):
         for refRingEntry in refRings:
             refs=refRingEntry["refs"]
             if refs[0]!=refs[-1]:
-                self.log("skip multipolygon part %d: %d refs[0]!=refs[-1]"%(refRingEntry["wayId"], osmid))
+                # should not happen
+#                self.log("skip inner multipolygon part %d: %d refs[0]!=refs[-1]"%(refRingEntry["wayId"], osmid))
                 continue
 
             newRefs=refRingEntry["newRefs"]
             if len(refs)!=len(newRefs):
-                self.log("skip multipolygon part %d: %d coords missing"%(refRingEntry["wayId"], osmid))
+#                self.log("skip multipolygon part %d: %d coords missing"%(refRingEntry["wayId"], osmid))
                 continue
             
             cPolygonInner=refRingEntry["polygon"]
             if cPolygonInner==None:
-                self.log("skip multipolygon part %d: %d invalid Polygon"%(refRingEntry["wayId"], osmid))
+#                self.log("skip multipolygon part %d: %d invalid Polygon"%(refRingEntry["wayId"], osmid))
                 continue
             
             if not cPolygonOuter.covers(cPolygonInner):
                 continue
             
-            if unknownRefRingsCopy!=None:
+            if unknownRefRingsCopy!=None and refRingEntry in unknownRefRingsCopy:
                 self.log("add unknown relation member %d as inner to relation %d"%(refRingEntry["wayId"], osmid))
                 unknownRefRingsCopy.remove(refRingEntry)
 
@@ -2233,13 +2257,13 @@ class OSMDataImport(OSMDataSQLite):
                       relations_callback=self.parse_relations,
                       coords_callback=self.parse_coords)
             
-            self.log("deleted %d way areas from relations"%(self.deletedWayAreas))
 #            p = OSMParser(4, nodes_callback=self.parse_nodes, 
 #                      ways_callback=self.parse_ways, 
 #                      relations_callback=self.parse_relations,
 #                      coords_callback=self.parse_coords)
             
             p.parse(osmFile)
+            self.log("deleted %d way areas from relations"%(self.deletedWayAreas))
 
     def getOSMFile(self, country):
         return self.osmList[country]["osmFile"]

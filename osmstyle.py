@@ -112,7 +112,7 @@ class OSMStyle():
         self.pixmapDict["dogLeashPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/dogs_leash.png"))
         
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
-        self.colorDict["mapBackgroundColor"]=QColor(255, 255, 255)
+        self.colorDict["mapBackgroundColor"]=QColor(0xf1, 0xee, 0xe8)
         self.colorDict["wayCasingColor"]=QColor(0x60, 0x60, 0x60)
         self.colorDict["tunnelColor"]=Qt.white
         self.colorDict["bridgeCasingColor"]=QColor(0x50, 0x50, 0x50)

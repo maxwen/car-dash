@@ -293,7 +293,8 @@ class GISUtils():
                 for refEntry in removedRefs:
                     allRefs.remove(refEntry)
                 
-            if len(refRing)!=0:
+            # only add complete rings
+            if len(refRing)!=0 and refRing[0]==refRing[-1]:
                 refRingEntry["refs"]=refRing
                 refRingEntry["wayIdList"]=wayIdList
                 coords, newRefList=osmDataImport.createRefsCoords(refRing)
