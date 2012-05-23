@@ -2246,6 +2246,16 @@ class QtOSMWidget(QWidget):
             wayPos=QPoint(5, self.height()-15)
             self.painter.drawText(wayPos, self.wayInfo)
                     
+    def getDistanceString(self, value):
+        if value>10000:
+            valueStr="%dkm"%(int(value/1000))
+        elif value>500:
+            valueStr="%.1fkm"%(value/1000)
+        else:
+            valueStr="%dm"%value
+        
+        return valueStr
+
     def displayRouteInfo(self):
         pen=self.style.getStylePen("textPen")
         self.painter.setPen(pen)
@@ -2254,29 +2264,15 @@ class QtOSMWidget(QWidget):
         self.painter.setFont(font)
         fm = self.painter.fontMetrics();
 
-        if self.distanceToEnd!=0:
-            if self.distanceToEnd>10000:
-                distanceToEndStr="%dkm"%(int(self.distanceToEnd/1000))
-            elif self.distanceToEnd>500:
-                distanceToEndStr="%.1fkm"%(self.distanceToEnd/1000)
-            else:
-                distanceToEndStr="%dm"%self.distanceToEnd
-                
-            distanceToEndPos=QPoint(self.width()-self.getSidebarWidth()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
-            self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
-            self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("finishPixmap"))
+        distanceToEndStr=self.getDistanceString(self.distanceToEnd)
+        distanceToEndPos=QPoint(self.width()-self.getSidebarWidth()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
+        self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
+        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("finishPixmap"))
 
-        if self.distanceToCrossing!=0:
-            if self.distanceToCrossing>10000:
-                crossingLengthStr="%dkm"%(int(self.distanceToCrossing/1000))
-            elif self.distanceToCrossing>500:
-                crossingLengthStr="%.1fkm"%(self.distanceToCrossing/1000)
-            else:
-                crossingLengthStr="%dm"%self.distanceToCrossing
-            
-            crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
-            self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
-            self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2+fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("crossingPixmap"))
+        crossingLengthStr=self.getDistanceString(self.distanceToCrossing)
+        crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
+        self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
+        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2+fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("crossingPixmap"))
 
         font=self.style.getStyleFont("wayInfoFont")
         self.painter.setFont(font)
@@ -3687,13 +3683,13 @@ class QtOSMWidget(QWidget):
         
     def currentTargetPointReached(self, lat, lon):
         targetLat, targetLon=self.currentTargetPoint.getClosestRefPos()
-        if self.osmutils.distance(lat, lon, targetLat, targetLon)<30:
+        if self.osmutils.distance(lat, lon, targetLat, targetLon)<15.0:
             return True
         return False
 
     def currentStartPointReached(self, lat, lon):
         startLat, startLon=self.currentStartPoint.getClosestRefPos()
-        if self.osmutils.distance(lat, lon, startLat, startLon)<30:
+        if self.osmutils.distance(lat, lon, startLat, startLon)<15.0:
             return True
         return False
     

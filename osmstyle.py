@@ -472,7 +472,7 @@ class OSMStyle():
         return self.getStreetPenWidthForZoom(zoom)+4
    
     def getRoadPenKey(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet):
-        return "%s-%s-%s-%s-%s-%s-%s-%s"%(str(streetTypeId), str(zoom), str(casing), str(oneway), str(tunnel), str(bridge), str(access), str(livingStreet))
+        return "%d-%d-%d-%d-%d-%d-%d-%d"%(streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet)
     
     def getRoadPen(self, streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet, tags):
         key=self.getRoadPenKey(streetTypeId, zoom, casing, oneway, tunnel, bridge, access, livingStreet)

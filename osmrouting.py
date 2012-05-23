@@ -212,19 +212,19 @@ class OSMRoutingPoint():
             return
         
         refList=osmParserData.getRefListSubset(refs, startRef, endRef)
-        ref, refPoint, point=osmParserData.getClosestRefOnEdge(self.lat, self.lon, refList, coords, 30.0)
+        ref, refPos, closestRefPos=osmParserData.getClosestRefOnEdge(self.lat, self.lon, refList, coords, 30.0)
 
         if ref==None:
             print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return 
         
-        self.closestRefPos=point
+        self.closestRefPos=closestRefPos
         self.edgeId=edgeId
         self.target=target
         self.source=source
         self.usedRefId=ref
         self.wayId=wayId
-        self.refPos=refPoint
+        self.refPos=refPos
 #        self.country=country
         
         self.posOnEdge=osmParserData.getPosOnOnEdge(self.closestRefPos[0], self.closestRefPos[1], coords, length)

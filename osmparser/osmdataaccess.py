@@ -82,7 +82,7 @@ class Constants():
     AREA_TYPE_LEISURE=9
     AREA_TYPE_PLACE=10 # will not be displayed
     
-    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "construction", "quarry"])
+    LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "quarry"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
     LANDUSE_WATER_TYPE_SET=set(["reservoir", "basin", "water"])
     
@@ -1016,73 +1016,131 @@ class OSMDataAccess(OSMDataSQLite):
             i=i+1
 
         return closestRef, closestRefPoint, closestPoint
-    
-    def getPosOnOnEdge(self, lat, lon, coords, edgeLength):
-        length=self.getLengthOnEdge(lat, lon, coords)
-        if length==0:
-            return edgeLength
-        return length/edgeLength
-    
-    def getLengthOnEdge(self, lat, lon, coords, withOutside=False):
-        length=0
+
+    def getClosestPointOnEdge(self, lat, lon, coords, maxDistance):
+        closestRefPoint=None
+        closestPoint=None
+        distances=list()
+        
+        minDistance=maxDistance
+        i=0
         lat1, lon1=coords[0]
         for lat2, lon2 in coords[1:]:
-            distance=self.osmutils.distance(lat1, lon1, lat2, lon2)
+            distances.append(self.osmutils.distance(lat1, lon1, lat2, lon2))
+            onLine, distance, point=self.isMinimalDistanceOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, maxDistance)
+            if onLine==True:
+                if distance<minDistance:
+                    minDistance=distance
+                    distance1=self.osmutils.distance(lat, lon, lat1, lon1)
+                    distance2=self.osmutils.distance(lat, lon, lat2, lon2)
+                    if distance1<distance2:
+                        closestRefPoint=coords[i]
+                    else:
+                        if i<len(coords)-1:
+                            closestRefPoint=coords[i+1]
+                        else:
+                            closestRefPoint=coords[-1]
+                            
+                    closestPoint=point
+                
+            lat1=lat2
+            lon1=lon2
+            i=i+1
 
-            if self.isOnLineBetweenPoints(lat, lon, lat1, lon1, lat2, lon2, distance):
-                distance1=self.osmutils.distance(lat, lon, lat1, lon1)
-                length=length+distance1
+        return closestRefPoint, closestPoint, distances
+      
+    def getPosOnOnEdge(self, lat, lon, coords, edgeLength):
+        length=self.getLengthOnEdge(lat, lon, coords)
+        if length==None:
+            return 0.0
+        return length/edgeLength
+    
+    def getLengthOnEdge(self, lat, lon, coords):
+        refPoint, point, distances=self.getClosestPointOnEdge(lat, lon, coords, 30.0)
+
+        if refPoint==None or not refPoint in coords:
+            return None
+        
+        length=0
+        lat1, lon1=coords[0]
+        if refPoint==(lat1, lon1):
+            return self.osmutils.distance(lat, lon, lat1, lon1)
+        
+        i=0
+        for lat2, lon2 in coords[1:]:
+            if refPoint==(lat2, lon2):
+                distance=self.osmutils.distance(lat, lon, lat1, lon1)
+                length=length+distance
                 return length
 
-            length=length+distance
+            length=length+distances[i]
                                                                 
             lat1=lat2
             lon1=lon2
+            i=i+1
 
-        if withOutside==True:
-            # add length from last coord
-            length=length+self.osmutils.distance(lat, lon, lat2, lon2)
         return length
     
+    def getRemaingDistanceOnTrackItem(self, trackItem, lat, lon):
+        coordsList=self.getCoordsOfTrackItem(trackItem)
+        length=trackItem["length"]           
+        return self.getRemainingDistanceOnEdge(coordsList, lat, lon, length)
+
     def calcRouteDistances(self, trackList, lat, lon, route):
-        coordsList=list()
         firstTrackItem=trackList[0]
         endLength=0
         crossingLength=0
-        sumLength=firstTrackItem["sumLength"]
-        length=firstTrackItem["length"]
-        crossingFound=False
+        currentTrackItem=firstTrackItem
+        distanceToEdge=self.getRemaingDistanceOnTrackItem(firstTrackItem, lat, lon)
+        trackListIndex=0
         
-        for trackItemRef in firstTrackItem["refs"]:
-            coordsList.append(trackItemRef["coords"])
-            if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
-                crossingFound=True
-           
-        distanceToEdge=self.getRemainingDistanceOnEdge(coordsList, lat, lon, length)
-        if distanceToEdge!=None:
-            endLength=distanceToEdge
+        if distanceToEdge!=None and distanceToEdge>=0:
             crossingLength=distanceToEdge
-
+            endLength=distanceToEdge
+        else:
+            # only possible if edge decision is pending
+            # we have passed the crossing but trackList[0] is
+            # still the last edge
+            if len(trackList)>1:
+                # assume we are on the right edge
+                secondTrackItem=trackList[1]
+                distanceToEdge=self.getRemaingDistanceOnTrackItem(secondTrackItem, lat, lon)
+                if distanceToEdge!=None and distanceToEdge>=0:
+                    currentTrackItem=secondTrackItem
+                    trackListIndex=1
+                    crossingLength=distanceToEdge
+                    endLength=distanceToEdge
+                
+        if len(trackList)==1:
+            return endLength, crossingLength
+            
+        sumLength=currentTrackItem["sumLength"]
+        length=currentTrackItem["length"]
         endLength=endLength+route.getAllLength()-sumLength  
         
-        if crossingFound==True:
-            return endLength, crossingLength
-
         crossingFound=False
-        for trackItem in trackList[1:]:     
-            if crossingFound==True:
-                break       
-            length=trackItem["length"]
-            crossingLength=crossingLength+length
-            for trackItemRef in trackItem["refs"]:
-                if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
-                    crossingFound=True
-                    break
+
+        if len(trackList)>=trackListIndex:
+            # find next crosssing
+            for trackItem in trackList[trackListIndex:]:     
+                for trackItemRef in trackItem["refs"]:
+                    if "direction" in trackItemRef and "crossingInfo" in trackItemRef and "crossing" in trackItemRef:
+                        crossingFound=True
+                        break
+                    
+                if crossingFound==False:
+                    length=trackItem["length"]
+                    crossingLength=crossingLength+length
            
+                else:
+                    break
+                
         return endLength, crossingLength
 
     def getRemainingDistanceOnEdge(self, coords, lat, lon, edgeLength):
-        length=self.getLengthOnEdge(lat, lon, coords, True)
+        length=self.getLengthOnEdge(lat, lon, coords)
+        if length==None:
+            return None
         remaining=edgeLength-length
         return remaining
 
