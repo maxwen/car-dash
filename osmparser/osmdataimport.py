@@ -795,7 +795,8 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.parseFullAddress(tags, None, lat, lon)
                         
-            if "amenity" in tags and "name" in tags:
+#            if "amenity" in tags and "name" in tags:
+            if "amenity" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
                     if nodeType!=-1:
@@ -803,7 +804,8 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-            if "shop" in tags and "name" in tags:
+#            if "shop" in tags and "name" in tags:
+            if "shop" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
                     if nodeType!=-1:
@@ -819,7 +821,8 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-            if "tourism" in tags and "name" in tags:
+#            if "tourism" in tags and "name" in tags:
+            if "tourism" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
                     if nodeType!=-1:
