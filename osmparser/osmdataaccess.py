@@ -207,7 +207,7 @@ class OSMDataAccess(OSMDataSQLite):
         resultList=list()
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            resultList.append(self.restrictionFromDB(x))
+            resultList.append(self.restrictionFromDB2(x))
         return resultList
         
     def getEdgeEntryForEdgeIdWithCoords(self, edgeId):
@@ -1186,7 +1186,7 @@ class OSMDataAccess(OSMDataSQLite):
                         # we may need to reverse them if the route goes
                         # in the opposite direction   
                         nextEdgeId=edgeList[1]
-                        (nextEdgeId, nextStartRef, nextEndRef, _, _, _, _, _, _)=self.getEdgeEntryForEdgeId(nextEdgeId)                       
+                        (nextEdgeId, nextStartRef, nextEndRef, _, _, _, _, _, _)=self.getEdgeEntryForId(nextEdgeId)                       
             
                         # look how the next edge continues to find the order
                         if nextEdgeId!=edgeId:
@@ -1578,18 +1578,34 @@ class OSMDataAccess(OSMDataSQLite):
             coords.append(trackItemRef["coords"])  
         return coords
     
+    def resolveRestriction(self, restriction):
+        restrictionId, toEdgeId, viaEdgePath, toCost, osmId=restriction
+        (_, _, _, _, toWayId, _, _, _, _)=self.getEdgeEntryForId(toEdgeId)
+        if "," in viaEdgePath:
+            edgeList=viaEdgePath.split(",")
+            viaEdgeStr=""
+            for edgeId in edgeList:
+                (_, _, _, _, wayId, _, _, _, _)=self.getEdgeEntryForId(int(edgeId))
+                viaEdgeStr=viaEdgeStr+str(wayId)+","
+            viaEdgeStr=viaEdgeStr[:-2]
+            return "%d %d %s %f %s"%(restrictionId, toWayId, viaEdgeStr, toCost, str(osmId))
+        else:
+            (_, _, _, _, fromWayId, _, _, _, _)=self.getEdgeEntryForId(int(viaEdgePath))
+            return "%d %d %d %f %s"%(restrictionId, toWayId, fromWayId, toCost, str(osmId))
+        
     def isActiveTurnRestriction(self, fromEdgeId, toEdgeId, crossingRef):
         restrictionList=self.getRestrictionEntryForTargetEdge(toEdgeId)
         if len(restrictionList)!=0:
             restrictedEdge=False
             for restriction in restrictionList:
-                _, _, viaPath, _=restriction
-                # TODO: viaPath can be more the one way if supported
-                # TODO: better use the viaNode if available - add to DB
-                if int(viaPath) == fromEdgeId:
-                    restrictedEdge=True
-                    break
-                
+                restrictionId, toEdgeId, viaEdgePath, toCost, osmId=restriction
+   
+                # TODO: viaPath with ways
+                if not "," in viaEdgePath:
+                    if int(viaEdgePath) == fromEdgeId:
+                        restrictedEdge=True
+                        break
+
             return restrictedEdge
         
         return False
@@ -1620,7 +1636,7 @@ class OSMDataAccess(OSMDataSQLite):
         data["heading"]=self.getHeadingOnEdgeId(edgeId, ref)
         tunnelEdgeList.append(data)
         
-        _, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForEdgeId(edgeId)
+        _, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForId(edgeId)
         if ref==startRef:
             nextEndRef=endRef
         else:

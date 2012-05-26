@@ -188,6 +188,17 @@ TODO: ways with only place and nothing more
 -to resolve unneded place tage we need to store the area
 DONE
 
+ TODO: fix distance display during routing
+ can be negative numbers until next edge is selected
+ -> assume correct edge and use for calculation
+ DONE
+ 
+ TODO: relation way without inner or outer tag
+-need to calculate
+DONE
+
+TODO: turn restrications for "viaWay"
+ DONE
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -212,38 +223,12 @@ TODO: create faster create edge table nodes
 
  TODO: recalc route from next crossing to avoid u-turns
  
- TODO: fix distance display during routing
- can be negative numbers until next edge is selected
- 
  TODO: fix tunnel mode
  use heading info from ways for better prediction
  
  TODO parser
  -pbf parser
  -add filters   
- 
-TODO: turn restrications for "viaWay"
-relation with via type way {'to': 30031793, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 215852, 'from': 4408193}
-relation with via type way {'to': 40954792, 'viaWay': [40954793], 'type': 'no_u_turn', 'id': 253142, 'from': 23409578}
-relation with via type way {'to': 40954866, 'viaWay': [42938957], 'type': 'no_u_turn', 'id': 253143, 'from': 40954791}
-relation with via type way {'to': 19895081, 'viaWay': [19895082, 41319701, 19894771], 'type': 'no_u_turn', 'id': 271013, 'from': 4415310}
-relation with via type way {'to': 41319690, 'viaWay': [11816140], 'type': 'no_u_turn', 'id': 271014, 'from': 42939770}
-relation with via type way {'to': 42557575, 'viaWay': [4583329], 'type': 'no_u_turn', 'id': 289040, 'from': 8760005}
-relation with via type way {'to': 39530243, 'viaWay': [39530244], 'type': 'no_left_turn', 'id': 298850, 'from': 30031793}
-relation with via type way {'to': 42939134, 'viaWay': [41319701, 19894771], 'type': 'no_u_turn', 'id': 299523, 'from': 40954865}
-relation with via type way {'to': 30326540, 'viaWay': [47389508], 'type': 'no_right_turn', 'id': 374891, 'from': 30326289}
-relation with via type way {'to': 4688464, 'viaWay': [59097900], 'type': 'no_straight_on', 'id': 911911, 'from': 157249324}
-relation with via type way {'to': 157249324, 'viaWay': [59097900], 'type': 'no_straight_on', 'id': 911912, 'from': 4688464}
-relation with via type way {'to': 49163400, 'viaWay': [60268190], 'type': 'no_u_turn', 'id': 937381, 'from': 129805333}
-relation with via type way {'to': 31548960, 'viaWay': [31548948], 'type': 'no_u_turn', 'id': 1950380, 'from': 31548958}
-relation with via type way {'to': 144096450, 'viaWay': [29369211], 'type': 'no_u_turn', 'id': 1951907, 'from': 144096445}
-relation with via type way {'to': 144096446, 'viaWay': [29369211], 'type': 'no_u_turn', 'id': 1951908, 'from': 31959421}
-relation with via type way {'to': 144096444, 'viaWay': [144096443], 'type': 'no_u_turn', 'id': 1951909, 'from': 34826605}
-relation with via type way {'to': 144096445, 'viaWay': [144096443], 'type': 'no_u_turn', 'id': 1951910, 'from': 144096450}
-relation with via type way {'to': 144986762, 'viaWay': [144986748], 'type': 'no_u_turn', 'id': 1963421, 'from': 152310750}
-relation with via type way {'to': 54858215, 'viaWay': [127061650], 'type': 'no_u_turn', 'id': 2065288, 'from': 4789250}
-relation with via type way {'to': 154613293, 'viaWay': [4408138], 'type': 'only_left_turn', 'id': 2079173, 'from': 154613298}
-relation with via type way {'to': 144986762, 'viaWay': [141477947, 144986748], 'type': 'no_u_turn', 'id': 2090704, 'from': 26523463} 
  
  TODO: try QGraphicsView
  
@@ -279,6 +264,3 @@ TODO: outer ways of relations could be already stored in parse_ways
 DONE
 -> what to do if the type and/or tags are different
 
-TODO: relation way without inner or outer tag
--need to calculate
-DONE

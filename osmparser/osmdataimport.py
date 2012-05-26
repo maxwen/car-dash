@@ -292,11 +292,11 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorAdmin.execute("SELECT AddGeometryColumn('adminLineTable', 'geom', 4326, 'LINESTRING', 2)")
         
     def createRestrictionTable(self):
-        self.cursorEdge.execute('CREATE TABLE restrictionTable (id INTEGER PRIMARY KEY, target INTEGER, viaPath TEXT, toCost REAL)')
+        self.cursorEdge.execute('CREATE TABLE restrictionTable (id INTEGER PRIMARY KEY, target INTEGER, viaPath TEXT, toCost REAL, osmId INTEGER)')
         self.cursorEdge.execute("CREATE INDEX restrictionTarget_idx ON restrictionTable (target)")
         
-    def addToRestrictionTable(self, target, viaPath, toCost):
-        self.cursorEdge.execute('INSERT INTO restrictionTable VALUES( ?, ?, ?, ?)', (self.restrictionId, target, viaPath, toCost))
+    def addToRestrictionTable(self, target, viaPath, toCost, osmId):
+        self.cursorEdge.execute('INSERT INTO restrictionTable VALUES( ?, ?, ?, ?, ?)', (self.restrictionId, target, viaPath, toCost, osmId))
         self.restrictionId=self.restrictionId+1
                 
     def addToPOIRefTable(self, refid, refType, lat, lon, tags, nodeType, layer):           
@@ -1547,13 +1547,13 @@ class OSMDataImport(OSMDataSQLite):
             allEdgesCount=allEdgesCount+1
              
             edgeId=int(edgeEntryId[0])
-            edge=self.getEdgeEntryForEdgeId(edgeId)
+            edge=self.getEdgeEntryForId(edgeId)
             self.createEdgeTableNodeSameStartEnriesFor(edge)
             
-            edge=self.getEdgeEntryForEdgeId(edgeId)
+            edge=self.getEdgeEntryForId(edgeId)
             self.createEdgeTableNodeSameEndEnriesFor(edge)
 
-            edge=self.getEdgeEntryForEdgeId(edgeId)
+            edge=self.getEdgeEntryForId(edgeId)
             self.createEdgeTableNodeSourceEnriesFor(edge)
 
         print("")
@@ -1572,7 +1572,7 @@ class OSMDataImport(OSMDataSQLite):
             allEdgesCount=allEdgesCount+1
 
             edgeId=edgeEntryId[0]
-            edge=self.getEdgeEntryForEdgeId(edgeId)
+            edge=self.getEdgeEntryForId(edgeId)
             edgeId, _, _, _, _, source, target, _, _=edge
                         
             if source==0:
@@ -1682,8 +1682,8 @@ class OSMDataImport(OSMDataSQLite):
                         
                         self.usedBarrierList.append(ref)
     
-                        self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
-                        self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
+                        self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000, None)
+                        self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000, None)
                 else:
                     self.log("createBarrierRestrictions: failed to resolve fromEdge for %s"%(barrierRestrictionEntry))
             else:
@@ -1701,14 +1701,134 @@ class OSMDataImport(OSMDataSQLite):
                 if fromEdge!=None and toEdge!=None:
                     self.usedBarrierList.append(ref)
                     
-                    self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000)
-                    self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000)
+                    self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000, None)
+                    self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000, None)
                 else:
                     self.log("createBarrierRestrictions: failed to resolve %s"%(barrierRestrictionEntry))
    
         self.barrierRestrictionList=None
         print("")
         
+    def viaEdgeListToString(self, viaEdgeList):
+        viaEdgeString=""
+        for viaEdgeId in viaEdgeList:
+            viaEdgeString=viaEdgeString+str(viaEdgeId)+","
+        return viaEdgeString[:-1]
+            
+    # get list of connecting edges
+    def getEdgeListForWayList(self, wayList):
+        edgeList=list()
+        i=1
+        for wayId in wayList[:-1]:
+            resultList=self.getEdgeEntryForWayId(wayId)
+            nextWayId=wayList[i]
+            nextEdgeFound=False
+            for wayIdResult in resultList:
+                (edgeId, startRef, endRef, _, _, _, _, _, _)=wayIdResult
+
+                resultList1=self.getEdgeEntryForWayId(nextWayId)
+                for nextWayIdResult in resultList1:
+                    (nextEdgeId, nextStartRef, nextEndRef, _, _, _, _, _, _)=nextWayIdResult
+            
+                    if endRef==nextStartRef or endRef==nextEndRef or startRef==nextStartRef or startRef==nextEndRef:
+                        edgeList.append(edgeId)
+                        nextEdgeFound=True
+                        break
+                    
+                if nextEdgeFound==True:
+                    break
+            
+            if nextEdgeFound==False:
+                return None
+            
+            i=i+1
+
+        edgeList.append(nextEdgeId)
+        return edgeList
+       
+    def addRestrictionRule(self, crossingRef, restrictionType, toEdgeId, fromEdgeId, viaEdgeStr, osmId, toAddRules):     
+        if restrictionType[:3]=="no_":
+            if not (toEdgeId, viaEdgeStr, osmId) in toAddRules:
+                toAddRules.append((toEdgeId, viaEdgeStr, osmId))  
+#                print("add %d %s"%(toEdgeId, viaEdgeStr))    
+                        
+        elif restrictionType[:5]=="only_":
+            resultList2=self.getEdgeEntryForStartOrEndPoint(crossingRef)
+
+            if len(resultList2)!=0:
+                for edge in resultList2:
+                    (otherEdgeId, _, _, _, _, _, _, _, _)=edge
+                    
+                    if otherEdgeId==fromEdgeId or otherEdgeId==toEdgeId:
+                        continue
+                    
+                    if not (otherEdgeId, viaEdgeStr, osmId) in toAddRules:
+                        toAddRules.append((otherEdgeId, viaEdgeStr, osmId))
+                        
+    def createWayRestrictionForViaWay(self, wayRestrictionEntry, toAddRules):
+        fromWayId=wayRestrictionEntry["from"]
+        toWayId=wayRestrictionEntry["to"]
+        restrictionType=wayRestrictionEntry["type"]
+        osmId=wayRestrictionEntry["id"]
+        viaWayList=wayRestrictionEntry["viaWay"]
+        viaWayList.insert(0, fromWayId)
+        viaWayList.append(toWayId)
+#        print(viaWayList)
+        
+        edgeList=self.getEdgeListForWayList(viaWayList)
+        if edgeList==None:
+            self.log("failed to resolve edgelist for %s"%(wayRestrictionEntry))
+            return
+        
+#        print(edgeList)
+        toEdgeId=edgeList[-1]
+        
+        revEdgeList=list()
+        revEdgeList.extend(edgeList[:-1])
+        revEdgeList.reverse()
+        
+        viaEdgeStr=self.viaEdgeListToString(revEdgeList)        
+        restrictionEdgeId=edgeList[-2]
+        
+        # find crossingRef between toEdgeId and the last viaEdgeId
+        crossingRef=self.getCrossingRefBetweenEdges(restrictionEdgeId, toEdgeId)
+                                            
+        if crossingRef==None:
+            self.log("failed to find crossing ref between way %d and %d"%(viaWayList[-2], viaWayList[-1]))
+            return
+        
+        self.addRestrictionRule(crossingRef, restrictionType, toEdgeId, restrictionEdgeId, viaEdgeStr, osmId, toAddRules)
+
+    def getCrossingRefBetweenEdges(self, fromEdgeId, toEdgeId):
+        crossingRef=None
+        (_, startRef, endRef, _, _, _, _, _, _)=self.getEdgeEntryForId(fromEdgeId)
+        (_, startRef1, endRef1, _, _, _, _, _, _)=self.getEdgeEntryForId(toEdgeId)
+
+        if startRef==startRef1 or endRef==startRef1:
+            crossingRef=startRef1
+        
+        if endRef==endRef1 or startRef==endRef1:
+            crossingRef=endRef1
+        
+        return crossingRef
+
+    def getCrossingRefBetweenWays(self, fromWayId, toWayId):
+        resultList=self.getEdgeEntryForWayId(fromWayId)
+        for fromWayIdResult in resultList:
+            (fromEdgeId, _, _, _, _, _, _, _, _)=fromWayIdResult
+
+            resultList1=self.getEdgeEntryForWayId(toWayId)
+            if len(resultList1)!=0:
+                for toWayIdResult in resultList1:                        
+                    (toEdgeId, _, _, _, _, _, _, _, _)=toWayIdResult
+                                                    
+                    crossingRef=self.getCrossingRefBetweenEdges(fromEdgeId, toEdgeId)
+                                                        
+                    if crossingRef!=None:
+                        return crossingRef, fromEdgeId, toEdgeId
+                    
+        return None, None, None
+
     def createWayRestrictionsDB(self):
         allRestricitionLength=len(self.wayRestricitionList)
         allRestrictionCount=0
@@ -1721,52 +1841,21 @@ class OSMDataImport(OSMDataSQLite):
             print(prog, end="\r")
             allRestrictionCount=allRestrictionCount+1
 
-            fromWayId=int(wayRestrictionEntry["from"])
-            toWayId=int(wayRestrictionEntry["to"])
+            fromWayId=wayRestrictionEntry["from"]
+            toWayId=wayRestrictionEntry["to"]
             restrictionType=wayRestrictionEntry["type"]
+            osmId=wayRestrictionEntry["id"]
 
             if "viaWay" in wayRestrictionEntry:
-#                self.log("relation with via type way %s"%(wayRestrictionEntry))
-                continue
-
-            resultList=self.getEdgeEntryForWayId(fromWayId)
-            for fromWayIdResult in resultList:
-                (fromEdgeId, startRefFrom, endRefFrom, _, fromWayId, _, _, _, _)=fromWayIdResult
-    
-                resultList1=self.getEdgeEntryForWayId(toWayId)
-                if len(resultList1)!=0:
-                    for toWayIdResult in resultList1:                        
-                        (toEdgeId, startRefTo, endRefTo, _, toWayId, _, _, _, _)=toWayIdResult
-                                                        
-                        crossingRef=None
-                        if startRefTo==startRefFrom or endRefTo==startRefFrom:
-                            crossingRef=startRefFrom
-                        
-                        if endRefTo==endRefFrom or startRefTo==endRefFrom:
-                            crossingRef=endRefFrom
-                                                            
-                        if crossingRef==None:
-                            continue
-                        
-                        if restrictionType[:3]=="no_":
-                            if not (toEdgeId, fromEdgeId) in toAddRules:
-                                toAddRules.append((toEdgeId, fromEdgeId))
-                            continue
-                        
-                        if restrictionType[:5]=="only_":
-                            resultList2=self.getEdgeEntryForStartOrEndPoint(crossingRef)
-
-                            if len(resultList2)!=0:
-                                for edge in resultList2:
-                                    (otherEdgeId, _, _, _, otherWayId, _, _, _, _)=edge
-                                    
-                                    if otherWayId==fromWayId or otherWayId==toWayId:
-                                        continue
-                                    if not (otherEdgeId, fromEdgeId) in toAddRules:
-                                        toAddRules.append((otherEdgeId, fromEdgeId))
-            
-        for toEdgeId, fromEdgeId in toAddRules:
-            self.addToRestrictionTable(toEdgeId, str(fromEdgeId), 10000)
+                self.createWayRestrictionForViaWay(wayRestrictionEntry, toAddRules)
+                
+            else:
+                crossingRef, fromEdgeId, toEdgeId=self.getCrossingRefBetweenWays(fromWayId, toWayId)
+                if crossingRef!=None:                            
+                    self.addRestrictionRule(crossingRef, restrictionType, toEdgeId, fromEdgeId, str(fromEdgeId), osmId, toAddRules)
+                                        
+        for toEdgeId, viaEdgeStr, osmId in toAddRules:
+            self.addToRestrictionTable(toEdgeId, viaEdgeStr, 10000, osmId)
         
         self.wayRestricitionList=None
         print("")
@@ -3262,8 +3351,8 @@ def main(argv):
        
 
 #    self.log(p.getLenOfEdgeTable())
-#    self.log(p.getEdgeEntryForEdgeId(6719))
-#    self.log(p.getEdgeEntryForEdgeId(2024))
+#    self.log(p.getEdgeEntryForId(6719))
+#    self.log(p.getEdgeEntryForId(2024))
 
 #    p.test()
 

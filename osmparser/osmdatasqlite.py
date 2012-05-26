@@ -277,15 +277,27 @@ class OSMDataSQLite():
         return (addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon)
 
     def restrictionFromDB(self, x):
-        restrictionId=x[0]
-        target=x[1]
+        restrictionId=int(x[0])
+        target=int(x[1])
         viaPath=x[2]
-        toCost=x[3]
+        toCost=float(x[3])
         return (restrictionId, target, viaPath, toCost)
+
+    def restrictionFromDB2(self, x):
+        restrictionId=int(x[0])
+        target=int(x[1])
+        viaPath=x[2]
+        toCost=float(x[3])
+        osmId=None
+        if len(x)==5:
+            if x[4]!=None:
+                osmId=int(x[4])
+
+        return (restrictionId, target, viaPath, toCost, osmId)
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data1")
+        return os.path.join(getDataRoot(), "data3")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -332,8 +344,9 @@ class OSMDataSQLite():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/salzburg-2.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/salzburg-2.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/wien.osm.bz2'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
@@ -376,13 +389,12 @@ class OSMDataSQLite():
         allentries=self.cursorEdge.fetchall()
         return allentries[0][0]
     
-    def getEdgeEntryForEdgeId(self, edgeId):
+    def getEdgeEntryForId(self, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
         allentries=self.cursorEdge.fetchall()
         if len(allentries)==1:
             edge=self.edgeFromDB(allentries[0])
             return edge
-        self.log("no edge with %d"%(edgeId))
         return (None, None, None, None, None, None, None, None, None)
     
     def isValidOnewayEnter(self, oneway, ref, startRef, endRef):

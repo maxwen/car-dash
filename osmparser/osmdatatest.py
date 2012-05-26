@@ -22,11 +22,11 @@ class OSMDataTest(OSMDataAccess):
             self.log( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
         
     def testRestrictionTable(self):
-        self.cursorEdge.execute('SELECT * from restrictionTable ORDER by target')
+        self.cursorEdge.execute('SELECT * from restrictionTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            restrictionId, target, viaPath, toCost=self.restrictionFromDB(x)
-            self.log("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost))
+            restrictionId, target, viaPath, toCost, osmId=self.restrictionFromDB2(x)
+            print("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost) + " osmId:"+str(osmId))
                 
     def testPOIRefTable(self):
         self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
@@ -238,7 +238,7 @@ def main(argv):
 #    p.test()
 
 #    p.testDBConistency()
-#    p.testRestrictionTable()
+    p.testRestrictionTable()
 #    p.recreateEdges()
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()
@@ -269,7 +269,7 @@ def main(argv):
 #    p.vacuumGlobalDB()
 #    p.testPOIRefTable()
 #    p.mergeEqualWayEntries()
-    p.testAreaTable()
+#    p.testAreaTable()
 #    p.mergeWayEntries()
 
 #    p.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
@@ -300,6 +300,7 @@ def main(argv):
 #    print(coords)
     
 #    p.removeUnnededPOIs()
+
     p.closeAllDB()
 
 

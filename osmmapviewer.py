@@ -3172,6 +3172,15 @@ class QtOSMWidget(QWidget):
             self.getAreaTagsForPos(pos)
         elif action==showWayTags:
             print(osmParserData.getWayEntryForId(self.lastWayId))
+            print(osmParserData.getEdgeEntryForId(self.lastEdgeId))
+            osmParserData.printCrossingsForWayId(self.lastWayId)
+            restrictionList=osmParserData.getRestrictionEntryForTargetEdge(self.lastEdgeId)
+            if len(restrictionList)!=0:
+                for restriction in restrictionList:
+                    restrictionId, toEdgeId, viaEdgePath, toCost, osmId=restriction
+                    print(restriction)
+                    print(osmParserData.resolveRestriction(restriction))
+
 
         else:
             if isinstance(action, OSMRoutingPointAction):
