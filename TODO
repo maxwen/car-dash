@@ -199,6 +199,20 @@ DONE
 
 TODO: turn restrications for "viaWay"
  DONE
+ 
+ TODO:
+landuse=meadow+natural=wetland inside landuse=forest  1905113
+-> if natural and landuse tag paint before
+DONE
+
+TODO: outer ways of relations could be already stored in parse_ways
+-check and delete them in parse_relations if they
+have the same area_type
+DONE
+
+  TODO: amenity can also be area and relation
+  -added parking
+ DONE
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -242,8 +256,6 @@ TODO: create faster create edge table nodes
   TODO: support super relations?
   -relations with member relation
   
-  TODO: amenity can also be area and relation
-  -added parking
 
 TODO: create tables with simplified polygons
 
@@ -254,13 +266,11 @@ TODO: admin area display is only geographic not politically
 TODO: points are not stored with resolved lat, lon
 -can multiple resolve calls return different resolved pos?
 
-TODO:
-landuse=meadow+natural=wetland inside landuse=forest  1905113
--> if natural paint landuse before
-DONE
+TODO: bounding box for routing
 
-TODO: outer ways of relations could be already stored in parse_ways
--check and delete them in parse_relations
-DONE
--> what to do if the type and/or tags are different
-
+TODO: should allow selecting more then one
+routing point at a time from search dialogs
+without the need to reopen it
+-favorites view
+-address dialog
+-poi search dialogs

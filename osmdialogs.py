@@ -896,6 +896,7 @@ class OSMFavoritesDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.favoriteView)
         header.setStretchLastSection(True)
         self.favoriteView.setHorizontalHeader(header)
+        self.favoriteView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.favoriteView.setColumnWidth(0, 300)
 
         style=QCommonStyle()
@@ -1107,6 +1108,7 @@ class OSMSaveFavoritesDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.favoriteView)
         header.setStretchLastSection(True)
         self.favoriteView.setHorizontalHeader(header)
+        self.favoriteView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.favoriteView.setColumnWidth(0, 300)
 
         buttons=QHBoxLayout()
@@ -1245,6 +1247,7 @@ class OSMRouteListDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.routeView)
         header.setStretchLastSection(True)
         self.routeView.setHorizontalHeader(header)
+        self.routeView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routeView.setColumnWidth(0, 300)
         
         style=QCommonStyle()
@@ -1403,6 +1406,7 @@ class OSMRouteSaveDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.routeView)
         header.setStretchLastSection(True)
         self.routeView.setHorizontalHeader(header)
+        self.routeView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routeView.setColumnWidth(0, 300)
         
         buttons=QHBoxLayout()
@@ -1463,6 +1467,7 @@ class OSMRouteTableModel(QAbstractTableModel):
         self.startPoint=self.style.getStylePixmap("startPixmap")
         self.endPoint=self.style.getStylePixmap("finishPixmap")
         self.wayPoint=self.style.getStylePixmap("wayPixmap")
+        self.heightHint=self.startPoint.height()+2
         
     def rowCount(self, parent): 
         return len(self.routingPointList)
@@ -1473,6 +1478,7 @@ class OSMRouteTableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
+        
         elif role == Qt.DecorationRole:
             if index.row() >= len(self.routingPointList):
                 return None
@@ -1494,7 +1500,11 @@ class OSMRouteTableModel(QAbstractTableModel):
             
             if index.column()==0:
                 return name
-        
+            
+        elif role == Qt.SizeHintRole:
+            if index.column()==0:
+                return QSize(1, self.heightHint)
+            
         return None
        
     def headerData(self, col, orientation, role):
@@ -1547,6 +1557,8 @@ class OSMRouteDialog(QDialog):
         header.setStretchLastSection(True)
         self.routeView.setHorizontalHeader(header)
         self.routeView.setColumnWidth(0, 300)
+        self.routeView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.routeView.resizeRowsToContents()
 
         editButtons=QHBoxLayout()
         editButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
@@ -2214,7 +2226,9 @@ class OSMPOITableModel(QAbstractTableModel):
         self.poiList=self.style.getPOIDictAsList()
         self.displayPOITypeList=displayPOITypeList
         self.withZoom=withZoom
-        
+        defaultPixmap=self.style.getStylePixmap("poiPixmap")
+        self.heightHint=defaultPixmap.height()+2
+
     def rowCount(self, parent): 
         return len(self.poiList)
     
@@ -2257,7 +2271,12 @@ class OSMPOITableModel(QAbstractTableModel):
             if index.column()==0:
                 return desc
             if index.column()==1:
-                return zoom  
+                return zoom
+        
+        elif role == Qt.SizeHintRole:
+            if index.column()==0:
+                return QSize(1, self.heightHint)
+
         return None
        
     def headerData(self, col, orientation, role):
@@ -2313,6 +2332,7 @@ class OSMPOIDisplayDialog(QDialog):
         self.poiView.setHorizontalHeader(header)
         self.poiView.setColumnWidth(0, 300)
         self.poiView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.poiView.resizeRowsToContents()
 
         style=QCommonStyle()
 
@@ -2360,15 +2380,7 @@ class OSMAreaTableModel(QAbstractTableModel):
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
-#        elif role == Qt.DecorationRole:
-#            if index.row() >= len(self.poiList):
-#                return None
-#            
-#            pixmapName=self.poiList[index.row()][2]
-#            if pixmapName!=None:
-#                return self.style.getStylePixmap(pixmapName)
-#            
-#            return None
+
         elif role==Qt.CheckStateRole:
             if index.row() >= len(self.areaList):
                 return None
@@ -2626,7 +2638,9 @@ class OSMPOISearchDialog(QDialog):
         header.setStretchLastSection(True)
         self.poiView.setHorizontalHeader(header)
         self.poiView.setColumnWidth(0, 300)
-        
+        self.poiView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.poiView.resizeRowsToContents()
+
         if self.nearestMode==False:
             cityBox=QVBoxLayout()
             self.cityFilterEdit=QLineEdit(self)
@@ -2690,6 +2704,7 @@ class OSMPOISearchDialog(QDialog):
         header=QHeaderView(Qt.Horizontal, self.poiEntryView)
         header.setStretchLastSection(True)
         self.poiEntryView.setHorizontalHeader(header)
+        self.poiEntryView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.poiEntryView.setColumnWidth(0, 300)
 
         if self.nearestMode==False:

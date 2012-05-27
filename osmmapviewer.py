@@ -99,6 +99,7 @@ class OSMRoutingPointAction(QAction):
             self.setIcon(QIcon(self.style.getStylePixmap("wayPixmap")))
         if self.routingPoint.getType()==OSMRoutingPoint.TYPE_MAP:
             self.setIcon(QIcon(self.style.getStylePixmap("mapPointPixmap")))
+        self.setIconVisibleInMenu(True)
         
     def getRoutingPoint(self):
         return self.routingPoint
@@ -4107,7 +4108,7 @@ class OSMWidget(QWidget):
         mapPosition=self.mapWidgetQt.getMapPosition()
         gpsPosition=self.mapWidgetQt.getGPSPosition()
 
-        # TODO: we always use map position
+        # we always use map position for country pre selection
         defaultCountryId=osmParserData.getCountryOnPointWithGeom(mapPosition[0], mapPosition[1])
         poiDialog=OSMPOISearchDialog(self, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearest)
         result=poiDialog.exec()
@@ -4563,41 +4564,40 @@ class OSMWidget(QWidget):
             self._searchPOINearest()
         
     def setPoint(self, name, pointType, lat, lon):
+        point=OSMRoutingPoint(name, pointType, (lat, lon))
         if pointType==OSMRoutingPoint.TYPE_START:
-            routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))
-            routingPoint.resolveFromPos(osmParserData)
-            self.mapWidgetQt.setStartPoint(routingPoint) 
-            self.mapWidgetQt.showPointOnMap(routingPoint)
-            if not routingPoint.isValid():
+            point.resolveFromPos(osmParserData)
+            self.mapWidgetQt.setStartPoint(point) 
+            self.mapWidgetQt.showPointOnMap(point)
+            if not point.isValid():
                 self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
                 
         elif pointType==OSMRoutingPoint.TYPE_END:
-            routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
-            routingPoint.resolveFromPos(osmParserData)
-            self.mapWidgetQt.setEndPoint(routingPoint) 
-            self.mapWidgetQt.showPointOnMap(routingPoint)
-            if not routingPoint.isValid():
+            point.resolveFromPos(osmParserData)
+            self.mapWidgetQt.setEndPoint(point) 
+            self.mapWidgetQt.showPointOnMap(point)
+            if not point.isValid():
                 self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
                 
         elif pointType==OSMRoutingPoint.TYPE_WAY:
-            routingPoint=OSMRoutingPoint(name, pointType, (lat, lon))  
-            routingPoint.resolveFromPos(osmParserData)
-            self.mapWidgetQt.setWayPoint(routingPoint) 
-            self.mapWidgetQt.showPointOnMap(routingPoint)
-            if not routingPoint.isValid():
+            point.resolveFromPos(osmParserData)
+            self.mapWidgetQt.setWayPoint(point) 
+            self.mapWidgetQt.showPointOnMap(point)
+            if not point.isValid():
                 self.showError("Error", "Point not usable for routing.\nFailed to resolve way for point.")
         
         elif pointType==OSMRoutingPoint.TYPE_MAP:
-            mapPoint=OSMRoutingPoint(name, pointType, (lat, lon))
-            self.mapWidgetQt.mapPoint=mapPoint
-            self.mapWidgetQt.showPointOnMap(mapPoint)
+            self.mapWidgetQt.mapPoint=point
+            self.mapWidgetQt.showPointOnMap(point)
+
+        elif pointType==OSMRoutingPoint.TYPE_TMP:
+            self.mapWidgetQt.showPointOnMap(point)
         
         elif pointType==OSMRoutingPoint.TYPE_FAVORITE:
-            favoritePoint=OSMRoutingPoint(name, pointType, (lat, lon))
-            self.favoriteList.append(favoritePoint)
+            self.favoriteList.append(point)
 
     def searchAddress(self):
-        # TODO: we always use map position
+        # we always use map position for country pre selection
         mapPosition=self.mapWidgetQt.getMapPosition()
         defaultCountryId=osmParserData.getCountryOnPointWithGeom(mapPosition[0], mapPosition[1])
 
