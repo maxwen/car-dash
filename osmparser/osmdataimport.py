@@ -14,7 +14,7 @@ from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
 from utils.osmutils import OSMUtils
 from imposm.parser.xml.parser import XMLParser
-from imposm.parser import OSMParser
+#from imposm.parser import OSMParser
 
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
