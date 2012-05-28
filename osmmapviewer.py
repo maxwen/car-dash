@@ -4477,6 +4477,8 @@ class OSMWidget(QWidget):
 
         self.mapWidgetQt.loadConfig(config)
         
+        loadDialogSettings(config)
+        
     def saveConfig(self, config):
 #        print("withDownload: %s"%(self.getWithDownloadValue()))
         config.getDefaultSection()["zoom"]=str(self.getZoomValue())
@@ -4536,6 +4538,8 @@ class OSMWidget(QWidget):
             i=i+1
         
         self.mapWidgetQt.saveConfig(config)
+        
+        saveDialogSettings(config)
         
     def updateDownloadThreadState(self, state):
         if state!=self.lastDownloadState:

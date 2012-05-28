@@ -213,6 +213,14 @@ DONE
   TODO: amenity can also be area and relation
   -added parking
  DONE
+ 
+TODO: search dialogs should remember last settings
+-filter
+-selection
+DONE
+
+TODO: make dialog settings persistent
+DONE
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -274,3 +282,4 @@ without the need to reopen it
 -favorites view
 -address dialog
 -poi search dialogs
+
