@@ -583,12 +583,14 @@ class GPSMonitor(QWidget):
             self.canMonitor.osmWidget.updateGPSDataDisplay(gpsData, False)
 
     def loadConfig(self, config):
-        self.globalDistance=config.getDefaultSection().getint("globalDistance", 0)
-        self.localDistance=config.getDefaultSection().getint("localDistance", 0)
+        section="gps"
+        self.globalDistance=config.getSection(section).getint("globalDistance", 0)
+        self.localDistance=config.getSection(section).getint("localDistance", 0)
             
     def saveConfig(self, config):
-        config.getDefaultSection()["globalDistance"]=str(self.globalDistance)
-        config.getDefaultSection()["localDistance"]=str(self.localDistance)
+        section="gps"
+        config.getSection(section)["globalDistance"]=str(self.globalDistance)
+        config.getSection(section)["localDistance"]=str(self.localDistance)
 
     @pyqtSlot()
     def _resetDistance(self):

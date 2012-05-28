@@ -221,6 +221,10 @@ DONE
 
 TODO: make dialog settings persistent
 DONE
+
+TODO: crossing distances in osmrouting are calculated as straight lines!
+-should actually follow the edge -> time?
+DONE
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -230,9 +234,6 @@ DONE
  
  TODO: parser config file
  -definition of imported data
-
-TODO: crossing distances in osmrouting are calculated as straight lines!
--should actually follow the edge -> time?
 
 TODO: use newer version of geos for spatialite
 -support of Line_Locate_Point
@@ -283,3 +284,9 @@ without the need to reopen it
 -address dialog
 -poi search dialogs
 
+TODO: add gps settings to options
+-device
+-nmea or gpsd
+
+TODO: distance to next crossing 
+-calculated twice if in routing mode

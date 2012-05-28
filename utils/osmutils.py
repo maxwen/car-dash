@@ -172,7 +172,7 @@ class OSMUtils():
             return "end"
         return "unknown" 
 
-    def createTemporaryPoints(self, lat1, lon1, lat2, lon2, frac=10.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
+    def createTemporaryPoints(self, lat1, lon1, lat2, lon2, frac=5.0, offsetStart=0.0, offsetEnd=0.0, addStart=True, addEnd=True):
         rlat1 = self.deg2rad(lat1)
         rlon1 = self.deg2rad(lon1)
         rlat2 = self.deg2rad(lat2)

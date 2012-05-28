@@ -816,16 +816,17 @@ class CANMonitor(QMainWindow):
         connectBox=QHBoxLayout()
         top.addLayout(connectBox)
         
+        section="connect"
         self.connectCANButton = QCheckBox('CAN Connect', self)
         self.connectCANButton.clicked.connect(self._connectCAN)
-        self.connectCANEnable=self.config.getDefaultSection().getboolean("CANconnect", False)
+        self.connectCANEnable=self.config.getSection(section).getboolean("CANconnect", False)
         self.connectCANButton.setChecked(self.connectCANEnable)
         self.connectCANButton.setIcon(self.ampelRot)
         connectBox.addWidget(self.connectCANButton)
 
         self.connectGPSButton = QCheckBox('GPS Connect', self)
         self.connectGPSButton.clicked.connect(self._connectGPS)
-        self.connectGPSEnable=self.config.getDefaultSection().getboolean("GPSconnect", False)
+        self.connectGPSEnable=self.config.getSection(section).getboolean("GPSconnect", False)
         self.connectGPSButton.setChecked(self.connectGPSEnable)
         self.connectGPSButton.setIcon(self.ampelRot)
         connectBox.addWidget(self.connectGPSButton)
@@ -1011,8 +1012,9 @@ class CANMonitor(QMainWindow):
             self.updateGPSThread.stop()
             
         self.closeLogFile()
-        self.config.getDefaultSection()["canConnect"]=str(self.connectCANEnable)
-        self.config.getDefaultSection()["gpsConnect"]=str(self.connectGPSEnable)
+        section="connect"
+        self.config.getSection(section)["canConnect"]=str(self.connectCANEnable)
+        self.config.getSection(section)["gpsConnect"]=str(self.connectGPSEnable)
         
         self.osmWidget.saveConfig(self.config)
         self.gpsBox.saveConfig(self.config)

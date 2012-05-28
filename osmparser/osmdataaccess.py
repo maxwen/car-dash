@@ -1058,7 +1058,7 @@ class OSMDataAccess(OSMDataSQLite):
     def getLengthOnEdge(self, lat, lon, coords):
         refPoint, point, distances=self.getClosestPointOnEdge(lat, lon, coords, 30.0)
 
-        if refPoint==None or not refPoint in coords:
+        if refPoint==None:
             return None
         
         length=0
@@ -1086,17 +1086,17 @@ class OSMDataAccess(OSMDataSQLite):
         length=trackItem["length"]           
         return self.getRemainingDistanceOnEdge(coordsList, lat, lon, length)
 
-    def calcRouteDistances(self, trackList, lat, lon, route):
+    def calcRouteDistances(self, trackList, lat, lon, route, distanceOnEdge):
         firstTrackItem=trackList[0]
         endLength=0
         crossingLength=0
         currentTrackItem=firstTrackItem
-        distanceToEdge=self.getRemaingDistanceOnTrackItem(firstTrackItem, lat, lon)
+#        distanceToEdge=self.getRemaingDistanceOnTrackItem(firstTrackItem, lat, lon)
         trackListIndex=0
         
-        if distanceToEdge!=None and distanceToEdge>=0:
-            crossingLength=distanceToEdge
-            endLength=distanceToEdge
+        if distanceOnEdge!=None and distanceOnEdge>=0:
+            crossingLength=distanceOnEdge
+            endLength=distanceOnEdge
         else:
             # only possible if edge decision is pending
             # we have passed the crossing but trackList[0] is
@@ -1104,12 +1104,12 @@ class OSMDataAccess(OSMDataSQLite):
             if len(trackList)>1:
                 # assume we are on the right edge
                 secondTrackItem=trackList[1]
-                distanceToEdge=self.getRemaingDistanceOnTrackItem(secondTrackItem, lat, lon)
-                if distanceToEdge!=None and distanceToEdge>=0:
+                distanceOnEdge=self.getRemaingDistanceOnTrackItem(secondTrackItem, lat, lon)
+                if distanceOnEdge!=None and distanceOnEdge>=0:
                     currentTrackItem=secondTrackItem
                     trackListIndex=1
-                    crossingLength=distanceToEdge
-                    endLength=distanceToEdge
+                    crossingLength=distanceOnEdge
+                    endLength=distanceOnEdge
                 
         if len(trackList)==1:
             return endLength, crossingLength

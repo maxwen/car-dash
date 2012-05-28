@@ -3441,13 +3441,14 @@ class QtOSMWidget(QWidget):
             self.routeInfo=None, None, None, None
             
     def calcRouteDistances(self, lat, lon):
-        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute)
+        distanceOnEdge=osmRouting.getDistanceToCrossing()
+        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge)
 
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
-        edge=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)
+        edge=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)        
         if edge==None:
             self.clearLastEdgeInfo()
         else:   
@@ -4426,29 +4427,30 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.sidebarVisible=value
         
     def loadConfig(self, config):
-        self.setZoomValue(config.getDefaultSection().getint("zoom", 9))
-        self.setAutocenterGPSValue(config.getDefaultSection().getboolean("autocenterGPS", False))
-        self.setWithDownloadValue(config.getDefaultSection().getboolean("withDownload", True))
-        self.setStartLatitude(config.getDefaultSection().getfloat("lat", self.startLat))
-        self.setStartLongitude(config.getDefaultSection().getfloat("lon", self.startLon))
-        self.setTileHome(config.getDefaultSection().get("tileHome", defaultTileHome))
-        self.setTileServer(config.getDefaultSection().get("tileServer", defaultTileServer))
+        section="display"
+        self.setZoomValue(config.getSection(section).getint("zoom", 9))
+        self.setAutocenterGPSValue(config.getSection(section).getboolean("autocenterGPS", False))
+        self.setWithDownloadValue(config.getSection(section).getboolean("withDownload", True))
+        self.setStartLatitude(config.getSection(section).getfloat("lat", self.startLat))
+        self.setStartLongitude(config.getSection(section).getfloat("lon", self.startLon))
+        self.setTileHome(config.getSection(section).get("tileHome", defaultTileHome))
+        self.setTileServer(config.getSection(section).get("tileServer", defaultTileServer))
         
         if disableMappnik==False:
-            self.setWithMapnikValue(config.getDefaultSection().getboolean("withMapnik", False))
-            self.setMapnikConfig(config.getDefaultSection().get("mapnikConfig", defaultMapnikConfig))
+            self.setWithMapnikValue(config.getSection(section).getboolean("withMapnik", False))
+            self.setMapnikConfig(config.getSection(section).get("mapnikConfig", defaultMapnikConfig))
         
-        self.setWithMapRotationValue(config.getDefaultSection().getboolean("withMapRotation", False))
-        self.setShow3DValue(config.getDefaultSection().getboolean("with3DView", False))
-#        self.setShowBackgroundTiles(config.getDefaultSection().getboolean("showBackgroundTiles", False))
-        self.setShowAreas(config.getDefaultSection().getboolean("showAreas", False))
-        self.setShowPOI(config.getDefaultSection().getboolean("showPOI", False))
-        self.setShowSky(config.getDefaultSection().getboolean("showSky", False))
-        self.setXAxisRotation(config.getDefaultSection().getint("XAxisRotation", 60))
-        self.setTileStartZoom(config.getDefaultSection().getint("tileStartZoom", defaultTileStartZoom))
-        self.setVirtualZoom(config.getDefaultSection().getboolean("virtualZoom", False))
-        self.setStartZoom3DView(config.getDefaultSection().getint("startZoom3D", defaultStart3DZoom))
-        self.setSidebarVisible(config.getDefaultSection().getboolean("sidebarVisible", True))
+        self.setWithMapRotationValue(config.getSection(section).getboolean("withMapRotation", False))
+        self.setShow3DValue(config.getSection(section).getboolean("with3DView", False))
+#        self.setShowBackgroundTiles(config.getSection(section).getboolean("showBackgroundTiles", False))
+        self.setShowAreas(config.getSection(section).getboolean("showAreas", False))
+        self.setShowPOI(config.getSection(section).getboolean("showPOI", False))
+        self.setShowSky(config.getSection(section).getboolean("showSky", False))
+        self.setXAxisRotation(config.getSection(section).getint("XAxisRotation", 60))
+        self.setTileStartZoom(config.getSection(section).getint("tileStartZoom", defaultTileStartZoom))
+        self.setVirtualZoom(config.getSection(section).getboolean("virtualZoom", False))
+        self.setStartZoom3DView(config.getSection(section).getint("startZoom3D", defaultStart3DZoom))
+        self.setSidebarVisible(config.getSection(section).getboolean("sidebarVisible", True))
         
         section="poi"
         if config.hasSection(section):
@@ -4480,36 +4482,37 @@ class OSMWidget(QWidget):
         loadDialogSettings(config)
         
     def saveConfig(self, config):
+        section="display"
 #        print("withDownload: %s"%(self.getWithDownloadValue()))
-        config.getDefaultSection()["zoom"]=str(self.getZoomValue())
-        config.getDefaultSection()["autocenterGPS"]=str(self.getAutocenterGPSValue())
-        config.getDefaultSection()["withDownload"]=str(self.getWithDownloadValue())
-        config.getDefaultSection()["withMapnik"]=str(self.getWithMapnikValue())
-        config.getDefaultSection()["withMapRotation"]=str(self.getWithMapRotationValue())
-        config.getDefaultSection()["with3DView"]=str(self.getShow3DValue())
-#        config.getDefaultSection()["showBackgroundTiles"]=str(self.getShowBackgroundTiles())
-        config.getDefaultSection()["showAreas"]=str(self.getShowAreas())
-        config.getDefaultSection()["showPOI"]=str(self.getShowPOI())
-        config.getDefaultSection()["showSky"]=str(self.getShowSky())
-        config.getDefaultSection()["XAxisRotation"]=str(self.getXAxisRotation())
-        config.getDefaultSection()["tileStartZoom"]=str(self.getTileStartZoom())
-        config.getDefaultSection()["virtualZoom"]=str(self.getVirtualZoom())
-        config.getDefaultSection()["startZoom3D"]=str(self.getStartZoom3DView())
-        config.getDefaultSection()["sidebarVisible"]=str(self.getSidebarVisible())
+        config.getSection(section)["zoom"]=str(self.getZoomValue())
+        config.getSection(section)["autocenterGPS"]=str(self.getAutocenterGPSValue())
+        config.getSection(section)["withDownload"]=str(self.getWithDownloadValue())
+        config.getSection(section)["withMapnik"]=str(self.getWithMapnikValue())
+        config.getSection(section)["withMapRotation"]=str(self.getWithMapRotationValue())
+        config.getSection(section)["with3DView"]=str(self.getShow3DValue())
+#        config.getSection(section)["showBackgroundTiles"]=str(self.getShowBackgroundTiles())
+        config.getSection(section)["showAreas"]=str(self.getShowAreas())
+        config.getSection(section)["showPOI"]=str(self.getShowPOI())
+        config.getSection(section)["showSky"]=str(self.getShowSky())
+        config.getSection(section)["XAxisRotation"]=str(self.getXAxisRotation())
+        config.getSection(section)["tileStartZoom"]=str(self.getTileStartZoom())
+        config.getSection(section)["virtualZoom"]=str(self.getVirtualZoom())
+        config.getSection(section)["startZoom3D"]=str(self.getStartZoom3DView())
+        config.getSection(section)["sidebarVisible"]=str(self.getSidebarVisible())
         
         if self.mapWidgetQt.gps_rlat!=0.0:
-            config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
+            config.getSection(section)["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
         else:
-            config.getDefaultSection()["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlat)
+            config.getSection(section)["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlat)
             
         if self.mapWidgetQt.gps_rlon!=0.0:    
-            config.getDefaultSection()["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlon)
+            config.getSection(section)["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlon)
         else:
-            config.getDefaultSection()["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlon)
+            config.getSection(section)["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlon)
             
-        config.getDefaultSection()["tileHome"]=self.getTileHome()
-        config.getDefaultSection()["tileServer"]=self.getTileServer()
-        config.getDefaultSection()["mapnikConfig"]=self.getMapnikConfig()
+        config.getSection(section)["tileHome"]=self.getTileHome()
+        config.getSection(section)["tileServer"]=self.getTileServer()
+        config.getSection(section)["mapnikConfig"]=self.getMapnikConfig()
         
         section="poi"
         config.removeSection(section)

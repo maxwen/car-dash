@@ -20,6 +20,11 @@ class Config():
     
     def getDefaultSection(self):
         return self.config["DEFAULT"]
+
+    def getSection(self, section):
+        if self.hasSection(section):
+            return self.config[section]
+        return self.getDefaultSection()
     
     def addSection(self, section):
         self.config.add_section(section)
