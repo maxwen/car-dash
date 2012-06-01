@@ -10,9 +10,10 @@ import sys
 import time
 import os
 from datetime import datetime
+from dialogs.options import OptionsDialogTab
+from PyQt4.QtGui import QRadioButton
 
-
-USE_GPSD=False
+USE_GPSD=True
 USE_NMEA=True
 
 try:
@@ -28,7 +29,7 @@ except ImportError:
     USE_NMEA=False
 
 from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
-from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
+from PyQt4.QtGui import QLineEdit, QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
 from widgets.gaugecompass import QtPngCompassGauge
 from utils.osmutils import OSMUtils
 from utils.config import Config
@@ -36,13 +37,6 @@ from utils.config import Config
 gpsRunState="run"
 gpsStoppedState="stopped"
 
-
-def getGPSUpdateThread(parent):
-    if USE_NMEA==True:
-        return GPSUpateWorkerNMEA(parent)
-    if USE_GPSD==True:
-        return GPSUpateWorkerGPSD(parent)
-    return None
 
 class GPSData():
     def __init__(self, time=None, lat=None, lon=None, track=None, speed=None, altitude=None, predicted=False, satellitesInUse=0):
@@ -310,15 +304,19 @@ class GpsObject():
         return GPSData(timeStamp, self.lat, self.lon, self.track, self.speed, self.altitude, False, self.strongSatelites)
     
 class GPSUpateWorkerNMEA(QThread):
-    def __init__(self, parent): 
+    def __init__(self, device, parent): 
         QThread.__init__(self, parent)
         self.exiting = False
         self.connected=False
-        self.deviceList=["/dev/ttyACM0", 
-                         "/dev/ttyACM1", 
-                         "/dev/ttyUSB0", 
-                         "/dev/ttyUSB1",
-                         "/dev/gps"]
+        if device==None:
+            self.deviceList=["/dev/ttyACM0", 
+                             "/dev/ttyACM1", 
+                             "/dev/ttyUSB0", 
+                             "/dev/ttyUSB1",
+                             "/dev/gps"]
+        else:
+            self.deviceList=[device]
+            
         self.timeout=3
         self.baud=9600
         self.port=None
@@ -717,6 +715,93 @@ class GPSWindow(QMainWindow):
             
         self.osmWidget.saveConfig(self.config)
         self.config.writeConfig()
+
+class GPSTab(OptionsDialogTab):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialogTab.__init__(self, optionsConfig, parent)
+        self.setFromOptionsConfig(self.getOptionsConfig())
+        
+    def getTabName(self):
+        return "GPS"
+
+    def setFromOptionsConfig(self, optionsConfig):
+        self.useNmea=self.optionsConfig["withNmea"]
+        self.useGpsd=self.optionsConfig["withGpsd"]
+        self.device=self.optionsConfig["device"]
+        
+    def setToOptionsConfig(self):
+        self.optionsConfig["withNmea"]=self.nmeaButton.isChecked()
+        self.optionsConfig["withGpsd"]=self.gpsdButton.isChecked()
+        device=self.deviceText.text()
+        if len(device)!=0:
+            self.optionsConfig["device"]=device
+        else:
+            self.optionsConfig["device"]=None
+                
+    def addToLayout(self, layout):
+        filler=QLabel(self)
+        formLayout = QFormLayout()
+        formLayout.setAlignment(Qt.AlignTop)
+        layout.addLayout(formLayout)
+        
+        self.nmeaButton=QRadioButton("nmea", self)
+        formLayout.addRow(self.nmeaButton, filler)  
+        self.nmeaButton.setChecked(self.useNmea)
+        
+        label=QLabel(self)
+        label.setText("GPS Device:")
+
+        self.deviceText=QLineEdit(self)
+        formLayout.addRow(label, self.deviceText)  
+        self.deviceText.setToolTip('NMEA GPS device path. Changes take affect only after restart.')
+        if self.device!=None:
+            self.deviceText.setText(self.device)
+        
+        self.gpsdButton=QRadioButton("gpsd", self)
+        formLayout.addRow(self.gpsdButton, filler)  
+        self.gpsdButton.setChecked(self.useGpsd)
+
+class GPSConfig():
+    def __init__(self):
+        self.withNmea=True
+        self.withGpsd=False
+        self.device=None
+        
+    def loadConfig(self, config):
+        section="gpsconfig"
+        self.withNmea=config.getSection(section).getboolean("withNmea", True)
+        self.withGpsd=config.getSection(section).getboolean("withGpsd", False)
+        device=config.getSection(section).get("device", None)
+        if device!=None:
+            self.device=device
+            
+    def saveConfig(self, config):
+        section="gpsconfig"
+        config.removeSection(section)
+        config.addSection(section)
+        config.getSection(section)["withNmea"]=str(self.withNmea)
+        if self.device!=None:
+            config.getSection(section)["device"]=str(self.device)
+        config.getSection(section)["withGpsd"]=str(self.withGpsd)
+        
+    def getOptionsConfig(self, optionsConfig):
+        optionsConfig["withNmea"]=self.withNmea
+        optionsConfig["withGpsd"]=self.withGpsd
+        optionsConfig["device"]=self.device
+    
+    def setFromOptionsConfig(self, optionsConfig):
+        self.withGpsd=optionsConfig["withGpsd"]
+        self.withNmea=optionsConfig["withNmea"]
+        self.device=optionsConfig["device"]
+
+gpsConfig=GPSConfig()
+
+def getGPSUpdateThread(parent):
+    if gpsConfig.withNmea==True:
+        return GPSUpateWorkerNMEA(gpsConfig.device, parent)
+    if gpsConfig.withGpsd==True:
+        return GPSUpateWorkerGPSD(parent)
+    return None
 
 def main(argv): 
     signal.signal(signal.SIGINT, signal.SIG_DFL)

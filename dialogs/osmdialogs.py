@@ -17,7 +17,8 @@ from osmparser.osmdataaccess import OSMDataAccess
 from osmstyle import OSMStyle
 from osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
-from dialogs.options import OptionsDialogTabManager, OptionsDialogTab, OptionsDialog
+from dialogs.options import OptionsDialogTab, OptionsDialog
+from utils.gpsutils import GPSTab
 
 settings=dict()
 
@@ -2192,7 +2193,7 @@ class OSM3DTab(OptionsDialogTab):
 
         tab3Layout.addRow(label, self.startZoom3DField)  
 
-tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab]
+tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab, GPSTab]
  
 class OSMOptionsDialog(OptionsDialog):
     def __init__(self, optionsConfig, parent):

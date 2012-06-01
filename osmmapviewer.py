@@ -25,7 +25,7 @@ from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from utils.config import Config
 from utils.osmutils import OSMUtils
-from utils.gpsutils import getGPSUpdateThread, GPSData, gpsRunState, gpsStoppedState
+from utils.gpsutils import gpsConfig, getGPSUpdateThread, GPSData, gpsRunState, gpsStoppedState
 from dialogs.osmdialogs import *
 
 from mapnik.mapnikwrapper import MapnikWrapper, disableMappnik
@@ -4145,7 +4145,10 @@ class OSMWidget(QWidget):
         optionsConfig["displayPOITypeList"]=list(self.getDisplayPOITypeList())
         optionsConfig["displayAreaTypeList"]=list(self.getDisplayAreaTypeList())
         optionsConfig["startZoom3D"]=self.getStartZoom3DView()
-        
+        optionsConfig["withNmea"]=True
+        optionsConfig["withGpsd"]=False
+
+        gpsConfig.getOptionsConfig(optionsConfig)
         return optionsConfig
 
     def setFromOptionsConfig(self, optionsConfig):
@@ -4172,6 +4175,8 @@ class OSMWidget(QWidget):
         self.setDisplayAreaTypeList(optionsConfig["displayAreaTypeList"])
         self.setStartZoom3DView(optionsConfig["startZoom3D"])
         self.setRoutingMode(optionsConfig["routingMode"])
+        
+        gpsConfig.setFromOptionsConfig(optionsConfig)
         
     @pyqtSlot()
     def _showSettings(self):
@@ -4508,9 +4513,8 @@ class OSMWidget(QWidget):
                     self.favoriteList.append(favoritePoint)
 
         self.mapWidgetQt.loadConfig(config)
-        
-        loadDialogSettings(config)
-        
+        gpsConfig.loadConfig(config)
+        loadDialogSettings(config)        
         
     def saveConfig(self, config):
         section="display"
@@ -4576,6 +4580,7 @@ class OSMWidget(QWidget):
         
         self.mapWidgetQt.saveConfig(config)
         
+        gpsConfig.saveConfig(config)
         saveDialogSettings(config)
         
     def updateDownloadThreadState(self, state):
