@@ -589,6 +589,8 @@ class GPSMonitor(QWidget):
             
     def saveConfig(self, config):
         section="gps"
+        config.removeSection(section)
+        config.addSection(section)
         config.getSection(section)["globalDistance"]=str(self.globalDistance)
         config.getSection(section)["localDistance"]=str(self.localDistance)
 
@@ -601,74 +603,6 @@ class GPSMonitor(QWidget):
         
     def _cleanup(self):
         None
-
-class GPSSimpleMonitor(QWidget):
-    def __init__(self, parent):
-        QWidget.__init__(self, parent)
-        self.valueLabelList=list()
-        
-    def createGPSLabel(self, form, key, value):
-        lbl = QLabel(self)
-        lbl.setMinimumHeight(50)
-        font = lbl.font()
-        font.setPointSize(14)
-        lbl.setFont(font)
-        lbl.setText(key)
-        
-        lbl2 = QLabel(self)
-        lbl2.setMinimumHeight(50)
-        font = lbl2.font()
-        font.setPointSize(14)
-        lbl2.setFont(font)
-        lbl2.setText(value)
-        self.valueLabelList.append(lbl2)
-
-        form.addRow(lbl, lbl2)
-        
-    def createLCD(self, mode):
-        lcd = QLCDNumber(self)
-        lcd.setMode(mode)
-        lcd.setMinimumHeight(50)
-        lcd.setMinimumWidth(160)
-        lcd.setDigitCount(8)
-        if mode==QLCDNumber.Bin:
-            lcd.display("00000000")
-        else:
-            lcd.display(0)
-        lcd.setSegmentStyle(QLCDNumber.Flat)
-        lcd.setAutoFillBackground(True)
-        palette = lcd.palette()
-        palette.setColor(QPalette.Normal, QPalette.Foreground, Qt.blue)
-        palette.setColor(QPalette.Normal, QPalette.Background, Qt.lightGray)
-        lcd.setPalette(palette);
-        return lcd
-    
-    def addToWidget(self, hbox):
-        form=QFormLayout()
-        form.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-
-        hbox.addLayout(form)
-        
-        self.createGPSLabel(form, "Latitude", "")
-        self.createGPSLabel(form, "Longitude", "")
-        self.createGPSLabel(form, "Altitude", "")
-        self.createGPSLabel(form, "Speed", "")
-        self.createGPSLabel(form, "Track", "")
-        
-    def update(self, gpsData):
-        if gpsData!=None:
-            self.valueLabelList[0].setText(str(gpsData.lat))
-            self.valueLabelList[1].setText(str(gpsData.lon))
-            self.valueLabelList[2].setText(str(gpsData.altitude))
-            self.valueLabelList[3].setText(str(gpsData.speed))
-            self.valueLabelList[4].setText(str(gpsData.track))
-                
-        else:
-            self.valueLabelList[0].setText("")
-            self.valueLabelList[1].setText("")
-            self.valueLabelList[2].setText("")
-            self.valueLabelList[3].setText("")
-            self.valueLabelList[4].setText("")
         
 class GPSWindow(QMainWindow):
     def __init__(self, parent):

@@ -322,7 +322,38 @@ class OSMRouting():
 #        self.currentEdgeCheckTrigger=0
         self.longestPossibleEdge=None
         self.distanceToNextCrossing=None
+
+    def cleanAll(self):
+        self.cleanCurrentEdge()
+        self.cleanEdgeCalculations(True)
         
+    def cleanCurrentEdge(self):
+        self.debugPrint(0.0, 0.0, "cleanCurrentEdge")
+        self.currentEdgeData=None
+        
+    def cleanEdgeCalculations(self, cleanLastApproachingRef):
+        if cleanLastApproachingRef==False:
+            self.lastApproachingRef=self.approachingRef
+        else:
+            self.lastApproachingRef=None
+            
+        self.approachingRef=None
+        self.approachingRefPos=None
+        self.expectedNextEdgeId=None
+        self.expectedNextEdge=None
+        self.possibleEdges=None
+        self.distanceToCrossing=None
+        self.crossingPassed=False
+        self.crossingReached=False
+        self.nextEdgeLength=None
+        self.otherNearHeading=False
+        self.distanceFromCrossing=None
+        self.nearCrossing=False
+        self.nearPossibleEdges=None
+#        self.currentEdgeCheckTrigger=0
+        self.longestPossibleEdge=None
+        self.distanceToNextCrossing=None
+                
     def getCurrentSearchEdgeList(self):
         return self.possibleEdges
     
@@ -443,6 +474,7 @@ class OSMRouting():
                     headingCoords=list()
                     headingCoords.extend(coords)
                     headingCoords.reverse()
+                    
                 heading=self.osmParserData.getHeadingForPoints(headingCoords)
 
                 edgeHeadings.append(heading)
@@ -569,37 +601,6 @@ class OSMRouting():
             return edge
 
         return None
-    
-    def cleanAll(self):
-        self.cleanCurrentEdge()
-        self.cleanEdgeCalculations(True)
-        
-    def cleanCurrentEdge(self):
-        self.debugPrint(0.0, 0.0, "cleanCurrentEdge")
-        self.currentEdgeData=None
-        
-    def cleanEdgeCalculations(self, cleanLastApproachingRef):
-        if cleanLastApproachingRef==False:
-            self.lastApproachingRef=self.approachingRef
-        else:
-            self.lastApproachingRef=None
-            
-        self.approachingRef=None
-        self.approachingRefPos=None
-        self.expectedNextEdgeId=None
-        self.expectedNextEdge=None
-        self.possibleEdges=None
-        self.distanceToCrossing=None
-        self.crossingPassed=False
-        self.crossingReached=False
-        self.nextEdgeLength=None
-        self.otherNearHeading=False
-        self.distanceFromCrossing=None
-        self.nearCrossing=False
-        self.nearPossibleEdges=None
-#        self.currentEdgeCheckTrigger=0
-        self.longestPossibleEdge=None
-        self.distanceToNextCrossing=None
 
     # distance to crossing that we assume is near crossing
     # here we start calculating the expected edge
@@ -670,9 +671,6 @@ class OSMRouting():
             
             return
 
-        # TODO: if crossing is not mapped correct
-        # we can jump from near crossing to past crossing
-        # before we reached the crossing
         self.distanceFromCrossing=distance
         self.crossingReached=True     
         self.debugPrint(lat, lon, "crossing reached %d"%self.distanceFromCrossing)
@@ -734,10 +732,10 @@ class OSMRouting():
             self.crossingReached=False
         
     def useEdge(self, lat, lon, track, speed, edge, cleanLastApproachingRef):
-        self.cleanEdgeCalculations(cleanLastApproachingRef)
-            
         self.currentEdgeData=edge
-        
+            
+        self.cleanEdgeCalculations(cleanLastApproachingRef)
+                    
         # immediately calc next crossing to be available on the next call
         # else in case of a short edge we might miss the next crossing
         self.calcNextEdgeValues(lat, lon, track, speed)
@@ -853,6 +851,20 @@ class OSMRouting():
         
         return distance
     
+    def checkForEdgesInAvailableEdgeList(self, lat, lon, track, margin):
+        edgeList=self.getCurrentEdgesInMargin(lat, lon, track, margin)
+        if self.expectedNextEdge!=None:
+            # is expected edge still in margin?
+            if self.expectedNextEdge in edgeList:
+                return True
+        elif self.possibleEdges!=None:
+            # is at least one possible edge in margin?
+            for edge in self.possibleEdges:
+                if edge in edgeList:
+                    return True
+                
+        return False
+    
     def getEdgeIdOnPosForRouting(self, lat, lon, track, nextEdgeOnRoute, margin, fromMouse, speed):        
         if track==None:
             return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
@@ -868,15 +880,13 @@ class OSMRouting():
                 # check if expected edge is not in margin at all            
                 if self.otherNearHeading==True:
                     if self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH:
-                        edgeList=self.getCurrentEdgesInMargin(lat, lon, track, margin)
-                        if not self.expectedNextEdge in edgeList:
+                        if not self.checkForEdgesInAvailableEdgeList(lat, lon, track, margin):
                             self.debugPrint(lat, lon, "lost expected edge fallback")
                             return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
 
                 else:
                     if self.distanceFromCrossing>MAXIMUM_DECISION_LENGTH_SHORT:
-                        edgeList=self.getCurrentEdgesInMargin(lat, lon, track, margin)
-                        if not self.expectedNextEdge in edgeList:
+                        if not self.checkForEdgesInAvailableEdgeList(lat, lon, track, margin):
                             self.debugPrint(lat, lon, "lost expected edge fallback")
                             return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
             

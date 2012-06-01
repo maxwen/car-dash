@@ -1449,9 +1449,6 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("centerGPSPixmap"))
             self.centerGPSRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-#            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("gpsDataPixmap"))
-#            self.showGPSDataRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
-
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
             self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
@@ -1880,9 +1877,6 @@ class QtOSMWidget(QWidget):
                 elif self.centerGPSRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Center map to GPS")
                     return True
-#                elif self.showGPSDataRect.contains(mousePos):
-#                    QToolTip.showText(event.globalPos(), "Show GPS data")
-#                    return True
                 elif self.optionsRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Settings")
                     return True
@@ -2894,8 +2888,6 @@ class QtOSMWidget(QWidget):
                         self.osmWidget._loadRoute()
                     elif self.centerGPSRect.contains(eventPos):
                         self.osmWidget._centerGPS()
-#                    elif self.showGPSDataRect.contains(eventPos):
-#                        self.osmWidget._showGPSData()
                     elif self.optionsRect.contains(eventPos):
                         self.osmWidget._showSettings()
                     return
@@ -3786,6 +3778,8 @@ class QtOSMWidget(QWidget):
     def loadConfig(self, config):
         section="routing"
         if config.hasSection(section):
+            self.osmWidget.setRoutingModeId(config.getSection(section).getint("routingmode", 0))
+
             for name, value in config.items(section):
                 if name[:5]=="point":
                     point=OSMRoutingPoint()
@@ -3827,6 +3821,8 @@ class QtOSMWidget(QWidget):
         section="routing"
         config.removeSection(section)
         config.addSection(section)
+        
+        config.getSection(section)["routingmode"]=str(self.osmWidget.getRoutingModeId())
         
         i=0
         if self.startPoint!=None:
@@ -4127,11 +4123,6 @@ class OSMWidget(QWidget):
         msgBox.exec()
         
     @pyqtSlot()
-    def _showGPSData(self):
-        gpsDataDialog=OSMGPSDataDialog(self)
-        gpsDataDialog.exec()
-        
-    @pyqtSlot()
     def _showSettings(self):
         optionsDialog=OSMOptionsDialog(self)
         result=optionsDialog.exec()
@@ -4160,6 +4151,7 @@ class OSMWidget(QWidget):
             self.setDisplayPOITypeList(optionsDialog.displayPOITypeList)
             self.setDisplayAreaTypeList(optionsDialog.displayAreaTypeList)
             self.setStartZoom3DView(optionsDialog.startZoom3D)
+            self.setRoutingMode(optionsDialog.routingMode)
             
             self.mapWidgetQt.clearPolygonCache()
             self.mapWidgetQt.update()
@@ -4425,7 +4417,19 @@ class OSMWidget(QWidget):
     
     def setSidebarVisible(self, value):
         self.mapWidgetQt.sidebarVisible=value
+    
+    def getRoutingModes(self):
+        return osmParserData.getRoutingModes()
+
+    def getRoutingModeId(self):
+        return osmParserData.getRoutingModeId()
+
+    def setRoutingMode(self, mode):
+        return osmParserData.setRoutingMode(mode)
         
+    def setRoutingModeId(self, modeId):
+        return osmParserData.setRoutingModeId(modeId)
+    
     def loadConfig(self, config):
         section="display"
         self.setZoomValue(config.getSection(section).getint("zoom", 9))
@@ -4481,8 +4485,12 @@ class OSMWidget(QWidget):
         
         loadDialogSettings(config)
         
+        
     def saveConfig(self, config):
         section="display"
+        config.removeSection(section)
+        config.addSection(section)
+        
 #        print("withDownload: %s"%(self.getWithDownloadValue()))
         config.getSection(section)["zoom"]=str(self.getZoomValue())
         config.getSection(section)["autocenterGPS"]=str(self.getAutocenterGPSValue())

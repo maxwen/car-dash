@@ -13,7 +13,6 @@ import time
 from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import OSMDataAccess
-from utils.gpsutils import GPSSimpleMonitor
 from osmstyle import OSMStyle
 from osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
@@ -1977,6 +1976,9 @@ class OSMOptionsDialog(QDialog):
         self.XAxisRotation=parent.getXAxisRotation()
         self.tileServer=parent.getTileServer()
         self.tileHome=parent.getTileHome()
+        self.routingModes=parent.getRoutingModes()
+        self.routingModeButtons=list()
+        self.routingModeId=parent.getRoutingModeId()
         
         if disableMappnik==False:
             self.mapnikConfig=parent.getMapnikConfig()
@@ -2001,6 +2003,7 @@ class OSMOptionsDialog(QDialog):
         tab1 = QWidget(self)
         tab2 = QWidget(self) 
         tab3 = QWidget(self) 
+        tab4 = QWidget(self) 
         
         tab1Layout = QVBoxLayout(tab1)
         tab1Layout.setAlignment(Qt.AlignTop)
@@ -2010,10 +2013,14 @@ class OSMOptionsDialog(QDialog):
 
         tab3Layout = QFormLayout(tab3)
         tab3Layout.setAlignment(Qt.AlignTop)    
-            
+
+        tab4Layout = QVBoxLayout(tab4)
+        tab4Layout.setAlignment(Qt.AlignTop)            
+        
         self.tabs.addTab(tab1, "Driving Mode") 
         self.tabs.addTab(tab2, "Display")
         self.tabs.addTab(tab3, "3D")
+        self.tabs.addTab(tab4, "Routing")
         
         filler=QLabel(self)
 
@@ -2139,6 +2146,15 @@ class OSMOptionsDialog(QDialog):
 
         tab3Layout.addRow(label, self.startZoom3DField)  
         
+        for routingMode in self.routingModes:
+            routingModeId=routingMode["id"]
+            routingModeButton=QRadioButton(routingMode["desc"], self)
+            self.routingModeButtons.append(routingModeButton)
+            if routingModeId==self.routingModeId:
+                routingModeButton.setChecked(True)
+                
+            tab4Layout.addWidget(routingModeButton) 
+            
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
@@ -2193,49 +2209,13 @@ class OSMOptionsDialog(QDialog):
         self.tileStartZoom=int(self.tileStartZoomField.text())
         self.startZoom3D=int(self.startZoom3DField.text())
         
-        self.done(QDialog.Accepted)
-
-class OSMGPSDataDialog(QDialog):
-    def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-        self.initUI()
-
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setAlignment(Qt.AlignTop)
-        top.setSpacing(2)
-        
-        style=QCommonStyle()
-
-        self.gpsBox=GPSSimpleMonitor(self)
-        self.gpsBox.addToWidget(top)
-
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.okButton=QPushButton("Close", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-        buttons.addWidget(self.okButton)
-        
-        top.addLayout(buttons)
-        self.setLayout(top)
-        self.setWindowTitle('GPS Data')
-        self.setGeometry(0, 0, 400, 300)
-        
-        # init else we need to wait for the first change
-        self.updateGPSDisplay(self.parent().lastGPSData)
-        self.connect(self.parent().parent().updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.updateGPSDisplay)
-        
-    def updateGPSDisplay(self, gpsData):
-        self.gpsBox.update(gpsData)
+        self.routingMode=None
+        i=0
+        for button in self.routingModeButtons:
+            if button.isChecked():
+                self.routingMode=self.routingModes[i]
+            i=i+1
                 
-    @pyqtSlot()
-    def _ok(self):
         self.done(QDialog.Accepted)
 
 class OSMInputDialog(QDialog):

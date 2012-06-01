@@ -411,7 +411,7 @@ class OSMDataAccess(OSMDataSQLite):
                 targetPos=targetPoint.getPosOnEdge()
                        
                 if self.dWrapperTrsp!=None:
-                    edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(sourceEdge, targetEdge, sourcePos, targetPos, bbox, False)
+                    edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(sourceEdge, targetEdge, sourcePos, targetPos, bbox)
                     if edgeList==None:
                         return None
  
@@ -430,7 +430,7 @@ class OSMDataAccess(OSMDataSQLite):
     
     def calcRouteForEdges(self, startEdge, endEdge, startPos, endPos):                                                                                         
         if self.dWrapperTrsp!=None:
-            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(startEdge, endEdge, startPos, endPos, None, False)
+            edgeList, pathCost=self.dWrapperTrsp.computeShortestPath(startEdge, endEdge, startPos, endPos, None)
             if edgeList==None:
                 return None, None
             return edgeList, pathCost
@@ -1017,6 +1017,7 @@ class OSMDataAccess(OSMDataSQLite):
 
         return closestRef, closestRefPoint, closestPoint
 
+    # TODO: copy of getClosestRefOnEdge
     def getClosestPointOnEdge(self, lat, lon, coords, maxDistance):
         closestRefPoint=None
         closestPoint=None
@@ -1679,7 +1680,19 @@ class OSMDataAccess(OSMDataSQLite):
         if "name" in tags:
             return tags["name"]
         return "Unknown"
+
+    def setRoutingMode(self, mode):
+        self.dWrapperTrsp.setRoutingMode(mode)
+        
+    def getRoutingModes(self):
+        return self.dWrapperTrsp.getRoutingModes()
+
+    def getRoutingModeId(self):
+        return self.dWrapperTrsp.getRoutingModeId()  
     
+    def setRoutingModeId(self, modeId):
+        self.dWrapperTrsp.setRoutingModeId(modeId)
+      
 def main(argv):    
     p = OSMDataAccess()
     

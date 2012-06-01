@@ -1013,6 +1013,8 @@ class CANMonitor(QMainWindow):
             
         self.closeLogFile()
         section="connect"
+        self.config.removeSection(section)
+        self.config.addSection(section)
         self.config.getSection(section)["canConnect"]=str(self.connectCANEnable)
         self.config.getSection(section)["gpsConnect"]=str(self.connectGPSEnable)
         

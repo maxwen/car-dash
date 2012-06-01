@@ -9,11 +9,40 @@ from ctypes import *
 from Polygon import Polygon
 
 class TrspWrapper():
+    MODE_FASTEST=0
+    MODE_SHORTEST=1
+
+    routingModes=[{"desc":"Fastest", "id":MODE_FASTEST},
+                  {"desc":"Shortest", "id":MODE_SHORTEST}]
+
     def __init__(self, dataDir):
         self.dataDir=dataDir
         self.lastBBoxCPolygon=None
         self.lastBBox=None
+        self.routingModeId=self.MODE_FASTEST
         
+    def getRoutingModes(self):
+        return self.routingModes
+    
+    def getRoutingModeId(self):
+        return self.routingModeId
+    
+    def setRoutingMode(self, mode):
+        routingModeId=mode["id"]
+        if routingModeId!=self.routingModeId:
+            self.lastBBoxCPolygon=None
+        self.routingModeId=routingModeId
+
+    def setRoutingModeId(self, modeId):
+        for routingMode in self.routingModes:
+            if modeId==routingMode["id"]:
+                if modeId!=self.routingModeId:
+                    self.lastBBoxCPolygon=None                
+                self.routingModeId=modeId
+                return
+        
+        print("TrspWrapper: invalid routing mode")  
+              
     def isGraphLoaded(self):
         return True
     
@@ -39,14 +68,14 @@ class TrspWrapper():
     def getSQLQueryEdgeShortest(self):
         if self.lastBBox!=None:
             xmin, ymin, xmax, ymax=self.lastBBox        
-            return 'SELECT id, source, target, length AS cost, CASE WHEN reverseCost IS cost THEN length ELSE reverseCost END FROM edgeTable WHERE MbrWithin("geom", BuildMbr(%f, %f, %f, %f, 4326))==1'%(xmin, ymin, xmax, ymax)
+            return 'SELECT id, source, target, length AS cost, CASE WHEN reverseCost IS cost THEN length ELSE reverseCost END FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(xmin, ymin, xmax, ymax)
         else:
             return 'SELECT id, source, target, length AS cost, CASE WHEN reverseCost IS cost THEN length ELSE reverseCost END FROM edgeTable'
             
     def getSQLQueryEdge(self):
         if self.lastBBox!=None:
             xmin, ymin, xmax, ymax=self.lastBBox
-            return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeWithin(%f, %f, %f, %f))'%(xmin, ymin, xmax, ymax)
+            return 'SELECT id, source, target, cost, reverseCost FROM edgeTable WHERE ROWID IN (SELECT rowid FROM idx_edgeTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(xmin, ymin, xmax, ymax)
         else:
             return 'SELECT id, source, target, cost, reverseCost FROM edgeTable'
             
@@ -57,7 +86,7 @@ class TrspWrapper():
         bboxCPolyon=Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])    
         return self.lastBBoxCPolygon.covers(bboxCPolyon)
         
-    def computeShortestPath(self, startEdge, endEdge, startPos, endPos, bbox, shortest):
+    def computeShortestPath(self, startEdge, endEdge, startPos, endPos, bbox):
         lib_routing = cdll.LoadLibrary("librouting_trsp.so")
                 
         edgeList=list()
@@ -82,8 +111,8 @@ class TrspWrapper():
             lib_routing.clean_edges()
             
         # TODO: disabled bbox for routing
-#        self.lastBBox=None
-        print(self.lastBBox)
+        self.lastBBox=None
+#        print(self.lastBBox)
 
         doVertexC=c_int(0)
         startEdgeC=c_int(startEdge)
@@ -93,7 +122,8 @@ class TrspWrapper():
         path_count=c_int(0)
         file=c_char_p(self.getDB().encode(encoding='utf_8', errors='strict'))
         
-        if shortest==True:
+        print(self.routingModeId)
+        if self.routingModeId==self.MODE_SHORTEST:
             sqlEdge=c_char_p(self.getSQLQueryEdgeShortest().encode(encoding='utf_8', errors='strict'))
         else:
             sqlEdge=c_char_p(self.getSQLQueryEdge().encode(encoding='utf_8', errors='strict'))
