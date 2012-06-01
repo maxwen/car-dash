@@ -10,12 +10,14 @@ import re
 import os
 import time
 
+
 from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
 from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import OSMDataAccess
 from osmstyle import OSMStyle
 from osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
+from dialogs.options import OptionsDialogTabManager, OptionsDialogTab, OptionsDialog
 
 settings=dict()
 
@@ -1954,100 +1956,117 @@ class IntValueValidator(QValidator):
             return (QValidator.Invalid, input, pos)
         return (QValidator.Acceptable, input, pos)
     
-class OSMOptionsDialog(QDialog):
-    def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
+class OSMRoutingTab(OptionsDialogTab):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialogTab.__init__(self, optionsConfig, parent)
+        self.setFromOptionsConfig(self.getOptionsConfig())
         
-        self.style=OSMStyle()
-#        self.downloadIcon=QIcon(self.style.getStylePixmap("downloadPixmap"))
-#        self.gpsIcon=QIcon(self.style.getStylePixmap("followGPSPixmap"))
-        
-        self.followGPS=parent.getAutocenterGPSValue()
-        self.withDownload=parent.getWithDownloadValue()
-        self.withMapRotation=parent.getWithMapRotationValue()
-        self.withShow3D=parent.getShow3DValue()
-#        self.withShowBackgroundTiles=parent.getShowBackgroundTiles()
-        self.withShowAreas=parent.getShowAreas()
-        self.withShowPOI=parent.getShowPOI()
-        self.withShowSky=parent.getShowSky()
-        self.XAxisRotation=parent.getXAxisRotation()
-        self.tileServer=parent.getTileServer()
-        self.tileHome=parent.getTileHome()
-        self.routingModes=parent.getRoutingModes()
+    def getTabName(self):
+        return "Routing"
+
+    def setFromOptionsConfig(self, optionsConfig):
         self.routingModeButtons=list()
-        self.routingModeId=parent.getRoutingModeId()
-        
-        if disableMappnik==False:
-            self.mapnikConfig=parent.getMapnikConfig()
-            self.withMapnik=parent.getWithMapnikValue()
-            
-        self.tileStartZoom=parent.getTileStartZoom()
-        self.displayPOITypeList=list(parent.getDisplayPOITypeList())
-        self.displayAreaTypeList=list(parent.getDisplayAreaTypeList())
-        self.startZoom3D=parent.getStartZoom3DView()
-        self.initUI()
+        self.routingModes=optionsConfig["routingModes"]
+        self.routingModeId=optionsConfig["routingModeId"]
 
-    def initUI(self):
-        top=QVBoxLayout()
-        top.setSpacing(2)
-            
-        style=QCommonStyle()
-        iconSize=QSize(48, 48)
+    def setToOptionsConfig(self):
+        self.routingMode=None
+        i=0
+        for button in self.routingModeButtons:
+            if button.isChecked():
+                self.routingMode=self.routingModes[i]
+            i=i+1
+        self.optionsConfig["routingMode"]=self.routingMode
+                
+    def addToLayout(self, layout):
+        for routingMode in self.routingModes:
+            routingModeId=routingMode["id"]
+            routingModeButton=QRadioButton(routingMode["desc"], self)
+            self.routingModeButtons.append(routingModeButton)
+            if routingModeId==self.routingModeId:
+                routingModeButton.setChecked(True)
+                
+            layout.addWidget(routingModeButton) 
 
-        self.tabs = MyTabWidget(self)
-        top.addWidget(self.tabs)
+class OSMDrivingModeTab(OptionsDialogTab):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialogTab.__init__(self, optionsConfig, parent)
+        self.setFromOptionsConfig(self.getOptionsConfig())
         
-        tab1 = QWidget(self)
-        tab2 = QWidget(self) 
-        tab3 = QWidget(self) 
-        tab4 = QWidget(self) 
-        
-        tab1Layout = QVBoxLayout(tab1)
-        tab1Layout.setAlignment(Qt.AlignTop)
-        
-        tab2Layout = QFormLayout(tab2)
-        tab2Layout.setAlignment(Qt.AlignTop)
+    def getTabName(self):
+        return "DrivingMode"
 
-        tab3Layout = QFormLayout(tab3)
-        tab3Layout.setAlignment(Qt.AlignTop)    
+    def setFromOptionsConfig(self, optionsConfig):
+        self.followGPS=optionsConfig["followGPS"]
+        self.withMapRotation=optionsConfig["withMapRotation"]
 
-        tab4Layout = QVBoxLayout(tab4)
-        tab4Layout.setAlignment(Qt.AlignTop)            
-        
-        self.tabs.addTab(tab1, "Driving Mode") 
-        self.tabs.addTab(tab2, "Display")
-        self.tabs.addTab(tab3, "3D")
-        self.tabs.addTab(tab4, "Routing")
-        
-        filler=QLabel(self)
-
+    def setToOptionsConfig(self):
+        self.optionsConfig["followGPS"]=self.followGPSButton.isChecked()
+        self.optionsConfig["withMapRotation"]=self.withMapRotationButton.isChecked()
+                
+    def addToLayout(self, layout):
         self.followGPSButton=QCheckBox("Follow GPS", self)
-#        self.followGPSButton.setIcon(self.gpsIcon)
-        self.followGPSButton.setIconSize(iconSize) 
         self.followGPSButton.setChecked(self.followGPS)       
-        tab1Layout.addWidget(self.followGPSButton)
+        layout.addWidget(self.followGPSButton)
 
         self.withMapRotationButton=QCheckBox("Map rotation", self)
         self.withMapRotationButton.setChecked(self.withMapRotation)
-        self.withMapRotationButton.setIconSize(iconSize)        
-        tab1Layout.addWidget(self.withMapRotationButton)
+        layout.addWidget(self.withMapRotationButton)
+        
+class OSMDisplayTab(OptionsDialogTab):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialogTab.__init__(self, optionsConfig, parent)
+        self.setFromOptionsConfig(self.getOptionsConfig())
+        
+    def getTabName(self):
+        return "Display"
+
+    def setFromOptionsConfig(self, optionsConfig):
+        self.withDownload=optionsConfig["withDownload"]
+        self.withShowAreas=optionsConfig["withShowAreas"]
+        self.withShowPOI=optionsConfig["withShowPOI"]
+        self.tileServer=optionsConfig["tileServer"]
+        self.tileHome=optionsConfig["tileHome"]
+
+        if disableMappnik==False:
+            self.mapnikConfig=optionsConfig["mapnikConfig"]
+            self.withMapnik=optionsConfig["withMapnik"]
+            
+        self.tileStartZoom=optionsConfig["tileStartZoom"]
+        self.displayPOITypeList=optionsConfig["displayPOITypeList"]
+        self.displayAreaTypeList=optionsConfig["displayAreaTypeList"]
+
+    def setToOptionsConfig(self):
+        self.optionsConfig["withDownload"]=self.downloadTilesButton.isChecked()
+        self.optionsConfig["withShowAreas"]=self.withShowAreasButton.isChecked()
+        self.optionsConfig["withShowPOI"]=self.withShowPOIButton.isChecked()
+        self.optionsConfig["tileServer"]=self.tileServerField.text()
+        self.optionsConfig["tileHome"]=self.tileHomeField.text()
+
+        if disableMappnik==False:
+            self.optionsConfig["mapnikConfig"]=self.mapnikConfigField.text()
+            self.optionsConfig["withMapnik"]=self.withMapnikButton.isChecked()
+            
+        self.optionsConfig["tileStartZoom"]=int(self.tileStartZoomField.text())
+        self.optionsConfig["displayPOITypeList"]=self.displayPOITypeList
+        self.optionsConfig["displayAreaTypeList"]=self.displayAreaTypeList
                 
+    def addToLayout(self, layout):
+        filler=QLabel(self)
+        tab2Layout = QFormLayout()
+        tab2Layout.setAlignment(Qt.AlignTop)
+        layout.addLayout(tab2Layout)
+        
         if disableMappnik==True:
             self.downloadTilesButton=QCheckBox("Download missing tiles", self)
         else:
             self.downloadTilesButton=QRadioButton("Download missing tiles", self)
-#        self.downloadTilesButton.setIcon(self.downloadIcon)
         self.downloadTilesButton.setChecked(self.withDownload)
-        self.downloadTilesButton.setIconSize(iconSize)        
         tab2Layout.addRow(self.downloadTilesButton, filler)  
 
         if disableMappnik==False:
             self.withMapnikButton=QRadioButton("Use Mapnik", self)
             self.withMapnikButton.setChecked(self.withMapnik)
-            self.withMapnikButton.setIconSize(iconSize)    
             tab2Layout.addRow(self.withMapnikButton, filler)  
         
         label=QLabel(self)
@@ -2094,17 +2113,11 @@ class OSMOptionsDialog(QDialog):
 
         tab2Layout.addRow(label, self.tileStartZoomField)  
 
-#        self.withShowBackgroundTilesButton=QCheckBox("Show Background Tiles", self)
-#        self.withShowBackgroundTilesButton.setChecked(self.withShowBackgroundTiles)
-#        self.withShowBackgroundTilesButton.setIconSize(iconSize)        
-#        tab2Layout.addRow(self.withShowBackgroundTilesButton, filler)  
-
         self.configureAreaButton=QPushButton("Configure...", self)
         self.configureAreaButton.clicked.connect(self._configureAreaDisplay)
 
         self.withShowAreasButton=QCheckBox("Show Environment", self)
         self.withShowAreasButton.setChecked(self.withShowAreas)
-        self.withShowAreasButton.setIconSize(iconSize)        
         tab2Layout.addRow(self.withShowAreasButton, self.configureAreaButton)  
         
         self.configurePOIButton=QPushButton("Configure...", self)
@@ -2112,17 +2125,50 @@ class OSMOptionsDialog(QDialog):
         
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
-        self.withShowPOIButton.setIconSize(iconSize)        
         tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)  
- 
+
+    @pyqtSlot()
+    def _configurePOIDisplay(self):
+        dialog=OSMPOIDisplayDialog(self, self.displayPOITypeList)
+        result=dialog.exec()
+
+    @pyqtSlot()
+    def _configureAreaDisplay(self):
+        dialog=OSMAreaDisplayDialog(self, self.displayAreaTypeList)
+        result=dialog.exec()
+        
+class OSM3DTab(OptionsDialogTab):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialogTab.__init__(self, optionsConfig, parent)
+        self.setFromOptionsConfig(self.getOptionsConfig())
+        
+    def getTabName(self):
+        return "3D"    
+    
+    def setFromOptionsConfig(self, optionsConfig):
+        self.withShow3D=optionsConfig["withShow3D"]
+        self.withShowSky=optionsConfig["withShowSky"]
+        self.XAxisRotation=optionsConfig["XAxisRotation"]
+        self.startZoom3D=optionsConfig["startZoom3D"]
+
+    def setToOptionsConfig(self):
+        self.optionsConfig["withShow3D"]=self.withShow3DButton.isChecked()
+        self.optionsConfig["withShowSky"]=self.withShowSkyButton.isChecked()
+        self.optionsConfig["XAxisRotation"]=int(self.xAxisRoationField.text())
+        self.optionsConfig["startZoom3D"]=int(self.startZoom3DField.text())
+                
+    def addToLayout(self, layout):
+        filler=QLabel(self)
+        tab3Layout = QFormLayout()
+        tab3Layout.setAlignment(Qt.AlignTop)
+        layout.addLayout(tab3Layout)
+        
         self.withShow3DButton=QCheckBox("Use 3D View", self)
         self.withShow3DButton.setChecked(self.withShow3D)
-        self.withShow3DButton.setIconSize(iconSize)        
         tab3Layout.addRow(self.withShow3DButton, filler)  
 
         self.withShowSkyButton=QCheckBox("Show Sky", self)
         self.withShowSkyButton.setChecked(self.withShowSky)
-        self.withShowSkyButton.setIconSize(iconSize)        
         tab3Layout.addRow(self.withShowSkyButton, filler)  
                        
         label=QLabel(self)
@@ -2145,78 +2191,12 @@ class OSMOptionsDialog(QDialog):
         self.startZoom3DField.setText("%d"%self.startZoom3D)
 
         tab3Layout.addRow(label, self.startZoom3DField)  
-        
-        for routingMode in self.routingModes:
-            routingModeId=routingMode["id"]
-            routingModeButton=QRadioButton(routingMode["desc"], self)
-            self.routingModeButtons.append(routingModeButton)
-            if routingModeId==self.routingModeId:
-                routingModeButton.setChecked(True)
-                
-            tab4Layout.addWidget(routingModeButton) 
-            
-        buttons=QHBoxLayout()
-        buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
-        self.cancelButton=QPushButton("Cancel", self)
-        self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
-        buttons.addWidget(self.cancelButton)
 
-        self.okButton=QPushButton("Ok", self)
-        self.okButton.clicked.connect(self._ok)
-        self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
-        buttons.addWidget(self.okButton)
-        
-        top.addLayout(buttons)
-        self.setLayout(top)
-        self.setWindowTitle('Settings')
-        self.setGeometry(0, 0, 400, 500)
-
-    @pyqtSlot()
-    def _configurePOIDisplay(self):
-        dialog=OSMPOIDisplayDialog(self, self.displayPOITypeList)
-        result=dialog.exec()
-
-    @pyqtSlot()
-    def _configureAreaDisplay(self):
-        dialog=OSMAreaDisplayDialog(self, self.displayAreaTypeList)
-        result=dialog.exec()
-                        
-    @pyqtSlot()
-    def _cancel(self):
-        self.done(QDialog.Rejected)
-        
-    @pyqtSlot()
-    def _ok(self):
-        self.withDownload=self.downloadTilesButton.isChecked()
-        self.followGPS=self.followGPSButton.isChecked()
-        self.withMapRotation=self.withMapRotationButton.isChecked()
-        self.withShow3D=self.withShow3DButton.isChecked()
-#        self.withShowBackgroundTiles=self.withShowBackgroundTilesButton.isChecked()
-        self.withShowAreas=self.withShowAreasButton.isChecked()
-        self.withShowPOI=self.withShowPOIButton.isChecked()
-        self.withShowSky=self.withShowSkyButton.isChecked()
-        self.XAxisRotation=int(self.xAxisRoationField.text())
-        self.tileServer=self.tileServerField.text()
-        self.tileHome=self.tileHomeField.text()
-        
-        if disableMappnik==False:
-            self.mapnikConfig=self.mapnikConfigField.text()
-            self.withMapnik=self.withMapnikButton.isChecked()
-        
-        self.tileStartZoom=int(self.tileStartZoomField.text())
-        self.startZoom3D=int(self.startZoom3DField.text())
-        
-        self.routingMode=None
-        i=0
-        for button in self.routingModeButtons:
-            if button.isChecked():
-                self.routingMode=self.routingModes[i]
-            i=i+1
-                
-        self.done(QDialog.Accepted)
+tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab]
+ 
+class OSMOptionsDialog(OptionsDialog):
+    def __init__(self, optionsConfig, parent):
+        OptionsDialog.__init__(self, optionsConfig, tabClassList, parent)         
 
 class OSMInputDialog(QDialog):
     def __init__(self, parent, defaultValue, windowTitle, labelText):
