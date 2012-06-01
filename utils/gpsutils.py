@@ -29,7 +29,7 @@ except ImportError:
 
 from PyQt4.QtCore import SIGNAL, QThread, Qt, pyqtSlot
 from PyQt4.QtGui import QCheckBox, QPalette, QApplication, QTabWidget, QSizePolicy, QMainWindow, QPushButton, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel
-from gaugecompass import QtPngCompassGauge
+from widgets.gaugecompass import QtPngCompassGauge
 from utils.osmutils import OSMUtils
 from utils.config import Config
 

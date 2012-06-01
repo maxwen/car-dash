@@ -15,7 +15,7 @@ from PyQt4.QtCore import Qt, QAbstractTableModel, SIGNAL, pyqtSlot
 from PyQt4.QtGui import QMessageBox, QProgressBar, QIcon, QSizePolicy, QRadioButton, QColor, QBrush, QWidget, QPushButton, QCheckBox, QLineEdit, QTableView, QTabWidget, QApplication, QHBoxLayout, QVBoxLayout, QFormLayout, QLCDNumber, QLabel, QMainWindow, QPalette, QHeaderView
 
 from collections import deque
-from gaugepng import QtPngDialGauge
+from widgets.gaugepng import QtPngDialGauge
 from osmmapviewer import OSMWidget
 
 import signal
