@@ -16,7 +16,7 @@ USE_GPSD=False
 USE_NMEA=True
 
 try:
-    import gpsd
+    import gpsd.gps
 except ImportError:
     USE_GPSD=False
 
