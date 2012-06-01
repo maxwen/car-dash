@@ -4122,41 +4122,67 @@ class OSMWidget(QWidget):
         msgBox.setFont(font)
         msgBox.exec()
         
+    def getOptionsConfig(self):
+        optionsConfig=dict()
+        optionsConfig["followGPS"]=self.getAutocenterGPSValue()
+        optionsConfig["withDownload"]=self.getWithDownloadValue()
+        optionsConfig["withMapRotation"]=self.getWithMapRotationValue()
+        optionsConfig["withShow3D"]=self.getShow3DValue()
+        optionsConfig["withShowAreas"]=self.getShowAreas()
+        optionsConfig["withShowPOI"]=self.getShowPOI()
+        optionsConfig["withShowSky"]=self.getShowSky()
+        optionsConfig["XAxisRotation"]=self.getXAxisRotation()
+        optionsConfig["tileServer"]=self.getTileServer()
+        optionsConfig["tileHome"]=self.getTileHome()
+        optionsConfig["routingModes"]=self.getRoutingModes()
+        optionsConfig["routingModeId"]=self.getRoutingModeId()
+        
+        if disableMappnik==False:
+            optionsConfig["mapnikConfig"]=self.getMapnikConfig()
+            optionsConfig["withMapnik"]=self.getWithMapnikValue()
+            
+        optionsConfig["tileStartZoom"]=self.getTileStartZoom()
+        optionsConfig["displayPOITypeList"]=list(self.getDisplayPOITypeList())
+        optionsConfig["displayAreaTypeList"]=list(self.getDisplayAreaTypeList())
+        optionsConfig["startZoom3D"]=self.getStartZoom3DView()
+        
+        return optionsConfig
+
+    def setFromOptionsConfig(self, optionsConfig):
+        self.setWithDownloadValue(optionsConfig["withDownload"])
+        self.setAutocenterGPSValue(optionsConfig["followGPS"])
+        self.setWithMapRotationValue(optionsConfig["withMapRotation"])
+        self.setShow3DValue(optionsConfig["withShow3D"])
+        self.setShowAreas(optionsConfig["withShowAreas"])
+        self.setShowPOI(optionsConfig["withShowPOI"])
+        self.setShowSky(optionsConfig["withShowSky"])
+        self.setXAxisRotation(optionsConfig["XAxisRotation"])
+        self.setTileServer(optionsConfig["tileServer"])
+        self.setTileHome(optionsConfig["tileHome"])
+        
+        if disableMappnik==False:
+            oldMapnikValue=self.getWithMapnikValue()
+            self.setMapnikConfig(optionsConfig["mapnikConfig"])
+            self.setWithMapnikValue(optionsConfig["withMapnik"])
+            if self.getWithMapnikValue()!=oldMapnikValue:
+                self.mapWidgetQt.cleanImageCache()
+            
+        self.setTileStartZoom(optionsConfig["tileStartZoom"])
+        self.setDisplayPOITypeList(optionsConfig["displayPOITypeList"])
+        self.setDisplayAreaTypeList(optionsConfig["displayAreaTypeList"])
+        self.setStartZoom3DView(optionsConfig["startZoom3D"])
+        self.setRoutingMode(optionsConfig["routingMode"])
+        
     @pyqtSlot()
     def _showSettings(self):
-        optionsDialog=OSMOptionsDialog(self)
+        optionsDialog=OSMOptionsDialog(self.getOptionsConfig(), self)
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
-            
-            self.setWithDownloadValue(optionsDialog.withDownload)
-            self.setAutocenterGPSValue(optionsDialog.followGPS)
-            self.setWithMapRotationValue(optionsDialog.withMapRotation)
-            self.setShow3DValue(optionsDialog.withShow3D)
-#            self.setShowBackgroundTiles(optionsDialog.withShowBackgroundTiles)
-            self.setShowAreas(optionsDialog.withShowAreas)
-            self.setShowPOI(optionsDialog.withShowPOI)
-            self.setShowSky(optionsDialog.withShowSky)
-            self.setXAxisRotation(optionsDialog.XAxisRotation)
-            self.setTileServer(optionsDialog.tileServer)
-            self.setTileHome(optionsDialog.tileHome)
-            
-            if disableMappnik==False:
-                oldMapnikValue=self.getWithMapnikValue()
-                self.setMapnikConfig(optionsDialog.mapnikConfig)
-                self.setWithMapnikValue(optionsDialog.withMapnik)
-                if optionsDialog.withMapnik!=oldMapnikValue:
-                    self.mapWidgetQt.cleanImageCache()
-                
-            self.setTileStartZoom(optionsDialog.tileStartZoom)
-            self.setDisplayPOITypeList(optionsDialog.displayPOITypeList)
-            self.setDisplayAreaTypeList(optionsDialog.displayAreaTypeList)
-            self.setStartZoom3DView(optionsDialog.startZoom3D)
-            self.setRoutingMode(optionsDialog.routingMode)
+            self.setFromOptionsConfig(optionsDialog.getOptionsConfig())
             
             self.mapWidgetQt.clearPolygonCache()
             self.mapWidgetQt.update()
-            
-            
+             
     @pyqtSlot()
     def _cleanup(self):
         trackLog.closeLogFile()
