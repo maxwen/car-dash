@@ -587,7 +587,7 @@ class OSMDataImport(OSMDataSQLite):
                     if nodeType!=-1:
                         self.addToPOIRefTable(ref, 0, lat, lon, tags, nodeType, layer)
                 
-                if "place" in tags:
+                if "place" in tags and "name" in tags:
                     if tags["place"] in self.isUsablePlaceNodeType():
                         self.addToPOIRefTable(ref, 0, lat, lon, tags, Constants.POI_TYPE_PLACE, layer)
  
@@ -784,7 +784,6 @@ class OSMDataImport(OSMDataSQLite):
             isTourism=False
             isAmenity=False
             isLeisure=False
-            isPlace=False
                        
             layer=self.getLayerValue(tags)
                 
@@ -849,10 +848,6 @@ class OSMDataImport(OSMDataSQLite):
                 self.addToTmpWayRefTable(wayid, refs)
                  
                 if self.skipAreas==False:         
-                    if "place" in tags:
-                        if tags["place"] in self.isUsablePlaceNodeType():
-                            isPlace=True
-
                     if "waterway" in tags:
                         if tags["waterway"] in self.getWaterwayTypes():
                             isNatural=True
@@ -894,9 +889,8 @@ class OSMDataImport(OSMDataSQLite):
                         isTourism=False
                         isAmenity=False
                         isLeisure=False
-                        isPlace=False
                         
-                    if isPlace==False and isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
+                    if isLeisure==False and isAmenity==False and isTourism==False and isAeroway==False and isBuilding==False and isLanduse==False and isNatural==False and isRailway==False:
                         continue
                     
                     isPolygon=False
@@ -942,8 +936,6 @@ class OSMDataImport(OSMDataSQLite):
                         areaType=Constants.AREA_TYPE_AMENITY
                     elif isLeisure==True:
                         areaType=Constants.AREA_TYPE_LEISURE
-                    elif isPlace==True:
-                        areaType=Constants.AREA_TYPE_PLACE
                         
                     if areaType!=None:
                         if isPolygon==True:
@@ -1187,8 +1179,6 @@ class OSMDataImport(OSMDataSQLite):
                         areaType=Constants.AREA_TYPE_AMENITY
                     elif isLeisure==True:
                         areaType=Constants.AREA_TYPE_LEISURE
-                    elif isPlace==True:
-                        areaType=Constants.AREA_TYPE_PLACE
                      
                     # (59178604, 'way', 'outer', '')
                     allOuterRefs=list()

@@ -80,7 +80,6 @@ class Constants():
     AREA_TYPE_AMENITY=7
     AREA_TYPE_BUILDING=8
     AREA_TYPE_LEISURE=9
-    AREA_TYPE_PLACE=10 # will not be displayed
     
     LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "quarry"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])

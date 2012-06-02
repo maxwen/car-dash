@@ -80,11 +80,11 @@ class OSMDataTest(OSMDataAccess):
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE osmId=101929162')
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=10')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
             osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
-            print(tags)
+            print(x)
 #            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
 #                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
@@ -228,7 +228,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-#    p.testAreaTable()
+    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -238,7 +238,7 @@ def main(argv):
 #    p.test()
 
 #    p.testDBConistency()
-    p.testRestrictionTable()
+#    p.testRestrictionTable()
 #    p.recreateEdges()
 #    p.recreateEdgeNodes()
 #    p.createAllRefTableIndexesPost()

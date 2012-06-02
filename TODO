@@ -259,10 +259,6 @@ TODO: create faster create edge table nodes
  -add filters   
  
  TODO: try QGraphicsView
- 
- TODO: correct drawing of overlapping areaes
- -no sense for layer tag
- -but e.g. residential or natural should be drawn before the rest
   
   TODO: matching between poly files and osm admin areas
   -multilanguage support

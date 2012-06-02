@@ -1302,7 +1302,7 @@ class QtOSMWidget(QWidget):
 #            if osmRouting.getCurrentSearchEdgeList()!=None:
 #                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
 
-            if osmRouting.getExpectedNextEdge() and osmRouting.getCurrentSearchEdgeList()!=None:
+            if osmRouting.getExpectedNextEdge()!=None and osmRouting.getCurrentSearchEdgeList()!=None:
                 self.displayExpectedEdge(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
     
             if osmParserData.getCurrentSearchBBox()!=None:
