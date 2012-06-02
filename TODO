@@ -288,8 +288,13 @@ without the need to reopen it
 -favorites view
 -address dialog
 -poi search dialogs
+DONE
+-> more then one waypoint should be selectable
 
 TODO: distance to next crossing 
 -calculated twice if in routing mode
 -> DONE
 -maybe add some optimisations
+
+TODO: ref tag of nodes
+-in poi search

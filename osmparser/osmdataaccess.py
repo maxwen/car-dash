@@ -1679,8 +1679,32 @@ class OSMDataAccess(OSMDataSQLite):
     def getPOITagString(self, tags):
         if "name" in tags:
             return tags["name"]
+        
+#        if "ref" in tags:
+#            return tags["ref"]
         return "Unknown"
 
+    def getAddressTagString(self, address):
+        (_, _, _, _, _, streetName, houseNumber, _, _)=address
+        if houseNumber!=None:
+            name=streetName+" "+houseNumber
+        else:
+            name=streetName
+        return name
+    
+    def getWayTagString(self, name, nameRef):
+        if nameRef!=None and name!=None:
+            if nameRef==name:
+                return "%s"%(name)
+            return "%s %s"%(name, nameRef)
+        elif nameRef==None and name!=None:
+            return "%s"%(name)
+        elif nameRef!=None and name==None:
+            return "%s"%(nameRef)
+        else:
+            return "Unknown"
+        return None
+    
     def setRoutingMode(self, mode):
         self.dWrapperTrsp.setRoutingMode(mode)
         

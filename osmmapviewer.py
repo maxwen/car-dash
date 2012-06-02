@@ -933,7 +933,6 @@ class QtOSMWidget(QWidget):
 
     # only use if transform is active
     def displayRoutingEdges(self, edgeList, expectedNextEdge):
-#        print(edgeList)
         pen=QPen()
         pen.setWidth(3)
         if edgeList!=None and len(edgeList)!=0:
@@ -945,6 +944,16 @@ class QtOSMWidget(QWidget):
                     pen.setColor(Qt.red)
     
                 self.displayCoords(coords, pen)
+
+    def displayExpectedEdge(self, edgeList, expectedNextEdge):
+        pen=QPen()
+        pen.setWidth(3)
+        if edgeList!=None and len(edgeList)!=0:
+            for edge in edgeList:
+                _, _, _, _, _, _, _, _, _, _, coords=edge
+                if expectedNextEdge!=None and edge==expectedNextEdge:
+                    pen.setColor(Qt.green)
+                    self.displayCoords(coords, pen)
 
     # only use if transform is active
     def displayApproachingRef(self, approachingRefPos):
@@ -1290,8 +1299,11 @@ class QtOSMWidget(QWidget):
         nextCrossingVisible=self.displayApproachingRef(approachingRefPos)
                 
         if WITH_CROSSING_DEBUG==True:
-            if osmRouting.getCurrentSearchEdgeList()!=None:
-                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
+#            if osmRouting.getCurrentSearchEdgeList()!=None:
+#                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
+
+            if osmRouting.getExpectedNextEdge() and osmRouting.getCurrentSearchEdgeList()!=None:
+                self.displayExpectedEdge(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
     
             if osmParserData.getCurrentSearchBBox()!=None:
                 self.displayBBox(osmParserData.getCurrentSearchBBox(), Qt.green)
@@ -3030,13 +3042,11 @@ class QtOSMWidget(QWidget):
         routingPointSubMenu=QMenu(self)
         routingPointSubMenu.setTitle("Map Points")
         mapPointList=self.getMapPoints()
-        mapPointMenuDisabled=len(mapPointList)==0 and self.mapPoint==None
+        mapPointMenuDisabled=len(mapPointList)==0
         for point in mapPointList:
+            if point.getType()==OSMRoutingPoint.TYPE_MAP:
+                routingPointSubMenu.addSeparator()
             pointAction=OSMRoutingPointAction(point.getName(), point, self.style, self)
-            routingPointSubMenu.addAction(pointAction)
-        if self.mapPoint!=None:
-            routingPointSubMenu.addSeparator()
-            pointAction=OSMRoutingPointAction(self.mapPoint.getName(), self.mapPoint, self.style, self)
             routingPointSubMenu.addAction(pointAction)
 
         routingPointSubMenu.setDisabled(mapPointMenuDisabled)
@@ -3135,7 +3145,7 @@ class QtOSMWidget(QWidget):
             currentPoint.resolveFromPos(osmParserData)
             if currentPoint.isValid():
                 _, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(currentPoint.getWayId())
-                defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+                defaultPointTag=osmParserData.getWayTagString(name, nameRef)
                 currentPoint.name=defaultPointTag
                 self.startPoint=currentPoint
                     
@@ -3150,7 +3160,7 @@ class QtOSMWidget(QWidget):
             gpsPoint.resolveFromPos(osmParserData)
             if gpsPoint.isValid():
                 _, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(gpsPoint.getWayId())
-                defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+                defaultPointTag=osmParserData.getWayTagString(name, nameRef)
                 gpsPoint.name=defaultPointTag
                 self.startPoint=gpsPoint
                 self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
@@ -3183,7 +3193,7 @@ class QtOSMWidget(QWidget):
         self.mousePressed=False
         self.moving=False
         self.update()
-        
+    
     def clearCurrentRoute(self):
         self.currentRoute=None
         self.clearRoute()
@@ -3264,6 +3274,9 @@ class QtOSMWidget(QWidget):
         if self.endPoint!=None:
             routingPointList.append(self.endPoint)
             
+        if self.mapPoint!=None:
+            routingPointList.append(self.mapPoint)
+
         return routingPointList
             
     def setRoute(self, route):
@@ -3313,7 +3326,7 @@ class QtOSMWidget(QWidget):
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, OSMRoutingPoint.DEFAULT_RESOLVE_POINT_MARGIN, OSMRoutingPoint.DEFAULT_RESOLVE_MAX_DISTANCE)
         if edgeId!=None:
             wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-            defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+            defaultPointTag=osmParserData.getWayTagString(name, nameRef)
         
         if defaultPointTag==None:
             defaultPointTag=""
@@ -3332,7 +3345,7 @@ class QtOSMWidget(QWidget):
         edgeId, wayId=osmParserData.getEdgeIdOnPos(lat, lon, OSMRoutingPoint.DEFAULT_RESOLVE_POINT_MARGIN, OSMRoutingPoint.DEFAULT_RESOLVE_MAX_DISTANCE)
         if edgeId!=None:
             wayId, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(wayId)
-            defaultPointTag=self.getDefaultPositionTag(name, nameRef)
+            defaultPointTag=osmParserData.getWayTagString(name, nameRef)
 
         if pointType==0:
             if defaultPointTag!=None:
@@ -3376,19 +3389,6 @@ class QtOSMWidget(QWidget):
                 self.osm_map_set_zoom(15)
     
             self.osm_center_map_to_position(point.getPos()[0], point.getPos()[1])       
-
-    def getDefaultPositionTag(self, name, nameRef):
-        if nameRef!=None and name!=None:
-            if nameRef==name:
-                return "%s"%(name)
-            return "%s %s"%(name, nameRef)
-        elif nameRef==None and name!=None:
-            return "%s"%(name)
-        elif nameRef!=None and name==None:
-            return "%s"%(nameRef)
-        else:
-            return "No Name"
-        return None
     
     def recalcRoute(self, lat, lon, edgeId):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
@@ -3534,7 +3534,7 @@ class QtOSMWidget(QWidget):
                 wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
                     
 #                osmParserData.printCrossingsForWayId(wayId)
-                self.wayInfo=self.getDefaultPositionTag(name, nameRef)  
+                self.wayInfo=osmParserData.getWayTagString(name, nameRef)  
                 self.speedInfo=maxspeed
                 self.wayPOIList=osmParserData.getPOIListOnWay(wayId)
 
@@ -4654,12 +4654,8 @@ class OSMWidget(QWidget):
 #            address, pointType=searchDialog.getResult()
             pointDict=searchDialog.getResult2()
             for pointType, address in pointDict.items():
-                (_, _, _, _, _, streetName, houseNumber, lat, lon)=address
-                if houseNumber!=None:
-                    name=streetName+" "+houseNumber
-                else:
-                    name=streetName
-                
+                name=osmParserData.getAddressTagString(address)
+                (_, _, _, _, _, _, _, lat, lon)=address
                 self.setPoint(name, pointType, lat, lon)
   
     @pyqtSlot()

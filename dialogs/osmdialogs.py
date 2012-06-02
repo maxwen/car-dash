@@ -1061,7 +1061,7 @@ class OSMFavoritesDialog(QDialog):
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         self.okButton.setDefault(True)
         buttons.addWidget(self.okButton)
         

@@ -743,6 +743,10 @@ class GPSTab(OptionsDialogTab):
                 
     def addToLayout(self, layout):
         filler=QLabel(self)
+        label=QLabel(self)
+        label.setText("Changes take affect only after restart.")
+        layout.addWidget(label)
+        
         formLayout = QFormLayout()
         formLayout.setAlignment(Qt.AlignTop)
         layout.addLayout(formLayout)
@@ -756,7 +760,7 @@ class GPSTab(OptionsDialogTab):
 
         self.deviceText=QLineEdit(self)
         formLayout.addRow(label, self.deviceText)  
-        self.deviceText.setToolTip('NMEA GPS device path. Changes take affect only after restart.')
+        self.deviceText.setToolTip('NMEA GPS device path.')
         if self.device!=None:
             self.deviceText.setText(self.device)
         
