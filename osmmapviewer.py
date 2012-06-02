@@ -4110,10 +4110,12 @@ class OSMWidget(QWidget):
         poiDialog=OSMPOISearchDialog(self, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearest)
         result=poiDialog.exec()
         if result==QDialog.Accepted:
-            poiEntry, pointType=poiDialog.getResult()
-            (refId, lat, lon, tags, nodeType, cityId, distance, displayString)=poiEntry
-            displayString=osmParserData.getPOITagString(tags)
-            self.setPoint(displayString, pointType, lat, lon)
+#            poiEntry, pointType=poiDialog.getResult()
+            pointDict=poiDialog.getResult2()
+            for pointType, poiEntry in pointDict.items():
+                (refId, lat, lon, tags, nodeType, cityId, distance, displayString)=poiEntry
+                displayString=osmParserData.getPOITagString(tags)
+                self.setPoint(displayString, pointType, lat, lon)
 
     def showError(self, title, text):
         msgBox=QMessageBox(QMessageBox.Warning, title, text, QMessageBox.Ok, self)
@@ -4122,8 +4124,7 @@ class OSMWidget(QWidget):
         msgBox.setFont(font)
         msgBox.exec()
         
-    def getOptionsConfig(self):
-        optionsConfig=dict()
+    def getOptionsConfig(self, optionsConfig):
         optionsConfig["followGPS"]=self.getAutocenterGPSValue()
         optionsConfig["withDownload"]=self.getWithDownloadValue()
         optionsConfig["withMapRotation"]=self.getWithMapRotationValue()
@@ -4180,7 +4181,7 @@ class OSMWidget(QWidget):
         
     @pyqtSlot()
     def _showSettings(self):
-        optionsDialog=OSMOptionsDialog(self.getOptionsConfig(), self)
+        optionsDialog=OSMOptionsDialog(self.getOptionsConfig(dict()), self)
         result=optionsDialog.exec()
         if result==QDialog.Accepted:
             self.setFromOptionsConfig(optionsDialog.getOptionsConfig())
@@ -4650,23 +4651,26 @@ class OSMWidget(QWidget):
         searchDialog=OSMAdressDialog(self, osmParserData, defaultCountryId)
         result=searchDialog.exec()
         if result==QDialog.Accepted:
-            address, pointType=searchDialog.getResult()
-            (_, _, _, _, _, streetName, houseNumber, lat, lon)=address
-            if houseNumber!=None:
-                name=streetName+" "+houseNumber
-            else:
-                name=streetName
-            
-            self.setPoint(name, pointType, lat, lon)
+#            address, pointType=searchDialog.getResult()
+            pointDict=searchDialog.getResult2()
+            for pointType, address in pointDict.items():
+                (_, _, _, _, _, streetName, houseNumber, lat, lon)=address
+                if houseNumber!=None:
+                    name=streetName+" "+houseNumber
+                else:
+                    name=streetName
+                
+                self.setPoint(name, pointType, lat, lon)
   
     @pyqtSlot()
     def _showFavorites(self):
         favoritesDialog=OSMFavoritesDialog(self, self.favoriteList)
         result=favoritesDialog.exec()
         if result==QDialog.Accepted:
-            point, pointType, favoriteList=favoritesDialog.getResult()
+#            point, pointType, favoriteList=favoritesDialog.getResult()
+            pointDict, favoriteList=favoritesDialog.getResult2()
             self.favoriteList=favoriteList
-            if point!=None:
+            for pointType, point in pointDict.items():
                 self.setPoint(point.getName(), pointType, point.getPos()[0], point.getPos()[1])
 
     @pyqtSlot()

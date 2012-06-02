@@ -189,6 +189,7 @@ class GPSUpateWorkerGPSD(QThread):
             if self.connected==True:
                 self.reconnectTry=0
                 self.reconnecting=False
+                self.updateStatusLabel("GPS reconnect ok")
                 return
             self.reconnectTry=self.reconnectTry+1
 
@@ -365,21 +366,22 @@ class GPSUpateWorkerNMEA(QThread):
         
     def connectGPS(self):
         for device in self.deviceList:
-            print("trying %s"%(device))
+#            print("trying %s"%(device))
             if not os.path.exists(device):
                 continue
             try:
                 self.port=SerialPort(device, self.baud, self.timeout)
                 self.connected=True
                 self.gpsObject=GpsObject(self.port)
-                print("Found NMEA gps device at %s"%(device))
+#                print("Found NMEA gps device at %s"%(device))
+                self.updateStatusLabel("GPS connect ok")
                 return
             except PortError:
                 continue
         
         if self.reconnecting==False:
             self.connectGPSFailed()
-            
+
     def disconnectGPS(self):
         if self.connected==True:
             self.port.close()
@@ -396,6 +398,7 @@ class GPSUpateWorkerNMEA(QThread):
             if self.connected==True:
                 self.reconnectTry=0
                 self.reconnecting=False
+                self.updateStatusLabel("GPS reconnect ok")
                 return
             self.reconnectTry=self.reconnectTry+1
 

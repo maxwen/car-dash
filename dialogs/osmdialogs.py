@@ -437,7 +437,6 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.currentCountryId=None
         self.currentCityId=None
         
-        self.pointType=None
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
@@ -445,10 +444,13 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
         self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
         
+        self.pointType=None
         self.selectedAddress=None
+        
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
         self.cityRecursive=False
+        self.pointDict=dict()
         self.initUI()
          
     def updateAdressListForCity(self):
@@ -507,6 +509,9 @@ class OSMAdressDialog(OSMDialogWithSettings):
     
     def getResult(self):
         return (self.selectedAddress, self.pointType)
+
+    def getResult2(self):
+        return self.pointDict
 
     def initUI(self):
         top=QVBoxLayout()
@@ -649,10 +654,16 @@ class OSMAdressDialog(OSMDialogWithSettings):
         
         style=QCommonStyle()
                 
-        self.cancelButton=QPushButton("Close", self)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
+
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
         
@@ -758,6 +769,10 @@ class OSMAdressDialog(OSMDialogWithSettings):
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
+
+    @pyqtSlot()
+    def _ok(self):
+        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _showPoint(self):
@@ -765,7 +780,8 @@ class OSMAdressDialog(OSMDialogWithSettings):
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=OSMRoutingPoint.TYPE_MAP
+            self.pointType=OSMRoutingPoint.TYPE_MAP         
+            self.pointDict[self.pointType]=self.selectedAddress
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -775,15 +791,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_FAVORITE
-        self.done(QDialog.Accepted)
-
-#    def _ok(self):
-#        selmodel = self.streetView.selectionModel()
-#        current = selmodel.currentIndex()
-#        if current.isValid():
-##            print(self.filteredStreetList[current.row()])
-#            self.selectedAddress=self.filteredStreetList[current.row()]
-##            print(self.selectedAddress)
+            self.pointDict[self.pointType]=self.selectedAddress
 #        self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -793,7 +801,8 @@ class OSMAdressDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_WAY
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedAddress
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setStartPoint(self):
@@ -802,7 +811,8 @@ class OSMAdressDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_START
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedAddress
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setEndPoint(self):
@@ -811,7 +821,8 @@ class OSMAdressDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_END
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedAddress
+#        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _clearStreetTableSelection(self):
@@ -956,7 +967,7 @@ class OSMFavoritesDialog(QDialog):
 
         self.selectedFavorite=None
         self.pointType=-1
-
+        self.pointDict=dict()
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
@@ -970,6 +981,9 @@ class OSMFavoritesDialog(QDialog):
    
     def getResult(self):
         return (self.selectedFavorite, self.pointType, self.favoriteList)
+
+    def getResult2(self):
+        return (self.pointDict, self.favoriteList)
     
     def initUI(self):
         top=QVBoxLayout()
@@ -1045,11 +1059,11 @@ class OSMFavoritesDialog(QDialog):
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
 
-        self.closeButton=QPushButton("Close", self)
-        self.closeButton.clicked.connect(self._close)
-        self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-        self.closeButton.setDefault(True)
-        buttons.addWidget(self.closeButton)
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        self.okButton.setDefault(True)
+        buttons.addWidget(self.okButton)
         
         top.addLayout(buttons)
 
@@ -1075,9 +1089,9 @@ class OSMFavoritesDialog(QDialog):
         self.done(QDialog.Rejected)
 
     @pyqtSlot()
-    def _close(self):
-        self.selectedFavorite=None
-        self.pointType=42
+    def _ok(self):
+#        self.selectedFavorite=None
+#        self.pointType=42
         self.done(QDialog.Accepted)      
           
     @pyqtSlot()
@@ -1087,6 +1101,7 @@ class OSMFavoritesDialog(QDialog):
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_MAP
+            self.pointDict[self.pointType]=self.selectedFavorite
         self.done(QDialog.Accepted)
         
     @pyqtSlot()
@@ -1096,7 +1111,8 @@ class OSMFavoritesDialog(QDialog):
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_WAY
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedFavorite
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setStartPoint(self):
@@ -1105,7 +1121,8 @@ class OSMFavoritesDialog(QDialog):
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_START
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedFavorite
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setEndPoint(self):
@@ -1114,7 +1131,8 @@ class OSMFavoritesDialog(QDialog):
         if current.isValid():
             self.selectedFavorite=self.filteredFavoriteList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_END
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedFavorite
+#        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _clearTableSelection(self):
@@ -2639,6 +2657,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         
         self.pointType=None
         self.selectedPOI=None
+        self.pointDict=dict()
         
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
@@ -2836,11 +2855,17 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         
         style=QCommonStyle()
                 
-        self.cancelButton=QPushButton("Close", self)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
+        self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
+        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
 
+        self.okButton=QPushButton("Ok", self)
+        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
+        self.okButton.clicked.connect(self._ok)
+        self.okButton.setDefault(True)
+        buttons.addWidget(self.okButton)
+        
         top.addLayout(buttons)
         
         self.setLayout(top)
@@ -2953,8 +2978,15 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
     def _cancel(self):
         self.done(QDialog.Rejected)
 
+    @pyqtSlot()
+    def _ok(self):
+        self.done(QDialog.Accepted)
+        
     def getResult(self):
         return (self.selectedPOI, self.pointType)
+
+    def getResult2(self):
+        return self.pointDict
     
     @pyqtSlot()
     def _showPoint(self):
@@ -2963,6 +2995,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedPOI=self.filteredPOIList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_MAP
+            self.pointDict[self.pointType]=self.selectedPOI
         self.done(QDialog.Accepted)
 
     @pyqtSlot()
@@ -2972,7 +3005,8 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedPOI=self.filteredPOIList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_FAVORITE
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedPOI
+#        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _setWayPoint(self):
@@ -2981,7 +3015,8 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedPOI=self.filteredPOIList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_WAY
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedPOI
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setStartPoint(self):
@@ -2990,7 +3025,8 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedPOI=self.filteredPOIList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_START
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedPOI
+#        self.done(QDialog.Accepted)
 
     @pyqtSlot()
     def _setEndPoint(self):
@@ -2999,7 +3035,8 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         if current.isValid():
             self.selectedPOI=self.filteredPOIList[current.row()]
             self.pointType=OSMRoutingPoint.TYPE_END
-        self.done(QDialog.Accepted)
+            self.pointDict[self.pointType]=self.selectedPOI
+#        self.done(QDialog.Accepted)
         
     @pyqtSlot()
     def _selectionChanged(self):

@@ -225,6 +225,11 @@ DONE
 TODO: crossing distances in osmrouting are calculated as straight lines!
 -should actually follow the edge -> time?
 DONE
+
+TODO: add gps settings to options
+-device
+-nmea or gpsd
+DONE
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -284,9 +289,7 @@ without the need to reopen it
 -address dialog
 -poi search dialogs
 
-TODO: add gps settings to options
--device
--nmea or gpsd
-
 TODO: distance to next crossing 
 -calculated twice if in routing mode
+-> DONE
+-maybe add some optimisations
