@@ -20,8 +20,6 @@ from osmparser.osmdatasqlite import OSMDataSQLite
 
 from trsp.trspwrapper import TrspWrapper
 
-HEADING_CALC_LENGTH=20.0
-
 class Constants():
     STREET_TYPE_SERVICE=0
     STREET_TYPE_TERTIARY_LINK=1
@@ -1610,70 +1608,63 @@ class OSMDataAccess(OSMDataSQLite):
         
         return False
 
-    def getHeadingOnEdgeId(self, edgeId, ref):
-        edgeId, _, endRef, _, _, _, _, _, _, _, _, coords=self.getEdgeEntryForEdgeIdWithCoords(edgeId)
-        if ref==endRef:
-            coords.reverse()
-        heading=self.getHeadingForPoints(coords)
-        return heading
-            
-    def getHeadingForPoints(self, coords):
-        lat1, lon1=coords[0]
-        for lat2, lon2 in coords[1:]:
-            # use refs with distance more the 20m to calculate heading
-            # if available else use the last one
-            if self.osmutils.distance(lat1, lon1, lat2, lon2)>HEADING_CALC_LENGTH:
-                break
-
-        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
-        return heading    
-    
-    def getEdgesOfTunnel(self, edgeId, ref):
-        tunnelEdgeList=list()
-        data=dict()
-        data["edge"]=edgeId
-        data["startRef"]=ref
-        data["heading"]=self.getHeadingOnEdgeId(edgeId, ref)
-        tunnelEdgeList.append(data)
-        
-        _, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForId(edgeId)
-        if ref==startRef:
-            nextEndRef=endRef
-        else:
-            nextEndRef=startRef
-            
-        self.followEdge(edgeId, nextEndRef, tunnelEdgeList, self.followEdgeCheck, data)
-
-        return tunnelEdgeList
-
-    def followEdgeCheck(self, wayId, ref):
-        tags=self.getTagsForWayEntry(wayId)
-        if not "tunnel" in tags:
-            return False
-        return True
-    
-    def followEdge(self, edgeId, ref, edgeList, followEdgeCheck, lastData):
-        resultList=self.getEdgeEntryForStartPoint(ref, None)
-        
-        for edge in resultList:    
-            edgeId, startRef, endRef, _, wayId, _, _, _, _=edge
-            if ref==startRef:
-                nextEndRef=endRef
-            else:
-                nextEndRef=startRef
-
-            if followEdgeCheck(wayId, nextEndRef)==False:
-                lastData["endRef"]=ref
-                return
-            
-            data=dict()
-            data["edge"]=edgeId
-            data["startRef"]=ref
-            data["heading"]=self.getHeadingOnEdgeId(edgeId, ref)
-
-            edgeList.append(data)
-
-            self.followEdge(edgeId, nextEndRef, edgeList, followEdgeCheck, data)
+#    def getHeadingsForPoints(self, coords, track):
+#        headings=list()
+#        lat1, lon1=coords[0]
+#        headings.append((lat1, lon1, heading))
+#        for lat2, lon2 in coords[1:]:
+#            heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+#            headings.append((lat2, lon2, heading))
+#            
+#        return headings
+#        
+#    def getEdgesOfTunnel(self, edgeId, ref, track):
+#        tunnelEdgeList=list()
+#        
+#        _, startRef, endRef, _, _, _, _, _, _=self.getEdgeEntryForId(edgeId)
+#        if ref==startRef:
+#            nextEndRef=endRef
+#        else:
+#            nextEndRef=startRef
+#            
+#        self.followEdge(edgeId, nextEndRef, tunnelEdgeList, self.followEdgeCheck, data)
+#
+#        return tunnelEdgeList
+#
+#    def followEdgeCheck(self, wayId, ref):
+#        tags=self.getTagsForWayEntry(wayId)
+#        if not "tunnel" in tags:
+#            return False
+#        return True
+#    
+#    def followEdge(self, edgeId, ref, edgeList, followEdgeCheck, lastData):
+#        resultList=self.getEdgeEntryForStartPoint(ref, None)
+#        
+#        for edge in resultList:    
+#            edgeId, startRef, endRef, _, wayId, _, _, _, coords=edge
+#            trackCoords=None
+#            if ref==startRef:
+#                nextEndRef=endRef
+#                trackCoords=coords
+#            else:
+#                nextEndRef=startRef
+#                trackCoords=list()
+#                trackCoords.extend(coords)
+#                trackCoords.reverse()
+#
+#            if followEdgeCheck(wayId, nextEndRef)==False:
+#                lastData["endRef"]=ref
+#                return
+#            
+#            data=dict()
+#            data["edge"]=edgeId
+#            data["startRef"]=ref
+#
+#            headings=self.getHeadingsForPoints()
+#                
+#            edgeList.append(data)
+#
+#            self.followEdge(edgeId, nextEndRef, edgeList, followEdgeCheck, data)
 
     def getPOITagString(self, tags):
         if "name" in tags:

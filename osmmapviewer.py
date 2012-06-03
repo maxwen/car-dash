@@ -64,8 +64,7 @@ DEFAULT_SEARCH_MARGIN=0.0003
 MINIMAL_TUNNEL_LENGHTH=50
 GPS_SIGNAL_MINIMAL_DIFF=0.5
 SKY_WIDTH=100
-WITH_LOCATION_PREDICTION=True
-WITH_LOCATION_BREADCRUMBS=True
+
 PREDICTION_USE_START_ZOOM=15
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
@@ -356,15 +355,11 @@ class OSMUpdateLocationWorker(QThread):
         self.osmWidget=osmWidget
         
     def setup(self):
-        if WITH_LOCATION_PREDICTION==False:
-            return
         print("starting OSMUpdateLocationWorker")
         self.exiting = False
         self.start()
  
     def stop(self):
-        if WITH_LOCATION_PREDICTION==False:
-            return
         print("stopping OSMUpdateLocationWorker")
         self.exiting = True
         self.wait()
@@ -530,6 +525,7 @@ class QtOSMWidget(QWidget):
 #        self.showBackgroundTiles=True
         self.refRing=None
         self.nightMode=False
+        self.gpsBreadcrumbs=True
         
 #        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
 #        self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -1316,7 +1312,7 @@ class QtOSMWidget(QWidget):
                     
 #        self.displayTestPoints()
                     
-        if WITH_LOCATION_BREADCRUMBS==True:
+        if self.gpsBreadcrumbs==True:
             self.displayLocationBredCrumbs()
             
         self.painter.resetTransform()
@@ -2839,7 +2835,7 @@ class QtOSMWidget(QWidget):
                 else:
                     self.update()  
 
-                if gpsData.predicted==False:
+                if gpsData.predicted==False or self.isInTunnel==True:
                     if debug==False:
                         if self.stop==False:  
                             self.showTrackOnGPSPos(lat, lon, False)
@@ -3437,6 +3433,7 @@ class QtOSMWidget(QWidget):
         self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge)
 
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
+        # TODO:
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
             return 
         
@@ -3904,6 +3901,7 @@ class OSMWidget(QWidget):
         self.test=test
         self.lastGPSData=None
         self.osmUtils=OSMUtils()
+        self.gpsPrediction=True
         osmParserData.openAllDB()
         
     def addToWidget(self, vbox):     
@@ -4148,7 +4146,9 @@ class OSMWidget(QWidget):
         optionsConfig["startZoom3D"]=self.getStartZoom3DView()
         optionsConfig["withNmea"]=True
         optionsConfig["withGpsd"]=False
-
+        optionsConfig["withGPSPrediction"]=self.getGPSPrediction()
+        optionsConfig["withGPSBreadcrumbs"]=self.getGPSBreadcrumbs()
+        
         gpsConfig.getOptionsConfig(optionsConfig)
         return optionsConfig
 
@@ -4176,6 +4176,8 @@ class OSMWidget(QWidget):
         self.setDisplayAreaTypeList(optionsConfig["displayAreaTypeList"])
         self.setStartZoom3DView(optionsConfig["startZoom3D"])
         self.setRoutingMode(optionsConfig["routingMode"])
+        self.setGPSPrediction(optionsConfig["withGPSPrediction"])
+        self.setGPSBreadcrumbs(optionsConfig["withGPSBreadcrumbs"])
         
         gpsConfig.setFromOptionsConfig(optionsConfig)
         
@@ -4209,7 +4211,7 @@ class OSMWidget(QWidget):
         osmParserData.closeAllDB()
 
     def handleMissingGPSSignal(self):
-        if self.getDrivingMode()==True:
+        if self.getDrivingMode()==True and self.mapWidgetQt.isInTunnel==False:
             osmRouting.cleanAll()
             self.mapWidgetQt.clearLastEdgeInfo()
             self.mapWidgetQt.update()
@@ -4246,6 +4248,9 @@ class OSMWidget(QWidget):
         if self.mapWidgetQt.map_zoom<PREDICTION_USE_START_ZOOM:
             return 
         
+        if self.mapWidgetQt.drivingMode==False:
+            return
+        
         if self.lastGPSData!=None:
             timeStamp=time.time()
             # update only after a max time of 500ms
@@ -4265,10 +4270,25 @@ class OSMWidget(QWidget):
             distance=(self.lastGPSData.speed/3.6)*(timeStamp-self.lastGPSData.time)
             if distance<3.0:
                 return
-            
+
             track=self.lastGPSData.track
             lat=self.lastGPSData.lat
             lon=self.lastGPSData.lon
+            
+            if self.mapWidgetQt.isInTunnel==True and self.mapWidgetQt.currentCoords!=None:
+                refPoint, point, distances=osmParserData.getClosestPointOnEdge(lat, lon, self.mapWidgetQt.currentCoords, 30.0)
+                if point!=None:
+                    lat2=point[0]
+                    lon2=point[1]
+                    
+#                    track1=self.osmUtils.headingDegrees(lat, lon, lat2, lon2)
+#                    print(track1)
+#                    if self.osmUtils.headingDiffAbsolute(track, track1) < 45:
+#                        track=track1
+#                    print(track)
+                    lat=lat2
+                    lon=lon2
+                
             lat1, lon1=self.osmUtils.getPosInDistanceAndTrack(lat, lon, distance, track)
             tmpGPSData=GPSData(timeStamp, lat1, lon1, track, self.lastGPSData.speed, self.lastGPSData.altitude, True, self.lastGPSData.satellitesInUse)
 #            print("predictedLocation %f %f %f"%(tmpGPSData.time, lat1, lon1))
@@ -4462,6 +4482,18 @@ class OSMWidget(QWidget):
     def setRoutingModeId(self, modeId):
         return osmParserData.setRoutingModeId(modeId)
     
+    def getGPSPrediction(self):
+        return self.gpsPrediction
+    
+    def setGPSPrediction(self, value):
+        self.gpsPrediction=value
+
+    def getGPSBreadcrumbs(self):
+        return self.mapWidgetQt.gpsBreadcrumbs
+    
+    def setGPSBreadcrumbs(self, value):
+        self.mapWidgetQt.gpsBreadcrumbs=value
+                
     def loadConfig(self, config):
         section="display"
         self.setZoomValue(config.getSection(section).getint("zoom", 9))
@@ -4487,6 +4519,8 @@ class OSMWidget(QWidget):
         self.setVirtualZoom(config.getSection(section).getboolean("virtualZoom", False))
         self.setStartZoom3DView(config.getSection(section).getint("startZoom3D", defaultStart3DZoom))
         self.setSidebarVisible(config.getSection(section).getboolean("sidebarVisible", True))
+        self.setGPSPrediction(config.getSection(section).getboolean("withGPSPrediction", True))
+        self.setGPSBreadcrumbs(config.getSection(section).getboolean("withGPSBreadcrumbs", True))
         
         section="poi"
         if config.hasSection(section):
@@ -4552,6 +4586,8 @@ class OSMWidget(QWidget):
         config.getSection(section)["tileHome"]=self.getTileHome()
         config.getSection(section)["tileServer"]=self.getTileServer()
         config.getSection(section)["mapnikConfig"]=self.getMapnikConfig()
+        config.getSection(section)["withGPSPrediction"]=str(self.getGPSPrediction())
+        config.getSection(section)["withGPSBreadcrumbs"]=str(self.getGPSBreadcrumbs())
         
         section="poi"
         config.removeSection(section)
@@ -4775,7 +4811,8 @@ class OSMWidget(QWidget):
                 self._stopReplayLog()
                 
             self.trackLogReplayThread.setup(self.trackLogLines)
-            self.updateLocationThread.setup()
+            if self.getGPSPrediction()==True:
+                self.updateLocationThread.setup()
 
     @pyqtSlot()
     def _stopReplayLog(self):
@@ -4797,7 +4834,8 @@ class OSMWidget(QWidget):
     def _continueReplayLog(self):
         if not self.trackLogReplayThread.isRunning():
             self.trackLogReplayThread.continueReplay()
-            self.updateLocationThread.setup()
+            if self.getGPSPrediction()==True:
+                self.updateLocationThread.setup()
 
     def updateGPSThreadState(self, state):
         if state==gpsRunState:
@@ -4806,7 +4844,7 @@ class OSMWidget(QWidget):
             if self.test==True:
                 self.disableTestButtons()
                 
-            if not self.updateLocationThread.isRunning():
+            if self.getGPSPrediction()==True and not self.updateLocationThread.isRunning():
                 self.updateLocationThread.setup()
                 
         if state==gpsStoppedState:

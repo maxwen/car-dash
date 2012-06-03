@@ -446,10 +446,10 @@ class OSMRouting():
                 edgeId, startRef, endRef, length, _, _, _, _, _, streetInfo, coords=edge
                 streetTypeId, oneway, roundabout=self.osmParserData.decodeStreetInfo(streetInfo)
        
-#                # ignore certain types for crossing expectations
-#                if streetTypeId==Constants.STREET_TYPE_SERVICE:
-#                    # street type service
-#                    continue
+                # ignore certain types for crossing expectations
+                if streetTypeId==Constants.STREET_TYPE_SERVICE:
+                    # street type service
+                    continue
             
                 # filter out onways with wrong start
                 if oneway!=0:
@@ -466,6 +466,7 @@ class OSMRouting():
                     continue
                         
                 # filter out access limited streets
+#                if self.osmParserData.isAccessRestricted(tags):
 #                if "access" in tags:
 #                    continue
                 
@@ -475,7 +476,7 @@ class OSMRouting():
                     headingCoords.extend(coords)
                     headingCoords.reverse()
                     
-                heading=self.osmParserData.getHeadingForPoints(headingCoords)
+                heading=self.getCrossingHeadingForPoints(headingCoords)
 
                 edgeHeadings.append(heading)
                 possibleEdges.append(edge)
@@ -484,7 +485,18 @@ class OSMRouting():
 
         self.debugPrint(lat, lon, possibleEdges)
         return possibleEdges, edgeHeadings
-    
+
+    def getCrossingHeadingForPoints(self, coords):
+        lat1, lon1=coords[0]
+        for lat2, lon2 in coords[1:]:
+            # use refs with distance more the 20m to calculate heading
+            # if available else use the last one
+            if self.osmutils.distance(lat1, lon1, lat2, lon2)>HEADING_CALC_LENGTH:
+                break
+
+        heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
+        return heading  
+        
     def getBestMatchingNextEdgeForHeading(self, track, possibleEdges, edgeHeadings, lat, lon):
         if len(possibleEdges)==0:
             self.otherNearHeading=False
@@ -583,7 +595,12 @@ class OSMRouting():
     def getEdgeIdOnPosForRoutingFallback(self, lat, lon, fromMouse, margin, track, speed):        
         if track!=None and fromMouse==False:  
             # use close range if no current edge is available
-            edge=self.getEdgeIdOnPosWithTrack(lat, lon, track, margin, DECISION_EDGE_RANGE)
+            # it is also called for checking if still on current edge
+            maxDistance=NORMAL_EDGE_RANGE
+            if self.currentEdgeData==None:
+                maxDistance=DECISION_EDGE_RANGE
+                
+            edge=self.getEdgeIdOnPosWithTrack(lat, lon, track, margin, maxDistance)
             if edge!=None:
                 if self.currentEdgeData==None:
                     self.useEdge(lat, lon, track, speed, edge, True)
@@ -927,6 +944,7 @@ class OSMRouting():
                                     self.debugPrint(lat, lon, "current point match more then on possible edge")
                                 elif onlyOneMatchingEdge==None:
                                     self.debugPrint(lat, lon, "current point match none of the possible edge")
+                                    return self.getEdgeIdOnPosForRoutingFallback(lat, lon, fromMouse, margin, track, speed)
                                     
                                 if self.distanceFromCrossing>self.longestPossibleEdge:
                                     self.debugPrint(lat, lon, "distance from crossing longer then edge length  fallback")

@@ -12,6 +12,7 @@ M_LN2=0.69314718055994530942    #log_e 2
 RADIUS_EARTH = 6371
 PI2=2*math.pi
 
+# see http://williams.best.vwh.net/avform.htm
 class OSMUtils():
     def deg2rad(self, deg):
         return math.radians(deg)
@@ -224,12 +225,6 @@ class OSMUtils():
     def mod(self, y, x):
         return y - x*math.floor(y/x)
     
-#     lat=asin(sin(lat1)*cos(d)+cos(lat1)*sin(d)*cos(tc))
-#     IF (cos(lat)=0)
-#        lon=lon1      // endpoint a pole
-#     ELSE
-#        lon=mod(lon1+asin(sin(tc)*sin(d)/cos(lat))+pi,2*pi)-pi
-#     ENDIF
     def getPosInDistanceAndTrack(self, lat1, lon1, distance, track):
         trackRad=self.deg2rad(track)
         distanceRad=(distance/(RADIUS_EARTH *1000))

@@ -29,7 +29,7 @@ class OSMDataTest(OSMDataAccess):
             print("id: "+str(restrictionId)+" target:"+str(target)+" viaPath:"+str(viaPath)+" toCost:"+str(toCost) + " osmId:"+str(osmId))
                 
     def testPOIRefTable(self):
-        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=382753138')
+        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, AsText(geom) FROM poiRefTable WHERE refId=2171468')
 
 #        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
@@ -83,10 +83,12 @@ class OSMDataTest(OSMDataAccess):
         self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=10')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
             print(x)
-#            if areaType==Constants.AREA_TYPE_NATURAL and "natural" in tags and tags["natural"]=="cliff":
-#                self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE type=10')
+        allentries=self.cursorArea.fetchall()
+        for x in allentries:
+            print(x)
 
     def testAdminAreaTable(self):
         self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
@@ -267,7 +269,7 @@ def main(argv):
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
-#    p.testPOIRefTable()
+    p.testPOIRefTable()
 #    p.mergeEqualWayEntries()
 #    p.testAreaTable()
 #    p.mergeWayEntries()

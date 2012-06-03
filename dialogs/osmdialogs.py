@@ -2018,19 +2018,26 @@ class OSMDrivingModeTab(OptionsDialogTab):
     def setFromOptionsConfig(self, optionsConfig):
         self.followGPS=optionsConfig["followGPS"]
         self.withMapRotation=optionsConfig["withMapRotation"]
+        self.withGPSPrediction=optionsConfig["withGPSPrediction"]
 
     def setToOptionsConfig(self):
         self.optionsConfig["followGPS"]=self.followGPSButton.isChecked()
         self.optionsConfig["withMapRotation"]=self.withMapRotationButton.isChecked()
-                
+        self.optionsConfig["withGPSPrediction"]=self.withGPSPredictionButton.isChecked()
+        
     def addToLayout(self, layout):
         self.followGPSButton=QCheckBox("Follow GPS", self)
         self.followGPSButton.setChecked(self.followGPS)       
         layout.addWidget(self.followGPSButton)
 
-        self.withMapRotationButton=QCheckBox("Map rotation", self)
+        self.withMapRotationButton=QCheckBox("Map Rotation", self)
         self.withMapRotationButton.setChecked(self.withMapRotation)
         layout.addWidget(self.withMapRotationButton)
+
+        self.withGPSPredictionButton=QCheckBox("GPS Prediction", self)
+        self.withGPSPredictionButton.setChecked(self.withGPSPrediction)
+        self.withGPSPredictionButton.setToolTip("Change take affect only after GPS reconnect or restart.")
+        layout.addWidget(self.withGPSPredictionButton)
         
 class OSMDisplayTab(OptionsDialogTab):
     def __init__(self, optionsConfig, parent):
@@ -2054,6 +2061,7 @@ class OSMDisplayTab(OptionsDialogTab):
         self.tileStartZoom=optionsConfig["tileStartZoom"]
         self.displayPOITypeList=optionsConfig["displayPOITypeList"]
         self.displayAreaTypeList=optionsConfig["displayAreaTypeList"]
+        self.withGPSBreadcrumbs=optionsConfig["withGPSBreadcrumbs"]
 
     def setToOptionsConfig(self):
         self.optionsConfig["withDownload"]=self.downloadTilesButton.isChecked()
@@ -2069,6 +2077,7 @@ class OSMDisplayTab(OptionsDialogTab):
         self.optionsConfig["tileStartZoom"]=int(self.tileStartZoomField.text())
         self.optionsConfig["displayPOITypeList"]=self.displayPOITypeList
         self.optionsConfig["displayAreaTypeList"]=self.displayAreaTypeList
+        self.optionsConfig["withGPSBreadcrumbs"]=self.withGPSBreadcrumbsButton.isChecked()
                 
     def addToLayout(self, layout):
         filler=QLabel(self)
@@ -2145,6 +2154,10 @@ class OSMDisplayTab(OptionsDialogTab):
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
         tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)  
+
+        self.withGPSBreadcrumbsButton=QCheckBox("GPS Breadcrumbs", self)
+        self.withGPSBreadcrumbsButton.setChecked(self.withGPSBreadcrumbs)
+        tab2Layout.addRow(self.withGPSBreadcrumbsButton, filler)
 
     @pyqtSlot()
     def _configurePOIDisplay(self):
