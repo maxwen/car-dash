@@ -97,18 +97,18 @@ class TrspWrapper():
 #        print(startPos)
 #        print(endPos)
         
-        newBBox=True
-        if bbox!=None:
-            if self.lastBBoxCPolygon!=None:
-                if self.isBBoxInsideLastBBox(bbox):
-                    newBBox=False
-            
-            if self.lastBBoxCPolygon==None or newBBox==True:
-                self.calcQueryBBox(bbox)
-                lib_routing.clean_edges()
-        else:
-            self.lastBBoxCPolygon=None
-            lib_routing.clean_edges()
+#        newBBox=True
+#        if bbox!=None:
+#            if self.lastBBoxCPolygon!=None:
+#                if self.isBBoxInsideLastBBox(bbox):
+#                    newBBox=False
+#            
+#            if self.lastBBoxCPolygon==None or newBBox==True:
+#                self.calcQueryBBox(bbox)
+#                lib_routing.clean_edges()
+#        else:
+#            self.lastBBoxCPolygon=None
+#            lib_routing.clean_edges()
             
         # TODO: disabled bbox for routing
         self.lastBBox=None
@@ -149,7 +149,7 @@ class TrspWrapper():
                 edgeList.append(pathPointer[i].edge_id)
                 cost=cost+pathPointer[i].cost
                 
-            print(edgeList)
+#            print(edgeList)
 #            print(len(edgeList))
 #            print(cost)
             return edgeList, cost
