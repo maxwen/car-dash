@@ -1672,8 +1672,8 @@ class OSMDataImport(OSMDataSQLite):
                         
                         self.usedBarrierList.append(ref)
     
-                        self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000, None)
-                        self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000, None)
+                        self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 100000, None)
+                        self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 100000, None)
                 else:
                     self.log("createBarrierRestrictions: failed to resolve fromEdge for %s"%(barrierRestrictionEntry))
             else:
@@ -1691,8 +1691,8 @@ class OSMDataImport(OSMDataSQLite):
                 if fromEdge!=None and toEdge!=None:
                     self.usedBarrierList.append(ref)
                     
-                    self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 10000, None)
-                    self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 10000, None)
+                    self.addToRestrictionTable(toEdge[0], str(fromEdge[0]), 100000, None)
+                    self.addToRestrictionTable(fromEdge[0], str(toEdge[0]), 100000, None)
                 else:
                     self.log("createBarrierRestrictions: failed to resolve %s"%(barrierRestrictionEntry))
    
@@ -1845,7 +1845,7 @@ class OSMDataImport(OSMDataSQLite):
                     self.addRestrictionRule(crossingRef, restrictionType, toEdgeId, fromEdgeId, str(fromEdgeId), osmId, toAddRules)
                                         
         for toEdgeId, viaEdgeStr, osmId in toAddRules:
-            self.addToRestrictionTable(toEdgeId, viaEdgeStr, 10000, osmId)
+            self.addToRestrictionTable(toEdgeId, viaEdgeStr, 100000, osmId)
         
         self.wayRestricitionList=None
         print("")
@@ -2015,10 +2015,12 @@ class OSMDataImport(OSMDataSQLite):
             self.log(tags)
             
         if oneway==1:
-            reverseCost=100000
+            # must not be lower then cost!
+            reverseCost=100000+cost
         elif oneway==2:
             reverseCost=cost
-            cost=100000
+            # must not be lower then cost!
+            cost=100000+cost
         else:
             reverseCost=cost
         
@@ -3040,8 +3042,7 @@ class OSMDataImport(OSMDataSQLite):
             if wayId==None:
                 continue
             
-            streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
-            cost, reverseCost=self.getCostsOfWay(wayId, tags, length, 1, streetTypeId, oneway, roundabout, maxspeed)
+            cost, reverseCost=self.getCostsOfWay(wayId, tags, length, 1, streetInfo, maxspeed)
             self.updateCostsOfEdge(edgeId, cost, reverseCost)
 
         print("")
