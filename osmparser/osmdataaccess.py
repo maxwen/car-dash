@@ -18,7 +18,7 @@ import cProfile
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdatasqlite import OSMDataSQLite
 
-from trsp.trspwrapper import TrspWrapper
+from routing.trsp.trspwrapper import TrspWrapper
 
 class Constants():
     STREET_TYPE_SERVICE=0
