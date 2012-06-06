@@ -6,7 +6,7 @@ Created on Feb 29, 2012
 
 import unittest
 from osmparser.osmdataaccess import OSMDataAccess
-from osmrouting import OSMRoute
+from routing.osmrouting import OSMRoute
 from utils.config import Config
 
 class RoutingTest(unittest.TestCase):          

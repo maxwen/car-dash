@@ -15,7 +15,7 @@ from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTab
 from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import OSMDataAccess
 from osmstyle import OSMStyle
-from osmrouting import OSMRoutingPoint, OSMRoute
+from routing.osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
 from dialogs.options import OptionsDialogTab, OptionsDialog
 from utils.gpsutils import GPSTab

@@ -21,7 +21,7 @@ from PyQt4.QtCore import QTimer, QMutex, QEvent, QLine, QAbstractTableModel, QRe
 from PyQt4.QtGui import QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
-from osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
+from routing.osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from utils.config import Config
 from utils.osmutils import OSMUtils
