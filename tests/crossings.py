@@ -5,21 +5,19 @@ Created on Feb 29, 2012
 '''
 
 import unittest
-from osmparser.osmparserdata import OSMParserData
+from osmparser.osmdataaccess import OSMDataAccess
 
 class CrossingTest(unittest.TestCase):          
     def setUp(self):
-        self.p=OSMParserData()
-        self.p.initDB()
+        self.p=OSMDataAccess()
         self.p.openAllDB()
         
     def tearDown(self):
         self.p.closeAllDB()
         
     def testRoundaboutExit(self):
-        self.p.setDBCursorForCountry(0)
-        self.p.cursor.execute('SELECT * from crossingTable WHERE wayId=11165735')
-        allentries=self.p.cursor.fetchall()
+        self.p.cursorWay.execute('SELECT * from crossingTable WHERE wayId=11165735')
+        allentries=self.p.cursorWay.fetchall()
         self.assertTrue(len(allentries)==3, "to few crossings")
         for x in allentries:
             (crossingEntryId, wayid, refId, nextWayIdList)=self.p.crossingFromDB(x)

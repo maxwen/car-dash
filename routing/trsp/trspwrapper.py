@@ -122,7 +122,7 @@ class TrspWrapper():
         path_count=c_int(0)
         file=c_char_p(self.getDB().encode(encoding='utf_8', errors='strict'))
         
-        print(self.routingModeId)
+#        print(self.routingModeId)
         if self.routingModeId==self.MODE_SHORTEST:
             sqlEdge=c_char_p(self.getSQLQueryEdgeShortest().encode(encoding='utf_8', errors='strict'))
         else:

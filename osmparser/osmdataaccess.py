@@ -17,7 +17,6 @@ import cProfile
 
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdatasqlite import OSMDataSQLite
-
 from routing.trsp.trspwrapper import TrspWrapper
 
 class Constants():

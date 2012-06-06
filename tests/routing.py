@@ -12,7 +12,6 @@ from utils.config import Config
 class RoutingTest(unittest.TestCase):          
     def setUp(self):
         self.p=OSMDataAccess()
-        self.p.initDB()
         self.p.openAllDB()
         
     def tearDown(self):
