@@ -1548,6 +1548,9 @@ class QtOSMWidget(QWidget):
         pen=QPen()
         pen.setStyle(Qt.DashDotLine)
         pen.setColor(Qt.blue)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        
         if self.map_zoom>17:
             pen.setWidth(4.0)
         elif self.map_zoom>15:
@@ -3415,10 +3418,18 @@ class QtOSMWidget(QWidget):
         else:
             self.routeInfo=None, None, None, None
             
-    def calcRouteDistances(self, lat, lon):
-        distanceOnEdge=osmRouting.getDistanceToCrossing()
-        self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge)
-
+    def calcRouteDistances(self, lat, lon, initial=False):
+        if initial==True:
+            self.distanceToEnd=self.currentRoute.getAllLength()
+            self.distanceToCrossing=0
+            self.remainingTime=0
+        else:
+            distanceOnEdge=osmRouting.getDistanceToCrossing()
+#            print(distanceOnEdge)
+            self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge)
+            self.remainingTime=osmParserData.calcRemainingDrivingTime(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge, self.speed)
+#            print(self.remainingTime)
+        
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
         # TODO:
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
@@ -3652,9 +3663,12 @@ class QtOSMWidget(QWidget):
 #            print(self.currentEdgeList)
 #            print(self.currentTrackList)
                 
+            print(self.currentRoute.getAllLength())
+            print(self.currentRoute.getAllTime())
+            
             # display inital distances
             # simply use start point as ref
-            self.calcRouteDistances(self.startPoint.getPos()[0], self.startPoint.getPos()[1])
+            self.calcRouteDistances(self.startPoint.getPos()[0], self.startPoint.getPos()[1], True)
             self.routingStarted=True
             self.update()       
 

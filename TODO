@@ -230,6 +230,16 @@ TODO: add gps settings to options
 -device
 -nmea or gpsd
 DONE
+
+TODO: add to options
+driving mode:
+-show breadcrumbs
+-use prediction
+DONE
+
+ TODO: fix tunnel mode
+ -> use predicition and edge info
+ DONE 
 ------------------------------------------------------------------
  
  TODO: convert map point to routing point
@@ -250,9 +260,7 @@ TODO: create faster create edge table nodes
 -do it in memory
 
  TODO: recalc route from next crossing to avoid u-turns
- 
- TODO: fix tunnel mode
- use heading info from ways for better prediction
+
  
  TODO parser
  -pbf parser
@@ -297,7 +305,4 @@ TODO: ref tag of nodes
 
 TODO: create gpx tracks
 
-TODO: add to options
-driving mode:
--show breadcrumbs
--use prediction
+TODO: calc driving time for routes

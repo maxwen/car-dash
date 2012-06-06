@@ -2002,17 +2002,16 @@ class OSMDataImport(OSMDataSQLite):
         
         accessFactor=self.getAccessFactor(tags, streetTypeId)  
         streetTypeFactor=self.getStreetTypeFactor(streetTypeId)
-#        maxspeed=self.getMaxspeed(tags, streetTypeId)
                             
         try:
 #            cost=(distance * streetTypeFactor * accessFactor * crossingFactor) / (maxspeed/3.6)
             cost=(distance * streetTypeFactor * accessFactor * crossingFactor)
         except ZeroDivisionError:
             cost=distance
-            self.log(tags)
+            self.log("getCostsOfWay: %s"%str(tags))
         except TypeError:
             cost=distance
-            self.log(tags)
+            self.log("getCostsOfWay: %s"%str(tags))
             
         if oneway==1:
             # must not be lower then cost!
@@ -3292,7 +3291,7 @@ class OSMDataImport(OSMDataSQLite):
 def main(argv):    
     p = OSMDataImport()
     
-    p.initDB()
+#    p.initDB()
 #    p.openAdressDB()
 #    p.createAdressTable()
 #    p.closeAdressDB()
@@ -3358,7 +3357,7 @@ def main(argv):
     
 #    p.testRoutes()
 #    p.testWayTable()
-#    p.recreateCostsForEdges()
+    p.recreateCostsForEdges()
 #    p.removeOrphanedEdges()
 #    p.removeOrphanedWays()
 #    p.createGeomDataForEdgeTable()

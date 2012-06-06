@@ -526,7 +526,7 @@ class OSMDataAccess(OSMDataSQLite):
         latFrom=None
         lonFrom=None
         
-        wayId, _, refs, streetInfo, name, nameRef, _, _=self.getWayEntryForId(wayId)
+        wayId, _, refs, streetInfo, name, nameRef, maxspeed, _=self.getWayEntryForId(wayId)        
         streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
 
         refListPart=self.getRefListSubset(refs, startRef, endRef)
@@ -563,23 +563,17 @@ class OSMDataAccess(OSMDataSQLite):
                 print("routeEndRef %d not in refListPart %s"%(routeEndRefId, refListPart))
                 routeEndRefId=refListPart[0]
             else:
-                index=refListPart.index(routeEndRefId)
-                endLat, endLon=coords[index]
-                
+                index=refListPart.index(routeEndRefId)                
                 if index!=0:
                     # use one ref before
                     prevRefId=refListPart[index-1]
                     prevLat, prevLon=coords[index-1]
-                else:
-                    prevRefId=routeEndRefId
-                    prevLat=endLat
-                    prevLon=endLon
-                if prevRefId!=routeEndRefId:
+                    endLat, endLon=coords[index]
+                
                     lat, lon=endPoint.getClosestRefPos()
                     onLine=self.isOnLineBetweenPoints(lat, lon, endLat, endLon, prevLat, prevLon, 10.0)
                     if onLine==True:
-                        routeEndRefId=prevRefId
-        
+                        routeEndRefId=prevRefId        
 
         routeStartRefId=None
         if startPoint!=None:
@@ -589,16 +583,11 @@ class OSMDataAccess(OSMDataSQLite):
                 routeStartRefId=refListPart[0]
             else:
                 index=refListPart.index(routeStartRefId)
-                startLat, startLon=coords[index]
                 if index!=len(refListPart)-1:
                     nextRefId=refListPart[index+1]
+                    startLat, startLon=coords[index]
                     nextLat, nextLon=coords[index+1]
-                else:
-                    nextRefId=routeStartRefId
-                    nextLat=startLat
-                    nextLon=startLon
-                                    
-                if nextRefId!=routeStartRefId:
+                    
                     lat, lon=startPoint.getClosestRefPos()
                     onLine=self.isOnLineBetweenPoints(lat, lon, startLat, startLon, nextLat, nextLon, 10.0)
                     if onLine==True:
@@ -811,17 +800,25 @@ class OSMDataAccess(OSMDataSQLite):
         self.sumLength=self.sumLength+length
         trackItem["sumLength"]=self.sumLength
         # TODO: calc time for edge
-
+        if maxspeed==0:
+            maxspeed=self.getEstimatedMaxspeed(streetTypeId)
+            
+        timeSec=length/(maxspeed/3.6)
+        timeMin=timeSec/60
+        trackItem["time"]=timeMin
+        self.sumTime=self.sumTime+timeMin
+        trackItem["sumTime"]=self.sumTime
+        
         trackItem["refs"]=trackItemRefs
         trackWayList.append(trackItem)
         self.latFrom=latFrom
         self.lonFrom=lonFrom
-        return length, nextStartRef
+        return nextStartRef
 
     def printSingleEdgeForRefList(self, edge, trackWayList, startPoint, endPoint, currentStartRef):
         (edgeId, startRef, endRef, length, wayId, _, _, _, _, _, coords)=edge        
         
-        wayId, _, refs, streetInfo, name, nameRef, _, _=self.getWayEntryForId(wayId)
+        wayId, _, refs, streetInfo, name, nameRef, maxspeed, _=self.getWayEntryForId(wayId)
         streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
 
         refListPart=self.getRefListSubset(refs, startRef, endRef)
@@ -840,7 +837,7 @@ class OSMDataAccess(OSMDataSQLite):
         routeStartRefId=startPoint.getRefId()
         routeEndRefId=endPoint.getRefId()
         indexStart=refListPart.index(routeStartRefId)
-        startLat=coords[indexStart]
+        startLat, startLon=coords[indexStart]
         indexEnd=refListPart.index(routeEndRefId)
         endLat, endLon=coords[indexEnd]
         
@@ -862,12 +859,7 @@ class OSMDataAccess(OSMDataSQLite):
                 # use one ref before
                 prevRefId=refListPart[indexEnd-1]
                 prevLat, prevLon=coords[indexEnd-1]
-            else:
-                prevRefId=routeEndRefId
-                prevLat=endLat
-                prevLon=endLon
-                 
-            if prevRefId!=routeEndRefId:
+
                 lat, lon=endPoint.getClosestRefPos()
                 onLine=self.isOnLineBetweenPoints(lat, lon, endLat, endLon, prevLat, prevLon, 10.0)
                 if onLine==True:
@@ -876,17 +868,11 @@ class OSMDataAccess(OSMDataSQLite):
             if indexStart!=len(refListPart)-1:
                 nextRefId=refListPart[indexStart+1]
                 nextLat, nextLon=coords[indexStart+1]
-            else:
-                nextRefId=routeStartRefId
-                nextLat=startLat
-                nextLon=startLon
-                                
-            if nextRefId!=routeStartRefId:
+
                 lat, lon=startPoint.getClosestRefPos()
                 onLine=self.isOnLineBetweenPoints(lat, lon, startLat, startLon, nextLat, nextLon, 10.0)
                 if onLine==True:
-                    routeStartRefId=nextRefId
-                        
+                    routeStartRefId=nextRefId                        
             
             routeStartRefPassed=False
 
@@ -926,10 +912,27 @@ class OSMDataAccess(OSMDataSQLite):
         self.sumLength=self.sumLength+length
         trackItem["sumLength"]=self.sumLength
 
+        # TODO: calc time for edge
+        if maxspeed==0:
+            maxspeed=self.getEstimatedMaxspeed(streetTypeId)
+        
+        timeSec=length/(maxspeed/3.6)
+        timeMin=timeSec/60
+        trackItem["time"]=timeMin
+        self.sumTime=self.sumTime+timeMin
+        trackItem["sumTime"]=self.sumTime
+
         trackItem["refs"]=trackItemRefs
         trackWayList.append(trackItem)
-        return length
  
+    def getEstimatedMaxspeed(self, streetTypeId):
+        if streetTypeId==Constants.STREET_TYPE_MOTORWAY:
+            return 100
+        if streetTypeId==Constants.STREET_TYPE_TRUNK:
+            return 80
+        
+        return 50
+
     def getRefListSubset(self, refs, startRef, endRef):
         if not startRef in refs and not endRef in refs:
             return list()
@@ -1089,9 +1092,8 @@ class OSMDataAccess(OSMDataSQLite):
         endLength=0
         crossingLength=0
         currentTrackItem=firstTrackItem
-#        distanceToEdge=self.getRemaingDistanceOnTrackItem(firstTrackItem, lat, lon)
         trackListIndex=0
-        
+                    
         if distanceOnEdge!=None and distanceOnEdge>=0:
             crossingLength=distanceOnEdge
             endLength=distanceOnEdge
@@ -1108,7 +1110,7 @@ class OSMDataAccess(OSMDataSQLite):
                     trackListIndex=1
                     crossingLength=distanceOnEdge
                     endLength=distanceOnEdge
-                
+                        
         if len(trackList)==1:
             return endLength, crossingLength
             
@@ -1142,6 +1144,20 @@ class OSMDataAccess(OSMDataSQLite):
         remaining=edgeLength-length
         return remaining
 
+    def calcRemainingDrivingTime(self, trackList, lat, lon, route, distanceOnEdge, speed):
+        remainingEdgeTime=0
+        if speed!=None and distanceOnEdge!=None and distanceOnEdge>=0:
+            remainingEdgeTime=(distanceOnEdge/(speed/3.6))/60
+        if len(trackList)==1:
+            return remainingEdgeTime
+        
+        sumTime=remainingEdgeTime
+        for trackItem in trackList[1:]:
+            sumTime=sumTime+trackItem["time"]
+            
+        return sumTime
+
+    
     def printRoute(self, route):
         routeInfo=route.getRouteInfo()
         
@@ -1151,12 +1167,12 @@ class OSMDataAccess(OSMDataSQLite):
             edgeList=routeInfoEntry["edgeList"]    
                 
             trackWayList=list()
-            allLength=0
             self.latFrom=None
             self.lonFrom=None
             self.latCross=None
             self.lonCross=None
             self.sumLength=0
+            self.sumTime=0
 
             if len(edgeList)==0:
                 continue
@@ -1168,8 +1184,7 @@ class OSMDataAccess(OSMDataSQLite):
                 if startPoint.getPosOnEdge()>0.5 and endPoint.getPosOnEdge()<startPoint.getPosOnEdge():
                     currentStartRef=endRef
                          
-                length=self.printSingleEdgeForRefList(edge, trackWayList, startPoint, endPoint, currentStartRef)
-                allLength=allLength+length
+                self.printSingleEdgeForRefList(edge, trackWayList, startPoint, endPoint, currentStartRef)
     
             else:
                 i=0
@@ -1192,17 +1207,18 @@ class OSMDataAccess(OSMDataSQLite):
                                 currentStartRef=endRef
                         
                     if i==0:
-                        length, currentStartRef=self.printEdgeForRefList(edge, trackWayList, startPoint, None, currentStartRef)
+                        currentStartRef=self.printEdgeForRefList(edge, trackWayList, startPoint, None, currentStartRef)
                     elif i==len(edgeList)-1:
-                        length, currentStartRef=self.printEdgeForRefList(edge, trackWayList, None, endPoint, currentStartRef)
+                        currentStartRef=self.printEdgeForRefList(edge, trackWayList, None, endPoint, currentStartRef)
                     else:
-                        length, currentStartRef=self.printEdgeForRefList(edge, trackWayList, None, None, currentStartRef)
+                        currentStartRef=self.printEdgeForRefList(edge, trackWayList, None, None, currentStartRef)
                         
-                    allLength=allLength+length
                     i=i+1
                            
             routeInfoEntry["trackList"]=trackWayList
-            routeInfoEntry["length"]=allLength
+            routeInfoEntry["length"]=self.sumLength
+            routeInfoEntry["time"]=self.sumTime
+            print(routeInfoEntry)
     
     def isAccessRestricted(self, tags):
         value=None

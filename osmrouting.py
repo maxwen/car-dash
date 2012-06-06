@@ -81,7 +81,13 @@ class OSMRoute():
             if len(self.routeInfo)>index:
                 return self.routeInfo[index]["length"]
         return 0
-    
+
+    def getTime(self, index):
+        if self.routeInfo!=None:
+            if len(self.routeInfo)>index:
+                return self.routeInfo[index]["time"]
+        return 0
+        
     def getAllLength(self):
         if self.routeInfo!=None:
             i=0
@@ -91,7 +97,17 @@ class OSMRoute():
                 i=i+1
             return length
         return 0
-        
+    
+    def getAllTime(self):
+        if self.routeInfo!=None:
+            i=0
+            time=0
+            while i<len(self.routeInfo):
+                time=time+self.routeInfo[i]["time"]
+                i=i+1
+            return time
+        return 0      
+      
     def getTrackList(self, index):
         if self.routeInfo!=None:
             if len(self.routeInfo)>index:
@@ -175,6 +191,7 @@ class OSMRoutingPoint():
     TYPE_MAP=6
 
     DEFAULT_RESOLVE_POINT_MARGIN=0.0005
+    # maximal distance we try to resolve the pos
     DEFAULT_RESOLVE_MAX_DISTANCE=30.0
     
     def __init__(self, name="", pointType=0, pos=(0.0, 0.0)):
@@ -194,7 +211,6 @@ class OSMRoutingPoint():
         self.edgeId=None
         self.name=name
         self.usedRefId=0
-#        self.country=None                
         self.posOnEdge=0.0
         self.refPos=None
         self.closestRefPos=None
@@ -202,13 +218,11 @@ class OSMRoutingPoint():
     def resolveFromPos(self, osmParserData):
         edgeId, _=osmParserData.getEdgeIdOnPos(self.lat, self.lon, self.DEFAULT_RESOLVE_POINT_MARGIN, self.DEFAULT_RESOLVE_MAX_DISTANCE)
         if edgeId==None:
-#            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
 
         (edgeId, startRef, endRef, length, wayId, source, target, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
         wayId, _, refs, _, _, _, _, _=osmParserData.getWayEntryForId(wayId)
         if wayId==None:
-#            print("resolveFromPos not found for %f %f"%(self.lat, self.lon))
             return
         
         refList=osmParserData.getRefListSubset(refs, startRef, endRef)
@@ -225,7 +239,6 @@ class OSMRoutingPoint():
         self.usedRefId=ref
         self.wayId=wayId
         self.refPos=refPos
-#        self.country=country
         
         self.posOnEdge=osmParserData.getPosOnOnEdge(self.closestRefPos[0], self.closestRefPos[1], coords, length)
 #        print(self.posOnEdge)
@@ -256,12 +269,16 @@ class OSMRoutingPoint():
     def getType(self):
         return self.type
     
+    # real pos - can be anywhere
     def getPos(self):
         return (self.lat, self.lon)
     
+    # nearest pos that lies on the edge
+    # maybe a temporary created point between "real" refs
     def getClosestRefPos(self):
         return self.closestRefPos
     
+    # nearest "real" way ref pos
     def getRefPos(self):
         return self.refPos
     
@@ -279,9 +296,6 @@ class OSMRoutingPoint():
         
     def getTarget(self):
         return self.target
-    
-#    def getCountry(self):
-#        return self.country
     
     def changeType(self, newType):
         self.type=newType
