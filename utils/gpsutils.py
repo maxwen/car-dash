@@ -81,6 +81,7 @@ class GPSData():
     def fromTrackLogLine(self, line):
         lineParts=line.split(":")
         self.time=time.time()
+
         if len(lineParts)>=6:
             self.lat=float(lineParts[1])
             self.lon=float(lineParts[2])

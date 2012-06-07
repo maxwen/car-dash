@@ -339,7 +339,7 @@ class OSMGPSSimulationWorker(QThread):
     def run(self):
         for gpsData in self.gpsDataLines[self.currentGPSDataIndex:]:
             if self.exiting==True:
-                break
+                break            
             gpsData.time=time.time()
             self.updateGPSDataDisplay(gpsData)
             self.msleep(self.timeout)
@@ -520,8 +520,6 @@ class QtOSMWidget(QWidget):
         self.satelitesInUse=0
         self.currentDisplayBBox=None
         self.show3D=True
-#        self.showBackgroundTiles=True
-        self.refRing=None
         self.nightMode=False
         self.gpsBreadcrumbs=True
         
@@ -2333,7 +2331,7 @@ class QtOSMWidget(QWidget):
             
             speedBackground=QRect(0, self.height()-50-100, 100, 100)
             # show if speed is larger then maxspeed + 10%
-            if self.speed>self.speedInfo*1.1:
+            if self.speed!=None and self.drivingMode==True and self.speed>self.speedInfo*1.1:
                 self.painter.fillRect(speedBackground, self.style.getStyleColor("warningBackgroundColor"))
             else:
                 self.painter.fillRect(speedBackground, self.style.getStyleColor("backgroundColor"))
@@ -3389,18 +3387,16 @@ class QtOSMWidget(QWidget):
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
                 self.recalcRouteFromPoint(recalcPoint)
             
-    def clearLastEdgeInfo(self):
+    def clearAll(self):
         self.wayInfo=None
         self.currentCoords=None
         self.lastEdgeId=None
         self.lastWayId=None
         self.speedInfo=None
         self.wayPOIList=None
-        self.distanceToEnd=0
         self.distanceToCrossing=0
         self.nextEdgeOnRoute=None
         self.routeInfo=None, None, None, None
-        self.refRing=None
         
     def calcNextCrossingInfo(self, lat, lon):
         (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.currentTrackList, lat, lon)
@@ -3437,7 +3433,7 @@ class QtOSMWidget(QWidget):
         
         edge=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)        
         if edge==None:
-            self.clearLastEdgeInfo()
+            self.clearAll()
         else:   
 #            print(edge)
             edgeId=edge[0]
@@ -3515,23 +3511,20 @@ class QtOSMWidget(QWidget):
                             self.currentRoute.targetPointReached(self.currentRoutePart)
                             self.switchToNextRoutePart()     
                             if self.currentRoute.isRouteFinished():
-                                self.clearLastEdgeInfo()
+                                self.clearAll()
+                                self.distanceToEnd=0.0
                                 self.routingStarted=False
                                 print("route finish")
             else:
                 if edgeId!=self.lastEdgeId:
+                    self.clearAll()
                     self.lastEdgeId=edgeId
-                    self.distanceToEnd=0
-                    self.distanceToCrossing=0
-                    self.routeInfo=None, None, None, None
-                    self.currentEdgeIndexList=None
-                    self.nextEdgeOnRoute=None
+                    self.currentCoords=coords
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
-                wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
+                wayId, _, _, streetInfo, name, nameRef, maxspeed, _=osmParserData.getWayEntryForId(wayId)
                     
-#                osmParserData.printCrossingsForWayId(wayId)
                 self.wayInfo=osmParserData.getWayTagString(name, nameRef)  
                 self.speedInfo=maxspeed
                 self.wayPOIList=osmParserData.getPOIListOnWay(wayId)
@@ -3653,7 +3646,7 @@ class QtOSMWidget(QWidget):
             self.currentRoute.printRoute(osmParserData)
 #            self.printRouteDescription(self.currentRoute)
             
-            self.clearLastEdgeInfo()
+            self.clearAll()
 
             self.currentRoutePart=0
             self.currentEdgeList=self.currentRoute.getEdgeList(self.currentRoutePart)
@@ -3903,7 +3896,7 @@ class OSMWidget(QWidget):
         self.osmUtils=OSMUtils()
         self.gpsPrediction=True
         self.isInTunnel=False
-        self.waitForInvalidGPSSignal=False
+#        self.waitForInvalidGPSSignal=False
         osmParserData.openAllDB()
         
     def addToWidget(self, vbox):     
@@ -4213,10 +4206,9 @@ class OSMWidget(QWidget):
         osmParserData.closeAllDB()
 
     def handleMissingGPSSignal(self):
-        if self.getDrivingMode()==True and self.isInTunnel==False:
-            osmRouting.cleanAll()
-            self.mapWidgetQt.clearLastEdgeInfo()
-            self.mapWidgetQt.update()
+        osmRouting.clearAll()
+        self.mapWidgetQt.clearAll()
+        self.mapWidgetQt.update()
     
     def startTunnelMode(self):
         if self.isInTunnel==False:
@@ -4226,29 +4218,34 @@ class OSMWidget(QWidget):
             # before completely missing
             # and this is influencing the tunnel prediction
             # which is based on the last data before the tunnel
-            self.waitForInvalidGPSSignal=True     
+#            self.waitForInvalidGPSSignal=True     
                
     def stopTunnelMode(self):
         if self.isInTunnel==True:
             self.isInTunnel=False
-            self.waitForInvalidGPSSignal=False
+#            self.waitForInvalidGPSSignal=False
     
     # called from gps update thread
+    # only for different gps data
     def updateGPSDisplay(self, gpsData, addToLog=True):
         if gpsData!=None:   
             if gpsData.isValid():
-                if self.waitForInvalidGPSSignal==True:
-                    return
+                # after tunnel enter wait until signal
+                # becomes invalid
+#                if self.waitForInvalidGPSSignal==True:
+#                    return
                 
                 self.gpsSignalInvalid=False                                    
                 self.updateGPSDataDisplay(gpsData, False)
             else:
-                self.waitForInvalidGPSSignal=False
+#                self.waitForInvalidGPSSignal=False
                 
-                self.gpsSignalInvalid=True                
-                self.handleMissingGPSSignal()
+                self.gpsSignalInvalid=True 
+                
+                if self.isInTunnel==False:
+                    self.handleMissingGPSSignal()
 
-            if addToLog==True:
+            if addToLog==True and self.test==False:
                 trackLog.addTrackLogLine(gpsData.toLogLine())
 
     # called from tracklog worker
@@ -4276,8 +4273,8 @@ class OSMWidget(QWidget):
                 if self.gpsSignalInvalid==True: 
                     return 
     
-                if self.lastGPSData.speed==0 or self.lastGPSData.lat==0.0 or self.lastGPSData.lon==0.0:
-                    return
+            if self.lastGPSData.speed==0:
+                return
 
             distance=(self.lastGPSData.speed/3.6)*(timeStamp-self.lastGPSData.time)
             if distance<3.0:
@@ -4782,8 +4779,8 @@ class OSMWidget(QWidget):
         self.trackLogLine=0
         
         # init
-        osmRouting.cleanAll()
-        self.mapWidgetQt.clearLastEdgeInfo()
+        osmRouting.clearAll()
+        self.mapWidgetQt.clearAll()
         self.mapWidgetQt.update()        
         
         self._stepTrackLog()

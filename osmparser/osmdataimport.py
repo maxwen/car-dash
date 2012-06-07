@@ -792,7 +792,13 @@ class OSMDataImport(OSMDataSQLite):
                     if "addr:street" in tags:
                         lat, lon=self.getCenterOfPolygon(refs)
                         if lat!=None and lon!=None:
-                            self.parseFullAddress(tags, None, lat, lon)
+                            self.parseFullAddress()
+                    # buildings with a name - useful for searching
+                    if "name" in tags:
+                        lat, lon=self.getCenterOfPolygon(refs)
+                        if lat!=None and lon!=None:
+                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_BUILDING, layer)
+
                         
 #            if "amenity" in tags and "name" in tags:
             if "amenity" in tags:

@@ -306,3 +306,10 @@ TODO: ref tag of nodes
 TODO: create gpx tracks
 
 TODO: calc driving time for routes
+
+TODO: POI searcg dialogs
+-add select all and select none
+
+TODO: tracklogs from tunnels cannot be replayed 1:1
+-only one invalid tracklog entry
+-would need to change replay to use original timestamps

@@ -80,15 +80,17 @@ class OSMDataTest(OSMDataAccess):
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=10')
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_BUILDING))
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            print(x)
+            tags=self.decodeTags(x[2])
+            if "name" in tags:
+                print(tags["name"])
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE type=10')
-        allentries=self.cursorArea.fetchall()
-        for x in allentries:
-            print(x)
+#        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE type=10')
+#        allentries=self.cursorArea.fetchall()
+#        for x in allentries:
+#            print(x)
 
     def testAdminAreaTable(self):
         self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, parent, AsText(geom) FROM adminAreaTable WHERE osmId=941794')
@@ -269,7 +271,7 @@ def main(argv):
 #    p.testCoordsTable()
 #    p.vacuumEdgeDB()
 #    p.vacuumGlobalDB()
-    p.testPOIRefTable()
+#    p.testPOIRefTable()
 #    p.mergeEqualWayEntries()
 #    p.testAreaTable()
 #    p.mergeWayEntries()
