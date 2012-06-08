@@ -2829,14 +2829,14 @@ class QtOSMWidget(QWidget):
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
+                if gpsData.predicted==False or self.osmWidget.isInTunnel==True:
+                    if debug==False:
+                        self.showTrackOnGPSPos(False) 
+
                 if self.drivingMode==True and self.autocenterGPS==True and (self.stop==False or firstGPSData==True):
                     self.osm_autocenter_map()
                 else:
                     self.update()  
-
-                if gpsData.predicted==False or self.osmWidget.isInTunnel==True:
-                    if debug==False:
-                        self.showTrackOnGPSPos(lat, lon, False) 
            
         else:
             self.gps_rlat=0.0
@@ -3689,16 +3689,15 @@ class QtOSMWidget(QWidget):
     
     def clearRoute(self):
         self.distanceToEnd=0
+        self.distanceToCrossing=0
         self.currentEdgeIndexList=None
         self.nextEdgeOnRoute=None
-        self.wayInfo=None
-        self.lastEdgeId=None
-        self.lastWayId=None
         self.currentEdgeList=None
         self.currentTrackList=None
         self.currentStartPoint=None
         self.currentTargetPoint=None
         self.currentRoutePart=0
+        self.routingStarted=False
     
     def getTrackListFromEdge(self, indexEnd, edgeList, trackList):
         if indexEnd < len(edgeList):
@@ -3747,13 +3746,15 @@ class QtOSMWidget(QWidget):
         print("end:")
 
     def showTrackOnMousePos(self, x, y):
-        if self.drivingMode==False or self.osmWidget.test==True:
+        if self.drivingMode==False:
             (lat, lon)=self.getPosition(x, y)
             self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)
 
-    def showTrackOnGPSPos(self, lat, lon, update):
+    def showTrackOnGPSPos(self, update):
         if self.drivingMode==True:
-            self.showTrackOnPos(lat, lon, self.track, self.speed, update, False)            
+            gpsPosition=self.getGPSPosition()
+            if gpsPosition!=None:
+                self.showTrackOnPos(gpsPosition[0], gpsPosition[1], self.track, self.speed, update, False)            
     
     def getPosition(self, x, y):
         point=QPointF(x, y)        
@@ -4184,7 +4185,7 @@ class OSMWidget(QWidget):
             self.setFromOptionsConfig(optionsDialog.getOptionsConfig())
             
             self.mapWidgetQt.clearPolygonCache()
-            self.mapWidgetQt.update()
+            self.update()
              
     @pyqtSlot()
     def _cleanup(self):
@@ -4208,7 +4209,7 @@ class OSMWidget(QWidget):
     def handleMissingGPSSignal(self):
         osmRouting.clearAll()
         self.mapWidgetQt.clearAll()
-        self.mapWidgetQt.update()
+        self.update()
     
     def startTunnelMode(self):
         if self.isInTunnel==False:
@@ -4385,7 +4386,15 @@ class OSMWidget(QWidget):
     
     def setDrivingMode(self, value):
         self.mapWidgetQt.drivingMode=value
-        self.update()
+        if value==True:
+            self.mapWidgetQt.showTrackOnGPSPos(False)
+        
+            if self.getDrivingMode()==True and self.getAutocenterGPSValue()==True:
+                self.mapWidgetQt.osm_autocenter_map()
+            else:
+                self.update()
+        else:
+            self.update()
         
     def getDrivingMode(self):
         return self.mapWidgetQt.drivingMode
@@ -4781,7 +4790,7 @@ class OSMWidget(QWidget):
         # init
         osmRouting.clearAll()
         self.mapWidgetQt.clearAll()
-        self.mapWidgetQt.update()        
+        self.update()        
         
         self._stepTrackLog()
 
