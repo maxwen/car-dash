@@ -230,7 +230,7 @@ class GISUtils():
             
         return refRings
 
-    def mergeRelationRefs(self, allRefs, osmDataImport):
+    def mergeRelationRefs(self, osmid, allRefs, osmDataImport):
         refRings=list()
         refRingEntry=dict()
         refRing=list()
@@ -307,7 +307,9 @@ class GISUtils():
                 refRingEntry["coords"]=coords
                 refRingEntry["newRefs"]=newRefList
                 refRings.append(refRingEntry)
-            
+            else:
+                osmDataImport.log("failed to create a closed ring for %s %s"%(osmid, refRing))
+                
             refRingEntry=dict()
             refRing=list()
             wayIdList=list()

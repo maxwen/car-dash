@@ -3397,6 +3397,7 @@ class QtOSMWidget(QWidget):
         self.distanceToCrossing=0
         self.nextEdgeOnRoute=None
         self.routeInfo=None, None, None, None
+        osmRouting.clearAll()
         
     def calcNextCrossingInfo(self, lat, lon):
         (direction, crossingInfo, crossingType, crossingRef, crossingEdgeId)=osmParserData.getNextCrossingInfoFromPos(self.currentTrackList, lat, lon)
@@ -4207,7 +4208,6 @@ class OSMWidget(QWidget):
         osmParserData.closeAllDB()
 
     def handleMissingGPSSignal(self):
-        osmRouting.clearAll()
         self.mapWidgetQt.clearAll()
         self.update()
     
@@ -4384,16 +4384,23 @@ class OSMWidget(QWidget):
     def getNightMode(self):
         return self.mapWidgetQt.nightMode
     
+    def setConnectGPS(self, value):
+        self.gpsConnected=value
+                        
+    def getConnectGPS(self):
+        return self.gpsConnected
+    
     def setDrivingMode(self, value):
         self.mapWidgetQt.drivingMode=value
         if value==True:
             self.mapWidgetQt.showTrackOnGPSPos(False)
         
-            if self.getDrivingMode()==True and self.getAutocenterGPSValue()==True:
+            if self.getAutocenterGPSValue()==True:
                 self.mapWidgetQt.osm_autocenter_map()
             else:
                 self.update()
         else:
+            self.mapWidgetQt.clearAll()
             self.update()
         
     def getDrivingMode(self):
@@ -4788,7 +4795,6 @@ class OSMWidget(QWidget):
         self.trackLogLine=0
         
         # init
-        osmRouting.clearAll()
         self.mapWidgetQt.clearAll()
         self.update()        
         
@@ -4849,18 +4855,14 @@ class OSMWidget(QWidget):
                 self.updateLocationThread.setup()
 
     def updateGPSThreadState(self, state):
-        if state==gpsRunState:
-            self.gpsConnected=True
-            
+        if state==gpsRunState:            
             if self.test==True:
                 self.disableTestButtons()
                 
             if self.getGPSPrediction()==True and not self.updateLocationThread.isRunning():
                 self.updateLocationThread.setup()
                 
-        if state==gpsStoppedState:
-            self.gpsConnected=False
-            
+        if state==gpsStoppedState:            
             if self.test==True:
                 self.enableTestButtons()
                 
@@ -4956,9 +4958,12 @@ class OSMWindow(QMainWindow):
         if value==True:
             if not self.updateGPSThread.isRunning():
                 self.updateGPSThread.setup(True)
+            
         else:
             self.disconnectGPS()
-    
+
+        self.osmWidget.setConnectGPS(value)
+        
     @pyqtSlot()
     def _nightMode(self):
         value=self.nightModeButton.isChecked()
@@ -4972,7 +4977,7 @@ class OSMWindow(QMainWindow):
     def disconnectGPS(self):
         if self.updateGPSThread.isRunning():
             self.updateGPSThread.stop()
-        
+                    
     def updateGPSThreadState(self, state):
         self.osmWidget.updateGPSThreadState(state)
     

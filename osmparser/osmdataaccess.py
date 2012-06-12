@@ -67,7 +67,7 @@ class Constants():
     POI_TYPE_PARK=16
     POI_TYPE_DOG_PARK=17
     POI_TYPE_NATURE_RESERVE=18
-    POI_TYPE_BUILDING=19
+    POI_TYPE_HOTEL=19
     
     AREA_TYPE_LANDUSE=1
     AREA_TYPE_NATURAL=2
@@ -103,19 +103,20 @@ class Constants():
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
     REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure", "bridge", "tunnel"])
     REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
-    
-    PARKING_LIMITATIONS_DICT={"fee":"no"}
-    
-    AMENITY_POI_TYPE_DICT={"fuel": (POI_TYPE_GAS_STATION, None),
-                       "parking": (POI_TYPE_PARKING, None),
-                       "hospital": (POI_TYPE_HOSPITAL, None),
-                       "police": (POI_TYPE_POLICE, None),
-                       "veterinary":(POI_TYPE_VETERIANERY, None)}   
+        
+    AMENITY_POI_TYPE_DICT={"fuel": POI_TYPE_GAS_STATION,
+                       "parking": POI_TYPE_PARKING,
+                       "hospital": POI_TYPE_HOSPITAL,
+                       "police": POI_TYPE_POLICE,
+                       "veterinary":POI_TYPE_VETERIANERY}   
     AMENITY_AREA_TYPE_SET=set(["parking", "grave_yard"])
     
     TOURISM_POI_TYPE_DICT={"camp_site": POI_TYPE_CAMPING,
-                       "caravan_site": POI_TYPE_CAMPING} 
-    TOURISM_AREA_TYPE_SET=set(["camp_site", "caravan_site"])
+                       "caravan_site": POI_TYPE_CAMPING,
+                       "hotel" : POI_TYPE_HOTEL,
+                       "motel" : POI_TYPE_HOTEL,
+                       "guest_house" : POI_TYPE_HOTEL} 
+    TOURISM_AREA_TYPE_SET=set(["camp_site", "caravan_site", "hotel", "motel", "guest_house"])
     
     LEISURE_POI_TYPE_DICT={"park": POI_TYPE_PARK,
                        "dog_park": POI_TYPE_DOG_PARK,

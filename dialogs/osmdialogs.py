@@ -42,8 +42,10 @@ def loadDialogSettings(config):
                         for valueItem in valueItems:
                             valueList.append(int(valueItem))
                     else:
-                        valueList.append(int(value[1:-1]))
-
+                        try:
+                            valueList.append(int(value[1:-1]))
+                        except ValueError:
+                            None
                     value=valueList
                 else:
                     try:
@@ -528,7 +530,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.countryCombo=QComboBox(self)
         defaultCountryName=None
         
-        if lastCountryId==None:
+        if lastCountryId==None or not lastCountryId in self.countryDict.keys():
             if self.defaultCountryId!=None:
                 defaultCountryName=self.countryDict[self.defaultCountryId]
         else:
@@ -2389,6 +2391,10 @@ class OSMPOITableModel(QAbstractTableModel):
             return True
      
         return False
+    
+    def update(self, poiTypeList):
+        self.displayPOITypeList=poiTypeList
+        self.reset()
 
 class OSMPOIDisplayDialog(QDialog):
     def __init__(self, parent, poiTypeList):
@@ -2703,7 +2709,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.countryCombo=QComboBox(self)
             
             defaultCountryName=None
-            if lastCountryId==None:
+            if lastCountryId==None or not lastCountryId in self.countryDict.keys():
                 if self.defaultCountryId!=None:
                     defaultCountryName=self.countryDict[self.defaultCountryId]
             else:
@@ -2726,8 +2732,22 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         dataArea=QHBoxLayout()
         
+        poiArea=QVBoxLayout()
+        dataArea.addLayout(poiArea)
+        
+        poiSelectArea=QHBoxLayout()
+        poiArea.addLayout(poiSelectArea)
+
+        self.selectAllPOIButton=QPushButton("All", self)
+        self.selectAllPOIButton.clicked.connect(self._selectAllPOI)
+        poiSelectArea.addWidget(self.selectAllPOIButton)
+
+        self.selectNonePOIButton=QPushButton("None", self)
+        self.selectNonePOIButton.clicked.connect(self._selectNonePOI)
+        poiSelectArea.addWidget(self.selectNonePOIButton)
+            
         self.poiView=QTableView(self)
-        dataArea.addWidget(self.poiView)
+        poiArea.addWidget(self.poiView)
         
         if lastPOIList!=None:
             self.currentPOITypeList=lastPOIList
@@ -3092,7 +3112,19 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         else:
             self.cityList=list()
-            
+    
+    @pyqtSlot()
+    def _selectAllPOI(self):
+        self.currentPOITypeList=self.style.getAllPOIList()
+        self.poiViewModel.update(self.currentPOITypeList)
+        self._poiListChanged()
+        
+    @pyqtSlot()
+    def _selectNonePOI(self):
+        self.currentPOITypeList=list()
+        self.poiViewModel.update(self.currentPOITypeList)
+        self._poiListChanged()
+        
     @pyqtSlot()
     def _applyFilterCity(self):
         self._clearCityTableSelection()

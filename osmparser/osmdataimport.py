@@ -515,15 +515,7 @@ class OSMDataImport(OSMDataSQLite):
     
     def getAmenityNodeTypeId(self, nodeTag, tags):
         if nodeTag in Constants.AMENITY_POI_TYPE_DICT.keys():
-            entry=Constants.AMENITY_POI_TYPE_DICT[nodeTag]
-            nodeType=entry[0]
-            limitationDict=entry[1]
-            if limitationDict!=None:
-                for key, value in limitationDict.items():
-                    if key in tags.keys():
-                        if value!=tags[key]:
-                            return -1
-            return nodeType
+            return Constants.AMENITY_POI_TYPE_DICT[nodeTag]
         
         return -1
 
@@ -792,15 +784,13 @@ class OSMDataImport(OSMDataSQLite):
                     if "addr:street" in tags:
                         lat, lon=self.getCenterOfPolygon(refs)
                         if lat!=None and lon!=None:
-                            self.parseFullAddress()
-                    # buildings with a name - useful for searching
-                    if "name" in tags:
-                        lat, lon=self.getCenterOfPolygon(refs)
-                        if lat!=None and lon!=None:
-                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_BUILDING, layer)
-
+                            self.parseFullAddress(tags, wayid, lat, lon)
+                    # TODO: buildings with a name - useful for searching
+#                    if "name" in tags:
+#                        lat, lon=self.getCenterOfPolygon(refs)
+#                        if lat!=None and lon!=None:
+#                            self.addToPOIRefTable(wayid, 1, lat, lon, tags, Constants.POI_TYPE_BUILDING, layer)
                         
-#            if "amenity" in tags and "name" in tags:
             if "amenity" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getAmenityNodeTypeId(tags["amenity"], tags)
@@ -809,7 +799,6 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-#            if "shop" in tags and "name" in tags:
             if "shop" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getShopNodeTypeId(tags["shop"])
@@ -826,7 +815,6 @@ class OSMDataImport(OSMDataSQLite):
                         if lat!=None and lon!=None:
                             self.addToPOIRefTable(wayid, 1, lat, lon, tags, nodeType, layer)
 
-#            if "tourism" in tags and "name" in tags:
             if "tourism" in tags:
                 if self.skipPOINodes==False:
                     nodeType=self.getTourismNodeTypeId(tags["tourism"])
@@ -1198,7 +1186,8 @@ class OSMDataImport(OSMDataSQLite):
                         role=way[2]
                         
                         if memberType=="relation":
-#                            self.log("super relation %d %s"%(osmid, tags))
+                            if isAdminBoundary==True:
+                                self.log("skip admin boundary %d %s - super relation"%(osmid, tags["name"]))
                             skipArea=True
                             break
 
@@ -1207,7 +1196,8 @@ class OSMDataImport(OSMDataSQLite):
                             if wayId==None:
                                 wayId, _, refs, _, _, _, _, _=self.getWayEntryForId(relationWayId)
                                 if wayId==None:
-                                    self.log("skip multipolygon %d has unresolved ways"%(osmid))
+                                    if isAdminBoundary==True:
+                                        self.log("skip admin boundary %d %s - unresolved ways"%(osmid, tags["name"]))
                                     skipArea=True
                                     break                                                                                    
 
@@ -1231,21 +1221,25 @@ class OSMDataImport(OSMDataSQLite):
                         continue
                     
                     if len(allOuterRefs)==0:
-                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
+#                        self.log("skip multipolygon: %d len(allOuterRefs)==0"%(osmid))
+                        if isAdminBoundary==True:
+                            self.log("skip admin boundary %d %s - len(allOuterRefs)==0"%(osmid, tags["name"]))
                         continue
                     
                     allOuterRefsCopy=list()
                     allOuterRefsCopy.extend(allOuterRefs)
                     
-                    outerRefRings=self.getGISUtils().mergeRelationRefs(allOuterRefs, self)
-                    innerRefRings=self.getGISUtils().mergeRelationRefs(allInnerRefs, self)
+                    outerRefRings=self.getGISUtils().mergeRelationRefs(osmid, allOuterRefs, self)
+                    innerRefRings=self.getGISUtils().mergeRelationRefs(osmid, allInnerRefs, self)
                     # actually not needed cause it should only contain already rings
-                    unknownRefRings=self.getGISUtils().mergeRelationRefs(allUnknownRefs, self)
+                    unknownRefRings=self.getGISUtils().mergeRelationRefs(osmid, allUnknownRefs, self)
                     unknownRefRingsCopy=list()
                     unknownRefRingsCopy.extend(unknownRefRings)
                     
                     if len(outerRefRings)==0:
-                        self.log("skip multipolygon: %d len(outerRefRings)==0"%(osmid))
+                        if isAdminBoundary==True:
+                            self.log("skip admin boundary %d %s - len(outerRefRings)==0"%(osmid, tags["name"]))
+                        
                         continue
                     
                     # convert to multipolygon
@@ -1300,7 +1294,7 @@ class OSMDataImport(OSMDataSQLite):
                             
                             self.removeEqualWayEntryOfRelation(osmid, areaType, unknownRefRingEntry)
 
-                            self.log("add unknown relation member %d as outer to relation %d"%(unknownRefRingEntry["wayId"], osmid))
+#                            self.log("add unknown relation member %d as outer to relation %d"%(unknownRefRingEntry["wayId"], osmid))
                             polyStringPart=self.getGISUtils().createMultiPolygonPartFromCoordsWithInner(outerCoords, list())
                             polyString=polyString+polyStringPart
                         
@@ -1381,7 +1375,7 @@ class OSMDataImport(OSMDataSQLite):
                 continue
             
             if unknownRefRingsCopy!=None and refRingEntry in unknownRefRingsCopy:
-                self.log("add unknown relation member %d as inner to relation %d"%(refRingEntry["wayId"], osmid))
+#                self.log("add unknown relation member %d as inner to relation %d"%(refRingEntry["wayId"], osmid))
                 unknownRefRingsCopy.remove(refRingEntry)
 
             innerCoords.append(refRingEntry["coords"])
@@ -1395,11 +1389,11 @@ class OSMDataImport(OSMDataSQLite):
             storedWayId, storedType, _, _, _=self.getAreaWithId(wayId, 0)
             if storedWayId!=None:
                 if storedType==areaType:
-                    self.log("delete way area %d relation %d has outer way with same type"%(wayId, osmid))
+#                    self.log("delete way area %d relation %d has outer way with same type"%(wayId, osmid))
                     self.deleteAreaWithId(wayId, 0)
                     self.deletedWayAreas=self.deletedWayAreas+1
-                else:
-                    self.log("way %d of relation %d already stored as area with different type"%(wayId, osmid))
+#                else:
+#                    self.log("way %d of relation %d already stored as area with different type"%(wayId, osmid))
 
     def getStreetNameInfo(self, tags, streetTypeId):
 
@@ -1846,6 +1840,9 @@ class OSMDataImport(OSMDataSQLite):
                 self.createWayRestrictionForViaWay(wayRestrictionEntry, toAddRules)
                 
             else:
+                if "viaNode" in wayRestrictionEntry:
+                    viaNode=wayRestrictionEntry["viaNode"]
+                # TODO: could use viaNode instead of finding crossingRef
                 crossingRef, fromEdgeId, toEdgeId=self.getCrossingRefBetweenWays(fromWayId, toWayId)
                 if crossingRef!=None:                            
                     self.addRestrictionRule(crossingRef, restrictionType, toEdgeId, fromEdgeId, str(fromEdgeId), osmId, toAddRules)
@@ -2020,12 +2017,10 @@ class OSMDataImport(OSMDataSQLite):
             self.log("getCostsOfWay: %s"%str(tags))
             
         if oneway==1:
-            # must not be lower then cost!
-            reverseCost=100000+cost
+            reverseCost=-1.0
         elif oneway==2:
             reverseCost=cost
-            # must not be lower then cost!
-            cost=100000+cost
+            cost=-1.0
         else:
             reverseCost=cost
         
@@ -3297,7 +3292,7 @@ class OSMDataImport(OSMDataSQLite):
 def main(argv):    
     p = OSMDataImport()
     
-#    p.initDB()
+    p.initDB()
 #    p.openAdressDB()
 #    p.createAdressTable()
 #    p.closeAdressDB()
@@ -3363,7 +3358,7 @@ def main(argv):
     
 #    p.testRoutes()
 #    p.testWayTable()
-    p.recreateCostsForEdges()
+#    p.recreateCostsForEdges()
 #    p.removeOrphanedEdges()
 #    p.removeOrphanedWays()
 #    p.createGeomDataForEdgeTable()
