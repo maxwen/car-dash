@@ -94,7 +94,7 @@ class Constants():
     AEROWAY_POI_TYPE_DICT={"aerodrome": POI_TYPE_AIRPORT}
     AEROWAY_AREA_TYPE_SET=set(["runway", "taxiway", "apron", "aerodrome"])
     
-    BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence"])
+    BARIER_NODES_TYPE_SET=set(["bollard", "block", "chain", "fence", "lift_gate"])
     
     BOUNDARY_TYPE_SET=set(["administrative"])
     
@@ -102,7 +102,7 @@ class Constants():
     
     REQUIRED_HIGHWAY_TAGS_SET=set(["motorcar", "motor_vehicle", "access", "vehicle", "service", "lanes"])
     REQUIRED_AREA_TAGS_SET=set(["name", "ref", "landuse", "natural", "amenity", "tourism", "waterway", "railway", "aeroway", "highway", "building", "leisure", "bridge", "tunnel"])
-    REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place"])
+    REQUIRED_NODE_TAGS_SET=set(["name", "ref", "place", "website", "url", "wikipedia"])
         
     AMENITY_POI_TYPE_DICT={"fuel": POI_TYPE_GAS_STATION,
                        "parking": POI_TYPE_PARKING,
@@ -179,6 +179,7 @@ class Constants():
                            STREET_TYPE_TERTIARY,
                            STREET_TYPE_RESIDENTIAL])
 
+    UNKNOWN_NAME_TAG="Unknown"
             
 class OSMDataAccess(OSMDataSQLite):
     def __init__(self):
@@ -1689,8 +1690,21 @@ class OSMDataAccess(OSMDataSQLite):
         
 #        if "ref" in tags:
 #            return tags["ref"]
-        return "Unknown"
+        return Constants.UNKNOWN_NAME_TAG
 
+    def getPOIWebTags(self, tags):
+        webTags=dict()
+        if "website" in tags:
+            webTags["website"]=tags["website"]
+
+        if "url" in tags:
+            webTags["url"]=tags["url"]
+
+        if "wikipedia" in tags:
+            webTags["wikipedia"]=tags["wikipedia"]
+        
+        return webTags
+    
     def getAddressTagString(self, address):
         (_, _, _, _, _, streetName, houseNumber, _, _)=address
         if houseNumber!=None:
@@ -1709,7 +1723,7 @@ class OSMDataAccess(OSMDataSQLite):
         elif nameRef!=None and name==None:
             return "%s"%(nameRef)
         else:
-            return "Unknown"
+            return Constants.UNKNOWN_NAME_TAG
         return None
     
     def setRoutingMode(self, mode):

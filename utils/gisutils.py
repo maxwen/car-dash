@@ -307,8 +307,8 @@ class GISUtils():
                 refRingEntry["coords"]=coords
                 refRingEntry["newRefs"]=newRefList
                 refRings.append(refRingEntry)
-            else:
-                osmDataImport.log("failed to create a closed ring for %s %s"%(osmid, refRing))
+#            else:
+#                osmDataImport.log("failed to create a closed ring for %s %s"%(osmid, refRing))
                 
             refRingEntry=dict()
             refRing=list()

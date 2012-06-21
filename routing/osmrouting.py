@@ -8,7 +8,7 @@ from utils.osmutils import OSMUtils
 from osmparser.osmdataaccess import Constants
 import time
 
-WITH_CROSSING_DEBUG=False
+WITH_CROSSING_DEBUG=True
 
 MAXIMUM_DECISION_LENGTH=100.0
 MAXIMUM_DECISION_LENGTH_SHORT=50.0
@@ -376,7 +376,10 @@ class OSMRouting():
 
     def getCurrentEdge(self):
         return self.currentEdgeData
-        
+
+    def getCurrentEdgeId(self):
+        return self.currentEdgeData[0]
+          
     def calcApproachingRef(self, lat, lon, startRef, endRef, coords, track, useLastValue):
         # find the ref we are aproaching based on track
         # since we ony check when coming to a crossing 

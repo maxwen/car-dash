@@ -80,12 +80,13 @@ class OSMDataTest(OSMDataAccess):
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
 
-        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_BUILDING))
+        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaTable WHERE osmId=1848611')
         allentries=self.cursorArea.fetchall()
         for x in allentries:
-            tags=self.decodeTags(x[2])
-            if "name" in tags:
-                print("%d %s"%(int(x[0]), tags["name"]))
+            print(x)
+#            tags=self.decodeTags(x[2])
+#            if "name" in tags:
+#                print("%d %s"%(int(x[0]), tags["name"]))
 
 #        self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(geom) FROM areaLineTable WHERE type=10')
 #        allentries=self.cursorArea.fetchall()
@@ -232,7 +233,7 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-#    p.testAreaTable()
+    p.testAreaTable()
        
 
 #    self.log(p.getLenOfEdgeTable())
@@ -283,7 +284,7 @@ def main(argv):
 #    p.resolvePOIRefs()
 #    p.resolveAdminAreas()
 #    p.resolveAddresses(False)
-    p.testAdminAreaTable()
+#    p.testAdminAreaTable()
 #    p.testAdminLineTable()
 
 #    self.log(p.bu.getPolyCountryList())

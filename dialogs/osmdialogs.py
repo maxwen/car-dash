@@ -11,14 +11,15 @@ import os
 import time
 
 
-from PyQt4.QtCore import QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QSortFilterProxyModel, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
-from osmparser.osmdataaccess import OSMDataAccess
+from PyQt4.QtCore import QUrl, QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
+from PyQt4.QtGui import QDesktopServices, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from osmparser.osmdataaccess import OSMDataAccess, Constants
 from osmstyle import OSMStyle
 from routing.osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
 from dialogs.options import OptionsDialogTab, OptionsDialog
 from utils.gpsutils import GPSTab
+from widgets.utilwidgets import LinkLabel, SearchButton
 
 settings=dict()
 
@@ -61,14 +62,6 @@ def saveDialogSettings(config):
     config.addSection(section)
     for key, value in settings.items():
         config.set(section, section+"."+key, str(value))
-    
-class MyTabWidget(QTabWidget):
-    def __init__(self, parent):
-        QTabWidget.__init__(self, parent)
-        self.setTabPosition(QTabWidget.East)
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
         
 class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, adminAreaDict, reverseAdminAreaDict, parent):
@@ -2224,8 +2217,12 @@ class OSM3DTab(OptionsDialogTab):
         self.startZoom3DField.setValidator(self.validator)
         self.startZoom3DField.setText("%d"%self.startZoom3D)
 
-        tab3Layout.addRow(label, self.startZoom3DField)  
+        tab3Layout.addRow(label, self.startZoom3DField)    
 
+    @pyqtSlot()
+    def _search(self):
+        QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=t5", QUrl.TolerantMode))
+        
 tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab, GPSTab]
  
 class OSMOptionsDialog(OptionsDialog):
@@ -2851,6 +2848,12 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
+        self.searchButton=SearchButton(self)
+        self.searchButton.setText("Search")
+        self.searchButton.setSearchString(None)
+        self.searchButton.setEnabled(False)
+        actionButtons.addWidget(self.searchButton)
+        
         self.addFavButton=QPushButton("Favorite", self)
         self.addFavButton.clicked.connect(self._addFavPoint)
         self.addFavButton.setIcon(self.favoriteIcon)
@@ -3080,6 +3083,20 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.setWayPointButton.setEnabled(current.isValid())
         self.showPointButton.setEnabled(current.isValid())
         self.addFavButton.setEnabled(current.isValid())
+        
+        selmodel = self.poiEntryView.selectionModel()
+        current = selmodel.currentIndex()
+        if current.isValid():
+            selectedPOI=self.filteredPOIList[current.row()]
+            (refId, nodeLat, nodeLon, tags, nodeType, cityId, distance, displayString)=selectedPOI
+            if displayString!=Constants.UNKNOWN_NAME_TAG:
+                self.searchButton.setEnabled(True)
+                city=self.adminAreaDict[cityId]
+                self.searchButton.setSearchString(displayString+"+"+city)
+            else:
+                self.searchButton.setEnabled(False)
+                self.searchButton.setSearchString(None)
+                
         
     @pyqtSlot()
     def _poiListChanged(self):

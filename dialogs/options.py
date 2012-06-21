@@ -6,6 +6,7 @@ Created on Jun 1, 2012
 
 from PyQt4.QtCore import Qt, pyqtSlot
 from PyQt4.QtGui import QCommonStyle, QPushButton, QWidget, QVBoxLayout, QDialog, QTabWidget, QStyle, QHBoxLayout
+from widgets.utilwidgets import MyTabWidget
 
 class OptionsDialogTab(QWidget):
     def __init__(self, optionsConfig, parent):
@@ -56,14 +57,6 @@ class OptionsDialogTabManager():
         for tabClass in self.tabClassList:
             instance = tabClass(self.optionsConfig, self.parent)
             self.addTab(instance)
-
-class MyTabWidget(QTabWidget):
-    def __init__(self, parent):
-        QTabWidget.__init__(self, parent)
-        self.setTabPosition(QTabWidget.East)
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
         
 class OptionsDialog(QDialog):
     def __init__(self, optionsConfig, tabClassList, parent):

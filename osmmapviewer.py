@@ -478,7 +478,7 @@ class QtOSMWidget(QWidget):
         self.lastMouseMoveX=0
         self.lastMouseMoveY=0
         
-        self.lastEdgeId=None
+        self.selectedEdgeId=None
         self.lastWayId=None
         self.recalcTrigger=0
         self.mousePos=(0, 0)
@@ -3159,9 +3159,9 @@ class QtOSMWidget(QWidget):
             self.getAreaTagsForPos(pos)
         elif action==showWayTags:
             print(osmParserData.getWayEntryForId(self.lastWayId))
-            print(osmParserData.getEdgeEntryForId(self.lastEdgeId))
+            print(osmParserData.getEdgeEntryForId(self.selectedEdgeId))
             osmParserData.printCrossingsForWayId(self.lastWayId)
-            restrictionList=osmParserData.getRestrictionEntryForTargetEdge(self.lastEdgeId)
+            restrictionList=osmParserData.getRestrictionEntryForTargetEdge(self.selectedEdgeId)
             if len(restrictionList)!=0:
                 for restriction in restrictionList:
                     restrictionId, toEdgeId, viaEdgePath, toCost, osmId=restriction
@@ -3387,16 +3387,20 @@ class QtOSMWidget(QWidget):
             if self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
                 self.recalcRouteFromPoint(recalcPoint)
             
-    def clearAll(self):
-        self.wayInfo=None
+    def clearCurrent(self):
         self.currentCoords=None
-        self.lastEdgeId=None
+        self.selectedEdgeId=None
         self.lastWayId=None
         self.speedInfo=None
         self.wayPOIList=None
+        self.wayInfo=None
+        
         self.distanceToCrossing=0
         self.nextEdgeOnRoute=None
         self.routeInfo=None, None, None, None
+        
+    def clearAll(self):
+        self.clearCurrent()
         osmRouting.clearAll()
         
     def calcNextCrossingInfo(self, lat, lon):
@@ -3434,7 +3438,7 @@ class QtOSMWidget(QWidget):
         
         edge=osmRouting.getEdgeIdOnPosForRouting(lat, lon, track, self.nextEdgeOnRoute, DEFAULT_SEARCH_MARGIN, fromMouse, speed)        
         if edge==None:
-            self.clearAll()
+            self.clearCurrent()
         else:   
 #            print(edge)
             edgeId=edge[0]
@@ -3445,6 +3449,7 @@ class QtOSMWidget(QWidget):
             coords=edge[10]
             
             self.currentCoords=coords
+            self.selectedEdgeId=edgeId
 
             if self.drivingMode==True and self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                                                       
                 if self.routingStarted==True:                    
@@ -3516,11 +3521,6 @@ class QtOSMWidget(QWidget):
                                 self.distanceToEnd=0.0
                                 self.routingStarted=False
                                 print("route finish")
-            else:
-                if edgeId!=self.lastEdgeId:
-                    self.clearAll()
-                    self.lastEdgeId=edgeId
-                    self.currentCoords=coords
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId

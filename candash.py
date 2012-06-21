@@ -17,6 +17,7 @@ from PyQt4.QtGui import QMessageBox, QProgressBar, QIcon, QSizePolicy, QRadioBut
 from collections import deque
 from widgets.gaugepng import QtPngDialGauge
 from osmmapviewer import OSMWidget
+from widgets.utilwidgets import MyTabWidget
 
 import signal
 import operator
@@ -421,19 +422,6 @@ class CANLogTableBox(QWidget):
         self.continueButton.setDisabled(self.update==True or self.replayMode==True)
         self.pauseButton.setDisabled(self.update==False and self.replayMode==False)
         self._clearTable()
-
-class MyTabWidget(QTabWidget):
-    def __init__(self, parent):
-        QTabWidget.__init__(self, parent)
-#        self.setTabShape(QTabWidget.Rounded)
-#        self.setTabsClosable(True)
-        self.setTabPosition(QTabWidget.East)
-        font = self.font()
-        font.setPointSize(14)
-        self.setFont(font)
-        
-#    def mousePressEvent(self, event):
-#        print("MyTabWidget mousePressEvent")
 
 class CANMonitor(QMainWindow):
     def __init__(self, app, test, parent):
