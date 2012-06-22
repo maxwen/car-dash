@@ -19,7 +19,7 @@ from routing.osmrouting import OSMRoutingPoint, OSMRoute
 from mapnik.mapnikwrapper import disableMappnik
 from dialogs.options import OptionsDialogTab, OptionsDialog
 from utils.gpsutils import GPSTab
-from widgets.utilwidgets import LinkLabel, SearchButton
+from widgets.utilwidgets import SearchButton, WebButton
 
 settings=dict()
 
@@ -2681,7 +2681,8 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
         self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
-
+        self.googleIcon=QIcon(self.style.getStylePixmap("googlePixmap"))
+        
         self.cityList=list()
         self.filteredCityList=list()        
         self.currentCityId=None
@@ -2849,11 +2850,18 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
         
         self.searchButton=SearchButton(self)
-        self.searchButton.setText("Search")
+        self.searchButton.setText("Google")
+        self.searchButton.setIcon(self.googleIcon)
         self.searchButton.setSearchString(None)
         self.searchButton.setEnabled(False)
         actionButtons.addWidget(self.searchButton)
-        
+
+        self.webButton=WebButton(self)
+        self.webButton.setText("WWW")
+        self.webButton.setWebTags(None)
+        self.webButton.setEnabled(False)
+        actionButtons.addWidget(self.webButton)    
+            
         self.addFavButton=QPushButton("Favorite", self)
         self.addFavButton.clicked.connect(self._addFavPoint)
         self.addFavButton.setIcon(self.favoriteIcon)
@@ -3092,11 +3100,22 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             if displayString!=Constants.UNKNOWN_NAME_TAG:
                 self.searchButton.setEnabled(True)
                 city=self.adminAreaDict[cityId]
-                self.searchButton.setSearchString(displayString+"+"+city)
+                searchString=displayString+" "+city
+                if "addr:street" in tags:
+                    searchString=searchString+" "+tags["addr:street"]
+
+                self.searchButton.setSearchString(searchString)
             else:
                 self.searchButton.setEnabled(False)
                 self.searchButton.setSearchString(None)
                 
+            webTags=self.osmParserData.getPOIWebTags(tags)
+            if len(webTags)!=0:
+                self.webButton.setWebTags(webTags)
+                self.webButton.setEnabled(True)
+            else:
+                self.webButton.setWebTags(None)
+                self.webButton.setEnabled(False)
         
     @pyqtSlot()
     def _poiListChanged(self):

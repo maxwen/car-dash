@@ -18,7 +18,7 @@ from utils.gisutils import GISUtils
 import cProfile
 
 from PyQt4.QtCore import QTimer, QMutex, QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt4.QtGui import QDesktopServices, QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
 from routing.osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
@@ -3035,6 +3035,7 @@ class QtOSMWidget(QWidget):
 
         routingPointSubMenu.setDisabled(mapPointMenuDisabled)
 
+        googlePOIAction=QAction("Google this POI by name", self)
         showAdminHierarchy=QAction("Show Admin Info for here", self)
         showAreaTags=QAction("Show Area Info for here", self)
         showWayTags=QAction("Show Way Info", self)
@@ -3060,6 +3061,7 @@ class QtOSMWidget(QWidget):
         menu.addAction(recalcRouteGPSAction)
         menu.addSeparator()
         menu.addAction(zoomToCompleteRoute)
+        menu.addAction(googlePOIAction)
         menu.addAction(showAdminHierarchy)
         menu.addAction(showAreaTags)
         menu.addAction(showWayTags)
@@ -3167,7 +3169,14 @@ class QtOSMWidget(QWidget):
                     restrictionId, toEdgeId, viaEdgePath, toCost, osmId=restriction
                     print(restriction)
                     print(osmParserData.resolveRestriction(restriction))
-
+        elif action==googlePOIAction:
+            pos=QPoint(self.mousePos[0], self.mousePos[1])
+            refId, tags=self.getNodeInfoForPos(pos)
+            if tags!=None:
+                searchString=osmParserData.getPOITagString(tags)
+                if "addr:street" in tags:
+                    searchString=searchString+" "+tags["addr:street"]
+                QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=%s"%(searchString), QUrl.TolerantMode))
 
         else:
             if isinstance(action, OSMRoutingPointAction):

@@ -66,7 +66,8 @@ class OSMStyle():
         self.pixmapDict["plusPixmap"]=QPixmap(os.path.join(getImageRoot(), "plus.png"))
         self.pixmapDict["showSidebarPixmap"]=QPixmap(os.path.join(getImageRoot(), "showSidebar.png"))
         self.pixmapDict["hideSidebarPixmap"]=QPixmap(os.path.join(getImageRoot(), "hideSidebar.png"))
-      
+        self.pixmapDict["googlePixmap"]=QPixmap(os.path.join(getImageRoot(), "google.png"))
+
         self.pixmapDict["turnRightImage"]=QPixmap(os.path.join(getImageRoot(), "directions/right.png"))
         self.pixmapDict["turnLeftImage"]=QPixmap(os.path.join(getImageRoot(), "directions/left.png"))
         self.pixmapDict["turnRighHardImage"]=QPixmap(os.path.join(getImageRoot(), "directions/sharply_right.png"))
@@ -112,7 +113,7 @@ class OSMStyle():
         self.pixmapDict["parkPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/park.png"))
         self.pixmapDict["dogLeashPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/dogs_leash.png"))
         self.pixmapDict["hotelPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/hotel.png"))
-        
+                
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(0xf1, 0xee, 0xe8)
         self.colorDict["wayCasingColor"]=QColor(0x60, 0x60, 0x60)

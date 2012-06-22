@@ -36,3 +36,22 @@ class SearchButton(QPushButton):
     def _search(self):
         if self.searchString!=None:
             QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=%s"%(self.searchString), QUrl.TolerantMode))
+
+class WebButton(QPushButton):
+    def __init__(self, parent):
+        QPushButton.__init__(self, parent)
+        self.clicked.connect(self._openURL)
+
+    def setWebTags(self, urlTags):
+        self.urlTags=urlTags
+        
+    @pyqtSlot()
+    def _openURL(self):
+        if self.urlTags!=None:
+            if "website" in self.urlTags:
+                QDesktopServices.openUrl(QUrl(self.urlTags["website"]), QUrl.TolerantMode)
+            if "url" in self.urlTags:
+                QDesktopServices.openUrl(QUrl(self.urlTags["url"]), QUrl.TolerantMode)
+            if "wikipedia" in self.urlTags:
+                url="http://www.wikipedia.org/wiki/"+self.urlTags["wikipedia"]
+                QDesktopServices.openUrl(QUrl(url), QUrl.TolerantMode)
