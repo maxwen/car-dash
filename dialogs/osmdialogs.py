@@ -2218,10 +2218,6 @@ class OSM3DTab(OptionsDialogTab):
         self.startZoom3DField.setText("%d"%self.startZoom3D)
 
         tab3Layout.addRow(label, self.startZoom3DField)    
-
-    @pyqtSlot()
-    def _search(self):
-        QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=t5", QUrl.TolerantMode))
         
 tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab, GPSTab]
  

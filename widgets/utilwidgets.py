@@ -49,9 +49,9 @@ class WebButton(QPushButton):
     def _openURL(self):
         if self.urlTags!=None:
             if "website" in self.urlTags:
-                QDesktopServices.openUrl(QUrl(self.urlTags["website"]), QUrl.TolerantMode)
+                QDesktopServices.openUrl(QUrl(self.urlTags["website"], QUrl.TolerantMode))
             if "url" in self.urlTags:
-                QDesktopServices.openUrl(QUrl(self.urlTags["url"]), QUrl.TolerantMode)
+                QDesktopServices.openUrl(QUrl(self.urlTags["url"], QUrl.TolerantMode))
             if "wikipedia" in self.urlTags:
                 url="http://www.wikipedia.org/wiki/"+self.urlTags["wikipedia"]
-                QDesktopServices.openUrl(QUrl(url), QUrl.TolerantMode)
+                QDesktopServices.openUrl(QUrl(url, QUrl.TolerantMode))

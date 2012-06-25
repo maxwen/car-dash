@@ -3174,9 +3174,10 @@ class QtOSMWidget(QWidget):
             refId, tags=self.getNodeInfoForPos(pos)
             if tags!=None:
                 searchString=osmParserData.getPOITagString(tags)
-                if "addr:street" in tags:
-                    searchString=searchString+" "+tags["addr:street"]
-                QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=%s"%(searchString), QUrl.TolerantMode))
+                if searchString!=Constants.UNKNOWN_NAME_TAG:
+                    if "addr:street" in tags:
+                        searchString=searchString+" "+tags["addr:street"]
+                    QDesktopServices.openUrl(QUrl("http://www.google.com/search?q=%s"%(searchString), QUrl.TolerantMode))
 
         else:
             if isinstance(action, OSMRoutingPointAction):
