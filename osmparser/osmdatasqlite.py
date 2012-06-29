@@ -24,6 +24,8 @@ class OSMDataSQLite():
         self.connectionNode=None
         self.cursorAdmin=None
         self.connectionAdmin=None
+        self.cursorWaySimple=None
+        self.connectioWaySimple=None
         self.gisUtils=GISUtils()
 
     def getGISUtils(self):
@@ -57,6 +59,13 @@ class OSMDataSQLite():
         self.cursorWay.execute("SELECT load_extension('libspatialite.so')")
         self.setPragmaForDB(self.cursorWay)
 
+    def openSimpleWayDB(self):
+        self.connectionWaySimple=sqlite3.connect(self.getSimpleWayDBFile())
+        self.cursorWaySimple=self.connectionWaySimple.cursor()
+        self.connectionWaySimple.enable_load_extension(True)
+        self.cursorWaySimple.execute("SELECT load_extension('libspatialite.so')")
+        self.setPragmaForDB(self.cursorWaySimple)
+        
     def openNodeDB(self):
         self.connectionNode=sqlite3.connect(self.getNodeDBFile())
         self.cursorNode=self.connectionNode.cursor()
@@ -97,6 +106,13 @@ class OSMDataSQLite():
             self.connectionWay=None     
             self.cursorWay=None
 
+    def closeSimpleWayDB(self):
+        if self.connectionWaySimple!=None:
+            self.connectionWaySimple.commit()        
+            self.cursorWaySimple.close()
+            self.connectionWaySimple=None     
+            self.cursorWaySimple=None
+            
     def closeNodeDB(self):
         if self.connectionNode!=None:
             self.connectionNode.commit()        
@@ -125,6 +141,7 @@ class OSMDataSQLite():
         self.openAreaDB()
         self.openAdressDB()
         self.openAdminDB()
+        self.openSimpleWayDB()
         
     def closeAllDB(self):
         self.closeWayDB()
@@ -133,15 +150,16 @@ class OSMDataSQLite():
         self.closeAreaDB()
         self.closeAdressDB()
         self.closeAdminDB()
+        self.closeSimpleWayDB()
         
     def wayFromDB(self, x):
-        wayId=x[0]
+        wayId=int(x[0])
         refs=pickle.loads(x[2])
         tags=self.decodeTags(x[1])
-        streetInfo=x[3]
+        streetInfo=int(x[3])
         name=x[4]
         nameRef=x[5]
-        maxspeed=x[6]
+        maxspeed=int(x[6])
         poiList=None
         if x[7]!=None:
             poiList=pickle.loads(x[7])
@@ -149,13 +167,13 @@ class OSMDataSQLite():
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList)
  
     def wayFromDBWithCoordsString(self, x):
-        wayId=x[0]
+        wayId=int(x[0])
         refs=pickle.loads(x[2])
         tags=self.decodeTags(x[1])
-        streetInfo=x[3]
+        streetInfo=int(x[3])
         name=x[4]
         nameRef=x[5]
-        maxspeed=x[6]
+        maxspeed=int(x[6])
         poiList=None
         if x[7]!=None:
             poiList=pickle.loads(x[7])    
@@ -315,6 +333,10 @@ class OSMDataSQLite():
         file="ways.db"
         return os.path.join(self.getDataDir(), file)
 
+    def getSimpleWayDBFile(self):
+        file="waysSimple1.db"
+        return os.path.join(self.getDataDir(), file)
+    
     def getNodeDBFile(self):
         file="nodes.db"
         return os.path.join(self.getDataDir(), file)
@@ -416,6 +438,12 @@ class OSMDataSQLite():
         tags=pickle.loads(plainTags)
         return tags
 
+    def encodeTags(self, tags):
+        if len(tags.keys())==0:
+            return None
+        pickeledTags=pickle.dumps(tags)
+        return pickeledTags
+    
     def getAllAdminAreas(self, adminLevelList, sortByAdminLevel):
         filterString=self.createSQLFilterStringForIN(adminLevelList)
 

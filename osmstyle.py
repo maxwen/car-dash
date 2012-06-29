@@ -782,7 +782,17 @@ class OSMStyle():
         font.setPointSize(14)
         font.setStyleHint(QFont.TypeWriter)
         self.fontDict["monoFont"]=font     
-        
+
+        font = QFont("Mono")
+        font.setPointSize(16)
+        font.setStyleHint(QFont.TypeWriter)
+        self.fontDict["monoFontLarge"]=font  
+
+        font = QFont("Mono")
+        font.setPointSize(18)
+        font.setStyleHint(QFont.TypeWriter)
+        self.fontDict["monoFontXLarge"]=font  
+                
     # TODO: values for lat 45 dec north
     # http://wiki.openstreetmap.org/wiki/FAQ#What_is_the_map_scale_for_a_particular_zoom_level_of_the_map.3F
     # * cos(lat)

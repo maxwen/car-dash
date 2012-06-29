@@ -58,6 +58,7 @@ WITH_TIMING_DEBUG=False
 SIDEBAR_WIDTH=80
 CONTROL_WIDTH=80
 SCREEN_BORDER_WIDTH=50
+ROUTE_INFO_WIDTH=110
 
 DEFAULT_SEARCH_MARGIN=0.0003
 # length of tunnel where we expect gps signal failure
@@ -1516,7 +1517,17 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_TERTIARY_LINK]
         
         return None
-                       
+                  
+    def getAdminLevelListForZoom(self):
+        if self.map_zoom in range(14, 19):
+            # all
+            return Constants.ADMIN_LEVEL_DISPLAY_SET
+            
+        elif self.map_zoom in range(self.tileStartZoom, 15):
+            return [2]
+        
+        return None
+     
     def clearPolygonCache(self):
         self.prefetchBBox=None
         self.wayPolygonCache=dict()
@@ -1525,7 +1536,8 @@ class QtOSMWidget(QWidget):
     
     def getVisibleAdminLines(self, bbox):
         start=time.time()
-        adminLineList, adminLineIdSet=osmParserData.getAdminLinesInBboxWithGeom(bbox, 0.0, Constants.ADMIN_LEVEL_DISPLAY_SET)
+        adminLevels=self.getAdminLevelListForZoom()
+        adminLineList, adminLineIdSet=osmParserData.getAdminLinesInBboxWithGeom(bbox, 0.0, adminLevels)
         
         if WITH_TIMING_DEBUG==True:
             print("getAdminLinesInBboxWithGeom: %f"%(time.time()-start))
@@ -1570,7 +1582,7 @@ class QtOSMWidget(QWidget):
             resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
         elif self.map_zoom>=12:
             resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
-        elif self.map_zoom>=10:
+        elif self.map_zoom>=self.tileStartZoom:
             resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 100.0)        
         
         if WITH_TIMING_DEBUG==True:
@@ -2235,7 +2247,7 @@ class QtOSMWidget(QWidget):
         self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
         
         if self.currentRoute!=None and self.currentTrackList!=None and not self.currentRoute.isRouteFinished():
-            routeInfoBackground=QRect(self.width()-100-self.getSidebarWidth(), self.height()-50-200, 100, 200)
+            routeInfoBackground=QRect(self.width()-ROUTE_INFO_WIDTH-self.getSidebarWidth(), self.height()-50-200, ROUTE_INFO_WIDTH, 200)
             self.painter.fillRect(routeInfoBackground, self.style.getStyleColor("backgroundColor"))
             
     def showTextInfo(self):
@@ -2262,19 +2274,23 @@ class QtOSMWidget(QWidget):
         pen=self.style.getStylePen("textPen")
         self.painter.setPen(pen)
 
-        font=self.style.getStyleFont("monoFont")
+        font=self.style.getStyleFont("monoFontLarge")
         self.painter.setFont(font)
         fm = self.painter.fontMetrics();
 
         distanceToEndStr=self.getDistanceString(self.distanceToEnd)
         distanceToEndPos=QPoint(self.width()-self.getSidebarWidth()-fm.width(distanceToEndStr)-2, self.height()-50-100-100+fm.height()+2)
         self.painter.drawText(distanceToEndPos, "%s"%distanceToEndStr)
-        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("finishPixmap"))
+        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-ROUTE_INFO_WIDTH, distanceToEndPos.y()-fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("finishPixmap"))
+
+        font=self.style.getStyleFont("monoFontXLarge")
+        self.painter.setFont(font)
+        fm = self.painter.fontMetrics();
 
         crossingLengthStr=self.getDistanceString(self.distanceToCrossing)
-        crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100-100+2*(fm.height())+2)
+        crossingDistancePos=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingLengthStr)-2, self.height()-50-100)
         self.painter.drawText(crossingDistancePos, "%s"%crossingLengthStr)
-        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-100, self.height()-50-100-100+2+fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("crossingPixmap"))
+#        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-ROUTE_INFO_WIDTH, self.height()-50-100-100+2+fm.height()+2, IMAGE_WIDTH_TINY, IMAGE_HEIGHT_TINY, self.style.getStylePixmap("crossingPixmap"))
 
         font=self.style.getStyleFont("wayInfoFont")
         self.painter.setFont(font)
@@ -2309,7 +2325,7 @@ class QtOSMWidget(QWidget):
             routeInfoPos1=QPoint(self.width()-self.getSidebarWidth()-fm.width(crossingInfoStr)-10, self.height()-15)
             self.painter.drawText(routeInfoPos1, "%s"%(crossingInfoStr))
                             
-            x=self.width()-self.getSidebarWidth()-92
+            x=self.width()-self.getSidebarWidth()-ROUTE_INFO_WIDTH+10
             y=self.height()-50-100+10
             self.displayRouteDirectionImage(direction, exitNumber, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, x, y) 
      

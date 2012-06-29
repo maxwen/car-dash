@@ -240,14 +240,14 @@ class OSMDataAccess(OSMDataSQLite):
             resultList.append(edge)
         return resultList
     
-    def getDifferentEdgeEntryForStartOrEndPoint(self, ref, edgeId):
-        self.cursorEdge.execute('SELECT * FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
-        resultList=list()
-        allentries=self.cursorEdge.fetchall()
-        for result in allentries:
-            edge=self.edgeFromDB(result)
-            resultList.append(edge)
-        return resultList
+#    def getDifferentEdgeEntryForStartOrEndPoint(self, ref, edgeId):
+#        self.cursorEdge.execute('SELECT * FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
+#        resultList=list()
+#        allentries=self.cursorEdge.fetchall()
+#        for result in allentries:
+#            edge=self.edgeFromDB(result)
+#            resultList.append(edge)
+#        return resultList
 
     def getDifferentEdgeEntryForStartOrEndPointWithCoords(self, ref, edgeId):
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable where id!=%d AND (startRef=%d OR endRef=%d)'%(edgeId, ref, ref))
@@ -1409,25 +1409,31 @@ class OSMDataAccess(OSMDataSQLite):
     def getWaysInBboxWithGeom(self, bbox, margin, streetTypeList, withSimplify=False, tolerance=0.0):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
         
+        cursor=None
         # streetTypeId an layer sorting
         if streetTypeList==None or len(streetTypeList)==0:    
             if withSimplify==False:
                 self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+                cursor=self.cursorWay
             else:
-                tolerance=self.osmutils.degToMeter(tolerance)
-                self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(Simplify(geom, %f)) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
-
+#                tolerance=self.osmutils.degToMeter(tolerance)
+#                self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(Simplify(geom, %f)) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+                self.cursorWaySimple.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+                cursor=self.cursorWaySimple
         else:
             filterString=self.createSQLFilterStringForIN(streetTypeList)
             
             if withSimplify==False:
                 self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+                cursor=self.cursorWay
             else:
-                tolerance=self.osmutils.degToMeter(tolerance)
-                self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(Simplify(geom, %f)) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
-
+#                tolerance=self.osmutils.degToMeter(tolerance)
+#                self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(Simplify(geom, %f)) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+                self.cursorWaySimple.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+                cursor=self.cursorWaySimple
+                
         wayIdSet=set()
-        allentries=self.cursorWay.fetchall()
+        allentries=cursor.fetchall()
         resultList=list()
         for x in allentries:
             way=self.wayFromDBWithCoordsString(x)

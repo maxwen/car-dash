@@ -19,7 +19,7 @@ class OSMDataTest(OSMDataAccess):
         allentries=self.cursorAdress.fetchall()
         for x in allentries:
             addressId, refId, country, cityId, postCode, streetName, houseNumber, lat, lon=self.addressFromDB(x)
-            self.log( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
+            print( "id: "+str(addressId) + " refId:"+str(refId) +" country: "+str(country)+" cityId: " + str(cityId) + " postCode: " + str(postCode) + " streetName: "+str(streetName) + " houseNumber:"+ str(houseNumber) + " lat:"+str(lat) + " lon:"+str(lon))
         
     def testRestrictionTable(self):
         self.cursorEdge.execute('SELECT * from restrictionTable')
@@ -36,28 +36,28 @@ class OSMDataTest(OSMDataAccess):
         for x in allentries:
             print("%s %s %s"%(x[0], x[1], pickle.loads(x[2])))
 #            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
-#            self.log("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
+#            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
     def testWayTable(self):
         self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
         allentries=self.cursorWay.fetchall()
         for x in allentries:
             wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
-            self.log( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
+            print( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
 
     def testCrossingTable(self):
         self.cursorWay.execute('SELECT * FROM crossingTable')
         allentries=self.cursorWay.fetchall()
         for x in allentries:
             crossingEntryId, wayid, refId, wayIdList=self.crossingFromDB(x)
-            self.log( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
+            print( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
         
     def testEdgeTable(self):
         self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, AsText(geom) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
             edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoordsString(x)
-            self.log( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
+            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
 #        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_NATURAL))
@@ -70,7 +70,7 @@ class OSMDataTest(OSMDataAccess):
 
 #            osmId, areaType, tags, layer, polyStr=self.areaFromDBWithCoordsString(x)
 #            print(polyStr)
-#            self.log("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
+#            print("osmId: "+str(osmId)+ " type: "+str(areaType) +" tags: "+str(tags)+ " layer: "+ str(layer)+" polyStr:"+str(polyStr))
 
 #        tolerance=self.osmutils.degToMeter(10.0)
 #        print(tolerance)
@@ -99,7 +99,7 @@ class OSMDataTest(OSMDataAccess):
         for x in allentries:
             osmId, tags, adminLevel, parent=self.adminAreaFromDBWithParent(x)
             print("%d %s"%(osmId, tags["name"]))
-#            self.log("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
+#            print("osmId: "+str(osmId)+ " tags: "+str(tags)+ " adminLevel: "+ str(adminLevel) + " parent:"+str(parent))
 
     def testAdminLineTable(self):
         self.cursorAdmin.execute('SELECT osmId, adminLevel, AsText(geom) FROM adminLineTable')
@@ -114,113 +114,82 @@ class OSMDataTest(OSMDataAccess):
 #        allentries=self.cursorCoords.fetchall()  
 #        self.cursorCoords.execute('SELECT * from wayRefTable WHERE wayId=31664992')
 #        allentries=self.cursorCoords.fetchall()  
-#        self.log(allentries)
+#        print(allentries)
         None
                       
     def testEdgeTableGeom(self):
         self.cursorEdge.execute('SELECT AsText(geom) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
         for x in allentries:
-            self.log(x)                 
+            print(x)                 
+    
+    def createSimpleWayDBTables(self):
+        self.cursorWaySimple.execute("SELECT InitSpatialMetaData()")
+        self.cursorWaySimple.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
+        self.cursorWaySimple.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
+        self.cursorWaySimple.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
 
-#    def poiRefFromDB3(self, x):
-#        refId=int(x[0])
-#        tags=self.decodeTags(x[1])
-#        poiType=int(x[2])      
-#        lat, lon=self.getGISUtils().createPointFromPointString(x[3])
-#        return (refId, tags, poiType, lat, lon)    
-#      
-#    # check all pois of refType=node
-#    # inside an area with refType=way
-#    # with the same tags. If yes remove the entry for the way                             
-#    def removeUnnededPOIs(self):
-#        nodeTypeList=self.createSQLFilterStringForIN([Constants.POI_TYPE_PARKING, Constants.POI_TYPE_CAMPING, Constants.POI_TYPE_SUPERMARKET, Constants.POI_TYPE_PLACE])
-#        self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=343552101 AND refType=0 AND type in %s'%(nodeTypeList))
-#        allPOIRefs=self.cursorNode.fetchall()
-#        
-#        allRefLength=len(allPOIRefs)
-#        allRefsCount=0
-#        removeCount=0
-#
-#        prog = ProgressBar(0, allRefLength, 77)
-#        
-#        for x in allPOIRefs:
-#            print(x)
-#            (refId, tags, poiType, lat, lon)=self.poiRefFromDB3(x)
-#            prog.updateAmount(allRefsCount)
-#            print(prog, end="\r")
-#            allRefsCount=allRefsCount+1
-#
-#            lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxAroundPoint(lat, lon, 0.0)       
-##            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND MbrContains(geom, MakePoint(%f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, lon, lat))
-#            self.cursorArea.execute('SELECT osmId FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
-#
-#            areaList=self.cursorArea.fetchall()
-#            for y in areaList:
-#                print(y)
-#                # in case of a wayRef polygon this is the wayId
-#                areaId=int(y[0])   
-#                # check if there is a poi node with this wayId         
-#                self.cursorNode.execute('SELECT refId, tags, type, AsText(geom) FROM poiRefTable WHERE refId=%d AND (refType=1 OR refType=2)'%(areaId))
-#                allPOIWayRefs=self.cursorNode.fetchall()
-#            
-#                for z in allPOIWayRefs:
-#                    (refId1, tags1, poiType1, lat1, lon1)=self.poiRefFromDB3(z)
-#                    # same poi type
-#                    if poiType==poiType1:
-#                        removeRef=None
-#                        # a node POI "overrules" a way POI 
-#                        # except it has no tags and the way POI has
-##                        print("POI node %d %s is inside of POI area %d %s"%(refId, tags, refId1, tags1))
-#                        if len(tags1)==0:
-#                            removeRef=refId1
-#                        elif len(tags)==0:
-#                            removeRef=refId
-#                        else:  
-#                            if poiType==Constants.POI_TYPE_PLACE:
-#                                if "name" in tags and "name" in tags1:
-#                                    if tags["place"]==tags1["place"] and tags["name"]==tags1["name"]:
-#                                        removeRef=refId1
-#
-#                            else:
-##                                if not "name" in tags and "name" in tags1:
-##                                    removeRef=refId
-#                                    
-#                                removeRef=refId1
-#                        
-#                        if removeRef!=None:
-#                            print("remove %d"%(removeRef))
-#                            self.cursorNode.execute("DELETE FROM poiRefTable WHERE refId=%d"%(removeRef))
-#                            removeCount=removeCount+1
-#                            
-#        print("")   
+    def createSpatialIndexForSimpleWayTables(self):
+        self.cursorWaySimple.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
 
+    def addToSimpleWayTable(self, wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, lineString):
+        self.cursorWaySimple.execute("INSERT INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText('%s', 4326))"%(lineString), (wayId, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
+
+    def wayFromDBWithCoordsStringAll(self, x):
+        wayId=int(x[0])
+        tags=self.decodeTags(x[1])
+        refs=pickle.loads(x[2])
+        streetInfo=int(x[3])
+        name=x[4]
+        nameRef=x[5]
+        maxspeed=int(x[6])
+        streetTypeId=int(x[8])
+        layer=int(x[9])
+        coordsStr=x[10]            
+        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)   
+
+    def fillSimpleWayDB(self):
+        self.createSimpleWayDBTables()
+        
+        tolerance=self.osmutils.degToMeter(100.0)
+
+        self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, streetTypeId, layer, AsText(Simplify(geom, %f)) FROM wayTable'%(tolerance))
+        allWays=self.cursorWay.fetchall()
+        for x in allWays:
+            (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)=self.wayFromDBWithCoordsStringAll(x)
+            self.addToSimpleWayTable(wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)
+        
+        self.createSpatialIndexForSimpleWayTables()
+        self.closeSimpleWayDB()
+        
 def main(argv):    
     p = OSMDataTest()
       
     p.openAllDB()
+    
+    p.fillSimpleWayDB()
 #    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
 #    allentries=p.cursorArea.fetchall()
 #    for x in allentries:
-#        self.log(x)
+#        print(x)
 
 #    p.cursorEdge.execute('SELECT * FROM geometry_columns')
 #    allentries=p.cursorEdge.fetchall()
 #    for x in allentries:
-#        self.log(x)
+#        print(x)
 
 #    si=p.encodeStreetInfo2(0, 1, 1, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 1, 0, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 0, 0, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 0, 1, 0, 0)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 2, 0, 0, 1)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
 #    si=p.encodeStreetInfo2(0, 2, 1, 1, 0)
-#    self.log(p.decodeStreetInfo2(si))
+#    print(p.decodeStreetInfo2(si))
    
 #    lat=47.820928
 #    lon=13.016525
@@ -233,12 +202,12 @@ def main(argv):
 #    p.testStreetTable2()
 #    p.testEdgeTable()
 #    p.testRefTable()
-    p.testAreaTable()
+#    p.testAreaTable()
        
 
-#    self.log(p.getLenOfEdgeTable())
-#    self.log(p.getEdgeEntryForEdgeId(6719))
-#    self.log(p.getEdgeEntryForEdgeId(2024))
+#    print(p.getLenOfEdgeTable())
+#    print(p.getEdgeEntryForEdgeId(6719))
+#    print(p.getEdgeEntryForEdgeId(2024))
 
 #    p.test()
 
@@ -287,7 +256,7 @@ def main(argv):
 #    p.testAdminAreaTable()
 #    p.testAdminLineTable()
 
-#    self.log(p.bu.getPolyCountryList())
+#    print(p.bu.getPolyCountryList())
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000001))
 #    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000000))

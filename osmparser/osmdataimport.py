@@ -692,12 +692,6 @@ class OSMDataImport(OSMDataSQLite):
             if key in tagList:
                 newTags[key]=value
         return newTags       
-    
-    def encodeTags(self, tags):
-        if len(tags.keys())==0:
-            return None
-        pickeledTags=pickle.dumps(tags)
-        return pickeledTags
         
     def getWaterwayTypes(self):
         return Constants.WATERWAY_TYPE_SET
@@ -1990,9 +1984,11 @@ class OSMDataImport(OSMDataSQLite):
             # living_street
             return 1000
         
-        # never route over parking_aisle
+        # never route over parking_aisle or driveways
         if "service" in tags:
             if tags["service"]=="parking_aisle":
+                return 10000
+            if tags["service"]=="driveway":
                 return 10000
             
         return 1
