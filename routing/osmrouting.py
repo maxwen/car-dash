@@ -8,7 +8,7 @@ from utils.osmutils import OSMUtils
 from osmparser.osmdataaccess import Constants
 import time
 
-WITH_CROSSING_DEBUG=True
+WITH_CROSSING_DEBUG=False
 
 MAXIMUM_DECISION_LENGTH=100.0
 MAXIMUM_DECISION_LENGTH_SHORT=50.0

@@ -1836,7 +1836,8 @@ class QtOSMWidget(QWidget):
             self.displayWayWithCache(way, pen)
 
     def getDisplayPOITypeListForZoom(self):
-        return self.style.getDisplayPOIListForZoom(self.map_zoom)
+        if self.map_zoom in range(self.tileStartZoom+1, 19):
+            return self.style.getDisplayPOIListForZoom(self.map_zoom)
     
     def getPixmapForNodeType(self, nodeType):
         return self.style.getPixmapForNodeType(nodeType)
@@ -3556,11 +3557,14 @@ class QtOSMWidget(QWidget):
                 self.speedInfo=maxspeed
                 self.wayPOIList=osmParserData.getPOIListOnWay(wayId)
 
-                _, _, _, tunnel, _=osmParserData.decodeStreetInfo2(streetInfo)
-                if tunnel==1 and track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:
-                    self.osmWidget.startTunnelMode()
-                else:
-                    self.osmWidget.stopTunnelMode()
+                
+                # a predcted signal must never start or stop tunnel mode
+                if not self.osmWidget.lastGPSData.predicted:
+                    _, _, _, tunnel, _=osmParserData.decodeStreetInfo2(streetInfo)
+                    if tunnel==1 and track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:
+                        self.osmWidget.startTunnelMode()
+                    else:
+                        self.osmWidget.stopTunnelMode()
                     
 #            stop=time.time()
 #            print("showTrackOnPos:%f"%(stop-start))
