@@ -535,6 +535,7 @@ class QtOSMWidget(QWidget):
         self.adminPolygonCache=dict()
         self.lastAdminLineIdSet=None      
         self.tagLabelWays=None
+        self.onewayWays=None
         
         self.style=OSMStyle()
         self.mapPoint=None
@@ -1230,6 +1231,7 @@ class QtOSMWidget(QWidget):
                 self.aerowayLines=list()
                 self.tagLabelWays=dict()
                 self.adminLineList=list()
+                self.onewayWays=dict()
                 
                 fetchStart=time.time()
 
@@ -1311,7 +1313,11 @@ class QtOSMWidget(QWidget):
                     
         if self.gpsBreadcrumbs==True:
             self.displayLocationBredCrumbs()
-            
+
+        if self.map_zoom>=self.style.SHOW_POI_START_ZOOM:
+            if self.onewayWays!=None and len(self.onewayWays)!=0:
+                self.displayOnewayTags(self.onewayWays)
+                            
         self.painter.resetTransform()
         
                 
@@ -1339,7 +1345,7 @@ class QtOSMWidget(QWidget):
             self.orderedNodeList.sort(key=self.nodeSortByYCoordinate, reverse=False)
 
         self.displayNodes()
-
+            
         if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
             if self.tagLabelWays!=None and len(self.tagLabelWays)!=0:
                 tagStart=time.time()
@@ -1504,7 +1510,7 @@ class QtOSMWidget(QWidget):
                 Constants.STREET_TYPE_ROAD,
                 Constants.STREET_TYPE_UNCLASSIFIED]
             
-        elif self.map_zoom in range(self.tileStartZoom, 15):
+        elif self.map_zoom in range(self.tileStartZoom+1, 15):
             return [Constants.STREET_TYPE_MOTORWAY,
                 Constants.STREET_TYPE_MOTORWAY_LINK,
                 Constants.STREET_TYPE_TRUNK,
@@ -1523,7 +1529,7 @@ class QtOSMWidget(QWidget):
             # all
             return Constants.ADMIN_LEVEL_DISPLAY_SET
             
-        elif self.map_zoom in range(self.tileStartZoom, 15):
+        elif self.map_zoom in range(self.tileStartZoom+1, 15):
             return [2]
         
         return None
@@ -1578,12 +1584,15 @@ class QtOSMWidget(QWidget):
             return 
         
         start=time.time()
-        if self.map_zoom>=14:
+#        if self.map_zoom>=14:
+#            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
+#        elif self.map_zoom>=12:
+#            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
+#        elif self.map_zoom>self.tileStartZoom:
+#            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 100.0)        
+
+        if self.map_zoom>self.tileStartZoom:
             resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList)        
-        elif self.map_zoom>=12:
-            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 50.0)        
-        elif self.map_zoom>=self.tileStartZoom:
-            resultList, wayIdSet=osmParserData.getWaysInBboxWithGeom(bbox, 0.0, streetTypeList, True, 100.0)        
         
         if WITH_TIMING_DEBUG==True:
             print("getWaysInBboxWithGeom: %f"%(time.time()-start))
@@ -1601,7 +1610,7 @@ class QtOSMWidget(QWidget):
         
         for way in resultList:
             wayId, _, _, streetInfo, _, _, _, _, _, _=way
-            streetTypeId, _, _, tunnel, bridge=osmParserData.decodeStreetInfo2(streetInfo)
+            streetTypeId, oneway, roundabout, tunnel, bridge=osmParserData.decodeStreetInfo2(streetInfo)
             
             if self.map_zoom>=self.style.SHOW_NAME_LABEL_WAYS_START_ZOOM:
                 if streetTypeId in Constants.NAME_LABEL_WAY_SET:
@@ -1610,7 +1619,10 @@ class QtOSMWidget(QWidget):
             elif self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
                 if streetTypeId in Constants.REF_LABEL_WAY_SET:
                     self.tagLabelWays[wayId]=way
-
+                
+            if (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
+                self.onewayWays[wayId]=way
+                
             if bridge==1:
                 self.bridgeWays.append(way)
                 continue
@@ -1646,6 +1658,27 @@ class QtOSMWidget(QWidget):
                     tagText=tagText+":"+nameRef
         return tagText
     
+    def displayOnewayTags(self, onewayWays):
+        if onewayWays!=None and len(onewayWays)!=0:
+            map_x, map_y=self.getMapZeroPos()
+            for way in onewayWays.values():
+                wayId, _, _, streetInfo, name, nameRef, _, _, _, _=way 
+                
+                if wayId in self.wayPolygonCache.keys():
+                    _, wayPainterPath=self.wayPolygonCache[wayId]
+
+                    streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
+
+                    point=None
+                    if oneway==1:
+                        point=wayPainterPath.pointAtPercent(1)
+                    elif oneway==2:
+                        point=wayPainterPath.pointAtPercent(0)
+                    
+                    if point!=None:
+                        point0=QPointF(point.x()-map_x,  point.y()-map_y)
+                        self.painter.drawPixmap(point0.x()-8, point0.y()-8, 16, 16, self.style.getStylePixmap("oneway"))
+                
     def displayWayTags(self, tagLabelWays):
         if tagLabelWays!=None and len(tagLabelWays)!=0:
             font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
@@ -1681,15 +1714,14 @@ class QtOSMWidget(QWidget):
                                 point0=self.transformHeading.map(point)
                                 painterPath, painterPathText=self.createTextLabel(tagText, font)
                                 painterPath, painterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), painterPath, painterPathText)
-                                rect=painterPath.boundingRect()
                            
-                                painterPathDict[wayId]=(painterPath, painterPathText, point0, rect)
+                                painterPathDict[wayId]=(painterPath, painterPathText)
                         else:
                             numHiddenTags=numHiddenTags+1
 
 
-            for wayId, (painterPath, painterPathText, point, rect) in painterPathDict.items():
-                self.displayTextLabel(painterPath, painterPathText, brush, pen)
+            for wayId, (tagPainterPath, tagPainterPathText) in painterPathDict.items():
+                self.displayTextLabel(tagPainterPath, tagPainterPathText, brush, pen)
             
             if WITH_TIMING_DEBUG==True:
                 print("visible tags:%d hidden tags:%d"%(numVisibleTags, numHiddenTags))
@@ -1697,40 +1729,21 @@ class QtOSMWidget(QWidget):
     # find position of tag for driving mode
     # should be as near as possible to the crossing but 
     # should not overlap with others
-    def calcWayTagPlacement(self, wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList):
+    def calcWayTagPlacement(self, wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText):
         if reverseRefs==False:
-#            for tagLabelPoint in range(5, 50, 5):
-                percent=wayPainterPath.percentAtLength(80)
-                point=wayPainterPath.pointAtPercent(percent)
-                if self.visibleCPolygon2.isInside(point.x(), point.y()): 
-                    point0=self.transformHeading.map(point)
-                    newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
-                    rect=newTagPainterPath.boundingRect()
-                    placeFound=True
-#                    for visibleRect in rectList:
-#                        if visibleRect.intersects(rect):
-#                            placeFound=False
-                        
-                    if placeFound==True:
-                        rectList.append(rect)
-                        return newTagPainterPath, newTagPainterPathText
+            percent=wayPainterPath.percentAtLength(80)
+            point=wayPainterPath.pointAtPercent(percent)
+            if self.visibleCPolygon2.isInside(point.x(), point.y()): 
+                point0=self.transformHeading.map(point)
+                newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
+                return newTagPainterPath, newTagPainterPathText
         else:
-#            for tagLabelPoint in range(50, 5, -5):
-                percent=wayPainterPath.percentAtLength(wayPainterPath.length()-80)
-                point=wayPainterPath.pointAtPercent(percent)
-                if self.visibleCPolygon2.isInside(point.x(), point.y()):
-                    point0=self.transformHeading.map(point)
-                    newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
-                    rect=newTagPainterPath.boundingRect()
-                    placeFound=True
-#                    for visibleRect in rectList:
-#                        if visibleRect.intersects(rect):
-#                            placeFound=False
-                        
-                    if placeFound==True:
-                        rectList.append(rect)
-                        return newTagPainterPath, newTagPainterPathText
-
+            percent=wayPainterPath.percentAtLength(wayPainterPath.length()-80)
+            point=wayPainterPath.pointAtPercent(percent)
+            if self.visibleCPolygon2.isInside(point.x(), point.y()):
+                point0=self.transformHeading.map(point)
+                newTagPainterPath, newTagPainterPathText=self.moveTextLabelToPos(point0.x(), point0.y(), tagPainterPath, tagPainterPathText)
+                return newTagPainterPath, newTagPainterPathText
             
         return None, None
 
@@ -1745,7 +1758,6 @@ class QtOSMWidget(QWidget):
             pen=self.style.getStylePen("placePen")
             
             painterPathDict=dict()
-            rectList=list()
             for way, reverseRefs in tagLabelWays.values():
                 wayId, _, _, _, name, nameRef, _, _, _, _=way 
                 
@@ -1758,7 +1770,7 @@ class QtOSMWidget(QWidget):
                         wayPainterPath=wayPainterPath.translated(-map_x, -map_y)
                         tagPainterPath, tagPainterPathText=self.createTextLabel(tagText, font)
             
-                        newTagPainterPath, newTagPainterPathText=self.calcWayTagPlacement(wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText, rectList)
+                        newTagPainterPath, newTagPainterPathText=self.calcWayTagPlacement(wayPainterPath, reverseRefs, tagPainterPath, tagPainterPathText)
 
                         if newTagPainterPath!=None:
                             painterPathDict[wayId]=(newTagPainterPath, newTagPainterPathText)
@@ -1807,7 +1819,7 @@ class QtOSMWidget(QWidget):
             # bridges  
             for way in self.bridgeWays:
                 _, tags, _, streetInfo, _, _, _, _, _,  _=way
-                streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
+                streetTypeId, oneway, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 if showBridges==True:
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, True, False, False, tags)
                     self.displayWayWithCache(way, pen)
@@ -1825,13 +1837,13 @@ class QtOSMWidget(QWidget):
         if showCasing==True:
             for way in self.tunnelWays:   
                 _, tags, _, streetInfo, _, _, _, _, _,  _=way
-                streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
+                streetTypeId, oneway, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
                 pen=self.style.getRoadPen(streetTypeId, self.map_zoom, showCasing, False, True, False, False, False, tags)
                 self.displayWayWithCache(way, pen)
         
         for way in self.tunnelWays:   
             _, tags, _, streetInfo, _, _, _, _, _,  _=way
-            streetTypeId, _, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
+            streetTypeId, oneway, _, _, _=osmParserData.decodeStreetInfo2(streetInfo)
             pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, True, False, False, False, tags)
             self.displayWayWithCache(way, pen)
 
@@ -2066,12 +2078,15 @@ class QtOSMWidget(QWidget):
             return
         
         start=time.time()
-        if self.map_zoom>=14:
+#        if self.map_zoom>=14:
+#            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
+#        elif self.map_zoom>=12:
+#            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 50.0)
+#        elif self.map_zoom>self.tileStartZoom:
+#            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 100.0)
+
+        if self.map_zoom>self.tileStartZoom:
             resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0)
-        elif self.map_zoom>=12:
-            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 50.0)
-        elif self.map_zoom>=10:
-            resultList, osmIdSet=osmParserData.getAreasInBboxWithGeom(areaTypeList, bbox, 0.0, True, 100.0)
         
         if WITH_TIMING_DEBUG==True:
             print("getAreasInBboxWithGeom: %f"%(time.time()-start))
@@ -2501,7 +2516,7 @@ class QtOSMWidget(QWidget):
                 else:
                     painterPath.lineTo(point)
                     
-                i=i+1
+                i=i+1                
                 
             rect=painterPath.controlPointRect()
             cont=[(rect.x(), rect.y()), 
@@ -2516,6 +2531,7 @@ class QtOSMWidget(QWidget):
         else:
             cPolygon, painterPath=self.wayPolygonCache[wayId]
                     
+        # only draw visible path
         if cPolygon!=None:
             # must create a copy cause shift changes alues intern
             p=Polygon(cPolygon)
@@ -3559,7 +3575,7 @@ class QtOSMWidget(QWidget):
 
                 
                 # a predcted signal must never start or stop tunnel mode
-                if not self.osmWidget.lastGPSData.predicted:
+                if self.osmWidget.lastGPSData!=None and not self.osmWidget.lastGPSData.predicted:
                     _, _, _, tunnel, _=osmParserData.decodeStreetInfo2(streetInfo)
                     if tunnel==1 and track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:
                         self.osmWidget.startTunnelMode()

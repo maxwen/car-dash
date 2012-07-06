@@ -39,25 +39,37 @@ class OSMDataTest(OSMDataAccess):
 #            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
     def testWayTable(self):
-        self.cursorWay.execute('SELECT * FROM wayTable WHERE wayId=147462600')
-        allentries=self.cursorWay.fetchall()
-        for x in allentries:
-            wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
-            print( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
+        self.cursorWay.execute('SELECT * FROM wayTable')
+        while True:
+            x=self.cursorWay.fetchone()
+            if x==None:
+                break
+            print(x)
+#            wayId, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, poiList=self.wayFromDB(x)
+#            print( "way: " + str(wayId) + " streetType:"+str(streetTypeId)+ " name:" +str(name) + " ref:"+str(nameRef)+" tags: " + str(tags) + "  refs: " + str(refs) + " oneway:"+str(oneway)+ " roundabout:"+str(roundabout) + " maxspeed:"+str(maxspeed)+" poilist:"+str(poiList))
 
     def testCrossingTable(self):
         self.cursorWay.execute('SELECT * FROM crossingTable')
-        allentries=self.cursorWay.fetchall()
-        for x in allentries:
+        while True:
+            x=self.cursorWay.fetchone()
+            if x==None:
+                break
             crossingEntryId, wayid, refId, wayIdList=self.crossingFromDB(x)
             print( "id: "+ str(crossingEntryId) + " wayid: " + str(wayid) +  " refId: "+ str(refId) + " wayIdList: " + str(wayIdList))
         
     def testEdgeTable(self):
-        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, AsText(geom) FROM edgeTable')
-        allentries=self.cursorEdge.fetchall()
-        for x in allentries:
-            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoordsString(x)
+        self.cursorEdge.execute('SELECT id, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, AsText(geom) FROM edgeTable')
+        while True:
+            x=self.cursorEdge.fetchone()
+            if x==None:
+                break
+            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoords(x)
             print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
+
+#        allentries=self.cursorEdge.fetchall()
+#        for x in allentries:
+#            edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost, streetInfo, coords=self.edgeFromDBWithCoords(x)
+#            print( "edgeId: "+str(edgeId) +" startRef: " + str(startRef)+" endRef:"+str(endRef)+ " length:"+str(length)+ " wayId:"+str(wayId) +" source:"+str(source)+" target:"+str(target) + " cost:"+str(cost)+ " reverseCost:"+str(reverseCost)+ "streetInfo:" + str(streetInfo) + " coords:"+str(coords))
             
     def testAreaTable(self):
 #        self.cursorArea.execute('SELECT osmId, areaId, type, tags, layer, AsText(geom) FROM areaTable WHERE type=%d'%(Constants.AREA_TYPE_NATURAL))
@@ -167,7 +179,10 @@ def main(argv):
       
     p.openAllDB()
     
-    p.fillSimpleWayDB()
+    print(p.getLenOfEdgeTable())
+    print(p.getLenOfWayTable())
+
+#    p.fillSimpleWayDB()
 #    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
 #    allentries=p.cursorArea.fetchall()
 #    for x in allentries:
@@ -221,7 +236,7 @@ def main(argv):
 #    p.recreateEdges()
     
 #    p.testRoutes()
-#    p.testWayTable()
+    p.testWayTable()
 #    p.recreateCostsForEdges()
 #    p.removeOrphanedEdges()
 #    p.removeOrphanedWays()

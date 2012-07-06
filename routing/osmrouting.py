@@ -8,7 +8,7 @@ from utils.osmutils import OSMUtils
 from osmparser.osmdataaccess import Constants
 import time
 
-WITH_CROSSING_DEBUG=False
+WITH_CROSSING_DEBUG=True
 
 MAXIMUM_DECISION_LENGTH=100.0
 MAXIMUM_DECISION_LENGTH_SHORT=50.0
@@ -17,13 +17,15 @@ CLOSE_EDGE_RANGE=20.0
 DECISION_EDGE_RANGE=10.0
 CLOSE_HEADING_RANGE=34
 DECISION_HEADING_RANGE=20
-NORMAL_HEADING_RANGE=60
 NO_CROSSING_SPEED=60
 NEAR_CROSSING_LENGTH_MIN=NORMAL_EDGE_RANGE
 PAST_CROSSING_LENGTH_MIN=15.0
 PAST_CROSSING_LENGTH_MIN_SHORT=10.0
 CROSSING_CALC_LENGTH_MIN=NORMAL_EDGE_RANGE*2
-HEADING_CALC_LENGTH=5.0
+# heading check length to decide if near crossing
+HEADING_CALC_LENGTH_CROSSING=5.0
+# heading check length after crossing
+HEADING_CALC_LENGTH_CHECK=20.0
 CHECK_TURN_SPEED=5
 
 class OSMRoute():
@@ -499,7 +501,7 @@ class OSMRouting():
                     headingCoords.extend(coords)
                     headingCoords.reverse()
                     
-                heading=self.getCrossingHeadingForPoints(headingCoords, HEADING_CALC_LENGTH)
+                heading=self.getCrossingHeadingForPoints(headingCoords, HEADING_CALC_LENGTH_CROSSING)
 
                 edgeHeadings.append(heading)
                 possibleEdges.append(edge)
@@ -1126,7 +1128,7 @@ class OSMRouting():
                 # dont check further the a specific distance from the crossing
                 # if the heading diff are clear
                 if self.otherNearHeading==False:
-                    if checkLength>HEADING_CALC_LENGTH:
+                    if checkLength>HEADING_CALC_LENGTH_CHECK:
                         break
 
                 lat1=lat2

@@ -25,7 +25,7 @@ class OSMDataSQLite():
         self.cursorAdmin=None
         self.connectionAdmin=None
         self.cursorWaySimple=None
-        self.connectioWaySimple=None
+        self.connectionWaySimple=None
         self.gisUtils=GISUtils()
 
     def getGISUtils(self):
@@ -315,7 +315,7 @@ class OSMDataSQLite():
     
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data3")
+        return os.path.join(getDataRoot(), "data2")
 
     def getEdgeDBFile(self):
         file="edge.db"
@@ -382,7 +382,7 @@ class OSMDataSQLite():
     
         osmData=dict()
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany-1.osm.bz2'
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
         osmData["poly"]="germany.poly"
@@ -409,8 +409,13 @@ class OSMDataSQLite():
     def getLenOfEdgeTable(self):
         self.cursorEdge.execute('SELECT COUNT(id) FROM edgeTable')
         allentries=self.cursorEdge.fetchall()
-        return allentries[0][0]
-    
+        return int(allentries[0][0])
+
+    def getLenOfWayTable(self):
+        self.cursorWay.execute('SELECT COUNT(wayId) FROM wayTable')
+        allentries=self.cursorWay.fetchall()
+        return int(allentries[0][0])
+        
     def getEdgeEntryForId(self, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
         allentries=self.cursorEdge.fetchall()

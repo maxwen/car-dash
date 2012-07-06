@@ -113,6 +113,8 @@ class OSMStyle():
         self.pixmapDict["parkPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/park.png"))
         self.pixmapDict["dogLeashPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/dogs_leash.png"))
         self.pixmapDict["hotelPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/hotel.png"))
+
+        self.pixmapDict["oneway"]=QPixmap(os.path.join(getImageRoot(), "plus.png"))
                 
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(0xf1, 0xee, 0xe8)

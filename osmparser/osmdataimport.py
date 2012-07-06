@@ -1499,15 +1499,17 @@ class OSMDataImport(OSMDataSQLite):
         return subRefList
 
     def createEdgeTableEntries(self):
-        self.cursorWay.execute('SELECT * FROM wayTable')
-        allWays=self.cursorWay.fetchall()
-        
-        allWaysLength=len(allWays)
+        allWaysLength=self.getLenOfWayTable()  
         allWaysCount=0
-
         prog = ProgressBar(0, allWaysLength, 77)
-        
-        for way in allWays:
+
+        cursor=self.connectionWay.cursor()
+        cursor.execute('SELECT * FROM wayTable')
+        while True:
+            way=cursor.fetchone()
+            if way==None:
+                break
+
             prog.updateAmount(allWaysCount)
             print(prog, end="\r")
             allWaysCount=allWaysCount+1
@@ -2111,20 +2113,24 @@ class OSMDataImport(OSMDataSQLite):
         return (streetTypeId==Constants.STREET_TYPE_MOTORWAY_LINK and streetTypeId2!=Constants.STREET_TYPE_MOTORWAY_LINK) or (streetTypeId==Constants.STREET_TYPE_TRUNK_LINK and streetTypeId2!=Constants.STREET_TYPE_TRUNK_LINK) or (streetTypeId==Constants.STREET_TYPE_PRIMARY_LINK and streetTypeId2!=Constants.STREET_TYPE_PRIMARY_LINK) or (streetTypeId==Constants.STREET_TYPE_SECONDARY_LINK and streetTypeId2!=Constants.STREET_TYPE_SECONDARY_LINK) or (streetTypeId==Constants.STREET_TYPE_TERTIARY_LINK and streetTypeId2!=Constants.STREET_TYPE_TERTIARY_LINK)
 
     def createCrossingEntries(self):
-        self.cursorWay.execute('SELECT * FROM wayTable')
-        allWays=self.cursorWay.fetchall()
-        
-        allWaysLength=len(allWays)
+        allWaysLength=self.getLenOfWayTable()
         allWaysCount=0
 
         prog = ProgressBar(0, allWaysLength, 77)
+        
         nodeTypeList=list()
         nodeTypeList.append(Constants.POI_TYPE_BARRIER)
         nodeTypeList.append(Constants.POI_TYPE_MOTORWAY_JUNCTION)
         
         poiDict=self.getAllPOIRefEntrysDict(nodeTypeList)
         
-        for way in allWays:
+        cursor=self.connectionWay.cursor()
+        cursor.execute('SELECT * FROM wayTable')
+        while True:
+            way=cursor.fetchone()
+            if way==None:
+                break
+            
             wayid, _, refs, streetInfo, name, _, _, _=self.wayFromDB(way)
             streetTypeId, oneway, roundabout=self.decodeStreetInfo(streetInfo)
   
@@ -2696,16 +2702,23 @@ class OSMDataImport(OSMDataSQLite):
         
         if addWays==True:
             self.log("add all ways to address DB")
-            self.cursorWay.execute('SELECT * FROM wayTable')
-            allWays=self.cursorWay.fetchall()
-            
-            allWaysLength=len(allWays)
+            allWaysLength=self.getLenOfWayTable()
             allWaysCount=0
-    
             prog = ProgressBar(0, allWaysLength, 77)
-            
+        
             addressSet=set()
-            for way in allWays:
+            
+            cursor=self.connectionWay.cursor()
+            cursor.execute('SELECT * FROM wayTable')
+            while True:
+                way=cursor.fetchone()
+                if way==None:
+                    break
+            
+                prog.updateAmount(allWaysCount)
+                print(prog, end="\r")
+                allWaysCount=allWaysCount+1
+            
                 _, _, refs, streetInfo, streetName, _, _, _=self.wayFromDB(way)
                 streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
                 
@@ -2932,21 +2945,24 @@ class OSMDataImport(OSMDataSQLite):
     def vacuumAdminDB(self):
         self.cursorAdmin.execute('VACUUM')
                                 
-    def removeOrphanedEdges(self):
-        self.cursorEdge.execute('SELECT * FROM edgeTable')
-        allEdges=self.cursorEdge.fetchall()
-        
-        allEdgesLength=len(allEdges)
+    def removeOrphanedEdges(self):       
+        allEdgesLength=self.getLenOfEdgeTable()
         allEdgesCount=0
 
         removeCount=0
         prog = ProgressBar(0, allEdgesLength, 77)
         
-        for edge in allEdges:
+        cursor=self.connectionEdge.cursor()
+        cursor.execute('SELECT * FROM edgeTable')
+        while True:
+            edge=cursor.fetchone()
+            if edge==None:
+                break
+
             prog.updateAmount(allEdgesCount)
             print(prog, end="\r")
             allEdgesCount=allEdgesCount+1
-
+            
             edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost=self.edgeFromDB(edge)
             resultList1=self.getEdgeEntryForSource(target)
             resultList2=self.getEdgeEntryForTarget(source)
@@ -2961,20 +2977,24 @@ class OSMDataImport(OSMDataSQLite):
         self.log("removed %d edges"%(removeCount))
         
     def removeOrphanedWays(self):
-        self.cursorWay.execute('SELECT * FROM wayTable')
-        allWays=self.cursorWay.fetchall()
-        
-        allWaysLength=len(allWays)
+        allWaysLength=self.getLenOfWayTable()
         allWaysCount=0
 
         removeCount=0
         prog = ProgressBar(0, allWaysLength, 77)
-        for way in allWays:
-            wayid, _, _, _, _, _, _, _=self.wayFromDB(way)
+        
+        cursor=self.connectionWay.cursor()
+        cursor.execute('SELECT * FROM wayTable')
+        while True:
+            way=cursor.fetchone()
+            if way==None:
+                break
 
             prog.updateAmount(allWaysCount)
             print(prog, end="\r")
             allWaysCount=allWaysCount+1
+            
+            wayid, _, _, _, _, _, _, _=self.wayFromDB(way)
 
             resultList=self.getEdgeEntryForWayId(wayid)
             if len(resultList)==0:
@@ -3020,19 +3040,22 @@ class OSMDataImport(OSMDataSQLite):
 
     def recreateCostsForEdges(self):
         self.log("recreate costs")
-        self.cursorEdge.execute('SELECT * FROM edgeTable')
-        allEdges=self.cursorEdge.fetchall()
-        
-        allEdgesLength=len(allEdges)
+        allEdgesLength=self.getLenOfEdgeTable()
         allEdgesCount=0
 
         prog = ProgressBar(0, allEdgesLength, 77)
-        
-        for edge in allEdges:
+
+        cursor=self.connectionEdge.cursor()
+        cursor.execute('SELECT * FROM edgeTable')
+        while True:
+            edge=cursor.fetchone()
+            if edge==None:
+                break
+                        
             prog.updateAmount(allEdgesCount)
             print(prog, end="\r")
             allEdgesCount=allEdgesCount+1
-            
+
             edgeId, _, _, length, wayId, _, _, cost, reverseCost=self.edgeFromDB(edge)
             wayId, tags, refs, streetInfo, _, _, maxspeed, _=self.getWayEntryForId(wayId)
             if wayId==None:
@@ -3294,6 +3317,7 @@ def main(argv):
 #    p.closeAdressDB()
     
     p.openAllDB()
+
 #    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
 #    allentries=p.cursorArea.fetchall()
 #    for x in allentries:

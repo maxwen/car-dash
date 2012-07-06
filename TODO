@@ -313,3 +313,6 @@ TODO: calc driving time for routes
 TODO: tracklogs from tunnels cannot be replayed 1:1
 -only one invalid tracklog entry
 -would need to change replay to use original timestamps
+
+TODO: display oneway streets better
+-traffic sign
