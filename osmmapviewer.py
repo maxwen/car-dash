@@ -1314,9 +1314,9 @@ class QtOSMWidget(QWidget):
         if self.gpsBreadcrumbs==True:
             self.displayLocationBredCrumbs()
 
-        if self.map_zoom>=self.style.SHOW_POI_START_ZOOM:
+        if self.map_zoom>=self.style.SHOW_ONEWAY_START_ZOOM:
             if self.onewayWays!=None and len(self.onewayWays)!=0:
-                self.displayOnewayTags(self.onewayWays)
+                self.displayOnewayOverlays(self.onewayWays)
                             
         self.painter.resetTransform()
         
@@ -1404,7 +1404,6 @@ class QtOSMWidget(QWidget):
             
         self.showTextInfo()
         self.showSpeedInfo()
-        self.showTunnelInfo()
         
         if self.nightMode==True:
             self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("nightModeColor"))
@@ -1620,7 +1619,7 @@ class QtOSMWidget(QWidget):
                 if streetTypeId in Constants.REF_LABEL_WAY_SET:
                     self.tagLabelWays[wayId]=way
                 
-            if (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
+            if oneway!=0:
                 self.onewayWays[wayId]=way
                 
             if bridge==1:
@@ -1658,9 +1657,8 @@ class QtOSMWidget(QWidget):
                     tagText=tagText+":"+nameRef
         return tagText
     
-    def displayOnewayTags(self, onewayWays):
+    def displayOnewayOverlays(self, onewayWays):
         if onewayWays!=None and len(onewayWays)!=0:
-            map_x, map_y=self.getMapZeroPos()
             for way in onewayWays.values():
                 wayId, _, _, streetInfo, name, nameRef, _, _, _, _=way 
                 
@@ -1668,17 +1666,38 @@ class QtOSMWidget(QWidget):
                     _, wayPainterPath=self.wayPolygonCache[wayId]
 
                     streetTypeId, oneway, roundabout, _, _=osmParserData.decodeStreetInfo2(streetInfo)
-
-                    point=None
-                    if oneway==1:
-                        point=wayPainterPath.pointAtPercent(1)
-                    elif oneway==2:
-                        point=wayPainterPath.pointAtPercent(0)
                     
-                    if point!=None:
-                        point0=QPointF(point.x()-map_x,  point.y()-map_y)
-                        self.painter.drawPixmap(point0.x()-8, point0.y()-8, 16, 16, self.style.getStylePixmap("oneway"))
-                
+                    if roundabout==1:
+                        continue
+                    
+                    pixmap=None
+                    if oneway==1:
+                        pixmap=self.style.getStylePixmap("oneway-right")
+                    elif oneway==2:
+                        pixmap=self.style.getStylePixmap("oneway-left")
+                        
+                    if pixmap!=None:
+                        self.drawImageOnPainterPath(wayPainterPath, pixmap, 16, 14)
+    
+    def drawImageOnPainterPath(self, painterPath, pixmap, width, height):
+        map_x, map_y=self.getMapZeroPos()
+
+        for i in range(10, 90, 79):
+            percent=i/100
+ 
+            point = painterPath.pointAtPercent(percent)
+            point0=QPointF(point.x()-map_x,  point.y()-map_y)
+            if not self.visibleCPolygon.isInside(point0.x(), point0.y()): 
+                continue
+            
+            angle = painterPath.angleAtPercent(percent)
+ 
+            self.painter.save()
+            self.painter.translate(point0)
+            self.painter.rotate(-angle)
+            self.painter.drawPixmap(-width/2, -height/2, width, height, pixmap)            
+            self.painter.restore()
+         
     def displayWayTags(self, tagLabelWays):
         if tagLabelWays!=None and len(tagLabelWays)!=0:
             font=self.style.getFontForTextDisplay(self.map_zoom, self.isVirtualZoom)
@@ -1802,10 +1821,10 @@ class QtOSMWidget(QWidget):
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, True, False, tags)
                     self.displayWayWithCache(way, pen)
             
-                # TODO: mark oneway direction
-                elif (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
-                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False, tags)
-                    self.displayWayWithCache(way, pen)
+#                # TODO: mark oneway direction
+#                elif (oneway!=0 and roundabout==0) and streetTypeId in self.getStreetTypeListForOneway():
+#                    pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, True, False, False, False, False, tags)
+#                    self.displayWayWithCache(way, pen)
                 
                 elif streetTypeId==Constants.STREET_TYPE_LIVING_STREET:
                     pen=self.style.getRoadPen(streetTypeId, self.map_zoom, False, False, False, False, False, True, tags)
@@ -2372,17 +2391,7 @@ class QtOSMWidget(QWidget):
             if os.path.exists(imagePath):
                 speedPixmap=QPixmap(imagePath)
                 self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, speedPixmap)
-                
-    def showTunnelInfo(self):
-        if self.osmWidget.isInTunnel==True:
-            y=self.height()-50-100-100-100+10
-            x=8
-            
-            tunnelBackground=QRect(0, self.height()-50-100-100-100, 100, 100)
-            self.painter.fillRect(tunnelBackground, self.style.getStyleColor("backgroundColor"))
-            
-            self.painter.drawPixmap(x, y, IMAGE_WIDTH_LARGE, IMAGE_HEIGHT_LARGE, self.style.getStylePixmap("tunnelPixmap"))
-            
+                            
     def displayRoutingPointRefPositions(self, point):
         if not point.isValid():
             return
@@ -2856,13 +2865,12 @@ class QtOSMWidget(QWidget):
             
             if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
                 
-                #self.gpsUpdateStartTime=time.time()
                 self.locationBreadCrumbs.append(gpsData)
 
                 self.gps_rlat=gps_rlat_new
                 self.gps_rlon=gps_rlon_new
                 
-                if gpsData.predicted==False or self.osmWidget.isInTunnel==True:
+                if gpsData.predicted==False:
                     if debug==False:
                         self.showTrackOnGPSPos(False) 
 
@@ -3572,15 +3580,6 @@ class QtOSMWidget(QWidget):
                 self.wayInfo=osmParserData.getWayTagString(name, nameRef)  
                 self.speedInfo=maxspeed
                 self.wayPOIList=osmParserData.getPOIListOnWay(wayId)
-
-                
-                # a predcted signal must never start or stop tunnel mode
-                if self.osmWidget.lastGPSData!=None and not self.osmWidget.lastGPSData.predicted:
-                    _, _, _, tunnel, _=osmParserData.decodeStreetInfo2(streetInfo)
-                    if tunnel==1 and track!=None and speed!=0 and length>MINIMAL_TUNNEL_LENGHTH:
-                        self.osmWidget.startTunnelMode()
-                    else:
-                        self.osmWidget.stopTunnelMode()
                     
 #            stop=time.time()
 #            print("showTrackOnPos:%f"%(stop-start))
@@ -3943,8 +3942,6 @@ class OSMWidget(QWidget):
         self.lastGPSData=None
         self.osmUtils=OSMUtils()
         self.gpsPrediction=True
-        self.isInTunnel=False
-#        self.waitForInvalidGPSSignal=False
         osmParserData.openAllDB()
         
     def addToWidget(self, vbox):     
@@ -4257,40 +4254,16 @@ class OSMWidget(QWidget):
         self.mapWidgetQt.clearAll()
         self.update()
     
-    def startTunnelMode(self):
-        if self.isInTunnel==False:
-            self.isInTunnel=True
-            # ignore all gps signals until the first invalid
-            # since the gps data maybe wrong or incorrect
-            # before completely missing
-            # and this is influencing the tunnel prediction
-            # which is based on the last data before the tunnel
-#            self.waitForInvalidGPSSignal=True     
-               
-    def stopTunnelMode(self):
-        if self.isInTunnel==True:
-            self.isInTunnel=False
-#            self.waitForInvalidGPSSignal=False
-    
     # called from gps update thread
     # only for different gps data
     def updateGPSDisplay(self, gpsData, addToLog=True):
         if gpsData!=None:   
             if gpsData.isValid():
-                # after tunnel enter wait until signal
-                # becomes invalid
-#                if self.waitForInvalidGPSSignal==True:
-#                    return
-                
                 self.gpsSignalInvalid=False                                    
                 self.updateGPSDataDisplay(gpsData, False)
             else:
-#                self.waitForInvalidGPSSignal=False
-                
-                self.gpsSignalInvalid=True 
-                
-                if self.isInTunnel==False:
-                    self.handleMissingGPSSignal()
+                self.gpsSignalInvalid=True                 
+                self.handleMissingGPSSignal()
 
             if addToLog==True and self.test==False:
                 trackLog.addTrackLogLine(gpsData.toLogLine())
@@ -4314,30 +4287,25 @@ class OSMWidget(QWidget):
             if timeStamp-self.lastGPSData.time<0.5:
                 return
             
-            # only use location worker if in tunnel
-            # just use last track and speed
-            if self.isInTunnel==False:
-                if self.gpsSignalInvalid==True: 
-                    return 
+            # if no valid gps signal dont do any prediction
+            if self.gpsSignalInvalid==True: 
+                return 
     
             if self.lastGPSData.speed==0:
                 return
 
+            # dont create new prediction based on another prediction
+            if self.lastGPSData.predicted==True:
+                return
+            
             distance=(self.lastGPSData.speed/3.6)*(timeStamp-self.lastGPSData.time)
+            # to short distance
             if distance<3.0:
                 return
 
             track=self.lastGPSData.track
             lat=self.lastGPSData.lat
             lon=self.lastGPSData.lon
-
-            # make sure the prediction is on the edge of the tunnel
-            # if the edge makes a curve inside the tunnel
-            if self.isInTunnel==True and self.mapWidgetQt.currentCoords!=None:
-                refPoint, point, distances=osmParserData.getClosestPointOnEdge(lat, lon, self.mapWidgetQt.currentCoords, 30.0)
-                if point!=None:
-                    lat=point[0]
-                    lon=point[1]
                 
             lat1, lon1=self.osmUtils.getPosInDistanceAndTrack(lat, lon, distance, track)
             tmpGPSData=GPSData(timeStamp, lat1, lon1, track, self.lastGPSData.speed, self.lastGPSData.altitude, True, self.lastGPSData.satellitesInUse)

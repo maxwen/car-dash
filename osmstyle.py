@@ -14,13 +14,14 @@ from utils.env import getImageRoot
 
 class OSMStyle():
     SHOW_CASING_START_ZOOM=14
-    SHOW_BRIDGES_START_ZOOM=14
-    SHOW_STREET_OVERLAY_START_ZOOM=17
+    SHOW_BRIDGES_START_ZOOM=15
+    SHOW_STREET_OVERLAY_START_ZOOM=16
     USE_ANTIALIASING_START_ZOOM=17
     SHOW_BUILDING_START_ZOOM=18
     SHOW_REF_LABEL_WAYS_START_ZOOM=14
     SHOW_NAME_LABEL_WAYS_START_ZOOM=17
     SHOW_POI_START_ZOOM=14
+    SHOW_ONEWAY_START_ZOOM=17
     
     POI_INFO_DICT={Constants.POI_TYPE_BARRIER:{"pixmap":"barrierPixmap", "desc":"Barrier", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_ENFORCEMENT:{"pixmap":"speedCameraImage", "desc":"Speed Camera", "zoom":SHOW_POI_START_ZOOM},
@@ -114,7 +115,8 @@ class OSMStyle():
         self.pixmapDict["dogLeashPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/dogs_leash.png"))
         self.pixmapDict["hotelPixmap"]=QPixmap(os.path.join(getImageRoot(), "poi/hotel.png"))
 
-        self.pixmapDict["oneway"]=QPixmap(os.path.join(getImageRoot(), "plus.png"))
+        self.pixmapDict["oneway-right"]=QPixmap(os.path.join(getImageRoot(), "oneway-right.png"))
+        self.pixmapDict["oneway-left"]=QPixmap(os.path.join(getImageRoot(), "oneway-left.png"))
                 
         self.colorDict["backgroundColor"]=QColor(120, 120, 120, 200)
         self.colorDict["mapBackgroundColor"]=QColor(0xf1, 0xee, 0xe8)
