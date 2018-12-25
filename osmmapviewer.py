@@ -8,30 +8,25 @@ import sys
 import math
 import os
 import signal
-import http.client
+import urllib.request
 import io
-import socket
 from collections import deque, OrderedDict
-import time
 from utils.env import getTileRoot, getImageRoot, getRoot
 from utils.gisutils import GISUtils
-import cProfile
 
-from PyQt4.QtCore import QTimer, QMutex, QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QDesktopServices, QMessageBox, QToolTip, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QFileDialog, QPolygonF, QPolygon, QTransform, QColor, QFont, QFrame, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt5.QtCore import QTimer, QMutex, QEvent, QLine, QAbstractTableModel, QRectF, Qt, QPoint, QPointF, QSize, pyqtSlot, pyqtSignal, QRect, QThread, QItemSelectionModel
+from PyQt5.QtGui import QDesktopServices, QPainterPath, QBrush, QFontMetrics, QLinearGradient, QPolygonF, QPolygon, QTransform, QColor, QFont, QValidator, QPixmap, QIcon, QPalette, QPainter, QPen
+from PyQt5.QtWidgets import QMessageBox,QToolTip, QFileDialog, QFrame, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QVBoxLayout, QPushButton, QWidget, QSizePolicy, QHBoxLayout, QApplication
 from osmparser.osmdataaccess import Constants, OSMDataAccess
 from osmstyle import OSMStyle
 from routing.osmrouting import OSMRouting, OSMRoutingPoint, OSMRoute
 
 from utils.config import Config
 from utils.osmutils import OSMUtils
-from utils.gpsutils import gpsConfig, getGPSUpdateThread, GPSData, gpsRunState, gpsStoppedState
 from dialogs.osmdialogs import *
 
-from mapnik.mapnikwrapper import MapnikWrapper, disableMappnik
-#from mapnik.mapnikwrappercpp import MapnikWrapperCPP
 from tracklog import TrackLog
-from Polygon import Polygon
+from Polygon.cPolygon import Polygon
 
 TILESIZE=256
 minWidth=640
@@ -61,22 +56,14 @@ SCREEN_BORDER_WIDTH=50
 ROUTE_INFO_WIDTH=110
 
 DEFAULT_SEARCH_MARGIN=0.0003
-# length of tunnel where we expect gps signal failure
-MINIMAL_TUNNEL_LENGHTH=50
-GPS_SIGNAL_MINIMAL_DIFF=0.5
 SKY_WIDTH=100
 
 PREDICTION_USE_START_ZOOM=15
 
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
-defaultTileServer="tile.openstreetmap.org"
-defaultMapnikConfig=os.path.join("mapnik-shape", "osm.xml")
+defaultTileServer="http://tile.openstreetmap.org"
 defaultTileStartZoom=15
 defaultStart3DZoom=17
-
-idleState="idle"
-runState="run"
-stoppedState="stopped"
 
 osmParserData = OSMDataAccess()
 trackLog=TrackLog(False)
@@ -105,6 +92,10 @@ class OSMRoutingPointAction(QAction):
         return self.routingPoint
     
 class OSMDownloadTilesWorker(QThread):
+
+    updateMapSignal = pyqtSignal()
+    updateStatusSignal = pyqtSignal('QString')
+
     def __init__(self, parent, tileServer): 
         QThread.__init__(self, parent)
         self.exiting = False
@@ -112,319 +103,104 @@ class OSMDownloadTilesWorker(QThread):
         self.downloadQueue=deque()
         self.downloadDoneQueue=deque()
         self.tileServer=tileServer
-        
-    def setWidget(self, osmWidget):
-        self.osmWidget=osmWidget
-        
-#    def __del__(self):
-#        self.exiting = True
-#        self.wait()
-        
-    def setup(self, forceDownload):
-        self.updateStatusLabel("OSM starting download thread")
-        self.exiting = False
-        self.forceDownload=forceDownload
-        self.downloadDoneQueue.clear()
-        self.start()
-            
+
     def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
+        self.updateStatusSignal.emit(text)
 
     def updateMap(self):
-        self.emit(SIGNAL("updateMap()"))
- 
-    def updateDownloadThreadState(self, state):
-        self.emit(SIGNAL("updateDownloadThreadState(QString)"), state)
+        self.updateMapSignal.emit()
 
     def stop(self):
         self.exiting = True
-        self.forceDownload=False
         self.downloadQueue.clear()
         self.downloadDoneQueue.clear()
         self.wait()
 
-    def addTile(self, tilePath, fileName, forceDownload, tileServer):
+    def clearQueue(self):
+        self.downloadQueue.clear()
+        self.downloadDoneQueue.clear()
+
+    def addTile(self, tilePath, fileName, tileServer):
         self.tileServer=tileServer
         if fileName in self.downloadDoneQueue:
             return
         if not [tilePath, fileName] in self.downloadQueue:
             self.downloadQueue.append([tilePath, fileName])
         if not self.isRunning():
-            self.setup(forceDownload)
-        
+            self.start()
+
     def downloadTile(self, tilePath, fileName):
         if fileName in self.downloadDoneQueue:
             return
         if os.path.exists(fileName) and self.forceDownload==False:
             return
         try:
-            httpConn = http.client.HTTPConnection(self.tileServer)
-            httpConn.connect()
-            httpConn.request("GET", tilePath)
-            response = httpConn.getresponse()
-            if response.status==http.client.OK:
-                self.updateStatusLabel("OSM downloaded "+fileName)
-                data = response.read()
-                if not os.path.exists(os.path.dirname(fileName)):
-                    try:
-                        os.makedirs(os.path.dirname(fileName))
-                    except OSError:
-                        self.updateStatusLabel("OSM download OSError makedirs")
+            if not os.path.exists(os.path.dirname(fileName)):
                 try:
-                    stream=io.open(fileName, "wb")
-                    stream.write(data)
-                    self.downloadDoneQueue.append(fileName)
-                    self.updateMap()
-                except IOError:
-                    self.updateStatusLabel("OSM download IOError write")
-                    
-            httpConn.close()
-        except socket.error:
-            self.updateStatusLabel("OSM download error socket.error")
-            self.exiting=True
+                    os.makedirs(os.path.dirname(fileName))
+                except OSError:
+                    self.updateStatusLabel("OSM download OSError makedirs")
+            urllib.request.urlretrieve(self.tileServer + tilePath, fileName)
+            self.updateMap()
+
+        except urllib.error.URLError:
+            self.updateStatusLabel("OSM download error")
                 
     def run(self):
-        self.updateDownloadThreadState(runState)
+        self.updateStatusLabel("OSM download thread run")
         while not self.exiting and True:
             if len(self.downloadQueue)!=0:
                 entry=self.downloadQueue.popleft()
                 self.downloadTile(entry[0], entry[1])
                 continue
-            
-            self.updateStatusLabel("OSM download thread idle")
-            self.updateDownloadThreadState(idleState)
-            self.osmWidget.setForceDownload(False, False)
 
-            self.msleep(1000) 
-            
+            self.updateStatusLabel("OSM download thread idle")
+            self.msleep(1000)
             if len(self.downloadQueue)==0:
-                self.exiting=True
-        
-        self.forceDownload=False
+                self.exiting = True
+
         self.downloadQueue.clear()
         self.downloadDoneQueue.clear()
-        self.updateMap()
-#        self.osmWidget.setForceDownload(False, False)
         self.updateStatusLabel("OSM download thread stopped")
-        self.updateDownloadThreadState(stoppedState)
-
-
-class OSMMapnikTilesWorker(QThread):
-    def __init__(self, parent, tileDir, mapFile): 
-        QThread.__init__(self, parent)
         self.exiting = False
-        self.tileDir=tileDir
-        self.mapFile=mapFile
-#        self.connect(self.mapnikWrapper, SIGNAL("updateMap()"), self.updateMap)
-        self.tileQueue=deque()
-        self.updateMapTrigger=0;
-        
-    def getTileFullPath(self, zoom, x, y):
-        if not os.path.exists(os.path.join(self.tileDir, str(zoom))):
-            os.mkdir(os.path.join(self.tileDir, str(zoom)))
 
-        if not os.path.exists(os.path.join(self.tileDir, str(zoom), str(x))):
-            os.mkdir(os.path.join(self.tileDir, str(zoom), str(x)))
-            
-        tilePath=os.path.join(str(zoom), str(x), str(y)+".png")
-        fileName=os.path.join(self.tileDir, tilePath)
-        return fileName
-    
-    def setWidget(self, osmWidget):
-        self.osmWidget=osmWidget
-        
-#    def __del__(self):
-#        self.exiting = True
-#        self.wait()
-        
-    def setup(self):
-        self.updateStatusLabel("OSM starting mapnik thread")
-        if disableMappnik==False:
-            self.mapnikWrapper=MapnikWrapper(self.tileDir, self.mapFile)
-#        self.mapnikWrapperCPP=MapnikWrapperCPP(self.mapFile)
-
-        self.exiting = False
-        self.start()
-            
-    def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
-
-    def updateMap(self):
-        self.emit(SIGNAL("updateMap()"))
- 
-    def updateMapnikThreadState(self, state):
-        self.emit(SIGNAL("updateMapnikThreadState(QString)"), state)
-
-    def stop(self):
-        self.exiting = True
-        self.wait()
-
-    def addTile(self, zoom, x, y):
-        if not (zoom, x, y) in self.tileQueue:
-#            print("call mapnik for %d %d %d"%(zoom, x, y))
-            self.tileQueue.append((zoom, x, y))
-            
-            if not self.isRunning():
-                self.updateMapTrigger=0
-                self.setup()
-        
-    def run(self):
-        self.updateMapnikThreadState(runState)
-        while not self.exiting and True:
-            while len(self.tileQueue)!=0:
-                (zoom, x, y)=self.tileQueue[0]
-#                start=time.time()
-                self.mapnikWrapper.render_tiles3(x, y, zoom)
-#                self.mapnikWrapperCPP.render_tile(self.getTileFullPath(zoom, x, y), x, y, zoom)
-#                print("%f"%(time.time()-start))
-                self.tileQueue.popleft()
-                self.updateMap()
-                
-#                if self.updateMapTrigger==5:
-#                    self.updateMap()
-#                    self.updateMapTrigger=0
-#                else:
-#                    self.updateMapTrigger=self.updateMapTrigger+1
-                         
-            self.updateStatusLabel("OSM mapnik thread idle")
-            self.updateMapnikThreadState(idleState)
-
-#            print("longsleep")
-            self.msleep(500) 
-            if len(self.tileQueue)==0:
-                self.exiting=True
-                continue
-                
-        self.updateMap();
-        self.updateStatusLabel("OSM mapnik thread stopped")
-        self.updateMapnikThreadState(stoppedState)
-
-class OSMGPSSimulationWorker(QThread):
-    def __init__(self, parent): 
-        QThread.__init__(self, parent)
-        self.exiting = False
-        self.currentGPSDataIndex=0
-        self.gpsDataLines=None
-        self.lastGpsData=None
-        self.timeout=1000
-    
-    def setWidget(self, osmWidget):
-        self.osmWidget=osmWidget
-        
-    def setup(self, gpsDataLines):
-        self.exiting = False
-        self.gpsDataLines=gpsDataLines
-        self.currentGPSDataIndex=0
-        self.lastGpsData=None
-        self.start()
- 
-    def stop(self):
-        self.exiting = True
-        self.wait()
-        self.currentGPSDataIndex=0
-        self.gpsDataLines=None
-        self.lastGpsData=None
- 
-    def continueReplay(self):
-        if self.gpsDataLines!=None:
-            self.exiting = False
-            self.start()
-
-    def pauseReplay(self):
-        self.exiting = True
-        self.wait()
-
-    def updateGPSDataDisplay(self, gpsData):
-        self.emit(SIGNAL("updateGPSDataDisplaySimulated(PyQt_PyObject)"), gpsData)
-        
-    def run(self):
-        for gpsData in self.gpsDataLines[self.currentGPSDataIndex:]:
-            if self.exiting==True:
-                break            
-            gpsData.time=time.time()
-            self.updateGPSDataDisplay(gpsData)
-            self.msleep(self.timeout)
-            self.currentGPSDataIndex=self.currentGPSDataIndex+1
-
-class OSMUpdateLocationWorker(QThread):
-    def __init__(self, parent): 
-        QThread.__init__(self, parent)
-        self.exiting = False
-        self.timeout=100
-    
-    def setWidget(self, osmWidget):
-        self.osmWidget=osmWidget
-        
-    def setup(self):
-        print("starting OSMUpdateLocationWorker")
-        self.exiting = False
-        self.start()
- 
-    def stop(self):
-        print("stopping OSMUpdateLocationWorker")
-        self.exiting = True
-        self.wait()
- 
-    def updateLocation(self):
-        self.emit(SIGNAL("updateLocation()"))
-        
-    def run(self):
-        while True:
-            if self.exiting==True:
-                break
-            
-            self.updateLocation()
-            self.msleep(self.timeout)
-
-    
 class OSMRouteCalcWorker(QThread):
-    def __init__(self, parent): 
+    updateStatusSignal = pyqtSignal('QString')
+    startProgressSignal = pyqtSignal()
+    stopProgressSignal = pyqtSignal()
+    routeCalculationDoneSignal = pyqtSignal()
+
+    def __init__(self, parent, route): 
         QThread.__init__(self, parent)
-        self.exiting = False
-        
-#    def __del__(self):
-#        self.exiting = True
-#        self.wait()
-        
-    def setup(self, route):
-        self.updateStatusLabel("OSM starting route calculation thread")
         self.exiting = False
         self.route=route
-        self.startProgress()
-        self.start()
- 
-    def updateRouteCalcThreadState(self, state):
-        self.emit(SIGNAL("updateRouteCalcThreadState(QString)"), state)
     
     def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
+        self.updateStatusSignal.emit(text)
     
     def routeCalculationDone(self):
-        self.emit(SIGNAL("routeCalculationDone()"))
+        self.routeCalculationDoneSignal.emit()
         
     def startProgress(self):
-        self.emit(SIGNAL("startProgress()"))
+        self.startProgressSignal.emit()
 
     def stopProgress(self):
-        self.emit(SIGNAL("stopProgress()"))
-
-#    def stop(self):
-#        self.exiting = True
-#        self.wait()
+        self.stopProgressSignal.emit()
  
     def run(self):
-        self.updateRouteCalcThreadState(runState)
         self.startProgress()
         while not self.exiting and True:
             self.route.calcRoute(osmParserData)
             self.exiting=True
 
-        self.updateRouteCalcThreadState(stoppedState)
         self.updateStatusLabel("OSM stopped route calculation thread")
         self.routeCalculationDone()
         self.stopProgress()
-        
+
 class QtOSMWidget(QWidget):
+    updateStatusSignal = pyqtSignal('QString')
+    startProgressSignal = pyqtSignal()
+    stopProgressSignal = pyqtSignal()
     def __init__(self, parent):
         QWidget.__init__(self, parent)
         self.osmWidget=parent
@@ -439,30 +215,11 @@ class QtOSMWidget(QWidget):
         self.map_zoom=9
         self.center_rlat = 0.0
         self.center_rlon=0.0
-        self.gps_rlat=0.0
-        self.gps_rlon=0.0
         
         self.lastHeadingLat=0.0
         self.lastHeadingLon=0.0
         
         self.osmutils=OSMUtils()
-        self.tileCache=OrderedDict()
-        self.withMapnik=False
-        self.withDownload=True
-        self.autocenterGPS=False
-        self.forceDownload=False
-        
-#        self.osmControlImage=QPixmap(os.path.join(env.getImageRoot(), "osm-control.png"))
-#        self.controlWidgetRect=QRect(0, 0, self.osmControlImage.width(), self.osmControlImage.height())
-#        self.zoomRect=QRect(0, 105, 95, 45)
-#        self.minusRect=QRect(7, 110, 35, 35)
-#        self.plusRect=QRect(53, 110, 35, 35)
-        
-#        self.moveRect=QRect(0, 0, 95, 95)
-#        self.leftRect=QRect(5, 35, 25, 25)
-#        self.rightRect=QRect(65, 35, 25, 25)
-#        self.upRect=QRect(35, 5, 25, 25)
-#        self.downRect=QRect(35, 65, 25, 25)
         
         self.setContextMenuPolicy(Qt.DefaultContextMenu)
         self.moving=False
@@ -472,7 +229,6 @@ class QtOSMWidget(QWidget):
         
         self.tileHome=defaultTileHome
         self.tileServer=defaultTileServer
-        self.mapnikConfig=defaultMapnikConfig
         self.tileStartZoom=defaultTileStartZoom
         self.startZoom3DView=defaultStart3DZoom
         
@@ -508,8 +264,6 @@ class QtOSMWidget(QWidget):
         
         self.lastCenterX=None
         self.lastCenterY=None
-        self.withMapRotation=True
-        self.drivingMode=False
         self.withShowPOI=False
         self.withShowAreas=False
         self.showSky=False
@@ -521,8 +275,6 @@ class QtOSMWidget(QWidget):
         self.satelitesInUse=0
         self.currentDisplayBBox=None
         self.show3D=True
-        self.nightMode=False
-        self.gpsBreadcrumbs=True
         
 #        self.setAttribute( Qt.WA_OpaquePaintEvent, True )
 #        self.setAttribute( Qt.WA_NoSystemBackground, True )
@@ -545,10 +297,6 @@ class QtOSMWidget(QWidget):
         self.sidebarVisible=True
 
         self.gisUtils=GISUtils()
-        self.locationBreadCrumbs=deque("", 10)
-        #self.gpsUpdateStartTime=None
-        self.routingStarted=False
-        self.routeRecalculated=False
     
     def getSidebarWidth(self):
         if self.sidebarVisible==True:
@@ -572,18 +320,12 @@ class QtOSMWidget(QWidget):
     
     def setRouteList(self, routeList):
         self.routeList=routeList
-        
+
     def getTileHomeFullPath(self):
         if os.path.isabs(self.tileHome):
             return self.tileHome
         else:
             return os.path.join(getTileRoot(), self.tileHome)
-    
-    def getMapnikConfigFullPath(self):
-        if os.path.isabs(self.mapnikConfig):
-            return self.mapnikConfig
-        else:
-            return os.path.join(getTileRoot(), self.mapnikConfig)
         
     def getTileFullPath(self, zoom, x, y):
         home=self.getTileHomeFullPath()
@@ -603,7 +345,7 @@ class QtOSMWidget(QWidget):
     def checkTileDirForZoom(self):
         tileDirForZoom=os.path.join(self.getTileHomeFullPath(), "%s"%self.map_zoom)
         if not os.path.isdir(tileDirForZoom):
-            os.mkdir(tileDirForZoom)
+            os.makedirs(tileDirForZoom)
         
     def osm_map_set_zoom (self, zoom):
         self.map_zoom=zoom
@@ -624,10 +366,7 @@ class QtOSMWidget(QWidget):
     
     def calcMapZeroPos(self):
         map_x=int(self.center_x-self.width()/2)
-        if self.withMapRotation==True:
-            map_y=int(self.center_y-self.height()/2)-self.getYOffsetForRotationMap()
-        else:
-            map_y=int(self.center_y-self.height()/2)
+        map_y=int(self.center_y-self.height()/2)
         return (map_x, map_y)
     
     def getMapZeroPos(self):
@@ -635,29 +374,21 @@ class QtOSMWidget(QWidget):
     
     def getMapPosition(self):
         return (self.osmutils.rad2deg(self.center_rlat), self.osmutils.rad2deg(self.center_rlon))
-
-    def getGPSPosition(self):
-        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
-            return (self.osmutils.rad2deg(self.gps_rlat), self.osmutils.rad2deg(self.gps_rlon))
-        return None
-    
-    def printTilesGeometry(self):
-        print("%d %d %d %f %f %s %f %f"%(self.center_x, self.center_y, self.map_zoom, self.osmutils.rad2deg(self.center_rlon), self.osmutils.rad2deg(self.center_rlat), self.getMapZeroPos(), self.osmutils.rad2deg(self.gps_rlon), self.osmutils.rad2deg(self.gps_rlat)))
-    
+        
     def showTiles (self):     
         width=self.width()
         height=self.width()
         map_x, map_y=self.getMapZeroPos()
                     
-        offset_x = - map_x % TILESIZE;
+        offset_x = - map_x % TILESIZE
         if offset_x==0:
             offset_x= - TILESIZE
             
-        offset_y = - map_y % TILESIZE;
+        offset_y = - map_y % TILESIZE
         if offset_y==0:
             offset_y= - TILESIZE
 
-#        print("%d %d %d %d"%(map_x, map_y, offset_x, offset_y))
+        print("%d %d %d %d"%(map_x, map_y, offset_x, offset_y))
         
         if offset_x >= 0:
             offset_x -= TILESIZE*4
@@ -706,25 +437,6 @@ class QtOSMWidget(QWidget):
             return pixbuf
 
         return None
-
-    def getCachedTile(self, fileName):
-        if fileName in self.tileCache:
-            return self.tileCache[fileName]
-        return None
-    
-    def addTileToCache(self, pixbuf, fileName):
-        # limit size of tile cache
-        if len(self.tileCache.keys())>MAX_TILE_CACHE:
-            print("cleanup image cache %d"%(len(self.tileCache.keys())))
-            i=0
-            for key in self.tileCache.keys():
-                del self.tileCache[key]
-                i=i+1
-                if i==TILE_CLEANUP_SIZE:
-                    break
-            print("cleanup image cache done %d"%(len(self.tileCache.keys())))
-
-        self.tileCache[fileName]=pixbuf
         
     def drawPixmap(self, x, y, width, height, pixbuf):
         self.painter.drawPixmap(x, y, width, height, pixbuf)
@@ -770,25 +482,14 @@ class QtOSMWidget(QWidget):
             
     def getTile(self, zoom, x, y):
         fileName=self.getTileFullPath(zoom, x, y)
-        pixbuf=self.getCachedTile(fileName)
-        if pixbuf!=None:
-            return pixbuf
-        
-        if os.path.exists(fileName) and self.forceDownload==False:
+
+        if os.path.exists(fileName):
             pixbuf=self.getTileFromFile(fileName)
-            self.addTileToCache(pixbuf, fileName)
             return pixbuf
         else:
-            if self.withMapnik==True and disableMappnik==False:
-                self.callMapnikForTile(zoom, x, y)
-                return self.getTilePlaceholder(zoom, x, y)
-            
-            elif self.withDownload==True:
-                self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.forceDownload, self.tileServer)
-                return self.getTilePlaceholder(zoom, x, y)     
-                    
+            self.osmWidget.downloadThread.addTile("/"+str(zoom)+"/"+str(x)+"/"+str(y)+".png", fileName, self.tileServer)
             return self.getTilePlaceholder(zoom, x, y)
-    
+
     def getTilePlaceholder(self, zoom, x, y):
         # try upscale lower zoom version
         pixbuf=self.getUpscaledTile(zoom, x, y)
@@ -796,46 +497,6 @@ class QtOSMWidget(QWidget):
             return pixbuf
         else:
             return self.getEmptyTile()
-        
-    def getGPSTransform(self, x, y):
-        transform=QTransform()
-        
-        transform.translate(x, y)      
-        
-        if self.show3DView()==True:
-            transform.rotate(self.XAxisRotation, Qt.XAxis)    
-        
-#        if self.isVirtualZoom==True: 
-#            transform.scale(self.virtualZoomValue, self.virtualZoomValue)    
-
-        if self.track!=None:
-            if self.drivingMode==False or self.withMapRotation==False:
-                transform.rotate(self.track)
-        
-        transform.translate(-(x), -(y))
-
-        return transform
-    
-    def displayGPSPosition(self):
-        if self.gps_rlon==0.0 and self.gps_rlat==0.0:
-            return
-         
-        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
-        
-        y,x=self.getTransformedPixelPosForLocationRad(self.gps_rlat, self.gps_rlon)
-        
-        xPos=int(x-pixmapWidth/2)
-        yPos=int(y-pixmapHeight/2)
-
-        transform=self.getGPSTransform(x, y)
-        self.painter.setTransform(transform)
-        
-        if self.track!=None:
-            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.style.getStylePixmap("gpsPointImage"))
-        else:
-            self.painter.drawPixmap(xPos, yPos, pixmapWidth, pixmapHeight, self.style.getStylePixmap("gpsPointImageStop"))
-                
-        self.painter.resetTransform()
  
     def displayMapPosition(self, mapPoint):
         pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
@@ -844,32 +505,13 @@ class QtOSMWidget(QWidget):
         if self.isPointVisibleTransformed(x, y):
             self.orderedNodeList.append((x, y, pixmapWidth, pixmapHeight, None, None, None, self.style.getStylePixmap("mapPointPixmap")))        
             self.displayRoutingPointRefPositions(mapPoint)
-        
-    def osm_autocenter_map(self, update=True):
-        if self.gps_rlat!=0.0 and self.gps_rlon!=0.0:
-            (pixel_y, pixel_x)=self.getPixelPosForLocationRad(self.gps_rlat, self.gps_rlon, False)
-
-            x = pixel_x - self.center_x
-            y = pixel_y - self.center_y
-            width = self.width()
-            height = self.height()
-            if x < (width/2 - width/8) or x > (width/2 + width/8) or y < (height/2 - height/8) or y > (height/2 + height/8):
-                self.center_x=pixel_x
-                self.center_y=pixel_y
-                self.center_coord_update();
-                
-            if update==True:
-                self.update()
-        
-    def osm_center_map_to_GPS(self):
-        self.osm_center_map_to(self.gps_rlat, self.gps_rlon)
             
     def osm_center_map_to(self, lat, lon):
         if lat!=0.0 and lon!=0.0:
             (pixel_y, pixel_x)=self.getPixelPosForLocationRad(lat, lon, False)
             self.center_x=pixel_x
             self.center_y=pixel_y
-            self.center_coord_update();
+            self.center_coord_update()
             self.update()
             
     def osm_map_scroll(self, dx, dy):
@@ -1011,16 +653,15 @@ class QtOSMWidget(QWidget):
         self.update()
     
     def zoom(self, zoom):
+        self.osmWidget.downloadThread.clearQueue()
         self.osm_map_set_zoom(zoom)
-        if self.drivingMode==True and self.autocenterGPS==True:
-            self.osm_autocenter_map(False)
         self.update()
        
     def resizeEvent(self, event):
         self.clearPolygonCache()
         self.osm_map_handle_resize()
     
-    def getTransform(self, withMapRotate, rotateAngle):
+    def getTransform(self):
         transform=QTransform()
         
         map_x, map_y=self.getMapZeroPos()
@@ -1032,41 +673,9 @@ class QtOSMWidget(QWidget):
         if self.isVirtualZoom==True: 
             transform.scale(self.virtualZoomValue, self.virtualZoomValue)    
         
-        if self.drivingMode==True:
-            if withMapRotate==True and rotateAngle!=None:
-                transform.rotate(rotateAngle)
-        
         transform.translate( -(self.center_x-map_x), -(self.center_y-map_y) )
 
         return transform
-    
-    def displayTestPoints(self):
-        pen=QPen(QColor(255, 0, 0))
-        pen.setWidth(20)
-        self.painter.setPen(pen)
-        self.painter.drawPoint(QPointF(self.width()/2, self.height()/2))
-        
-        map_x, map_y=self.getMapZeroPos()
-        pen=QPen(QColor(0, 255, 0))
-        pen.setWidth(15)
-        self.painter.setPen(pen)
-        self.painter.drawPoint(QPointF(self.center_x-map_x, self.center_y-map_y))
-        
-        (y, x)=self.getPixelPosForLocationRad(self.center_rlat, self.center_rlon, True)
-        pen=QPen(QColor(0, 0, 255))
-        pen.setWidth(10)
-        self.painter.setPen(pen)
-        self.painter.drawPoint(QPointF(x, y))
-        
-        pen=QPen(QColor(255, 0, 0))
-        pen.setWidth(20)
-        self.painter.setPen(pen)
-        
-        map_x, map_y=self.getMapZeroPos()
-        point=QPointF(self.width()/2, self.height()/2)   
-        invertedTransform=self.transformHeading.inverted()
-        point0=invertedTransform[0].map(point)
-        self.painter.drawPoint(point0)
     
     def getPrefetchBoxMargin(self):    
         if self.map_zoom in range(17, 19):
@@ -1084,13 +693,13 @@ class QtOSMWidget(QWidget):
             skyMargin=SKY_WIDTH
             
         invertedTransform=self.transformHeading.inverted()
-        point=QPoint(0, 0+skyMargin);
+        point=QPoint(0, 0+skyMargin)
         point0=invertedTransform[0].map(point)
-        point=QPoint(self.width(), 0+skyMargin);
+        point=QPoint(self.width(), 0+skyMargin)
         point1=invertedTransform[0].map(point)
-        point=QPoint(self.width(), self.height());
+        point=QPoint(self.width(), self.height())
         point2=invertedTransform[0].map(point)
-        point=QPoint(0, self.height());
+        point=QPoint(0, self.height())
         point3=invertedTransform[0].map(point)
         
         cont=[(point0.x(), point0.y()), (point1.x(), point1.y()), (point2.x(), point2.y()), (point3.x(), point3.y())]
@@ -1185,12 +794,8 @@ class QtOSMWidget(QWidget):
         self.setAntialiasing(True)
                 
         self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("mapBackgroundColor"))
-
-        rotateAngle=None
-        if self.track!=None:
-            rotateAngle=360-self.track
             
-        self.transformHeading=self.getTransform(self.withMapRotation, rotateAngle)
+        self.transformHeading=self.getTransform()
             
         self.painter.setTransform(self.transformHeading)
 
@@ -1279,40 +884,13 @@ class QtOSMWidget(QWidget):
 
         else:
             self.showTiles()
-               
+
         if self.currentRoute!=None and self.routeCalculationThread!=None and not self.routeCalculationThread.isRunning():
             self.displayRoute(self.currentRoute)
-            if self.drivingMode==True:
-                if self.currentEdgeIndexList!=None:
-                    self.displayRouteOverlay(self.currentTrackList, self.currentEdgeIndexList)
         
         if self.currentCoords!=None:
             self.style.getStylePen("edgePen").setWidth(self.style.getStreetPenWidthForZoom(self.map_zoom))
             self.displayCoords(self.currentCoords, self.style.getStylePen("edgePen"))
-                        
-        approachingRef, approachingRefPos=osmRouting.getApproachingRef()
-        nextCrossingVisible=self.displayApproachingRef(approachingRefPos)
-                
-        if WITH_CROSSING_DEBUG==True:
-#            if osmRouting.getCurrentSearchEdgeList()!=None:
-#                self.displayRoutingEdges(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
-
-            if osmRouting.getExpectedNextEdge()!=None and osmRouting.getCurrentSearchEdgeList()!=None:
-                self.displayExpectedEdge(osmRouting.getCurrentSearchEdgeList(), osmRouting.getExpectedNextEdge())
-    
-            if osmParserData.getCurrentSearchBBox()!=None:
-                self.displayBBox(osmParserData.getCurrentSearchBBox(), Qt.green)
-                
-#            if osmParserData.getRoutingWapper().getCurrentRoutingBBox()!=None:
-#                self.displayBBox(osmParserData.getRoutingWapper().getCurrentRoutingBBox(), Qt.red)
-
-#        if self.osmWidget.trackLogLines!=None:
-#            self.displayTrack(self.osmWidget.trackLogLines)
-                    
-#        self.displayTestPoints()
-                    
-        if self.gpsBreadcrumbs==True:
-            self.displayLocationBredCrumbs()
 
         if self.map_zoom>=self.style.SHOW_ONEWAY_START_ZOOM:
             if self.onewayWays!=None and len(self.onewayWays)!=0:
@@ -1349,50 +927,10 @@ class QtOSMWidget(QWidget):
         if self.map_zoom>=self.style.SHOW_REF_LABEL_WAYS_START_ZOOM:
             if self.tagLabelWays!=None and len(self.tagLabelWays)!=0:
                 tagStart=time.time()
-                if self.drivingMode==False:
-                    self.displayWayTags(self.tagLabelWays)
-                else:
-                    if nextCrossingVisible==True:
-                        edgeList=osmRouting.getCurrentSearchEdgeList()
-                        currentEdge=osmRouting.getCurrentEdge()
-                        if edgeList!=None and len(edgeList)>1 and currentEdge!=None:
-                            currentTagText=None
-                            _, _, _, _, wayId, _, _, _, _, _, _=currentEdge
-                            if wayId in self.tagLabelWays.keys():
-                                wayId, _, _, _, name, nameRef, _, _, _, _=self.tagLabelWays[wayId] 
-                                currentTagText=self.getWayTagText(name, nameRef)
-    
-                            newTagLabelWays=dict()
-                            for edge in edgeList:
-                                _, _, endRef, _, wayId, _, _, _, _, _, _=edge
-
-                                if edge==currentEdge:
-                                    continue
-                                
-                                reverseRefs=False
-                                if approachingRef==endRef:
-                                    reverseRefs=True
-                                    
-                                if wayId in self.tagLabelWays.keys():
-                                    wayId, _, _, _, name, nameRef, _, _, _, _=self.tagLabelWays[wayId] 
-    
-                                    tagText=self.getWayTagText(name, nameRef)
-                                    if tagText!=None:    
-                                        if currentTagText!=None and tagText==currentTagText:
-                                            continue
-                                        
-                                        newTagLabelWays[wayId]=(self.tagLabelWays[wayId], reverseRefs)
-                            
-                            self.displayWayTagsForRouting(newTagLabelWays)
-                
-                if WITH_TIMING_DEBUG==True:
-                    print("paintEvent displayWayTags:%f"%(time.time()-tagStart))
-        
-        self.displayGPSPosition()
+                self.displayWayTags(self.tagLabelWays)
         
         self.displaySidebar()
-        self.displayTopbar()
-            
+
 #        self.displayControlOverlay()
         self.displayControlOverlay2()
 
@@ -1405,9 +943,6 @@ class QtOSMWidget(QWidget):
         self.showTextInfo()
         self.showSpeedInfo()
         
-        if self.nightMode==True:
-            self.painter.fillRect(0, 0, self.width(), self.height(), self.style.getStyleColor("nightModeColor"))
-        
         self.painter.end()
 
         if WITH_TIMING_DEBUG==True:
@@ -1416,27 +951,6 @@ class QtOSMWidget(QWidget):
             print("displayedAdminLines: %d hiddenAdminLines: %d"%(self.numVisibleAdminLines, self.numHiddenAdminLiness))
         
             print("paintEvent:%f"%(time.time()-start))
-        
-    def displayLocationBredCrumbs(self):
-        for gpsData in self.locationBreadCrumbs:
-            lat=gpsData.lat
-            lon=gpsData.lon
-            predicted=gpsData.predicted
-            
-            pen=QPen()
-            pen.setWidth(3)
-            
-            y,x=self.getPixelPosForLocationDeg(lat, lon, True)
-            if self.isPointVisible(x, y):
-                if predicted==True:
-                    pen.setColor(Qt.black)
-                else:
-                    pen.setColor(Qt.green)
-                    
-                pen.setWidth(4.0)  
-                pen.setCapStyle(Qt.RoundCap)
-                self.painter.setPen(pen)
-                self.painter.drawPoint(x, y)
 
     def displaySidebar(self):
         diff =40-32
@@ -1456,9 +970,6 @@ class QtOSMWidget(QWidget):
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("routePixmap"))
             self.routesRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("centerGPSPixmap"))
-            self.centerGPSRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
-
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
             self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
@@ -1468,23 +979,6 @@ class QtOSMWidget(QWidget):
             self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
             self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, CONTROL_WIDTH+diff/2, 32, 32, self.style.getStylePixmap("showSidebarPixmap"))
             self.sidebarControlRect=textBackground
-            
-    def displayTopbar(self):
-        textBackground=QRect(CONTROL_WIDTH, 0, self.width()-self.getSidebarWidth()-2*CONTROL_WIDTH, 30)
-        self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
-        
-        font=self.style.getStyleFont("monoFontTopbar")
-        self.painter.setFont(font)
-        fm=self.painter.fontMetrics()
-        
-        lat=self.osmutils.rad2deg(self.gps_rlat)
-        lon=self.osmutils.rad2deg(self.gps_rlon)
-        track=self.track
-        if track==None:
-            track=0
-        
-        self.painter.setPen(self.style.getStylePen("textPen"))
-        self.painter.drawText(QPointF(CONTROL_WIDTH+20, fm.height()-2), "%.6f %.6f %3dkm/h %4dm %3d %2d"%(lat, lon, self.speed, self.altitude, track, self.satelitesInUse))
         
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -1924,9 +1418,6 @@ class QtOSMWidget(QWidget):
                     return True
                 elif self.routesRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Load route")
-                    return True
-                elif self.centerGPSRect.contains(mousePos):
-                    QToolTip.showText(event.globalPos(), "Center map to GPS")
                     return True
                 elif self.optionsRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Settings")
@@ -2381,11 +1872,7 @@ class QtOSMWidget(QWidget):
             y=self.height()-50-100+10
             
             speedBackground=QRect(0, self.height()-50-100, 100, 100)
-            # show if speed is larger then maxspeed + 10%
-            if self.speed!=None and self.drivingMode==True and self.speed>self.speedInfo*1.1:
-                self.painter.fillRect(speedBackground, self.style.getStyleColor("warningBackgroundColor"))
-            else:
-                self.painter.fillRect(speedBackground, self.style.getStyleColor("backgroundColor"))
+            self.painter.fillRect(speedBackground, self.style.getStyleColor("backgroundColor"))
 
             imagePath=os.path.join(getImageRoot(), "speedsigns", "%d.png"%(self.speedInfo))
             if os.path.exists(imagePath):
@@ -2833,80 +2320,11 @@ class QtOSMWidget(QWidget):
 
     def stepRight(self, step):
         self.stepInDirection(step, 0)
-                
-    def updateGPSLocation(self, gpsData, debug):
-        if gpsData==None:
-            return 
-                        
-        if gpsData.isValid():    
-            lat=gpsData.getLat()
-            lon=gpsData.getLon()
-            track=gpsData.getTrack()
-            self.speed=gpsData.getSpeed()
-            self.altitude=gpsData.getAltitude()
-            self.satelitesInUse=gpsData.getSatelitesInUse()
 
-            if debug==True:
-                self.track=track
-
-            if self.speed==0:
-                self.stop=True
-            else:
-                self.stop=False
-                # only set track when moving
-                self.track=track
-
-            firstGPSData=False
-            if self.gps_rlat==0.0 and self.gps_rlon==0.0:
-                firstGPSData=True
-                
-            gps_rlat_new=self.osmutils.deg2rad(lat)
-            gps_rlon_new=self.osmutils.deg2rad(lon)
-            
-            if gps_rlat_new!=self.gps_rlat or gps_rlon_new!=self.gps_rlon:  
-                
-                self.locationBreadCrumbs.append(gpsData)
-
-                self.gps_rlat=gps_rlat_new
-                self.gps_rlon=gps_rlon_new
-                
-                if gpsData.predicted==False:
-                    if debug==False:
-                        self.showTrackOnGPSPos(False) 
-
-                if self.drivingMode==True and self.autocenterGPS==True and (self.stop==False or firstGPSData==True):
-                    self.osm_autocenter_map()
-                else:
-                    self.update()  
-           
-        else:
-            self.gps_rlat=0.0
-            self.gps_rlon=0.0
-            self.stop=True
-            self.track=None
-            self.update()
-        
-    def cleanImageCache(self):
-        self.tileCache.clear()
-                        
-    def callMapnikForTile(self, zoom, x, y):   
-        if disableMappnik==False:
-            self.osmWidget.mapnikThread.addTile(zoom, x, y)
-
-    def setForceDownload(self, value, update):
-        self.forceDownload=value
-        self.cleanImageCache()
-        if self.forceDownload==True and update==True:
-            self.update()
-                    
-    def setAutocenterGPS(self, value):
-        self.autocenterGPS=value
-        if value==True:
-            self.osm_center_map_to_GPS()
-        
     def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
+        self.updateStatusSignal.emit(text)
 
+    @pyqtSlot()
     def updateMap(self):
         self.update()
         
@@ -2923,8 +2341,6 @@ class QtOSMWidget(QWidget):
                         self.osmWidget._showFavorites()
                     elif self.routesRect.contains(eventPos):
                         self.osmWidget._loadRoute()
-                    elif self.centerGPSRect.contains(eventPos):
-                        self.osmWidget._centerGPS()
                     elif self.optionsRect.contains(eventPos):
                         self.osmWidget._showSettings()
                     return
@@ -3046,8 +2462,6 @@ class QtOSMWidget(QWidget):
     def contextMenuEvent(self, event):
 #        print("%d-%d"%(self.mousePos[0], self.mousePos[1]))
         menu = QMenu(self)
-        forceDownloadAction = QAction("Force Download", self)
-        forceDownloadAction.setEnabled(self.withDownload==True and self.withMapnik==False)
         setStartPointAction = QAction("Set Start Point", self)
         setEndPointAction = QAction("Set End Point", self)
         setWayPointAction = QAction("Set Way Point", self)
@@ -3062,7 +2476,6 @@ class QtOSMWidget(QWidget):
         showPosAction=QAction("Show Position", self)
         zoomToCompleteRoute=QAction("Zoom to Route", self)
         recalcRouteAction=QAction("Calc Route from here", self)
-        recalcRouteGPSAction=QAction("Calc Route from GPS", self)
         
         routingPointSubMenu=QMenu(self)
         routingPointSubMenu.setTitle("Map Points")
@@ -3081,8 +2494,6 @@ class QtOSMWidget(QWidget):
         showAreaTags=QAction("Show Area Info for here", self)
         showWayTags=QAction("Show Way Info", self)
 
-        menu.addAction(forceDownloadAction)
-        menu.addSeparator()
         menu.addAction(setStartPointAction)
         menu.addAction(setEndPointAction)
         menu.addAction(setWayPointAction)
@@ -3099,7 +2510,6 @@ class QtOSMWidget(QWidget):
         menu.addAction(showRouteAction)
         menu.addAction(clearRouteAction)
         menu.addAction(recalcRouteAction)
-        menu.addAction(recalcRouteGPSAction)
         menu.addSeparator()
         menu.addAction(zoomToCompleteRoute)
         menu.addAction(googlePOIAction)
@@ -3129,14 +2539,10 @@ class QtOSMWidget(QWidget):
         
         recalcRouteDisabled=(self.routeCalculationThread!=None and self.routeCalculationThread.isRunning()) or self.endPoint==None
         recalcRouteAction.setDisabled(recalcRouteDisabled)
-        recalcRouteGPSAction.setDisabled(recalcRouteDisabled or self.gps_rlat==0.0 or self.gps_rlon==0.0)
 
         action = menu.exec_(self.mapToGlobal(event.pos()))
 #        print(action.text())
-        if action==forceDownloadAction:
-            if self.withDownload==True:
-                self.setForceDownload(True, True)
-        elif action==setStartPointAction:
+        if action==setStartPointAction:
             self.addRoutingPoint(0)
         elif action==setEndPointAction:
             self.addRoutingPoint(1)
@@ -3176,20 +2582,6 @@ class QtOSMWidget(QWidget):
                 currentPoint.name=defaultPointTag
                 self.startPoint=currentPoint
                     
-                self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
-            else:
-                self.showError("Error", "Route has invalid routing points")
-
-        elif action==recalcRouteGPSAction:
-            lat=self.osmutils.rad2deg(self.gps_rlat)
-            lon=self.osmutils.rad2deg(self.gps_rlon)
-            gpsPoint=OSMRoutingPoint("gps", OSMRoutingPoint.TYPE_START, (lat, lon))
-            gpsPoint.resolveFromPos(osmParserData)
-            if gpsPoint.isValid():
-                _, _, _, _, name, nameRef, _, _=osmParserData.getWayEntryForId(gpsPoint.getWayId())
-                defaultPointTag=osmParserData.getWayTagString(name, nameRef)
-                gpsPoint.name=defaultPointTag
-                self.startPoint=gpsPoint
                 self.showRouteForRoutingPoints(self.getCompleteRoutingPoints())
             else:
                 self.showError("Error", "Route has invalid routing points")
@@ -3254,11 +2646,6 @@ class QtOSMWidget(QWidget):
 #                    print(zoom)
                     if zoom!=self.map_zoom:
                         self.osm_map_set_zoom(zoom)
-                    
-                    if self.withMapRotation==True:
-                        y,_=self.getPixelPosForLocationDeg(centerLat, centerLon, False)
-                        y=y+self.getYOffsetForRotationMap()
-                        centerLat=self.osmutils.rad2deg(self.osmutils.pixel2lat(zoom, y))
 
                     self.osm_center_map_to_position(centerLat, centerLon)
                     break
@@ -3419,11 +2806,10 @@ class QtOSMWidget(QWidget):
                 self.showError("Error", "Failed to resolve way for way point")
         
     def showPointOnMap(self, point):
-        if self.drivingMode==False:
-            if self.map_zoom<15:
-                self.osm_map_set_zoom(15)
+        if self.map_zoom<15:
+            self.osm_map_set_zoom(15)
     
-            self.osm_center_map_to_position(point.getPos()[0], point.getPos()[1])       
+        self.osm_center_map_to_position(point.getPos()[0], point.getPos()[1])       
     
     def recalcRoute(self, lat, lon, edgeId):
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
@@ -3481,7 +2867,7 @@ class QtOSMWidget(QWidget):
             self.distanceToEnd, self.distanceToCrossing=osmParserData.calcRouteDistances(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge)
             self.remainingTime=osmParserData.calcRemainingDrivingTime(self.currentTrackList, lat, lon, self.currentRoute, distanceOnEdge, self.speed)
 #            print(self.remainingTime)
-        
+
     def showTrackOnPos(self, lat, lon, track, speed, update, fromMouse):
         # TODO:
         if self.routeCalculationThread!=None and self.routeCalculationThread.isRunning():
@@ -3501,77 +2887,6 @@ class QtOSMWidget(QWidget):
             
             self.currentCoords=coords
             self.selectedEdgeId=edgeId
-
-            if self.drivingMode==True and self.currentRoute!=None and self.currentEdgeList!=None and not self.currentRoute.isRouteFinished():                                                                       
-                if self.routingStarted==True:                    
-                    if edgeId!=self.currentEdgeList[0]:
-                        # it is possible that edges are "skipped"
-                        # so we need to synchronize here
-                        if edgeId in self.currentEdgeList:
-                            index=self.currentEdgeList.index(edgeId)
-                            self.recalcTrigger=0
-                            self.currentEdgeList=self.currentEdgeList[index:]
-                            self.currentTrackList=self.currentTrackList[index:]
-                            if len(self.currentEdgeList)>1:
-                                self.nextEdgeOnRoute=self.currentEdgeList[1]
-                            else:
-                                self.nextEdgeOnRoute=None
-                       
-                            self.calcNextCrossingInfo(lat, lon)      
-                            # initial            
-                            self.calcRouteDistances(lat, lon)
-    
-                        else:
-                            # we are not going to the expected next edge
-                            # but way 3 more locations before deciding
-                            # to recalculate
-                            if self.recalcTrigger==3:
-                                self.recalcTrigger=0
-                                self.recalcRoute(lat, lon, edgeId)
-                                return
-                            else:
-                                self.recalcTrigger=self.recalcTrigger+1
-                      
-                    if edgeId==self.currentEdgeList[0]:                                    
-                        # look if we are on the tracklist start                   
-                        onRoute=osmRouting.checkForPosOnTracklist(lat, lon, self.currentTrackList)                            
-                        if onRoute==False:
-                            if self.recalcTrigger==3:
-                                self.recalcTrigger=0
-                                self.recalcRoute(lat, lon, edgeId)
-                                return
-                            else:
-#                                self.recalcTrigger=self.recalcTrigger+1
-#                                self.routeInfo=(98, "Please turn", 98, 0)
-                                self.update()
-                                return
-                            
-                        self.recalcTrigger=0
-                            
-                        # initial
-                        if self.nextEdgeOnRoute==None:
-                            if len(self.currentEdgeList)>1:
-                                self.nextEdgeOnRoute=self.currentEdgeList[1]
-                            else:
-                                self.nextEdgeOnRoute=None
-                        
-                        # only distanceToEnd and crossingLength need to 
-                        # be recalculated every time
-                        # the rest only if the edge changes above                    
-                        self.calcRouteDistances(lat, lon)
-                              
-                        # initial
-                        if self.routeInfo[0]==None:
-                            self.calcNextCrossingInfo(lat, lon)     
-                            
-                        if self.currentTargetPointReached(lat, lon):
-                            self.currentRoute.targetPointReached(self.currentRoutePart)
-                            self.switchToNextRoutePart()     
-                            if self.currentRoute.isRouteFinished():
-                                self.clearAll()
-                                self.distanceToEnd=0.0
-                                self.routingStarted=False
-                                print("route finish")
                       
             if wayId!=self.lastWayId:
                 self.lastWayId=wayId
@@ -3585,61 +2900,6 @@ class QtOSMWidget(QWidget):
 #            print("showTrackOnPos:%f"%(stop-start))
         if update==True:
             self.update()
-            
-#    def calcTunnelData(self, edgeId, ref):
-#        
-#
-#        tunnelSpeed=self.speed        
-#        tunnelAltitude=self.altitude
-#        tunnelTrack=self.track
-#        tmpPointsFrac=tunnelSpeed/3.6
-#
-#        tunnelTrackLogLines=list()
-#        tunnelEdgeList=osmParserData.getEdgesOfTunnel(edgeId, ref)
-#        
-#        heading=None
-#        for tunnelEdgeData in tunnelEdgeList:
-#            if "edge" in tunnelEdgeData:
-#                edgeId=tunnelEdgeData["edge"]
-#            if "startRef"in tunnelEdgeData:
-#                startRef=tunnelEdgeData["startRef"]
-#            if "endRef"in tunnelEdgeData:
-#                endRef=tunnelEdgeData["endRef"]
-#            if "heading"in tunnelEdgeData:
-#                edgeHeading=tunnelEdgeData["heading"]
-#            
-#            # for now we cannot support crossings in tunnels so
-#            # choose the path where the heading stays the same
-#            if heading!=None and self.osmutils.headingDiffAbsolute(heading, edgeHeading)>10:
-#                continue
-#            
-#            (edgeId, _, endRef, _, _, _, _, _, _, _, coords)=osmParserData.getEdgeEntryForEdgeIdWithCoords(edgeId)
-#            if startRef==endRef:
-#                coords.reverse()
-#                
-#            offsetOnNextEdge=0
-#            lat1, lon1=coords[0]
-#            for lat2, lon2 in coords[1:]:
-#                distance=self.osmutils.distance(lat1, lon1, lat2, lon2)
-#                heading=self.osmutils.headingDegrees(lat1, lon1, lat2, lon2)
-#                
-#                if distance>tmpPointsFrac:
-#                    nodes=self.osmutils.createTemporaryPoints(lat1, lon1, lat2, lon2, frac=tmpPointsFrac, offsetStart=offsetOnNextEdge, offsetEnd=0.0, addStart=False, addEnd=False)
-#                    for tmpLat, tmpLon in nodes:
-#                        gpsData=GPSData(time.time(), tmpLat, tmpLon, heading, tunnelSpeed, tunnelAltitude)
-#                        tunnelTrackLogLines.append(gpsData)
-#                        
-#                    # calc the offset in the next = remaining from last
-#                    numberOfTmpPoints=int(distance/tmpPointsFrac)
-#                    remainingOnEdge=distance-(numberOfTmpPoints*tmpPointsFrac)
-#                    offsetOnNextEdge=int(tmpPointsFrac-remainingOnEdge)
-#
-#                else:
-#                    gpsData=GPSData(time.time(), lat2, lon2, tunnelTrack, tunnelSpeed, tunnelAltitude)
-#                    tunnelTrackLogLines.append(gpsData)
-#                    
-#                lat1=lat2
-#                lon1=lon2
                             
     def showRouteForRoutingPoints(self, routingPointList):              
         # calculate
@@ -3652,15 +2912,12 @@ class QtOSMWidget(QWidget):
             self.showError("Error", "Route has invalid routing points")
             return
 
-        self.routeCalculationThread=OSMRouteCalcWorker(self)
-        self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
-        self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
-        self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
-
-        self.routeRecalculated=False
-        if not self.routeCalculationThread.isRunning():
-            self.routeCalculationThread.setup(self.currentRoute)
+        self.routeCalculationThread=OSMRouteCalcWorker(self, self.currentRoute)
+        self.routeCalculationThread.routeCalculationDoneSignal.connect(self.routeCalculationDone)
+        self.routeCalculationThread.updateStatusSignal.connect(self.updateStatusLabel)
+        self.routeCalculationThread.startProgressSignal.connect(self.startProgress)
+        self.routeCalculationThread.stopProgressSignal.connect(self.stopProgress)
+        self.routeCalculationThread.start()
 
     def recalcRouteFromPoint(self, currentPoint):
         # make sure all are resolved because we cannot access
@@ -3671,21 +2928,18 @@ class QtOSMWidget(QWidget):
             self.showError("Error", "Route has invalid routing points")
             return
         
-        self.routeCalculationThread=OSMRouteCalcWorker(self)
-        self.connect(self.routeCalculationThread, SIGNAL("routeCalculationDone()"), self.routeCalculationDone)
-        self.connect(self.routeCalculationThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.routeCalculationThread, SIGNAL("startProgress()"), self.startProgress)
-        self.connect(self.routeCalculationThread, SIGNAL("stopProgress()"), self.stopProgress)
-
-        self.routeRecalculated=True
-        if not self.routeCalculationThread.isRunning():
-            self.routeCalculationThread.setup(self.currentRoute)
+        self.routeCalculationThread=OSMRouteCalcWorker(self, self.currentRoute)
+        self.routeCalculationThread.routeCalculationDoneSignal.connect(self.routeCalculationDone)
+        self.routeCalculationThread.updateStatusSignal.connect(self.updateStatusLabel)
+        self.routeCalculationThread.startProgressSignal.connect(self.startProgress)
+        self.routeCalculationThread.stopProgressSignal.connect(self.stopProgress)
+        self.routeCalculationThread.start()
 
     def startProgress(self):
-        self.emit(SIGNAL("startProgress()"))
+        self.startProgressSignal.emit()
 
     def stopProgress(self):
-        self.emit(SIGNAL("stopProgress()"))
+        self.stopProgressSignal.emit()
 
     def routeCalculationDone(self):
         if self.currentRoute.getRouteInfo()!=None:
@@ -3708,7 +2962,6 @@ class QtOSMWidget(QWidget):
             # display inital distances
             # simply use start point as ref
             self.calcRouteDistances(self.startPoint.getPos()[0], self.startPoint.getPos()[1], True)
-            self.routingStarted=True
             self.update()       
 
     def switchToNextRoutePart(self):
@@ -3743,7 +2996,6 @@ class QtOSMWidget(QWidget):
         self.currentStartPoint=None
         self.currentTargetPoint=None
         self.currentRoutePart=0
-        self.routingStarted=False
     
     def getTrackListFromEdge(self, indexEnd, edgeList, trackList):
         if indexEnd < len(edgeList):
@@ -3785,22 +3037,15 @@ class QtOSMWidget(QWidget):
                 print("%s %s %d"%(name, nameRef, sumLength))
                 if crossingInfo!=None:
                     print("%s %s"%(crossingInfo, self.osmutils.directionName(direction)))
-    
+
                 if indexEnd==len(edgeList):
                     break
-            
+                    
         print("end:")
 
     def showTrackOnMousePos(self, x, y):
-        if self.drivingMode==False:
-            (lat, lon)=self.getPosition(x, y)
-            self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)
-
-    def showTrackOnGPSPos(self, update):
-        if self.drivingMode==True:
-            gpsPosition=self.getGPSPosition()
-            if gpsPosition!=None:
-                self.showTrackOnPos(gpsPosition[0], gpsPosition[1], self.track, self.speed, update, False)            
+        (lat, lon)=self.getPosition(x, y)
+        self.showTrackOnPos(lat, lon, self.track, self.speed, True, True)       
     
     def getPosition(self, x, y):
         point=QPointF(x, y)        
@@ -3919,217 +3164,26 @@ class OSMWidget(QWidget):
         QWidget.__init__(self, parent)
         self.startLat=47.8
         self.startLon=13.0
-        self.lastDownloadState=stoppedState
-        self.lastMapnikState=stoppedState
         self.favoriteList=list()
         self.mapWidgetQt=QtOSMWidget(self)
-        
-#        self.style=OSMStyle()
-#        self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
-#        self.addressIcon=QIcon(self.style.getStylePixmap("addressesPixmap"))
-#        self.routesIccon=QIcon(self.style.getStylePixmap("routePixmap"))
-#        self.centerGPSIcon=QIcon(self.style.getStylePixmap("centerGPSPixmap"))
-#        self.settingsIcon=QIcon(self.style.getStylePixmap("settingsPixmap"))
-#        self.gpsIcon=QIcon(self.style.getStylePixmap("gpsDataPixmap"))
 
         self.incLat=0.0
         self.incLon=0.0
         self.step=0
         self.trackLogLines=None
         self.trackLogLine=None
-        self.gpsSignalInvalid=False
-        self.test=test
-        self.lastGPSData=None
         self.osmUtils=OSMUtils()
-        self.gpsPrediction=True
         osmParserData.openAllDB()
         
     def addToWidget(self, vbox):     
         hbox1=QHBoxLayout()
         hbox1.addWidget(self.mapWidgetQt)
-        
-#        buttons=QVBoxLayout()        
-#        buttons.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-#        buttons.setSpacing(0)
-
-#        iconSize=QSize(48, 48)
-#        self.adressButton=QPushButton("", self)
-#        self.adressButton.setIcon(self.addressIcon)
-#        self.adressButton.setToolTip("Addresses")
-#        self.adressButton.clicked.connect(self._showSearchMenu)
-#        self.adressButton.setIconSize(iconSize)        
-#        buttons.addWidget(self.adressButton)
-#                
-#        self.favoritesButton=QPushButton("", self)
-#        self.favoritesButton.setIcon(self.favoriteIcon)
-#        self.favoritesButton.setToolTip("Favorites")
-#        self.favoritesButton.clicked.connect(self._showFavorites)
-#        self.favoritesButton.setIconSize(iconSize)        
-#        buttons.addWidget(self.favoritesButton)
-#        
-#        self.routesButton=QPushButton("", self)
-#        self.routesButton.setIcon(self.routesIccon)
-#        self.routesButton.setToolTip("Routes")
-#        self.routesButton.clicked.connect(self._loadRoute)
-#        self.routesButton.setIconSize(iconSize)        
-#        buttons.addWidget(self.routesButton)
-#
-#        self.centerGPSButton=QPushButton("", self)
-#        self.centerGPSButton.setToolTip("Center map to GPS")
-#        self.centerGPSButton.setIcon(self.centerGPSIcon)
-#        self.centerGPSButton.setIconSize(iconSize)        
-#        self.centerGPSButton.clicked.connect(self._centerGPS)
-#        buttons.addWidget(self.centerGPSButton)
-#        
-#        self.showGPSDataButton=QPushButton("", self)
-#        self.showGPSDataButton.setToolTip("Show data from GPS")
-#        self.showGPSDataButton.setIcon(self.gpsIcon)
-#        self.showGPSDataButton.setIconSize(iconSize)        
-#        self.showGPSDataButton.clicked.connect(self._showGPSData)
-#        buttons.addWidget(self.showGPSDataButton)
-#
-#        self.optionsButton=QPushButton("", self)
-#        self.optionsButton.setToolTip("Settings")
-#        self.optionsButton.setIcon(self.settingsIcon)
-#        self.optionsButton.setIconSize(iconSize)        
-#        self.optionsButton.clicked.connect(self._showSettings)
-#        buttons.addWidget(self.optionsButton)  
-        
-#        font = QFont("Mono")
-#        font.setPointSize(14)
-#        font.setStyleHint(QFont.TypeWriter)
-#
-#        coords=QVBoxLayout()        
-#        coords.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-#        coords.setSpacing(0)
-#
-#        buttons.addLayout(coords)
-#
-#        self.gpsPosValueLat=QLabel("%.5f"%(0.0), self)
-#        self.gpsPosValueLat.setFont(font)
-#        self.gpsPosValueLat.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.gpsPosValueLat)
-#
-#        self.gpsPosValueLon=QLabel("%.5f"%(0.0), self)
-#        self.gpsPosValueLon.setFont(font)
-#        self.gpsPosValueLon.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.gpsPosValueLon)
-#        
-#        self.gpsAltitudeValue=QLabel("%d"%(0), self)
-#        self.gpsAltitudeValue.setFont(font)
-#        self.gpsAltitudeValue.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.gpsAltitudeValue)
-#
-#        self.gpsSpeedValue=QLabel("%d"%(0), self)
-#        self.gpsSpeedValue.setFont(font)
-#        self.gpsSpeedValue.setAlignment(Qt.AlignRight)
-#        coords.addWidget(self.gpsSpeedValue)
-#        
-#        hbox1.addLayout(buttons)
-
         vbox.addLayout(hbox1)
-        
-        if self.test==True:
-            self.addTestButtons(vbox)
-
-    def addTestButtons(self, vbox):
-        self.testButtons=QHBoxLayout()        
-
-        self.testGPSButton=QPushButton("Test GPS", self)
-        self.testGPSButton.clicked.connect(self._testGPS)
-        self.testButtons.addWidget(self.testGPSButton)
-        
-#        self.stepRouteButton=QPushButton("Step", self)
-#        self.stepRouteButton.clicked.connect(self._stepRoute)
-#        buttons.addWidget(self.stepRouteButton)
-#        
-#        self.resetStepRouteButton=QPushButton("Reset Step", self)
-#        self.resetStepRouteButton.clicked.connect(self._resetStepRoute)
-#        buttons.addWidget(self.resetStepRouteButton)
-
-        self.loadTrackLogButton=QPushButton("Load Tracklog", self)
-        self.loadTrackLogButton.clicked.connect(self._loadTrackLog)
-        self.testButtons.addWidget(self.loadTrackLogButton)
-        
-        self.stepTrackLogButton=QPushButton("Step", self)
-        self.stepTrackLogButton.clicked.connect(self._stepTrackLog)
-        self.testButtons.addWidget(self.stepTrackLogButton)
-
-        self.stepTrackLogBackButton=QPushButton("Step Back", self)
-        self.stepTrackLogBackButton.clicked.connect(self._stepTrackLogBack)
-        self.testButtons.addWidget(self.stepTrackLogBackButton)
-        
-        self.resetStepTrackLogButton=QPushButton("Reset Tracklog", self)
-        self.resetStepTrackLogButton.clicked.connect(self._resetTrackLogStep)
-        self.testButtons.addWidget(self.resetStepTrackLogButton)
-
-        self.replayTrackLogBackButton=QPushButton("Replay", self)
-        self.replayTrackLogBackButton.clicked.connect(self._replayLog)
-        self.testButtons.addWidget(self.replayTrackLogBackButton)
-        
-        self.pauseReplayTrackLogBackButton=QPushButton("Pause", self)
-        self.pauseReplayTrackLogBackButton.clicked.connect(self._pauseReplayLog)
-        self.testButtons.addWidget(self.pauseReplayTrackLogBackButton)
-
-        self.continueReplayTrackLogBackButton=QPushButton("Continue", self)
-        self.continueReplayTrackLogBackButton.clicked.connect(self._continueReplayLog)
-        self.testButtons.addWidget(self.continueReplayTrackLogBackButton)
-
-        self.stopReplayTrackLogButton=QPushButton("Stop", self)
-        self.stopReplayTrackLogButton.clicked.connect(self._stopReplayLog)
-        self.testButtons.addWidget(self.stopReplayTrackLogButton)
-
-        vbox.addLayout(self.testButtons)
-        
-    def disableTestButtons(self):
-        self.testGPSButton.setEnabled(False)
-        self.loadTrackLogButton.setEnabled(False)
-        self.stepTrackLogButton.setEnabled(False)
-        self.stepTrackLogBackButton.setEnabled(False)
-        self.resetStepTrackLogButton.setEnabled(False)
-        self.replayTrackLogBackButton.setEnabled(False)
-        self.pauseReplayTrackLogBackButton.setEnabled(False)
-        self.continueReplayTrackLogBackButton.setEnabled(False)
-        self.stopReplayTrackLogButton.setEnabled(False)
-
-    def enableTestButtons(self):
-        self.testGPSButton.setEnabled(True)
-        self.loadTrackLogButton.setEnabled(True)
-        self.stepTrackLogButton.setEnabled(True)
-        self.stepTrackLogBackButton.setEnabled(True)
-        self.resetStepTrackLogButton.setEnabled(True)
-        self.replayTrackLogBackButton.setEnabled(True)
-        self.pauseReplayTrackLogBackButton.setEnabled(True)
-        self.continueReplayTrackLogBackButton.setEnabled(True)
-        self.stopReplayTrackLogButton.setEnabled(True)
         
     def initWorkers(self):
         self.downloadThread=OSMDownloadTilesWorker(self, self.getTileServer())
-        self.downloadThread.setWidget(self.mapWidgetQt)
-        self.connect(self.downloadThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-        self.connect(self.downloadThread, SIGNAL("updateDownloadThreadState(QString)"), self.updateDownloadThreadState)
-
-        if disableMappnik==False:
-            self.mapnikThread=OSMMapnikTilesWorker(self, self.mapWidgetQt.getTileHomeFullPath(), self.mapWidgetQt.getMapnikConfigFullPath())
-            self.mapnikThread.setWidget(self.mapWidgetQt)
-            self.connect(self.mapnikThread, SIGNAL("updateMap()"), self.mapWidgetQt.updateMap)
-            self.connect(self.mapnikThread, SIGNAL("updateMapnikThreadState(QString)"), self.updateMapnikThreadState)
-        else:
-            self.mapnikThread=None
-            
-        self.trackLogReplayThread=OSMGPSSimulationWorker(self)
-        self.trackLogReplayThread.setWidget(self)
-        self.connect(self.trackLogReplayThread, SIGNAL("updateGPSDataDisplaySimulated(PyQt_PyObject)"), self.updateGPSDataDisplaySimulated)
-       
-        self.updateLocationThread=OSMUpdateLocationWorker(self)
-        self.updateLocationThread.setWidget(self)
-        self.connect(self.updateLocationThread, SIGNAL("updateLocation()"), self.createPredictedLocation)
-                        
-    def startProgress(self):
-        self.emit(SIGNAL("startProgress()"))
-
-    def stopProgress(self):
-        self.emit(SIGNAL("stopProgress()"))
+        self.downloadThread.updateMapSignal.connect(self.mapWidgetQt.updateMap)
+        self.downloadThread.updateStatusSignal.connect(self.mapWidgetQt.updateStatusLabel)
 
     @pyqtSlot()
     def _searchPOIName(self):
@@ -4141,11 +3195,10 @@ class OSMWidget(QWidget):
         
     def searchPOI(self, nearest):
         mapPosition=self.mapWidgetQt.getMapPosition()
-        gpsPosition=self.mapWidgetQt.getGPSPosition()
 
         # we always use map position for country pre selection
         defaultCountryId=osmParserData.getCountryOnPointWithGeom(mapPosition[0], mapPosition[1])
-        poiDialog=OSMPOISearchDialog(self, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearest)
+        poiDialog=OSMPOISearchDialog(self, osmParserData, mapPosition, defaultCountryId, nearest)
         result=poiDialog.exec()
         if result==QDialog.Accepted:
 #            poiEntry, pointType=poiDialog.getResult()
@@ -4163,9 +3216,6 @@ class OSMWidget(QWidget):
         msgBox.exec()
         
     def getOptionsConfig(self, optionsConfig):
-        optionsConfig["followGPS"]=self.getAutocenterGPSValue()
-        optionsConfig["withDownload"]=self.getWithDownloadValue()
-        optionsConfig["withMapRotation"]=self.getWithMapRotationValue()
         optionsConfig["withShow3D"]=self.getShow3DValue()
         optionsConfig["withShowAreas"]=self.getShowAreas()
         optionsConfig["withShowPOI"]=self.getShowPOI()
@@ -4175,27 +3225,14 @@ class OSMWidget(QWidget):
         optionsConfig["tileHome"]=self.getTileHome()
         optionsConfig["routingModes"]=self.getRoutingModes()
         optionsConfig["routingModeId"]=self.getRoutingModeId()
-        
-        if disableMappnik==False:
-            optionsConfig["mapnikConfig"]=self.getMapnikConfig()
-            optionsConfig["withMapnik"]=self.getWithMapnikValue()
-            
         optionsConfig["tileStartZoom"]=self.getTileStartZoom()
         optionsConfig["displayPOITypeList"]=list(self.getDisplayPOITypeList())
         optionsConfig["displayAreaTypeList"]=list(self.getDisplayAreaTypeList())
         optionsConfig["startZoom3D"]=self.getStartZoom3DView()
-        optionsConfig["withNmea"]=True
-        optionsConfig["withGpsd"]=False
-        optionsConfig["withGPSPrediction"]=self.getGPSPrediction()
-        optionsConfig["withGPSBreadcrumbs"]=self.getGPSBreadcrumbs()
         
-        gpsConfig.getOptionsConfig(optionsConfig)
         return optionsConfig
 
     def setFromOptionsConfig(self, optionsConfig):
-        self.setWithDownloadValue(optionsConfig["withDownload"])
-        self.setAutocenterGPSValue(optionsConfig["followGPS"])
-        self.setWithMapRotationValue(optionsConfig["withMapRotation"])
         self.setShow3DValue(optionsConfig["withShow3D"])
         self.setShowAreas(optionsConfig["withShowAreas"])
         self.setShowPOI(optionsConfig["withShowPOI"])
@@ -4203,23 +3240,11 @@ class OSMWidget(QWidget):
         self.setXAxisRotation(optionsConfig["XAxisRotation"])
         self.setTileServer(optionsConfig["tileServer"])
         self.setTileHome(optionsConfig["tileHome"])
-        
-        if disableMappnik==False:
-            oldMapnikValue=self.getWithMapnikValue()
-            self.setMapnikConfig(optionsConfig["mapnikConfig"])
-            self.setWithMapnikValue(optionsConfig["withMapnik"])
-            if self.getWithMapnikValue()!=oldMapnikValue:
-                self.mapWidgetQt.cleanImageCache()
-            
         self.setTileStartZoom(optionsConfig["tileStartZoom"])
         self.setDisplayPOITypeList(optionsConfig["displayPOITypeList"])
         self.setDisplayAreaTypeList(optionsConfig["displayAreaTypeList"])
         self.setStartZoom3DView(optionsConfig["startZoom3D"])
         self.setRoutingMode(optionsConfig["routingMode"])
-        self.setGPSPrediction(optionsConfig["withGPSPrediction"])
-        self.setGPSBreadcrumbs(optionsConfig["withGPSBreadcrumbs"])
-        
-        gpsConfig.setFromOptionsConfig(optionsConfig)
         
     @pyqtSlot()
     def _showSettings(self):
@@ -4236,85 +3261,9 @@ class OSMWidget(QWidget):
         trackLog.closeLogFile()
 
         if self.downloadThread.isRunning():
-            self.downloadThread.stop()        
-        
-        if disableMappnik==False:
-            if self.mapnikThread.isRunning():
-                self.mapnikThread.stop()
-
-        if self.trackLogReplayThread.isRunning():
-            self.trackLogReplayThread.stop()
-            
-        if self.updateLocationThread.isRunning():
-            self.updateLocationThread.stop()
+            self.downloadThread.stop()
  
         osmParserData.closeAllDB()
-
-    def handleMissingGPSSignal(self):
-        self.mapWidgetQt.clearAll()
-        self.update()
-    
-    # called from gps update thread
-    # only for different gps data
-    def updateGPSDisplay(self, gpsData, addToLog=True):
-        if gpsData!=None:   
-            if gpsData.isValid():
-                self.gpsSignalInvalid=False                                    
-                self.updateGPSDataDisplay(gpsData, False)
-            else:
-                self.gpsSignalInvalid=True                 
-                self.handleMissingGPSSignal()
-
-            if addToLog==True and self.test==False:
-                trackLog.addTrackLogLine(gpsData.toLogLine())
-
-    # called from tracklog worker
-    def updateGPSDataDisplaySimulated(self, gpsData):    
-        self.updateGPSDisplay(gpsData, False)    
-        
-    def createPredictedLocation(self):
-        # use predicition only in higher zooms
-        if self.mapWidgetQt.map_zoom<PREDICTION_USE_START_ZOOM:
-            return 
-        
-        if self.getDrivingMode()==False:
-            return
-        
-        if self.lastGPSData!=None:
-            timeStamp=time.time()
-            # update only after a max time of 500ms
-            # try to get it right in the middle between 2 "real" gps signals
-            if timeStamp-self.lastGPSData.time<0.5:
-                return
-            
-            # if no valid gps signal dont do any prediction
-            if self.gpsSignalInvalid==True: 
-                return 
-    
-            if self.lastGPSData.speed==0:
-                return
-
-            # dont create new prediction based on another prediction
-            if self.lastGPSData.predicted==True:
-                return
-            
-            distance=(self.lastGPSData.speed/3.6)*(timeStamp-self.lastGPSData.time)
-            # to short distance
-            if distance<3.0:
-                return
-
-            track=self.lastGPSData.track
-            lat=self.lastGPSData.lat
-            lon=self.lastGPSData.lon
-                
-            lat1, lon1=self.osmUtils.getPosInDistanceAndTrack(lat, lon, distance, track)
-            tmpGPSData=GPSData(timeStamp, lat1, lon1, track, self.lastGPSData.speed, self.lastGPSData.altitude, True, self.lastGPSData.satellitesInUse)
-#            print("predictedLocation %f %f %f"%(tmpGPSData.time, lat1, lon1))
-            self.updateGPSDataDisplay(tmpGPSData, False)
-
-    def updateGPSDataDisplay(self, gpsData, debug): 
-        self.lastGPSData=gpsData                   
-        self.mapWidgetQt.updateGPSLocation(gpsData, debug)
             
     def init(self, lat, lon, zoom):        
         self.mapWidgetQt.init()
@@ -4328,23 +3277,16 @@ class OSMWidget(QWidget):
         
     def initHome(self):                
         self.init(self.startLat, self.startLon, self.getZoomValue())
-    
-    @pyqtSlot()
-    def _centerGPS(self):
-        self.mapWidgetQt.osm_center_map_to_GPS()   
                         
-    def checkDownloadServer(self):
-        try:
-            socket.gethostbyname(self.getTileServer())
-            self.updateStatusLabel("OSM download server ok")
-            return True
-        except socket.error:
-            self.updateStatusLabel("OSM download server failed. Disabling")
-            self.setWithDownloadValue(False)
-            return False
-                    
-    def updateStatusLabel(self, text):
-        self.emit(SIGNAL("updateStatus(QString)"), text)
+    #def checkDownloadServer(self):
+    #    try:
+    #        socket.gethostbyname(self.getTileServer())
+    #        self.updateStatusLabel("OSM download server ok")
+    #        return True
+    #    except socket.error:
+    #       self.updateStatusLabel("OSM download server failed. Disabling")
+    #        self.setWithDownloadValue(False)
+    #        return False
         
     def getZoomValue(self):
         return self.mapWidgetQt.map_zoom
@@ -4352,74 +3294,12 @@ class OSMWidget(QWidget):
     def setZoomValue(self, value):
         self.mapWidgetQt.map_zoom=value
 
-    def getAutocenterGPSValue(self):
-        return self.mapWidgetQt.autocenterGPS
-
-    def setAutocenterGPSValue(self, value):
-        self.mapWidgetQt.autocenterGPS=value
-
     def getShow3DValue(self):
         return self.mapWidgetQt.show3D
     
     def setShow3DValue(self, value):
         self.mapWidgetQt.show3D=value
-             
-#    def getShowBackgroundTiles(self):
-#        return self.mapWidgetQt.showBackgroundTiles
-#         
-#    def setShowBackgroundTiles(self, value):
-#        self.mapWidgetQt.showBackgroundTiles=value
-         
-    def getWithDownloadValue(self):
-        return self.mapWidgetQt.withDownload
-
-    def getWithMapRotationValue(self):
-        return self.mapWidgetQt.withMapRotation
  
-    def getWithMapnikValue(self):
-        return self.mapWidgetQt.withMapnik
-
-    def setWithDownloadValue(self, value):
-        self.mapWidgetQt.withDownload=value
-        if value==True:
-            self.checkDownloadServer()
-            
-    def setWithMapRotationValue(self, value):
-        self.mapWidgetQt.withMapRotation=value
- 
-    def setWithMapnikValue(self, value):
-        if disableMappnik==False:
-            self.mapWidgetQt.withMapnik=value
-    
-    def setNightMode(self, value):
-        self.mapWidgetQt.nightMode=value
-        self.update()
-    
-    def getNightMode(self):
-        return self.mapWidgetQt.nightMode
-    
-    def setConnectGPS(self, value):
-        self.gpsConnected=value
-                        
-    def getConnectGPS(self):
-        return self.gpsConnected
-    
-    def setDrivingMode(self, value):
-        self.mapWidgetQt.drivingMode=value
-        if value==True:
-            self.mapWidgetQt.showTrackOnGPSPos(False)
-        
-            if self.getAutocenterGPSValue()==True:
-                self.mapWidgetQt.osm_autocenter_map()
-            else:
-                self.update()
-        else:
-            self.mapWidgetQt.clearAll()
-            self.update()
-        
-    def getDrivingMode(self):
-        return self.mapWidgetQt.drivingMode
-    
     def getShowAreas(self):
         return self.mapWidgetQt.withShowAreas
 
@@ -4455,13 +3335,6 @@ class OSMWidget(QWidget):
     
     def setTileServer(self, value):
         self.mapWidgetQt.tileServer=value
-
-    def getMapnikConfig(self):
-        return self.mapWidgetQt.mapnikConfig
-    
-    def setMapnikConfig(self, value):
-        if disableMappnik==False:
-            self.mapWidgetQt.mapnikConfig=value  
               
     def getTileStartZoom(self):
         return self.mapWidgetQt.tileStartZoom
@@ -4510,36 +3383,15 @@ class OSMWidget(QWidget):
         
     def setRoutingModeId(self, modeId):
         return osmParserData.setRoutingModeId(modeId)
-    
-    def getGPSPrediction(self):
-        return self.gpsPrediction
-    
-    def setGPSPrediction(self, value):
-        self.gpsPrediction=value
-
-    def getGPSBreadcrumbs(self):
-        return self.mapWidgetQt.gpsBreadcrumbs
-    
-    def setGPSBreadcrumbs(self, value):
-        self.mapWidgetQt.gpsBreadcrumbs=value
                 
     def loadConfig(self, config):
         section="display"
         self.setZoomValue(config.getSection(section).getint("zoom", 9))
-        self.setAutocenterGPSValue(config.getSection(section).getboolean("autocenterGPS", False))
-        self.setWithDownloadValue(config.getSection(section).getboolean("withDownload", True))
         self.setStartLatitude(config.getSection(section).getfloat("lat", self.startLat))
         self.setStartLongitude(config.getSection(section).getfloat("lon", self.startLon))
         self.setTileHome(config.getSection(section).get("tileHome", defaultTileHome))
         self.setTileServer(config.getSection(section).get("tileServer", defaultTileServer))
-        
-        if disableMappnik==False:
-            self.setWithMapnikValue(config.getSection(section).getboolean("withMapnik", False))
-            self.setMapnikConfig(config.getSection(section).get("mapnikConfig", defaultMapnikConfig))
-        
-        self.setWithMapRotationValue(config.getSection(section).getboolean("withMapRotation", False))
         self.setShow3DValue(config.getSection(section).getboolean("with3DView", False))
-#        self.setShowBackgroundTiles(config.getSection(section).getboolean("showBackgroundTiles", False))
         self.setShowAreas(config.getSection(section).getboolean("showAreas", False))
         self.setShowPOI(config.getSection(section).getboolean("showPOI", False))
         self.setShowSky(config.getSection(section).getboolean("showSky", False))
@@ -4548,8 +3400,6 @@ class OSMWidget(QWidget):
         self.setVirtualZoom(config.getSection(section).getboolean("virtualZoom", False))
         self.setStartZoom3DView(config.getSection(section).getint("startZoom3D", defaultStart3DZoom))
         self.setSidebarVisible(config.getSection(section).getboolean("sidebarVisible", True))
-        self.setGPSPrediction(config.getSection(section).getboolean("withGPSPrediction", True))
-        self.setGPSBreadcrumbs(config.getSection(section).getboolean("withGPSBreadcrumbs", True))
         
         section="poi"
         if config.hasSection(section):
@@ -4577,7 +3427,6 @@ class OSMWidget(QWidget):
                     self.favoriteList.append(favoritePoint)
 
         self.mapWidgetQt.loadConfig(config)
-        gpsConfig.loadConfig(config)
         loadDialogSettings(config)        
         
     def saveConfig(self, config):
@@ -4587,10 +3436,6 @@ class OSMWidget(QWidget):
         
 #        print("withDownload: %s"%(self.getWithDownloadValue()))
         config.getSection(section)["zoom"]=str(self.getZoomValue())
-        config.getSection(section)["autocenterGPS"]=str(self.getAutocenterGPSValue())
-        config.getSection(section)["withDownload"]=str(self.getWithDownloadValue())
-        config.getSection(section)["withMapnik"]=str(self.getWithMapnikValue())
-        config.getSection(section)["withMapRotation"]=str(self.getWithMapRotationValue())
         config.getSection(section)["with3DView"]=str(self.getShow3DValue())
 #        config.getSection(section)["showBackgroundTiles"]=str(self.getShowBackgroundTiles())
         config.getSection(section)["showAreas"]=str(self.getShowAreas())
@@ -4602,21 +3447,11 @@ class OSMWidget(QWidget):
         config.getSection(section)["startZoom3D"]=str(self.getStartZoom3DView())
         config.getSection(section)["sidebarVisible"]=str(self.getSidebarVisible())
         
-        if self.mapWidgetQt.gps_rlat!=0.0:
-            config.getSection(section)["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlat)
-        else:
-            config.getSection(section)["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlat)
-            
-        if self.mapWidgetQt.gps_rlon!=0.0:    
-            config.getSection(section)["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.gps_rlon)
-        else:
-            config.getSection(section)["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlon)
+        config.getSection(section)["lat"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlat)
+        config.getSection(section)["lon"]="%.6f"%self.mapWidgetQt.osmutils.rad2deg(self.mapWidgetQt.center_rlon)
             
         config.getSection(section)["tileHome"]=self.getTileHome()
         config.getSection(section)["tileServer"]=self.getTileServer()
-        config.getSection(section)["mapnikConfig"]=self.getMapnikConfig()
-        config.getSection(section)["withGPSPrediction"]=str(self.getGPSPrediction())
-        config.getSection(section)["withGPSBreadcrumbs"]=str(self.getGPSBreadcrumbs())
         
         section="poi"
         config.removeSection(section)
@@ -4646,17 +3481,8 @@ class OSMWidget(QWidget):
         
         self.mapWidgetQt.saveConfig(config)
         
-        gpsConfig.saveConfig(config)
         saveDialogSettings(config)
-        
-    def updateDownloadThreadState(self, state):
-        if state!=self.lastDownloadState:
-            self.lastDownloadState=state
 
-    def updateMapnikThreadState(self, state):
-        if state!=self.lastMapnikState:
-            self.lastMapnikState=state
-        
     def _showSearchMenu(self):
         menu = QMenu(self)
         searchAddressAction = QAction("Address", self)
@@ -4674,7 +3500,7 @@ class OSMWidget(QWidget):
             self._searchPOIName()
         elif action==searchPOINearestAction:
             self._searchPOINearest()
-        
+
     def setPoint(self, name, pointType, lat, lon):
         point=OSMRoutingPoint(name, pointType, (lat, lon))
         if pointType==OSMRoutingPoint.TYPE_START:
@@ -4750,154 +3576,14 @@ class OSMWidget(QWidget):
 
                 # zoom to route
                 self.mapWidgetQt.zoomToCompleteRoute(route.getRoutingPointList())
-                
-#    def paintEvent(self, event):
-#        print("OSMWidget:paintEvent")
-#        super(OSMWidget, self).paintEvent(event)
-        
-    @pyqtSlot()
-    def _testGPS(self):
-        if self.incLat==0.0:
-            self.incLat=self.startLat
-            self.incLon=self.startLon
-            self.incTrack=0
-            self.i=0
-#            self.osmWidget.mapWidgetQt.heading=0
-        else:
-            self.incLat=self.incLat+0.00001
-            self.incLon=self.incLon+0.00001
-#            self.i=self.i+1
-            self.incTrack+=15
-            if self.incTrack>360:
-                self.incTrack=0
-#            self.osmWidget.mapWidgetQt.heading=self.osmWidget.mapWidgetQt.heading+5
-        
-        gpsData=GPSData(time.time(), self.incLat, self.incLon, self.incTrack, 0, 42)
-        self.updateGPSDataDisplay(gpsData, True) 
-    
-#    @pyqtSlot()
-#    def _stepRoute(self):
-#        self.mapWidgetQt.printRouteInformationForStep(self.step, self.mapWidgetQt.currentRoute)
-#        self.step=self.step+1
-#        
-#    @pyqtSlot()
-#    def _resetStepRoute(self):
-#        self.step=0
-        
-    @pyqtSlot()
-    def _loadTrackLog(self):
-        fileName = QFileDialog.getOpenFileName(self, "Select Tracklog",
-                                                 os.path.join(getRoot(), "tracks"),
-                                                 "Tracklogs (*.log)")
-        if len(fileName)==0:
-            return
-
-        lines=list()
-        logFile=open(fileName, 'r')
-        for line in logFile:
-            lines.append(line)
-        logFile.close()
-        self.trackLogLines=list()
-        for line in lines:
-            if (len(line)==0 or line=="\n"):
-                continue
-
-            gpsData=GPSData()
-            gpsData.fromTrackLogLine(line)
-            self.trackLogLines.append(gpsData)
-        
-        self.trackLogLine=0
-        
-        # init
-        self.mapWidgetQt.clearAll()
-        self.update()        
-        
-        self._stepTrackLog()
-
-    @pyqtSlot()
-    def _stepTrackLog(self):
-        if self.trackLogLines!=None:
-            if self.trackLogLine<len(self.trackLogLines):
-                gpsData=self.trackLogLines[self.trackLogLine]
-                self.updateGPSDataDisplay(gpsData, False)
-                self.trackLogLine=self.trackLogLine+1
-                
-    @pyqtSlot()
-    def _stepTrackLogBack(self):
-        if self.trackLogLines!=None:
-            if self.trackLogLine>0:
-                self.trackLogLine=self.trackLogLine-1
-                gpsData=self.trackLogLines[self.trackLogLine]
-                self.updateGPSDataDisplay(gpsData, False)
-    
-    @pyqtSlot()
-    def _resetTrackLogStep(self):
-        if self.trackLogLine!=None:
-            self.trackLogLine=0
-    
-    @pyqtSlot()
-    def _replayLog(self):
-        if self.trackLogLines!=None:
-            if self.trackLogReplayThread.isRunning():
-                self._stopReplayLog()
-                
-            self.trackLogReplayThread.setup(self.trackLogLines)
-            if self.getGPSPrediction()==True:
-                self.updateLocationThread.setup()
-
-    @pyqtSlot()
-    def _stopReplayLog(self):
-        if self.trackLogReplayThread.isRunning():
-            self.trackLogReplayThread.stop()
-            
-        if self.updateLocationThread.isRunning():
-            self.updateLocationThread.stop()
-        
-    @pyqtSlot()
-    def _pauseReplayLog(self):
-        if self.trackLogReplayThread.isRunning():
-            self.trackLogReplayThread.pauseReplay()
-
-        if self.updateLocationThread.isRunning():
-            self.updateLocationThread.stop()
-
-    @pyqtSlot()
-    def _continueReplayLog(self):
-        if not self.trackLogReplayThread.isRunning():
-            self.trackLogReplayThread.continueReplay()
-            if self.getGPSPrediction()==True:
-                self.updateLocationThread.setup()
-
-    def updateGPSThreadState(self, state):
-        if state==gpsRunState:            
-            if self.test==True:
-                self.disableTestButtons()
-                
-            if self.getGPSPrediction()==True and not self.updateLocationThread.isRunning():
-                self.updateLocationThread.setup()
-                
-        if state==gpsStoppedState:            
-            if self.test==True:
-                self.enableTestButtons()
-                
-            if self.updateLocationThread.isRunning():
-                self.updateLocationThread.stop()
-
 class OSMWindow(QMainWindow):
-    def __init__(self, parent, test):
+    def __init__(self, parent):
         QMainWindow.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
         self.config=Config("osmmapviewer.cfg")
-        self.updateGPSThread=None
-        self.test=test
         self.initUI()
-        self.gpsConnected=False
-
-#    def paintEvent(self, event):
-#        print("OSMWindow:paintEvent")
-#        super(OSMWindow, self).paintEvent(event)
 
     def stopProgress(self):
         print("stopProgress")
@@ -4916,7 +3602,7 @@ class OSMWindow(QMainWindow):
         self.statusbar.addPermanentWidget(self.progress)
 
         
-        self.osmWidget=OSMWidget(self, self.test)
+        self.osmWidget=OSMWidget(self)
         self.osmWidget.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
         self.setCentralWidget(self.osmWidget)
 
@@ -4933,83 +3619,22 @@ class OSMWindow(QMainWindow):
 
         self.osmWidget.initHome()
 
-        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.osmWidget, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        self.connect(self.osmWidget.downloadThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        if disableMappnik==False:
-            self.connect(self.osmWidget.mapnikThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-        
-        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("startProgress()"), self.startProgress)
-        self.connect(self.osmWidget.mapWidgetQt, SIGNAL("stopProgress()"), self.stopProgress)
-        
-        self.nightModeButton=QCheckBox("Night Mode", self)
-        self.nightModeButton.clicked.connect(self._nightMode)        
-        self.statusbar.addPermanentWidget(self.nightModeButton)
-
-        self.drivingModeButton=QCheckBox("Driving Mode", self)
-        self.drivingModeButton.clicked.connect(self._drivingMode)        
-        self.statusbar.addPermanentWidget(self.drivingModeButton)
-        
-        self.connectGPSButton=QCheckBox("Connect GPS", self)
-        self.connectGPSButton.clicked.connect(self._connectGPS)        
-        self.statusbar.addPermanentWidget(self.connectGPSButton)
-
-        self.setGeometry(0, 0, 900, 500)
+        self.osmWidget.mapWidgetQt.startProgressSignal.connect(self.startProgress)
+        self.osmWidget.mapWidgetQt.stopProgressSignal.connect(self.stopProgress)
+        self.osmWidget.mapWidgetQt.updateStatusSignal.connect(self.updateStatusLabel)
+    
+        self.setGeometry(0, 0, 1280, 1040)
         self.setWindowTitle('OSM')
-        
-        self.updateGPSThread=getGPSUpdateThread(self)
-        if self.updateGPSThread!=None:
-            self.connect(self.updateGPSThread, SIGNAL("updateStatus(QString)"), self.updateStatusLabel)
-            self.connect(self.updateGPSThread, SIGNAL("updateGPSThreadState(QString)"), self.updateGPSThreadState)
-            self.connect(self.updateGPSThread, SIGNAL("connectGPSFailed()"), self.connectGPSFailed)
-            self.connect(self.updateGPSThread, SIGNAL("updateGPSDisplay(PyQt_PyObject)"), self.osmWidget.updateGPSDisplay)
 
         self.show()
-        
-    @pyqtSlot()
-    def _connectGPS(self):
-        value=self.connectGPSButton.isChecked()
-        if value==True:
-            if not self.updateGPSThread.isRunning():
-                self.updateGPSThread.setup(True)
-            
-        else:
-            self.disconnectGPS()
-
-        self.osmWidget.setConnectGPS(value)
-        
-    @pyqtSlot()
-    def _nightMode(self):
-        value=self.nightModeButton.isChecked()
-        self.osmWidget.setNightMode(value)
-
-    @pyqtSlot()
-    def _drivingMode(self):
-        value=self.drivingModeButton.isChecked()
-        self.osmWidget.setDrivingMode(value)
-        
-    def disconnectGPS(self):
-        if self.updateGPSThread.isRunning():
-            self.updateGPSThread.stop()
-                    
-    def updateGPSThreadState(self, state):
-        self.osmWidget.updateGPSThreadState(state)
-    
-    def connectGPSFailed(self):
-        self.connectGPSButton.setChecked(False)
-        self.showError("GPS Error", "Error connecing to GPS")
                 
     def updateStatusLabel(self, text):
-        self.statusbar.showMessage(text)
         print(text)
+        self.statusbar.showMessage(text)
 
     @pyqtSlot()
     def _cleanup(self):
-        if self.updateGPSThread.isRunning():
-            self.updateGPSThread.stop()
-        
         self.saveConfig()
-
         self.osmWidget._cleanup()
 
     def saveConfig(self):
@@ -5022,23 +3647,10 @@ class OSMWindow(QMainWindow):
         font.setPointSize(14)
         msgBox.setFont(font)
         msgBox.exec()
-
-#    def signal_handler(self, signal, frame):
-#        print("signal_handler %d"%(signal))
-#        if self.updateGPSThread.isRunning():
-#            self.updateGPSThread.disconnectGPS()
-#            self.updateGPSThread.reconnectGPS()
         
 def main(argv): 
-    test=False
-    try:
-        if argv[1]=="osmtest":
-            test=True
-    except IndexError:
-        test=False
-
     app = QApplication(sys.argv)
-    osmWindow = OSMWindow(None, test)
+    osmWindow = OSMWindow(None)
     app.aboutToQuit.connect(osmWindow._cleanup)
     #signal.signal(signal.SIGUSR1, osmWindow.signal_handler)
     signal.signal(signal.SIGINT, signal.SIG_DFL)

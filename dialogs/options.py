@@ -4,8 +4,8 @@ Created on Jun 1, 2012
 @author: maxl
 '''
 
-from PyQt4.QtCore import Qt, pyqtSlot
-from PyQt4.QtGui import QCommonStyle, QPushButton, QWidget, QVBoxLayout, QDialog, QTabWidget, QStyle, QHBoxLayout
+from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtWidgets import QCommonStyle, QPushButton, QWidget, QVBoxLayout, QDialog, QTabWidget, QStyle, QHBoxLayout
 from widgets.utilwidgets import MyTabWidget
 
 class OptionsDialogTab(QWidget):

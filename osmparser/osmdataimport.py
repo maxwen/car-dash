@@ -20,7 +20,7 @@ from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
 from osmparser.osmdatasqlite import OSMDataSQLite
 
-from Polygon import Polygon
+from Polygon.cPolygon import Polygon
 from osmparser.importlog import ImportLog
  
 importLog=ImportLog(True)
@@ -2349,14 +2349,13 @@ class OSMDataImport(OSMDataSQLite):
 #                      coords_callback=self.parse_coords)
             
             p.parse(osmFile)
-            self.log("deleted %d way areas from relations"%(self.deletedWayAreas))
 
     def getOSMFile(self, country):
         return self.osmList[country]["osmFile"]
     
     def initDB(self):
         self.log(self.getDataDir())
-                    
+        
         self.openCoordsDB()
         self.createCoordsDBTables()
 
@@ -2467,14 +2466,14 @@ class OSMDataImport(OSMDataSQLite):
             self.removeOrphanedWays()
             self.commitWayDB()
                         
-            self.log("vacuum way DB")
-            self.vacuumWayDB()
+            #self.log("vacuum way DB")
+            #self.vacuumWayDB()
             
-            self.log("vacuum edge DB")
-            self.vacuumEdgeDB()
+            #self.log("vacuum edge DB")
+            #self.vacuumEdgeDB()
             
-            self.log("vacuum area DB")
-            self.vacuumAreaDB()
+            #self.log("vacuum area DB")
+            #self.vacuumAreaDB()
             
         if createWayDB==True:
             self.log("create spatial index for way table")
@@ -2498,21 +2497,21 @@ class OSMDataImport(OSMDataSQLite):
 
         if createAreaDB==True:
             self.resolveAdminAreas()
-            self.log("vacuum admin DB")
-            self.vacuumAdminDB()
+            #self.log("vacuum admin DB")
+            #self.vacuumAdminDB()
             
         if createAdressDB==True:
             self.resolveAddresses(True)
             self.commitAdressDB()
-            self.log("vacuum address DB")
-            self.vacuumAddressDB()
+            #self.log("vacuum address DB")
+            #self.vacuumAddressDB()
 
         self.removeUnnededPOIs()        
         self.createPOIEntriesForWays()
         self.resolvePOIRefs()
         
-        self.log("vaccum node DB")
-        self.vacuumNodeDB()
+        #self.log("vaccum node DB")
+        #self.vacuumNodeDB()
 
         self.closeCoordsDB()
         self.closeAllDB()

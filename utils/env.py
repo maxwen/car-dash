@@ -6,7 +6,7 @@ Created on Mar 2, 2012
 
 import os
 
-DEFAULT_ROOT= os.path.join(os.environ['HOME'], "workspaces", "pydev", "car-dash")
+DEFAULT_ROOT= os.path.join(os.environ['HOME'], "workspaces", "car-dash")
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
 
 def getRoot():

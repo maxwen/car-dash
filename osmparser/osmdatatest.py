@@ -135,18 +135,6 @@ class OSMDataTest(OSMDataAccess):
         for x in allentries:
             print(x)                 
     
-    def createSimpleWayDBTables(self):
-        self.cursorWaySimple.execute("SELECT InitSpatialMetaData()")
-        self.cursorWaySimple.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
-        self.cursorWaySimple.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
-        self.cursorWaySimple.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
-
-    def createSpatialIndexForSimpleWayTables(self):
-        self.cursorWaySimple.execute('SELECT CreateSpatialIndex("wayTable", "geom")')
-
-    def addToSimpleWayTable(self, wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, lineString):
-        self.cursorWaySimple.execute("INSERT INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText('%s', 4326))"%(lineString), (wayId, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
-
     def wayFromDBWithCoordsStringAll(self, x):
         wayId=int(x[0])
         tags=self.decodeTags(x[1])
@@ -159,20 +147,6 @@ class OSMDataTest(OSMDataAccess):
         layer=int(x[9])
         coordsStr=x[10]            
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)   
-
-    def fillSimpleWayDB(self):
-        self.createSimpleWayDBTables()
-        
-        tolerance=self.osmutils.degToMeter(100.0)
-
-        self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, streetTypeId, layer, AsText(Simplify(geom, %f)) FROM wayTable'%(tolerance))
-        allWays=self.cursorWay.fetchall()
-        for x in allWays:
-            (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)=self.wayFromDBWithCoordsStringAll(x)
-            self.addToSimpleWayTable(wayId, tags, refs, streetInfo, name, nameRef, maxspeed, streetTypeId, layer, coordsStr)
-        
-        self.createSpatialIndexForSimpleWayTables()
-        self.closeSimpleWayDB()
         
 def main(argv):    
     p = OSMDataTest()
@@ -182,7 +156,6 @@ def main(argv):
     print(p.getLenOfEdgeTable())
     print(p.getLenOfWayTable())
 
-#    p.fillSimpleWayDB()
 #    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
 #    allentries=p.cursorArea.fetchall()
 #    for x in allentries:
@@ -296,5 +269,3 @@ def main(argv):
 if __name__ == "__main__":
 #    cProfile.run('main(sys.argv)')
     main(sys.argv)  
-    
-

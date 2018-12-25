@@ -87,7 +87,7 @@ class TrspWrapper():
         return self.lastBBoxCPolygon.covers(bboxCPolyon)
         
     def computeShortestPath(self, startEdge, endEdge, startPos, endPos, bbox):
-        lib_routing = cdll.LoadLibrary("librouting_trsp.so")
+        lib_routing = cdll.LoadLibrary("lib/librouting_trsp.so")
                 
         edgeList=list()
         cost=0

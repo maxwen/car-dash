@@ -1,0 +1,15 @@
+All build for python3
+
+Polygon3-3.0.7
+http://www.j-raedler.de/projects/polygon/
+
+PyQt-x11-gpl-4.11.3
+http://www.riverbankcomputing.com/software/pyqt/download
+
+python3 configure-ng.py --qmake /usr/bin/qmake-qt4 --sip /usr/bin/python3-sip
+
+These PyQt4 modules will be built: QtCore, QtGui, QtHelp, QtMultimedia,
+QtNetwork, QtDeclarative, QtScript, QtScriptTools, QtXml, QtOpenGL, QtSql,
+QtSvg, QtTest, QtXmlPatterns, QtDesigner, QtDBus.
+
+sip-4.19.12-9

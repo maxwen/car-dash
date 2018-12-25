@@ -11,14 +11,13 @@ import os
 import time
 
 
-from PyQt4.QtCore import QUrl, QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, SIGNAL, QRect, QThread
-from PyQt4.QtGui import QDesktopServices, QTreeView, QRadioButton, QTabWidget, QValidator, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QItemSelectionModel, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QIcon, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QPalette, QVBoxLayout, QPushButton, QWidget, QPixmap, QSizePolicy, QPainter, QPen, QHBoxLayout, QApplication
+from PyQt5.QtWidgets import QCommonStyle, QPushButton, QWidget, QVBoxLayout, QDialog, QTabWidget, QStyle, QHBoxLayout, QTreeView, QRadioButton, QTabWidget, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QHBoxLayout, QApplication, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QVBoxLayout, QPushButton, QWidget, QSizePolicy
+from PyQt5.QtCore import pyqtSignal, QUrl, QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, pyqtSignal, QRect, QThread, QItemSelectionModel
+from PyQt5.QtGui import QDesktopServices, QValidator, QIcon, QPalette, QPixmap, QPainter, QPen
 from osmparser.osmdataaccess import OSMDataAccess, Constants
 from osmstyle import OSMStyle
 from routing.osmrouting import OSMRoutingPoint, OSMRoute
-from mapnik.mapnikwrapper import disableMappnik
 from dialogs.options import OptionsDialogTab, OptionsDialog
-from utils.gpsutils import GPSTab
 from widgets.utilwidgets import SearchButton, WebButton
 
 settings=dict()
@@ -117,8 +116,9 @@ class OSMAdressTableModel(QAbstractTableModel):
     
    
     def update(self, streetList):
+        self.beginResetModel()
         self.streetList=streetList
-        self.reset()
+        self.endResetModel()
         
 class OSMAdressTableModelCity(QAbstractTableModel):
     def __init__(self, parent):
@@ -157,9 +157,10 @@ class OSMAdressTableModelCity(QAbstractTableModel):
     
    
     def update(self, cityList, cityModel):
+        self.beginResetModel()
         self.cityList=cityList
         self.cityModel=cityModel
-        self.reset()
+        self.endResetModel()
         
 class OSMCityModel():
     def __init__(self, osmParserData, countryId):
@@ -662,11 +663,10 @@ class OSMAdressDialog(OSMDialogWithSettings):
 
         top.addLayout(buttons)
         
-        self.connect(self.streetView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
-
-        self.connect(self.cityView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
+        selectionStreet = self.streetView.selectionModel()
+        selectionStreet .selectionChanged.connect(self._selectionChanged)
+        selectionCity = self.cityView.selectionModel()
+        selectionCity.selectionChanged.connect(self._cityChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Addresses')
@@ -945,8 +945,9 @@ class OSMFavoriteTableModel(QAbstractTableModel):
     
    
     def update(self, favoriteList):
+        self.beginResetModel()
         self.favoriteList=favoriteList
-        self.reset()
+        self.endResetModel()
         
 class OSMFavoritesDialog(QDialog):
     def __init__(self, parent, favoriteList):
@@ -1062,8 +1063,8 @@ class OSMFavoritesDialog(QDialog):
         
         top.addLayout(buttons)
 
-        self.connect(self.favoriteView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+        selection = self.favoriteView.selectionModel()
+        selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Favorites')
@@ -1240,8 +1241,8 @@ class OSMSaveFavoritesDialog(QDialog):
 
         top.addLayout(buttons)
 
-        self.connect(self.favoriteView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+        selection = self.favoriteView.selectionModel()
+        selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Save Favorite')
@@ -1308,8 +1309,9 @@ class OSMRouteListTableModel(QAbstractTableModel):
     
    
     def update(self, routeList):
+        self.beginResetModel()
         self.routeList=routeList
-        self.reset()
+        self.endResetModel()
 
 #--------------------------------------------------        
 class OSMRouteListDialog(QDialog):
@@ -1397,8 +1399,8 @@ class OSMRouteListDialog(QDialog):
 
         top.addLayout(buttons)
 
-        self.connect(self.routeView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+        selection = self.routeView.selectionModel()
+        selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Routes')
@@ -1538,8 +1540,8 @@ class OSMRouteSaveDialog(QDialog):
 
         top.addLayout(buttons)
 
-        self.connect(self.routeView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+        selection = self.routeView.selectionModel()
+        selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Save Route')
@@ -1626,8 +1628,9 @@ class OSMRouteTableModel(QAbstractTableModel):
     
    
     def update(self, routingPointList):
+        self.beginResetModel()
         self.routingPointList=routingPointList
-        self.reset()
+        self.endResetModel()
         
 class OSMRouteDialog(QDialog):
     def __init__(self, parent, routingPointList, routeList):
@@ -1728,8 +1731,8 @@ class OSMRouteDialog(QDialog):
         buttons.addWidget(self.okButton)
         top.addLayout(buttons)
                 
-        self.connect(self.routeView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._selectionChanged)
+        selection = self.routeView.selectionModel()
+        selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Routing Point')
@@ -2001,38 +2004,6 @@ class OSMRoutingTab(OptionsDialogTab):
                 routingModeButton.setChecked(True)
                 
             layout.addWidget(routingModeButton) 
-
-class OSMDrivingModeTab(OptionsDialogTab):
-    def __init__(self, optionsConfig, parent):
-        OptionsDialogTab.__init__(self, optionsConfig, parent)
-        self.setFromOptionsConfig(self.getOptionsConfig())
-        
-    def getTabName(self):
-        return "DrivingMode"
-
-    def setFromOptionsConfig(self, optionsConfig):
-        self.followGPS=optionsConfig["followGPS"]
-        self.withMapRotation=optionsConfig["withMapRotation"]
-        self.withGPSPrediction=optionsConfig["withGPSPrediction"]
-
-    def setToOptionsConfig(self):
-        self.optionsConfig["followGPS"]=self.followGPSButton.isChecked()
-        self.optionsConfig["withMapRotation"]=self.withMapRotationButton.isChecked()
-        self.optionsConfig["withGPSPrediction"]=self.withGPSPredictionButton.isChecked()
-        
-    def addToLayout(self, layout):
-        self.followGPSButton=QCheckBox("Follow GPS", self)
-        self.followGPSButton.setChecked(self.followGPS)       
-        layout.addWidget(self.followGPSButton)
-
-        self.withMapRotationButton=QCheckBox("Map Rotation", self)
-        self.withMapRotationButton.setChecked(self.withMapRotation)
-        layout.addWidget(self.withMapRotationButton)
-
-        self.withGPSPredictionButton=QCheckBox("GPS Prediction", self)
-        self.withGPSPredictionButton.setChecked(self.withGPSPrediction)
-        self.withGPSPredictionButton.setToolTip("Change take affect only after GPS reconnect or restart.")
-        layout.addWidget(self.withGPSPredictionButton)
         
 class OSMDisplayTab(OptionsDialogTab):
     def __init__(self, optionsConfig, parent):
@@ -2043,54 +2014,28 @@ class OSMDisplayTab(OptionsDialogTab):
         return "Display"
 
     def setFromOptionsConfig(self, optionsConfig):
-        self.withDownload=optionsConfig["withDownload"]
         self.withShowAreas=optionsConfig["withShowAreas"]
         self.withShowPOI=optionsConfig["withShowPOI"]
         self.tileServer=optionsConfig["tileServer"]
         self.tileHome=optionsConfig["tileHome"]
-
-        if disableMappnik==False:
-            self.mapnikConfig=optionsConfig["mapnikConfig"]
-            self.withMapnik=optionsConfig["withMapnik"]
-            
         self.tileStartZoom=optionsConfig["tileStartZoom"]
         self.displayPOITypeList=optionsConfig["displayPOITypeList"]
         self.displayAreaTypeList=optionsConfig["displayAreaTypeList"]
-        self.withGPSBreadcrumbs=optionsConfig["withGPSBreadcrumbs"]
 
     def setToOptionsConfig(self):
-        self.optionsConfig["withDownload"]=self.downloadTilesButton.isChecked()
         self.optionsConfig["withShowAreas"]=self.withShowAreasButton.isChecked()
         self.optionsConfig["withShowPOI"]=self.withShowPOIButton.isChecked()
         self.optionsConfig["tileServer"]=self.tileServerField.text()
         self.optionsConfig["tileHome"]=self.tileHomeField.text()
-
-        if disableMappnik==False:
-            self.optionsConfig["mapnikConfig"]=self.mapnikConfigField.text()
-            self.optionsConfig["withMapnik"]=self.withMapnikButton.isChecked()
-            
         self.optionsConfig["tileStartZoom"]=int(self.tileStartZoomField.text())
         self.optionsConfig["displayPOITypeList"]=self.displayPOITypeList
         self.optionsConfig["displayAreaTypeList"]=self.displayAreaTypeList
-        self.optionsConfig["withGPSBreadcrumbs"]=self.withGPSBreadcrumbsButton.isChecked()
                 
     def addToLayout(self, layout):
         filler=QLabel(self)
         tab2Layout = QFormLayout()
         tab2Layout.setAlignment(Qt.AlignTop)
         layout.addLayout(tab2Layout)
-        
-        if disableMappnik==True:
-            self.downloadTilesButton=QCheckBox("Download missing tiles", self)
-        else:
-            self.downloadTilesButton=QRadioButton("Download missing tiles", self)
-        self.downloadTilesButton.setChecked(self.withDownload)
-        tab2Layout.addRow(self.downloadTilesButton, filler)  
-
-        if disableMappnik==False:
-            self.withMapnikButton=QRadioButton("Use Mapnik", self)
-            self.withMapnikButton.setChecked(self.withMapnik)
-            tab2Layout.addRow(self.withMapnikButton, filler)  
         
         label=QLabel(self)
         label.setText("Tile Server:")
@@ -2112,18 +2057,6 @@ class OSMDisplayTab(OptionsDialogTab):
         self.tileHomeField.setMinimumWidth(200)
 
         tab2Layout.addRow(label, self.tileHomeField)   
-        
-        if disableMappnik==False:
-            label=QLabel(self)
-            label.setText("Mapnik Config:")
-            
-            self.validator=IntValueValidator(self)
-            self.mapnikConfigField=QLineEdit(self)
-            self.mapnikConfigField.setToolTip("Relative to $HOME or absolute")
-            self.mapnikConfigField.setText("%s"%self.mapnikConfig)
-            self.mapnikConfigField.setMinimumWidth(200)
-    
-            tab2Layout.addRow(label, self.mapnikConfigField) 
         
         label=QLabel(self)
         label.setText("Tile Zoom:")
@@ -2149,10 +2082,6 @@ class OSMDisplayTab(OptionsDialogTab):
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
         tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)  
-
-        self.withGPSBreadcrumbsButton=QCheckBox("GPS Breadcrumbs", self)
-        self.withGPSBreadcrumbsButton.setChecked(self.withGPSBreadcrumbs)
-        tab2Layout.addRow(self.withGPSBreadcrumbsButton, filler)
 
     @pyqtSlot()
     def _configurePOIDisplay(self):
@@ -2219,7 +2148,7 @@ class OSM3DTab(OptionsDialogTab):
 
         tab3Layout.addRow(label, self.startZoom3DField)    
         
-tabClassList=[OSMDrivingModeTab, OSMDisplayTab, OSM3DTab, OSMRoutingTab, GPSTab]
+tabClassList=[OSMDisplayTab, OSM3DTab, OSMRoutingTab]
  
 class OSMOptionsDialog(OptionsDialog):
     def __init__(self, optionsConfig, parent):
@@ -2300,6 +2229,7 @@ class OSMInputDialog(QDialog):
         
 #----------------------------
 class OSMPOITableModel(QAbstractTableModel):
+    dataChangedSignal = pyqtSignal(QModelIndex, QModelIndex)
     def __init__(self, parent, displayPOITypeList, withZoom):
         QAbstractTableModel.__init__(self, parent)
         self.style=OSMStyle()
@@ -2380,14 +2310,15 @@ class OSMPOITableModel(QAbstractTableModel):
                 self.displayPOITypeList.remove(self.poiList[index.row()][1])
             elif value==Qt.Checked:
                 self.displayPOITypeList.append(self.poiList[index.row()][1])
-            self.emit(SIGNAL("dataChanged(QModelIndex, QModelIndex)"), index, index)
+            self.dataChangedSignal.emit(index, index)
             return True
      
         return False
     
     def update(self, poiTypeList):
+        self.beginResetModel()
         self.displayPOITypeList=poiTypeList
-        self.reset()
+        self.endResetModel()
 
 class OSMPOIDisplayDialog(QDialog):
     def __init__(self, parent, poiTypeList):
@@ -2449,6 +2380,7 @@ class OSMPOIDisplayDialog(QDialog):
 
 #----------------------------
 class OSMAreaTableModel(QAbstractTableModel):
+    dataChangedSignal = pyqtSignal(QModelIndex, QModelIndex)
     def __init__(self, parent, displayAreaTypeList):
         QAbstractTableModel.__init__(self, parent)
         self.style=OSMStyle()
@@ -2510,7 +2442,7 @@ class OSMAreaTableModel(QAbstractTableModel):
                 self.displayAreaTypeList.remove(self.areaList[index.row()][1])
             elif value==Qt.Checked:
                 self.displayAreaTypeList.append(self.areaList[index.row()][1])
-            self.emit(SIGNAL("dataChanged(const &QModelIndex index, const &QModelIndex index)"), index, index)
+            self.dataChangedSignal.emit(index, index)
             return True
      
         return False
@@ -2636,11 +2568,12 @@ class OSMPOIListTableModel(QAbstractTableModel):
     
    
     def update(self, poiList):
+        self.beginResetModel()
         self.poiList=poiList
-        self.reset()
+        self.endResetModel()
 
 class OSMPOISearchDialog(OSMDialogWithSettings):
-    def __init__(self, parent, osmParserData, mapPosition, gpsPosition, defaultCountryId, nearestMode):
+    def __init__(self, parent, osmParserData, mapPosition, defaultCountryId, nearestMode):
         OSMDialogWithSettings.__init__(self, parent) 
 
         self.osmParserData=osmParserData
@@ -2651,7 +2584,6 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.nearestMode=nearestMode
         self.currentCountryId=None
         self.defaultCountryId=defaultCountryId
-        self.gpsPosition=gpsPosition
         self.mapPosition=mapPosition
         self.usedPosition=self.mapPosition
         
@@ -2794,23 +2726,6 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.ignoreCityButton=None
             
         poiArea=QVBoxLayout()    
-        
-        if self.nearestMode==True:    
-            positionButtons=QHBoxLayout()
-    
-            self.mapPositionButton=QRadioButton("Map", self)
-            self.mapPositionButton.setChecked(True)
-            self.mapPositionButton.clicked.connect(self._useMapPosition)
-            positionButtons.addWidget(self.mapPositionButton) 
-    
-            self.gpsPositionButton=QRadioButton("GPS", self)
-            self.gpsPositionButton.clicked.connect(self._useGPSPosition)
-            positionButtons.addWidget(self.gpsPositionButton) 
-    
-            if self.gpsPosition==None:
-                self.gpsPositionButton.setDisabled(True)
-                
-            poiArea.addLayout(positionButtons)
 
         self.poiFilterEdit=QLineEdit(self)
         if lastPOIFilter!=None:
@@ -2912,14 +2827,13 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.setWindowTitle('POI Search')
         self.setGeometry(0, 0, 850, 550)
         
-        self.connect(self.poiViewModel,
-            SIGNAL("dataChanged(QModelIndex, QModelIndex)"), self._poiListChanged)
-        self.connect(self.poiEntryView.selectionModel(),
-            SIGNAL("selectionChanged(QItemSelection, QItemSelection)"), self._selectionChanged)
-        
+        self.poiViewModel.dataChangedSignal.connect(self._poiListChanged)
+        selectionPOI = self.poiEntryView.selectionModel()
+        selectionPOI.selectionChanged.connect(self._selectionChanged)
+
         if self.nearestMode==False:
-            self.connect(self.cityView.selectionModel(),
-                     SIGNAL("selectionChanged(const QItemSelection &, const QItemSelection &)"), self._cityChanged)
+            selectionCity = self.cityView.selectionModel()
+            selectionCity.selectionChanged.connect(self._cityChanged)
 
         if self.nearestMode==False:
             self.initCityUI()
@@ -2927,7 +2841,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             if lastCityId!=None:
                 nodeIndex=self.cityViewModel.searchModel(lastCityId)
                 if nodeIndex!=None and nodeIndex.isValid():
-                    self.cityView.setCurrentIndex(nodeIndex);
+                    self.cityView.setCurrentIndex(nodeIndex)
 
         else:
             self._poiListChanged()
@@ -2993,11 +2907,6 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
     @pyqtSlot()
     def _useMapPosition(self):
         self.usedPosition=self.mapPosition
-        self._poiListChanged()
-
-    @pyqtSlot()
-    def _useGPSPosition(self):
-        self.usedPosition=self.gpsPosition
         self._poiListChanged()
 
     @pyqtSlot()

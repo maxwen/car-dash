@@ -10,7 +10,7 @@ Created on Dec 31, 2011
 import os
 import sys
 import time
-import Polygon
+from Polygon.cPolygon import Polygon
 from utils.env import getPolyDataRootSimple
 
 class OSMBoarderUtils():
@@ -73,7 +73,7 @@ class OSMBoarderUtils():
         while True:
             line = f.readline()
             if not(line):
-                continue;
+                continue
                    
             line = line.strip()
             if line == "END":
@@ -100,7 +100,7 @@ class OSMBoarderUtils():
         if firstLat!=lat or firstLon!=lon:
             print("first!=last coord ")
             
-        return coords, Polygon.Polygon(coords)
+        return coords, Polygon(coords)
     
     def readPolyFile(self, fileName):
         f=open(fileName, "r")
@@ -124,7 +124,7 @@ class OSMBoarderUtils():
     
     def countryNameListOfBBox(self, bbox):
         nameList=list()
-        bboxCPolygon=Polygon.Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])
+        bboxCPolygon=Polygon([(bbox[0], bbox[3]), (bbox[2], bbox[3]), (bbox[2], bbox[1]), (bbox[0], bbox[1])])
         for poly in self.polyData.values():
             name=poly["name"]
             polygons=poly["coords"]

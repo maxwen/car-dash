@@ -7,8 +7,8 @@ Created on Mar 31, 2012
 import os
 import math
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QFont, QPixmap, QColor, QPen, QBrush, QBitmap
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QPixmap, QColor, QPen, QBrush, QBitmap
 from osmparser.osmdataaccess import Constants
 from utils.env import getImageRoot
 
@@ -276,7 +276,7 @@ class OSMStyle():
     def getStylePen(self, key):
         if key in self.penDict:
             return self.penDict[key]
-        return self.Qt.NoPen
+        return Qt.NoPen
     
     def getPenForCrossingType(self, crossingType):
         if crossingType==Constants.CROSSING_TYPE_NORMAL:
@@ -919,6 +919,8 @@ class OSMStyle():
             elif natural=="beach":
                 if zoom>=13:
                     brush=self.getStyleBrush("beachPatternArea")
+            elif natural=="grassland":
+                brush=self.getStyleBrush("grass")
             else:
                 if natural in Constants.NATURAL_WATER_TYPE_SET:
                     brush=self.getStyleBrush("water")

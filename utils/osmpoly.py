@@ -15,7 +15,7 @@ class point(Structure):
 
 class OSMPoly():
     def __init__(self):
-        self.lib_pip = cdll.LoadLibrary("point_in_poly.so")
+        self.lib_pip = cdll.LoadLibrary("lib/point_in_poly.so")
         self.polyList=list()
         self.bbox=list()
         self.tags=list()

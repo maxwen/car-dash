@@ -24,8 +24,6 @@ class OSMDataSQLite():
         self.connectionNode=None
         self.cursorAdmin=None
         self.connectionAdmin=None
-        self.cursorWaySimple=None
-        self.connectionWaySimple=None
         self.gisUtils=GISUtils()
 
     def getGISUtils(self):
@@ -42,35 +40,28 @@ class OSMDataSQLite():
         self.connectionEdge=sqlite3.connect(self.getEdgeDBFile())
         self.cursorEdge=self.connectionEdge.cursor()
         self.connectionEdge.enable_load_extension(True)
-        self.cursorEdge.execute("SELECT load_extension('libspatialite.so')")
+        self.cursorEdge.execute("SELECT load_extension('mod_spatialite.so')")
         self.setPragmaForDB(self.cursorEdge)
 
     def openAreaDB(self):
         self.connectionArea=sqlite3.connect(self.getAreaDBFile())
         self.cursorArea=self.connectionArea.cursor()
         self.connectionArea.enable_load_extension(True)
-        self.cursorArea.execute("SELECT load_extension('libspatialite.so')")
+        self.cursorArea.execute("SELECT load_extension('mod_spatialite.so')")
         self.setPragmaForDB(self.cursorArea)
 
     def openWayDB(self):
         self.connectionWay=sqlite3.connect(self.getWayDBFile())
         self.cursorWay=self.connectionWay.cursor()
         self.connectionWay.enable_load_extension(True)
-        self.cursorWay.execute("SELECT load_extension('libspatialite.so')")
+        self.cursorWay.execute("SELECT load_extension('mod_spatialite.so')")
         self.setPragmaForDB(self.cursorWay)
-
-    def openSimpleWayDB(self):
-        self.connectionWaySimple=sqlite3.connect(self.getSimpleWayDBFile())
-        self.cursorWaySimple=self.connectionWaySimple.cursor()
-        self.connectionWaySimple.enable_load_extension(True)
-        self.cursorWaySimple.execute("SELECT load_extension('libspatialite.so')")
-        self.setPragmaForDB(self.cursorWaySimple)
         
     def openNodeDB(self):
         self.connectionNode=sqlite3.connect(self.getNodeDBFile())
         self.cursorNode=self.connectionNode.cursor()
         self.connectionNode.enable_load_extension(True)
-        self.cursorNode.execute("SELECT load_extension('libspatialite.so')")
+        self.cursorNode.execute("SELECT load_extension('mod_spatialite.so')")
         self.setPragmaForDB(self.cursorNode)
         
     def openAdressDB(self):
@@ -82,7 +73,7 @@ class OSMDataSQLite():
         self.connectionAdmin=sqlite3.connect(self.getAdminDBFile())
         self.cursorAdmin=self.connectionAdmin.cursor()
         self.connectionAdmin.enable_load_extension(True)
-        self.cursorAdmin.execute("SELECT load_extension('libspatialite.so')")
+        self.cursorAdmin.execute("SELECT load_extension('mod_spatialite.so')")
         self.setPragmaForDB(self.cursorAdmin)
     
     def closeEdgeDB(self):
@@ -105,13 +96,6 @@ class OSMDataSQLite():
             self.cursorWay.close()
             self.connectionWay=None     
             self.cursorWay=None
-
-    def closeSimpleWayDB(self):
-        if self.connectionWaySimple!=None:
-            self.connectionWaySimple.commit()        
-            self.cursorWaySimple.close()
-            self.connectionWaySimple=None     
-            self.cursorWaySimple=None
             
     def closeNodeDB(self):
         if self.connectionNode!=None:
@@ -141,7 +125,6 @@ class OSMDataSQLite():
         self.openAreaDB()
         self.openAdressDB()
         self.openAdminDB()
-        self.openSimpleWayDB()
         
     def closeAllDB(self):
         self.closeWayDB()
@@ -150,7 +133,6 @@ class OSMDataSQLite():
         self.closeAreaDB()
         self.closeAdressDB()
         self.closeAdminDB()
-        self.closeSimpleWayDB()
         
     def wayFromDB(self, x):
         wayId=int(x[0])
@@ -332,10 +314,6 @@ class OSMDataSQLite():
     def getWayDBFile(self):
         file="ways.db"
         return os.path.join(self.getDataDir(), file)
-
-    def getSimpleWayDBFile(self):
-        file="waysSimple1.db"
-        return os.path.join(self.getDataDir(), file)
     
     def getNodeDBFile(self):
         file="nodes.db"
@@ -366,7 +344,7 @@ class OSMDataSQLite():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/salzburg-2.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/wien.osm.bz2'
         osmData["poly"]="austria.poly"
@@ -380,14 +358,14 @@ class OSMDataSQLite():
 #        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
 #        osmDataList[1]=osmData
     
-        osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
+#        osmData=dict()
+#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-2.osm.bz2'
 #        osmData["osmFile"]=None
-        osmData["poly"]="germany.poly"
-        osmData["polyCountry"]="Europe / Western Europe / Germany"
-        osmDataList[2]=osmData
+#        osmData["poly"]="germany.poly"
+#        osmData["polyCountry"]="Europe / Western Europe / Germany"
+#        osmDataList[2]=osmData
         
 #        osmData=dict()
 #        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'

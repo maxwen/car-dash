@@ -4,8 +4,9 @@ Created on Jun 21, 2012
 @author: maxl
 '''
 
-from PyQt4.QtCore import QUrl, pyqtSlot
-from PyQt4.QtGui import QLabel, QTabWidget, QDesktopServices, QPushButton
+from PyQt5.QtCore import QUrl, pyqtSlot
+from PyQt5.QtWidgets import QLabel, QTabWidget, QPushButton
+from PyQt5.QtGui import QDesktopServices
 
 
 class LinkLabel(QLabel):
