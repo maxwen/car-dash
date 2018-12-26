@@ -499,7 +499,7 @@ class QtOSMWidget(QWidget):
             return self.getEmptyTile()
  
     def displayMapPosition(self, mapPoint):
-        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_WIDTH_SMALL)
         
         y,x=self.getTransformedPixelPosForLocationDeg(mapPoint.getPos()[0], mapPoint.getPos()[1])        
         if self.isPointVisibleTransformed(x, y):
@@ -930,10 +930,6 @@ class QtOSMWidget(QWidget):
                 self.displayWayTags(self.tagLabelWays)
         
         self.displaySidebar()
-
-#        self.displayControlOverlay()
-        self.displayControlOverlay2()
-
         self.showEnforcementInfo()
         self.showTextInfoBackground()
         
@@ -957,28 +953,24 @@ class QtOSMWidget(QWidget):
         if self.sidebarVisible==True:
             textBackground=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.height())
             self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 0+diff/2, 32, 32, self.style.getStylePixmap("hideSidebarPixmap"))
-            self.sidebarControlRect=QRect(self.width()-SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, 40)
-            self.sidebarRect=QRect(self.width()-SIDEBAR_WIDTH, self.sidebarControlRect.height(), SIDEBAR_WIDTH, self.height()-self.sidebarControlRect.height())
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
+            self.minusRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("plusPixmap"))
+            self.plusRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
         
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("addressesPixmap"))
-            self.searchRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 2 * IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("searchPixmap"))
+            self.searchRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 2 * IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("favoritesPixmap"))
-            self.favoriteRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("favoritesPixmap"))
+            self.favoriteRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 3*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("routePixmap"))
-            self.routesRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+2*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("routePixmap"))
+            self.routesRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 4*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
 
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
-            self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, 40+5*IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
-
-        else:
-            self.sidebarRect=None
-            textBackground=QRect(self.width()-SIDEBAR_WIDTH, CONTROL_WIDTH, SIDEBAR_WIDTH, 40)
-            self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
-            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, CONTROL_WIDTH+diff/2, 32, 32, self.style.getStylePixmap("showSidebarPixmap"))
-            self.sidebarControlRect=textBackground
+            self.painter.drawPixmap(self.width()-SIDEBAR_WIDTH+diff/2, self.height() - 2 * IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("settingsPixmap"))
+            self.optionsRect=QRect(self.width()-SIDEBAR_WIDTH+diff/2, self.height() - 2 * IMAGE_HEIGHT+diff/2, IMAGE_WIDTH, IMAGE_HEIGHT)
         
     def getStreetTypeListForOneway(self):
         return Constants.ONEWAY_OVERLAY_STREET_SET
@@ -1422,14 +1414,6 @@ class QtOSMWidget(QWidget):
                 elif self.optionsRect.contains(mousePos):
                     QToolTip.showText(event.globalPos(), "Settings")
                     return True
-                
-            if self.sidebarControlRect.contains(mousePos):
-                if self.sidebarVisible==True:
-                    QToolTip.showText(event.globalPos(), "Hide toolbar")
-                    return True
-                else:
-                    QToolTip.showText(event.globalPos(), "Show toolbar")
-                    return True
             
             if self.plusRect.contains(mousePos):
                 QToolTip.showText(event.globalPos(), "+ Zoom %d"%(self.map_zoom))
@@ -1441,11 +1425,7 @@ class QtOSMWidget(QWidget):
                 
             refId, tags=self.getNodeInfoForPos(mousePos)
             if tags!=None:
-                if self.osmWidget.test==True:
-                    displayString="%s:%d"%(osmParserData.getPOITagString(tags), refId)
-                else:
-                    displayString=osmParserData.getPOITagString(tags)
-                   
+                displayString=osmParserData.getPOITagString(tags)   
                 QToolTip.showText(event.globalPos(), displayString)
                     
             else:
@@ -1892,7 +1872,7 @@ class QtOSMWidget(QWidget):
         self.painter.drawPoint(x, y)
 
     def displayRoutingPoints(self):
-        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_WIDTH_SMALL)
 
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.getPos()[0], self.startPoint.getPos()[1])
@@ -2333,29 +2313,23 @@ class QtOSMWidget(QWidget):
 
         eventPos=QPoint(event.x(), event.y())
         if not self.moving:
-            if self.sidebarVisible==True:
-                if self.sidebarRect.contains(eventPos):
-                    if self.searchRect.contains(eventPos):
-                        self.osmWidget._showSearchMenu()
-                    elif self.favoriteRect.contains(eventPos):
-                        self.osmWidget._showFavorites()
-                    elif self.routesRect.contains(eventPos):
-                        self.osmWidget._loadRoute()
-                    elif self.optionsRect.contains(eventPos):
-                        self.osmWidget._showSettings()
-                    return
-                
-            if self.sidebarControlRect.contains(eventPos):
-                if self.sidebarVisible==True:
-                    self.sidebarVisible=False
-                else:
-                    self.sidebarVisible=True
-                self.update()
-                return
-            
             if self.minusRect.contains(eventPos) or self.plusRect.contains(eventPos):
                 self.pointInsideZoomOverlay(event.x(), event.y())
                 return
+
+            if self.sidebarVisible==True:
+                if self.searchRect.contains(eventPos):
+                    self.osmWidget._showSearchMenu()
+                    return
+                elif self.favoriteRect.contains(eventPos):
+                    self.osmWidget._showFavorites()
+                    return
+                elif self.routesRect.contains(eventPos):
+                    self.osmWidget._loadRoute()
+                    return
+                elif self.optionsRect.contains(eventPos):
+                    self.osmWidget._showSettings()
+                    return
             
             self.lastMouseMoveX=event.x()
             self.lastMouseMoveY=event.y()
@@ -2363,55 +2337,27 @@ class QtOSMWidget(QWidget):
                 
         else:
             self.moving=False
-
-
-#    def pointInsideMoveOverlay(self, x, y):
-#        if self.moveRect.contains(x, y):
-#            if self.leftRect.contains(x, y):
-#                self.stepLeft(MAP_SCROLL_STEP)
-#            if self.rightRect.contains(x, y):
-#                self.stepRight(MAP_SCROLL_STEP)
-#            if self.upRect.contains(x, y):
-#                self.stepUp(MAP_SCROLL_STEP)
-#            if self.downRect.contains(x, y):
-#                self.stepDown(MAP_SCROLL_STEP)
         
     def pointInsideZoomOverlay(self, x, y):
-#        if self.zoomRect.contains(x, y):
-            if self.minusRect.contains(x, y):
-                if self.isVirtualZoom==True:
-                    zoom=MAX_ZOOM
-                    self.isVirtualZoom=False
-                else:
-                    zoom=self.map_zoom-1
-                    if zoom<MIN_ZOOM:
-                        zoom=MIN_ZOOM
-                self.zoom(zoom)
+        if self.minusRect.contains(x, y):
+            if self.isVirtualZoom==True:
+                zoom=MAX_ZOOM
+                self.isVirtualZoom=False
+            else:
+                zoom=self.map_zoom-1
+                if zoom<MIN_ZOOM:
+                    zoom=MIN_ZOOM
+            self.zoom(zoom)
                 
-            if self.plusRect.contains(x,y):
-                zoom=self.map_zoom+1
-                if zoom==MAX_ZOOM+1:
-                    self.isVirtualZoom=True
+        if self.plusRect.contains(x,y):
+            zoom=self.map_zoom+1
+            if zoom==MAX_ZOOM+1:
+                self.isVirtualZoom=True
+                zoom=MAX_ZOOM
+            else:
+                if zoom>MAX_ZOOM:
                     zoom=MAX_ZOOM
-                else:
-                    if zoom>MAX_ZOOM:
-                        zoom=MAX_ZOOM
-                self.zoom(zoom)
-        
-#    def displayControlOverlay(self):
-#        self.painter.drawPixmap(0, 0, self.osmControlImage)
-
-    def displayControlOverlay2(self):
-        minusBackground=QRect(0, 0, CONTROL_WIDTH, CONTROL_WIDTH)
-        diff=CONTROL_WIDTH-IMAGE_WIDTH
-        self.painter.fillRect(minusBackground, self.style.getStyleColor("backgroundColor"))
-        self.minusRect=minusBackground
-        self.painter.drawPixmap(diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
-
-        plusBackground=QRect(self.width()-self.getSidebarWidth()-CONTROL_WIDTH, 0, CONTROL_WIDTH, CONTROL_WIDTH)
-        self.painter.fillRect(plusBackground, self.style.getStyleColor("backgroundColor"))
-        self.plusRect=plusBackground
-        self.painter.drawPixmap(self.width()-self.getSidebarWidth()-CONTROL_WIDTH+diff/2, diff/2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("plusPixmap"))
+            self.zoom(zoom)
 
     def mousePressEvent(self, event):
         self.mousePressed=True
@@ -2431,7 +2377,7 @@ class QtOSMWidget(QWidget):
                     
     def getMapPointForPos(self, mousePos):
         p=QPoint(mousePos[0], mousePos[1])
-        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_MEDIUM, IMAGE_HEIGHT_MEDIUM)
+        pixmapWidth, pixmapHeight=self.getPixmapSizeForZoom(IMAGE_WIDTH_SMALL, IMAGE_WIDTH_SMALL)
 
         if self.startPoint!=None:
             (y, x)=self.getTransformedPixelPosForLocationDeg(self.startPoint.lat, self.startPoint.lon)
@@ -3160,7 +3106,7 @@ class QtOSMWidget(QWidget):
 #---------------------
 
 class OSMWidget(QWidget):
-    def __init__(self, parent=None, test=None):
+    def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         self.startLat=47.8
         self.startLon=13.0

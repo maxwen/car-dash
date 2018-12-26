@@ -93,7 +93,8 @@ class OSMStyle():
         self.pixmapDict["settingsPixmap"]=QPixmap(os.path.join(getImageRoot(), "settings.png"))
         self.pixmapDict["gpsDataPixmap"]=QPixmap(os.path.join(getImageRoot(), "gps.png"))
         self.pixmapDict["mapPointPixmap"]=QPixmap(os.path.join(getImageRoot(), "flagMap.png"))
-        
+        self.pixmapDict["searchPixmap"]=QPixmap(os.path.join(getImageRoot(), "search.png"))
+
         self.pixmapDict["startPixmap"]=QPixmap(os.path.join(getImageRoot(), "routing/start.png"))
         self.pixmapDict["finishPixmap"]=QPixmap(os.path.join(getImageRoot(), "routing/finish.png"))
         self.pixmapDict["wayPixmap"]=QPixmap(os.path.join(getImageRoot(), "routing/way.png"))

@@ -342,7 +342,7 @@ class OSMRouting():
         self.clearEdgeCalculations(True)
         
     def clearCurrentEdge(self):
-        self.debugPrint(0.0, 0.0, "clearCurrentEdge")
+        #self.debugPrint(0.0, 0.0, "clearCurrentEdge")
         self.currentEdgeData=None
         
     def clearEdgeCalculations(self, cleanLastApproachingRef):

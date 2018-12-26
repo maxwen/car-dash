@@ -344,35 +344,28 @@ class OSMDataSQLite():
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
-        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria.osm'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/salzburg-2.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/wien.osm.bz2'
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/austria-latest.osm.pbf'
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
         
-#        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland.osm.bz2'
-##        osmData["osmFile"]=None
-#        osmData["poly"]="switzerland.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
-#        osmDataList[1]=osmData
+        osmData=dict()
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland-latest.osm.pbf'
+        osmData["poly"]="switzerland.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Switzerland"
+        osmDataList[1]=osmData
     
-#        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/germany.osm.bz2'
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-2.osm.bz2'
-#        osmData["osmFile"]=None
-#        osmData["poly"]="germany.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Germany"
-#        osmDataList[2]=osmData
+        osmData=dict()
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-latest.osm.pbf'
+        osmData["poly"]="germany.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Germany"
+        osmDataList[2]=osmData
         
-#        osmData=dict()
-#        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein.osm.bz2'
-##        osmData["osmFile"]=None
-#        osmData["poly"]="liechtenstein.poly"
-#        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
-#        osmDataList[3]=osmData
+        osmData=dict()
+        osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein-latest.osm.pbf'
+        osmData["poly"]="liechtenstein.poly"
+        osmData["polyCountry"]="Europe / Western Europe / Liechtenstein"
+        osmDataList[3]=osmData
 
         return osmDataList
     

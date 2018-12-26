@@ -14,7 +14,7 @@ from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
 from utils.osmutils import OSMUtils
 from imposm.parser.xml.parser import XMLParser
-#from imposm.parser import OSMParser
+from imposm.parser import OSMParser
 
 from osmparser.osmboarderutils import OSMBoarderUtils
 from osmparser.osmdataaccess import Constants
@@ -611,7 +611,6 @@ class OSMDataImport(OSMDataSQLite):
     def parse_coords(self, coord):
         if self.skipCoords==True:
             return
-        
         for osmid, lon, lat in coord:
             self.addToCoordsTable(osmid, float(lat), float(lon))
            
@@ -2338,16 +2337,23 @@ class OSMDataImport(OSMDataSQLite):
         if osmFile!=None:
             self.log(self.osmList[country])
             self.log("start parsing")
-            p = XMLParser(nodes_callback=self.parse_nodes, 
+            #p = XMLParser(nodes_callback=self.parse_nodes, 
+            #          ways_callback=self.parse_ways, 
+            #          relations_callback=self.parse_relations,
+            #          coords_callback=self.parse_coords)
+
+            p = OSMParser(4, nodes_callback=None, 
+                      ways_callback=None, 
+                      relations_callback=None,
+                      coords_callback=self.parse_coords)
+
+            p.parse(osmFile)
+
+            p = OSMParser(4, nodes_callback=self.parse_nodes, 
                       ways_callback=self.parse_ways, 
                       relations_callback=self.parse_relations,
-                      coords_callback=self.parse_coords)
-            
-#            p = OSMParser(4, nodes_callback=self.parse_nodes, 
-#                      ways_callback=self.parse_ways, 
-#                      relations_callback=self.parse_relations,
-#                      coords_callback=self.parse_coords)
-            
+                      coords_callback=None)
+
             p.parse(osmFile)
 
     def getOSMFile(self, country):
