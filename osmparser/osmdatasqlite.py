@@ -30,51 +30,78 @@ class OSMDataSQLite():
         return self.gisUtils
     
     def setPragmaForDB(self, cursor):
-#        cursor.execute('PRAGMA journal_mode=OFF')
-#        cursor.execute('PRAGMA synchronous=OFF')
+        #cursor.execute('PRAGMA journal_mode=OFF')
+        #cursor.execute('PRAGMA synchronous=OFF')
         cursor.execute('PRAGMA cache_size=40000')
         cursor.execute('PRAGMA page_size=4096')
-#        cursor.execute('PRAGMA ignore_check_constraint=ON')
-        
-    def openEdgeDB(self):
+        cursor.execute('PRAGMA locking_mode=EXCLUSIVE')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+
+    def setPragmaForDBImport(self, cursor):
+        cursor.execute('PRAGMA journal_mode=OFF')
+        cursor.execute('PRAGMA synchronous=OFF')
+        cursor.execute('PRAGMA cache_size=40000')
+        cursor.execute('PRAGMA page_size=4096')
+        cursor.execute('PRAGMA locking_mode=EXCLUSIVE')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+    
+    def openEdgeDB(self, pragmaImport=False):
         self.connectionEdge=sqlite3.connect(self.getEdgeDBFile())
         self.cursorEdge=self.connectionEdge.cursor()
         self.connectionEdge.enable_load_extension(True)
         self.cursorEdge.execute("SELECT load_extension('mod_spatialite.so')")
-        self.setPragmaForDB(self.cursorEdge)
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorEdge)
+        else:
+            self.setPragmaForDB(self.cursorEdge)
 
-    def openAreaDB(self):
+    def openAreaDB(self, pragmaImport=False):
         self.connectionArea=sqlite3.connect(self.getAreaDBFile())
         self.cursorArea=self.connectionArea.cursor()
         self.connectionArea.enable_load_extension(True)
         self.cursorArea.execute("SELECT load_extension('mod_spatialite.so')")
-        self.setPragmaForDB(self.cursorArea)
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorArea)
+        else:
+            self.setPragmaForDB(self.cursorArea)
 
-    def openWayDB(self):
+    def openWayDB(self, pragmaImport=False):
         self.connectionWay=sqlite3.connect(self.getWayDBFile())
         self.cursorWay=self.connectionWay.cursor()
         self.connectionWay.enable_load_extension(True)
         self.cursorWay.execute("SELECT load_extension('mod_spatialite.so')")
-        self.setPragmaForDB(self.cursorWay)
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorWay)
+        else:
+            self.setPragmaForDB(self.cursorWay)
         
-    def openNodeDB(self):
+    def openNodeDB(self, pragmaImport=False):
         self.connectionNode=sqlite3.connect(self.getNodeDBFile())
         self.cursorNode=self.connectionNode.cursor()
         self.connectionNode.enable_load_extension(True)
         self.cursorNode.execute("SELECT load_extension('mod_spatialite.so')")
-        self.setPragmaForDB(self.cursorNode)
-        
-    def openAdressDB(self):
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorNode)
+        else:
+            self.setPragmaForDB(self.cursorNode)
+
+    def openAdressDB(self, pragmaImport=False):
         self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
         self.cursorAdress=self.connectionAdress.cursor()
-        self.setPragmaForDB(self.cursorAdress)
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorAdress)
+        else:
+            self.setPragmaForDB(self.cursorAdress)
 
-    def openAdminDB(self):
+    def openAdminDB(self, pragmaImport=False):
         self.connectionAdmin=sqlite3.connect(self.getAdminDBFile())
         self.cursorAdmin=self.connectionAdmin.cursor()
         self.connectionAdmin.enable_load_extension(True)
         self.cursorAdmin.execute("SELECT load_extension('mod_spatialite.so')")
-        self.setPragmaForDB(self.cursorAdmin)
+        if pragmaImport == True:
+            self.setPragmaForDBImport(self.cursorAdmin)
+        else:
+            self.setPragmaForDB(self.cursorAdmin)
     
     def closeEdgeDB(self):
         if self.connectionEdge!=None:
@@ -125,7 +152,7 @@ class OSMDataSQLite():
         self.openAreaDB()
         self.openAdressDB()
         self.openAdminDB()
-        
+    
     def closeAllDB(self):
         self.closeWayDB()
         self.closeNodeDB()

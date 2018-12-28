@@ -9,6 +9,7 @@ import sqlite3
 import pickle
 import re
 import cProfile
+import time
 
 from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
@@ -59,16 +60,6 @@ class OSMDataImport(OSMDataSQLite):
         self.addressCache=set()
         self.highestAdminRelationNumber=0
         self.deletedWayAreas=0
-
-    def openAllDB(self):
-        super(OSMDataImport, self).openAllDB()
-        self.openTmpDB()
-        self.openCoordsDB()
-        
-    def closeAllDB(self):
-        super(OSMDataImport, self).closeAllDB()
-        self.closeTmpDB()
-        self.closeCoordsDB()  
         
     def createEdgeTables(self):
         self.createEdgeTable()
@@ -78,12 +69,9 @@ class OSMDataImport(OSMDataSQLite):
         self.createAddressTable()
 
     def openTmpDB(self):
-        if self.disableMemoryDB==True:
-            self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
-        else:
-            self.connectionTmp=sqlite3.connect(":memory:")
+        self.connectionTmp=sqlite3.connect(self.getTmpDBFile())
         self.cursorTmp=self.connectionTmp.cursor()
-#        self.setPragmaForDB(self.cursorTmp)
+        self.setPragmaForDBImport(self.cursorTmp)
 
     def getTmpDBFile(self):
         file="tmp.db"
@@ -93,12 +81,9 @@ class OSMDataImport(OSMDataSQLite):
         return os.path.exists(self.getTmpDBFile())
     
     def openCoordsDB(self):
-        if self.disableMemoryDB==True:
-            self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
-        else:
-            self.connectionCoords=sqlite3.connect(":memory:")
+        self.connectionCoords=sqlite3.connect(self.getCoordsDBFile())
         self.cursorCoords=self.connectionCoords.cursor()
-#        self.setPragmaForDB(self.cursorCoords)
+        self.setPragmaForDBImport(self.cursorCoords)
 
     def getCoordsDBFile(self):
         file="coords.db"
@@ -187,7 +172,7 @@ class OSMDataImport(OSMDataSQLite):
         return None, None    
         
     def createNodeDBTables(self):
-        self.cursorNode.execute("SELECT InitSpatialMetaData()")
+        self.cursorNode.execute("SELECT InitSpatialMetaData(1)")
 
         self.cursorNode.execute('CREATE TABLE poiRefTable (refId INTEGER, refType INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER, UNIQUE (refId, refType, type) ON CONFLICT IGNORE)')
         self.cursorNode.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
@@ -197,7 +182,7 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorNode.execute("SELECT AddGeometryColumn('poiRefTable', 'geom', 4326, 'POINT', 2)")
         
     def createWayDBTables(self):
-        self.cursorWay.execute("SELECT InitSpatialMetaData()")
+        self.cursorWay.execute("SELECT InitSpatialMetaData(1)")
         self.cursorWay.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
         self.cursorWay.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
         self.cursorWay.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
@@ -260,7 +245,7 @@ class OSMDataImport(OSMDataSQLite):
         return allentries[0][0]
     
     def createEdgeTable(self):
-        self.cursorEdge.execute("SELECT InitSpatialMetaData()")
+        self.cursorEdge.execute("SELECT InitSpatialMetaData(1)")
         self.cursorEdge.execute('CREATE TABLE edgeTable (id INTEGER PRIMARY KEY, startRef INTEGER, endRef INTEGER, length INTEGER, wayId INTEGER, source INTEGER, target INTEGER, cost REAL, reverseCost REAL, streetInfo INTEGER)')
         self.cursorEdge.execute("CREATE INDEX startRef_idx ON edgeTable (startRef)")
         self.cursorEdge.execute("CREATE INDEX endRef_idx ON edgeTable (endRef)")
@@ -270,7 +255,7 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorEdge.execute("SELECT AddGeometryColumn('edgeTable', 'geom', 4326, 'LINESTRING', 2)")
 
     def createAreaDBTables(self):
-        self.cursorArea.execute("SELECT InitSpatialMetaData()")
+        self.cursorArea.execute("SELECT InitSpatialMetaData(1)")
         self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER, areaId INTEGER, type INTEGER, tags BLOB, layer INTEGER, UNIQUE (osmId, areaId) ON CONFLICT IGNORE)')
         self.cursorArea.execute("CREATE INDEX osmId_idx ON areaTable (osmId)")
         self.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
@@ -281,7 +266,7 @@ class OSMDataImport(OSMDataSQLite):
         self.cursorArea.execute("SELECT AddGeometryColumn('areaLineTable', 'geom', 4326, 'LINESTRING', 2)")
 
     def createAdminDBTables(self):
-        self.cursorAdmin.execute("SELECT InitSpatialMetaData()")
+        self.cursorAdmin.execute("SELECT InitSpatialMetaData(1)")
         self.cursorAdmin.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags BLOB, adminLevel INTEGER, parent INTEGER)')
         self.cursorAdmin.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
         self.cursorAdmin.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
@@ -2336,7 +2321,6 @@ class OSMDataImport(OSMDataSQLite):
         osmFile=self.getOSMFile(country)
         if osmFile!=None:
             self.log(self.osmList[country])
-            self.log("start parsing")
             #p = XMLParser(nodes_callback=self.parse_nodes, 
             #          ways_callback=self.parse_ways, 
             #          relations_callback=self.parse_relations,
@@ -2360,6 +2344,7 @@ class OSMDataImport(OSMDataSQLite):
         return self.osmList[country]["osmFile"]
     
     def initDB(self):
+        self.log("initDB " + time.asctime(time.localtime(time.time())))
         self.log(self.getDataDir())
         
         self.openCoordsDB()
@@ -2370,46 +2355,46 @@ class OSMDataImport(OSMDataSQLite):
 
         createEdgeDB=not self.edgeDBExists()
         if createEdgeDB:
-            self.openEdgeDB()
+            self.openEdgeDB(True)
             self.createEdgeTables()
         else:
             self.openEdgeDB()
 
         createAreaDB=not self.areaDBExists()
         if createAreaDB:
-            self.openAreaDB()
+            self.openAreaDB(True)
             self.createAreaDBTables()
         else:
             self.openAreaDB()
         
         createAdressDB=not self.adressDBExists()
         if createAdressDB:
-            self.openAdressDB()
+            self.openAdressDB(True)
             self.createAdressTable()
         else:
             self.openAdressDB()
 
         createWayDB=not self.wayDBExists()
         if createWayDB:
-            self.openWayDB()
+            self.openWayDB(True)
             self.createWayDBTables()
         else:
             self.openWayDB()
 
         createNodeDB=not self.nodeDBExists()
         if createNodeDB:
-            self.openNodeDB()
+            self.openNodeDB(True)
             self.createNodeDBTables()
         else:
             self.openNodeDB()
 
         createAdminDB=not self.adminDBExists()
         if createAdminDB:
-            self.openAdminDB()
+            self.openAdminDB(True)
             self.createAdminDBTables()
         else:
             self.openAdminDB()
-
+        self.log("start parse " + time.asctime(time.localtime(time.time())))
         if createWayDB==True:
             self.skipNodes=False
             self.skipWays=False
@@ -2438,8 +2423,8 @@ class OSMDataImport(OSMDataSQLite):
 #            self.log("merge ways")
 #            self.mergeWayEntries()
 #            self.log("end merge ways")
-                        
-            self.log("create crossings")
+
+            self.log("create crossings " + time.asctime(time.localtime(time.time())))
             self.createCrossingEntries()
             
             self.commitWayDB()
@@ -2449,26 +2434,26 @@ class OSMDataImport(OSMDataSQLite):
         self.closeTmpDB()
 
         if createEdgeDB:            
-            self.log("create edges")
+            self.log("create edges " + time.asctime(time.localtime(time.time())))
             self.createEdgeTableEntries()
 
-            self.log("create edge nodes")
+            self.log("create edge nodes " + time.asctime(time.localtime(time.time())))
             self.createEdgeTableNodeEntries()
                         
-            self.log("create barrier restriction entries")
+            self.log("create barrier restriction entries " + time.asctime(time.localtime(time.time())))
             self.createBarrierRestrictions()
             
-            self.log('remove orphaned barriers')
+            self.log('remove orphaned barriers ' + time.asctime(time.localtime(time.time())))
             self.removeOrphanedBarriers()
 
-            self.log("create way restrictions")
+            self.log('create way restrictions ' + time.asctime(time.localtime(time.time())))
             self.createWayRestrictionsDB()              
 
-            self.log("remove orphaned edges")
+            self.log('remove orphaned edges ' + time.asctime(time.localtime(time.time())))
             self.removeOrphanedEdges()
             self.commitEdgeDB()
 
-            self.log("remove orphaned ways")
+            self.log("remove orphaned ways" + time.asctime(time.localtime(time.time())))
             self.removeOrphanedWays()
             self.commitWayDB()
                         
@@ -2480,7 +2465,9 @@ class OSMDataImport(OSMDataSQLite):
             
             #self.log("vacuum area DB")
             #self.vacuumAreaDB()
-            
+
+        self.log('create spatial index ' + time.asctime(time.localtime(time.time())))
+
         if createWayDB==True:
             self.log("create spatial index for way table")
             self.createSpatialIndexForWayTables()
@@ -2502,18 +2489,23 @@ class OSMDataImport(OSMDataSQLite):
             self.createSpatialIndexForAdminTable()
 
         if createAreaDB==True:
+            self.log('resolveAdminAreas ' + time.asctime(time.localtime(time.time())))
             self.resolveAdminAreas()
             #self.log("vacuum admin DB")
             #self.vacuumAdminDB()
             
         if createAdressDB==True:
+            self.log('resolveAddresses ' + time.asctime(time.localtime(time.time())))
             self.resolveAddresses(True)
             self.commitAdressDB()
             #self.log("vacuum address DB")
             #self.vacuumAddressDB()
 
+        self.log('removeUnnededPOIs ' + time.asctime(time.localtime(time.time())))
         self.removeUnnededPOIs()        
+        self.log('createPOIEntriesForWays ' + time.asctime(time.localtime(time.time())))
         self.createPOIEntriesForWays()
+        self.log('resolvePOIRefs '+ time.asctime(time.localtime(time.time())))
         self.resolvePOIRefs()
         
         #self.log("vaccum node DB")
@@ -2521,6 +2513,7 @@ class OSMDataImport(OSMDataSQLite):
 
         self.closeCoordsDB()
         self.closeAllDB()
+        self.log('end ' + time.asctime(time.localtime(time.time())))
 
     def parseAreas(self):
         self.skipWays=False
@@ -3315,126 +3308,7 @@ class OSMDataImport(OSMDataSQLite):
         
 def main(argv):    
     p = OSMDataImport()
-    
     p.initDB()
-#    p.openAdressDB()
-#    p.createAdressTable()
-#    p.closeAdressDB()
-    
-    p.openAllDB()
-
-#    p.cursorArea.execute("SELECT * FROM sqlite_master WHERE type='table'")
-#    allentries=p.cursorArea.fetchall()
-#    for x in allentries:
-#        self.log(x)
-
-
-#    p.cursorEdge.execute('PRAGMA table_info(cache_edgeTable_Geometry)')
-#    p.cursorEdge.execute('SELECT DiscardGeometryColumn("edgeTable", "geom")')
-#    p.cursorEdge.execute("SELECT RecoverGeometryColumn('edgeTable', 'geom', 4326, 'LINESTRING', 2)")
-#    p.cursorEdge.execute('SELECT CreateSpatialIndex("edgeTable", "geom")')
-#
-#    p.cursorEdge.execute('SELECT * FROM geometry_columns')
-#    allentries=p.cursorEdge.fetchall()
-#    for x in allentries:
-#        self.log(x)
-
-#    si=p.encodeStreetInfo2(0, 1, 1, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
-#    si=p.encodeStreetInfo2(0, 1, 0, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
-#    si=p.encodeStreetInfo2(0, 0, 0, 1, 1)
-#    self.log(p.decodeStreetInfo2(si))
-#    si=p.encodeStreetInfo2(0, 0, 1, 0, 0)
-#    self.log(p.decodeStreetInfo2(si))
-#    si=p.encodeStreetInfo2(0, 2, 0, 0, 1)
-#    self.log(p.decodeStreetInfo2(si))
-#    si=p.encodeStreetInfo2(0, 2, 1, 1, 0)
-#    self.log(p.decodeStreetInfo2(si))
-   
-#    lat=47.820928
-#    lon=13.016525
-#    p.testEdgeTableGeom()
-#    p.testGeomColumns(lat, lon, 100.0)
-#    p.testEdgeGeomWithBBox()
-#    p.testEdgeGeomWithPoint()
-#    p.testEdgeGeomWithCircle()
-#    
-#    p.testStreetTable2()
-#    p.testEdgeTable()
-#    p.testRefTable()
-#    p.testAreaTable()
-       
-
-#    self.log(p.getLenOfEdgeTable())
-#    self.log(p.getEdgeEntryForId(6719))
-#    self.log(p.getEdgeEntryForId(2024))
-
-#    p.test()
-
-#    p.testDBConistency()
-#    p.testRestrictionTable()
-#    p.recreateEdges()
-#    p.recreateEdgeNodes()
-#    p.createAllRefTableIndexesPost()
-
-#    p.recreateCrossings()
-#    p.recreateEdges()
-    
-#    p.testRoutes()
-#    p.testWayTable()
-#    p.recreateCostsForEdges()
-#    p.removeOrphanedEdges()
-#    p.removeOrphanedWays()
-#    p.createGeomDataForEdgeTable()
-
-#    p.createSpatialIndexForEdgeTable()
-#    p.createSpatialIndexForGlobalTables()
-#    p.createSpatialIndexForAreaTable()
-    
-#    p.parseAreas()
-#    p.parseRelations()
-    
-#    p.parseAddresses()
-#    p.parseAreas()
-#    p.parseNodes()
-#    p.testAddressTable()
-#    p.testCoordsTable()
-#    p.vacuumEdgeDB()
-#    p.vacuumGlobalDB()
-#    p.testPOIRefTable()
-#    p.mergeEqualWayEntries()
-    
-#    p.mergeWayEntries()
-
-#    p.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
-#    p.cursorArea.execute("CREATE INDEX adminLeel_idx ON areaTable (adminLevel)")        
-#    p.cursorArea.execute("CREATE INDEX areaLineType_idx ON areaLineTable (type)")
-#    p.vacuumAreaDB()
-#    p.resolvePOIRefs()
-#    p.resolveAdminAreas()
-#    p.resolveAddresses(False)
-#    p.testAdminAreaTable()
-
-#    self.log(p.bu.getPolyCountryList())
-#    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1609521))
-#    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000001))
-#    p.cursorArea.execute('DELETE from adminAreaTable WHERE osmId=%d'%(1000000))
-#    polyString="'MULTIPOLYGON("
-#
-#    outerCoords=[(20,35), (45, 20), (30, 5), (10, 10), (10, 30), (20, 35)]
-#    innerCoordsList=list()
-#    innerCoordsList.append([(30,20), (20,25), (20, 15), (30, 20)])
-#    polyString=polyString+p.createMultiPolygonPartFromCoordsWithInner(outerCoords, innerCoordsList)
-#    polyString=polyString[:-1]
-#    polyString=polyString+")'"
-#    print(polyString)
-#    
-#    coords=p.createOuterCoordsFromMultiPolygon(polyString)
-#    print(coords)
-    
-    p.closeAllDB()
-
 
 if __name__ == "__main__":
 #    cProfile.run('main(sys.argv)')

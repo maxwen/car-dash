@@ -5,7 +5,7 @@ Created on Apr 30, 2012
 '''
 
 import re
-from Polygon import Polygon
+from Polygon.cPolygon import Polygon
 
 class GISUtils():
     

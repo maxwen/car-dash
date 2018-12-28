@@ -12,6 +12,8 @@ class FileLog():
         self.logDir=logDir
         self.filePrefix=filePrefix
         self.withPrint=withPrint
+        if not os.path.exists(os.path.dirname(self.getLogFileName())):
+            os.makedirs(os.path.dirname(self.getLogFileName()))
         self.logFile=open(self.getLogFileName(), 'a')
         
     def getLogFileName(self):

@@ -164,7 +164,7 @@ class Constants():
                 STREET_TYPE_RESIDENTIAL])
     
     ADMIN_LEVEL_SET=[2, 4, 6, 8]
-    ADMIN_LEVEL_DISPLAY_SET=[2, 4, 6]
+    ADMIN_LEVEL_DISPLAY_SET=[2, 4, 6, 8]
     
     REF_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY, 
                            STREET_TYPE_TRUNK, 

@@ -2,3 +2,4 @@ data2*
 osmparser/importlogs
 tracks
 *~
+__pycache__
