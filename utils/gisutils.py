@@ -5,20 +5,23 @@ Created on Apr 30, 2012
 '''
 
 import re
+import time
 from Polygon.cPolygon import Polygon
 
 class GISUtils():
-    
+    coordsPattern = re.compile(r'[0-9\.]+|[^0-9\.]+')
+
     def parseCoords(self, coordsStr):
         coords=list()
-        x=re.findall(r'[0-9\.]+|[^0-9\.]+', coordsStr)
+        x=self.coordsPattern.findall(coordsStr)
         i=0
         while i<len(x)-2:
             coords.append((float(x[i+2]), float(x[i])))
             i=i+4
         return coords
-    
+
     def createCoordsFromPolygonString(self, coordsStr):
+
         x=coordsStr[:len("MULTIPOLYGON")]
         if x=="MULTIPOLYGON":
             return self.createCoordsFromMultiPolygon(coordsStr[15:-3])
@@ -59,8 +62,8 @@ class GISUtils():
     def createPointFromPointString(self, pointStr):
         pointStr=pointStr[6:-1]
         coordsPairs=pointStr.split(" ")
-        lon=float(coordsPairs[0].lstrip().rstrip())
-        lat=float(coordsPairs[1].lstrip().rstrip())
+        lon=float(coordsPairs[0].strip())
+        lat=float(coordsPairs[1].strip())
         return (lat, lon)
     
     def createCoordsFromLineString(self, lineString):

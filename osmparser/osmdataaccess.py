@@ -1444,7 +1444,7 @@ class OSMDataAccess(OSMDataSQLite):
     
     def getAreasInBboxWithGeom(self, areaTypeList, bbox, margin, withSimplify=False, tolerance=0.0):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)      
-        
+        print(withSimplify, tolerance)
         resultList=list()
         areaIdSet=set()
         filterString=None
@@ -1461,9 +1461,9 @@ class OSMDataAccess(OSMDataSQLite):
         else:
             tolerance=self.osmutils.degToMeter(tolerance)
             if filterString==None:
-                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY type'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(Simplify(geom, %f)) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY type'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
             else:
-                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(SimplifyPreserveTopology(geom, %f)) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s ORDER BY type'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+                self.cursorArea.execute('SELECT osmId, type, tags, layer, AsText(Simplify(geom, %f)) FROM areaTable WHERE ROWID IN (SELECT rowid FROM idx_areaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND type IN %s ORDER BY type'%(tolerance, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
         
         allentries=self.cursorArea.fetchall()
         
