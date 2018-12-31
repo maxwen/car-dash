@@ -1085,8 +1085,7 @@ class OSMDataImport(OSMDataSQLite):
 
                             try:
                                 adminLevel=int(tags["admin_level"])
-                                if not adminLevel in Constants.ADMIN_LEVEL_PARSE_SET:
-                                    self.log("skip admin multipolygon: %d %s level=%d"%(osmid, tags["name"], adminLevel))
+                                if not adminLevel in Constants.ADMIN_LEVEL_SET:
                                     continue
                             except ValueError:
                                 self.log("skip admin multipolygon: %d %s parse error adminLevel %s "%(osmid, tags["name"], tags["admin_level"]))
@@ -1294,8 +1293,8 @@ class OSMDataImport(OSMDataSQLite):
                             # to add our own admin infor later without clashing
                             if osmid>self.highestAdminRelationNumber:
                                 self.highestAdminRelationNumber=osmid
-
-                            self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
+                            if adminLevel != 2:
+                                self.addPolygonToAdminAreaTable(osmid, tags, adminLevel, polyString)
 
                             for wayId, refList in allOuterRefsCopy:
                                 coords, newRefList=self.createRefsCoords(refList)

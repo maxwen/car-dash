@@ -165,7 +165,6 @@ class Constants():
 
     ADMIN_LEVEL_SET=[2, 4, 6, 8]
     ADMIN_LEVEL_DISPLAY_SET=[2, 4, 6, 8]
-    ADMIN_LEVEL_PARSE_SET=[4, 6, 8]
 
     REF_LABEL_WAY_SET=set([STREET_TYPE_PRIMARY,
                            STREET_TYPE_TRUNK,
@@ -1493,22 +1492,6 @@ class OSMDataAccess(OSMDataSQLite):
 
         return resultList, areaIdSet
 
-    def getAdminAreasInBboxWithGeom(self, bbox, margin, adminLevelList):
-        lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)
-
-        filterString=self.createSQLFilterStringForIN(adminLevelList)
-
-        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE ROWID IN (SELECT rowid FROM idx_adminAreaTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND adminLevel IN %s AND Intersects(geom, BuildMBR(%f, %f, %f, %f, 4236))'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString, lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
-
-        allentries=self.cursorAdmin.fetchall()
-        resultList=list()
-        areaIdSet=set()
-        for x in allentries:
-            resultList.append(self.adminAreaFromDBWithCoordsString(x))
-            areaIdSet.add(x[0])
-
-        return resultList, areaIdSet
-
     def getAdminLinesInBboxWithGeom(self, bbox, margin, adminLevelList):
         lonRangeMin, latRangeMin, lonRangeMax, latRangeMax=self.createBBoxWithMargin(bbox, margin)
 
@@ -1520,7 +1503,7 @@ class OSMDataAccess(OSMDataSQLite):
         resultList=list()
         areaIdSet=set()
         for x in allentries:
-            resultList.append(self.adminLineFromDBWithCoordsString(x))
+            resultList.append((int(x[1]), self.adminLineFromDBWithCoordsString(x)))
             areaIdSet.add(x[0])
 
         return resultList, areaIdSet

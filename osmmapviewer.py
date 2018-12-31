@@ -1018,14 +1018,7 @@ class QtOSMWidget(QWidget):
         return None
 
     def getAdminLevelListForZoom(self):
-        if self.map_zoom in range(14, 19):
-            # all
-            return Constants.ADMIN_LEVEL_DISPLAY_SET
-
-        elif self.map_zoom in range(self.tileStartZoom + 1, 15):
-            return [2]
-
-        return None
+        return Constants.ADMIN_LEVEL_DISPLAY_SET
 
     def clearPolygonCache(self):
         self.prefetchBBox = None
@@ -1055,9 +1048,15 @@ class QtOSMWidget(QWidget):
 
     def displayAdminLines(self):
         pen = self.style.getStylePen("adminArea")
-        pen.setWidth(self.style.getAdminPenWidthForZoom(self.map_zoom))
         for line in self.adminLineList:
-            self.displayAdminLineWithCache(line, pen)
+            adminLevel = line[0]
+            lineCoords = line[1]
+            if adminLevel == 2:
+                pen.setStyle(Qt.SolidLine)
+            else:
+                pen.setStyle(Qt.DotLine)
+            pen.setWidth(self.style.getAdminPenWidthForZoom(self.map_zoom, adminLevel))
+            self.displayAdminLineWithCache(lineCoords, pen)
 
     def getVisibleWays(self, bbox):
         streetTypeList = self.getStreetTypeListForZoom()

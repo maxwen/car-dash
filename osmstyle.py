@@ -482,13 +482,15 @@ class OSMStyle():
 
         return 1
 
-    def getAdminPenWidthForZoom(self, zoom):
+    def getAdminPenWidthForZoom(self, zoom, adminLevel):
+        width = 2
         if zoom == 18:
-            return 4
+            width = 4
         if zoom == 17:
-            return 3
-
-        return 2
+            width = 3
+        if adminLevel == 2:
+            width = width * 2
+        return width
 
     def getPenWithForPoints(self, zoom):
         return self.getStreetPenWidthForZoom(zoom) + 4
