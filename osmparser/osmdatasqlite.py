@@ -28,13 +28,10 @@ class OSMDataSQLite():
 
     def getGISUtils(self):
         return self.gisUtils
-    
+
     def setPragmaForDB(self, cursor):
-        #cursor.execute('PRAGMA journal_mode=OFF')
-        #cursor.execute('PRAGMA synchronous=OFF')
         cursor.execute('PRAGMA cache_size=40000')
         cursor.execute('PRAGMA page_size=4096')
-        cursor.execute('PRAGMA locking_mode=EXCLUSIVE')
         cursor.execute('PRAGMA temp_store=MEMORY')
 
     def setPragmaForDBImport(self, cursor):
@@ -44,7 +41,7 @@ class OSMDataSQLite():
         cursor.execute('PRAGMA page_size=4096')
         cursor.execute('PRAGMA locking_mode=EXCLUSIVE')
         cursor.execute('PRAGMA temp_store=MEMORY')
-    
+
     def openEdgeDB(self, pragmaImport=False):
         self.connectionEdge=sqlite3.connect(self.getEdgeDBFile())
         self.cursorEdge=self.connectionEdge.cursor()
@@ -74,7 +71,7 @@ class OSMDataSQLite():
             self.setPragmaForDBImport(self.cursorWay)
         else:
             self.setPragmaForDB(self.cursorWay)
-        
+
     def openNodeDB(self, pragmaImport=False):
         self.connectionNode=sqlite3.connect(self.getNodeDBFile())
         self.cursorNode=self.connectionNode.cursor()
@@ -102,33 +99,33 @@ class OSMDataSQLite():
             self.setPragmaForDBImport(self.cursorAdmin)
         else:
             self.setPragmaForDB(self.cursorAdmin)
-    
+
     def closeEdgeDB(self):
         if self.connectionEdge!=None:
-            self.connectionEdge.commit()        
+            self.connectionEdge.commit()
             self.cursorEdge.close()
-            self.connectionEdge=None     
+            self.connectionEdge=None
             self.cursorEdge=None
 
     def closeAreaDB(self):
         if self.connectionArea!=None:
-            self.connectionArea.commit()        
+            self.connectionArea.commit()
             self.cursorArea.close()
-            self.connectionArea=None     
+            self.connectionArea=None
             self.cursorArea=None
-           
+
     def closeWayDB(self):
         if self.connectionWay!=None:
-            self.connectionWay.commit()        
+            self.connectionWay.commit()
             self.cursorWay.close()
-            self.connectionWay=None     
+            self.connectionWay=None
             self.cursorWay=None
-            
+
     def closeNodeDB(self):
         if self.connectionNode!=None:
-            self.connectionNode.commit()        
+            self.connectionNode.commit()
             self.cursorNode.close()
-            self.connectionNode=None     
+            self.connectionNode=None
             self.cursorNode=None
 
     def closeAdressDB(self):
@@ -144,7 +141,7 @@ class OSMDataSQLite():
             self.cursorAdmin.close()
             self.connectionAdmin=None
             self.cursorAdmin=None
-                 
+
     def openAllDB(self):
         self.openWayDB()
         self.openNodeDB()
@@ -152,7 +149,7 @@ class OSMDataSQLite():
         self.openAreaDB()
         self.openAdressDB()
         self.openAdminDB()
-    
+
     def closeAllDB(self):
         self.closeWayDB()
         self.closeNodeDB()
@@ -160,7 +157,7 @@ class OSMDataSQLite():
         self.closeAreaDB()
         self.closeAdressDB()
         self.closeAdminDB()
-        
+
     def wayFromDB(self, x):
         wayId=int(x[0])
         refs=pickle.loads(x[2])
@@ -174,7 +171,7 @@ class OSMDataSQLite():
             poiList=pickle.loads(x[7])
 
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList)
- 
+
     def wayFromDBWithCoordsString(self, x):
         wayId=int(x[0])
         refs=pickle.loads(x[2])
@@ -185,46 +182,46 @@ class OSMDataSQLite():
         maxspeed=int(x[6])
         poiList=None
         if x[7]!=None:
-            poiList=pickle.loads(x[7])    
+            poiList=pickle.loads(x[7])
         layer=int(x[8])
-        coordsStr=x[9]            
-        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)   
-    
+        coordsStr=x[9]
+        return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)
+
     def poiRefFromDB(self, x):
         refId=int(x[0])
         tags=self.decodeTags(x[1])
-        nodeType=int(x[2])            
+        nodeType=int(x[2])
         layer=int(x[3])
         pointStr=x[4]
         lat, lon=self.getGISUtils().createPointFromPointString(pointStr)
 
         return (refId, lat, lon, tags, nodeType, layer)
-    
+
     def crossingFromDB(self, x):
         crossingEntryId=x[0]
         wayid=x[1]
-        refId=x[2]            
+        refId=x[2]
         nextWayIdList=pickle.loads(x[3])
         return (crossingEntryId, wayid, refId, nextWayIdList)
-    
+
     def edgeFromDB(self, x):
         edgeId=x[0]
         startRef=x[1]
         endRef=x[2]
         length=x[3]
-        wayId=x[4]     
+        wayId=x[4]
         source=x[5]
         target=x[6]
         cost=x[7]
         reverseCost=x[8]
         return (edgeId, startRef, endRef, length, wayId, source, target, cost, reverseCost)
- 
+
     def edgeFromDBWithCoords(self, x):
         edgeId=x[0]
         startRef=x[1]
         endRef=x[2]
         length=x[3]
-        wayId=x[4]     
+        wayId=x[4]
         source=x[5]
         target=x[6]
         cost=x[7]
@@ -245,21 +242,21 @@ class OSMDataSQLite():
     def adminAreaFromDBWithCoordsString(self, x):
         osmId=x[0]
         tags=self.decodeTags(x[1])
-        adminLevel=int(x[2])  
+        adminLevel=int(x[2])
         polyStr=x[3]
         return (osmId, tags, adminLevel, polyStr)
 
     def adminLineFromDBWithCoordsString(self, x):
         osmId=x[0]
-        adminLevel=int(x[1])  
+        adminLevel=int(x[1])
         polyStr=x[2]
         return (osmId, adminLevel, polyStr)
-        
+
     def adminAreaFromDBWithParent(self, x):
         osmId=x[0]
         tags=self.decodeTags(x[1])
         if x[2]!=None:
-            adminLevel=int(x[2])  
+            adminLevel=int(x[2])
         else:
             adminLevel=None
         if x[3]!=None:
@@ -267,19 +264,19 @@ class OSMDataSQLite():
         else:
             parent=None
         return (osmId, tags, adminLevel, parent)
-     
+
     def areaFromDB(self, x):
         osmId=x[0]
         areaType=x[1]
         tags=self.decodeTags(x[2])
         return (osmId, areaType, tags)
-    
+
     def decodeStreetInfo(self, streetInfo):
         oneway=(streetInfo&63)>>4
         roundabout=(streetInfo&127)>>6
         streetTypeId=(streetInfo&15)
         return streetTypeId, oneway, roundabout
-    
+
     def decodeStreetInfo2(self, streetInfo):
         oneway=(streetInfo&63)>>4
         roundabout=(streetInfo&127)>>6
@@ -321,7 +318,7 @@ class OSMDataSQLite():
                 osmId=int(x[4])
 
         return (restrictionId, target, viaPath, toCost, osmId)
-    
+
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
         return os.path.join(getDataRoot(), "data2")
@@ -333,15 +330,15 @@ class OSMDataSQLite():
     def getAreaDBFile(self):
         file="area.db"
         return os.path.join(self.getDataDir(), file)
-    
+
     def getAdressDBFile(self):
         file="adress.db"
         return os.path.join(self.getDataDir(), file)
-    
+
     def getWayDBFile(self):
         file="ways.db"
         return os.path.join(self.getDataDir(), file)
-    
+
     def getNodeDBFile(self):
         file="nodes.db"
         return os.path.join(self.getDataDir(), file)
@@ -349,7 +346,7 @@ class OSMDataSQLite():
     def getAdminDBFile(self):
         file="admin.db"
         return os.path.join(self.getDataDir(), file)
-                        
+
     def edgeDBExists(self):
         return os.path.exists(self.getEdgeDBFile())
 
@@ -361,13 +358,13 @@ class OSMDataSQLite():
 
     def nodeDBExists(self):
         return os.path.exists(self.getNodeDBFile())
-                
+
     def adressDBExists(self):
         return os.path.exists(self.getAdressDBFile())
 
     def adminDBExists(self):
         return os.path.exists(self.getAdminDBFile())
-    
+
     def getOSMDataInfo(self):
         osmDataList=dict()
         osmData=dict()
@@ -375,19 +372,19 @@ class OSMDataSQLite():
         osmData["poly"]="austria.poly"
         osmData["polyCountry"]="Europe / Western Europe / Austria"
         osmDataList[0]=osmData
-        
+
         osmData=dict()
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/switzerland-latest.osm.pbf'
         osmData["poly"]="switzerland.poly"
         osmData["polyCountry"]="Europe / Western Europe / Switzerland"
         osmDataList[1]=osmData
-    
+
         osmData=dict()
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/bayern-latest.osm.pbf'
         osmData["poly"]="germany.poly"
         osmData["polyCountry"]="Europe / Western Europe / Germany"
         osmDataList[2]=osmData
-        
+
         osmData=dict()
         osmData["osmFile"]='/home/maxl/Downloads/geofabrik/liechtenstein-latest.osm.pbf'
         osmData["poly"]="liechtenstein.poly"
@@ -395,13 +392,13 @@ class OSMDataSQLite():
         osmDataList[3]=osmData
 
         return osmDataList
-    
+
     def getWayEntryForId(self, wayId):
         self.cursorWay.execute('SELECT * FROM wayTable where wayId=%d'%(wayId))
         allentries=self.cursorWay.fetchall()
         if len(allentries)==1:
             return self.wayFromDB(allentries[0])
-        
+
         return (None, None, None, None, None, None, None, None)
 
     def getLenOfEdgeTable(self):
@@ -413,7 +410,7 @@ class OSMDataSQLite():
         self.cursorWay.execute('SELECT COUNT(wayId) FROM wayTable')
         allentries=self.cursorWay.fetchall()
         return int(allentries[0][0])
-        
+
     def getEdgeEntryForId(self, edgeId):
         self.cursorEdge.execute('SELECT * FROM edgeTable where id=%d'%(edgeId))
         allentries=self.cursorEdge.fetchall()
@@ -421,12 +418,12 @@ class OSMDataSQLite():
             edge=self.edgeFromDB(allentries[0])
             return edge
         return (None, None, None, None, None, None, None, None, None)
-    
+
     def isValidOnewayEnter(self, oneway, ref, startRef, endRef):
         # in the middle of a oneway
         if ref!=startRef and ref!=endRef:
             return True
-        
+
         if oneway==1:
             if ref==startRef:
                 return True
@@ -446,7 +443,7 @@ class OSMDataSQLite():
             return None
         pickeledTags=pickle.dumps(tags)
         return pickeledTags
-    
+
     def getAllAdminAreas(self, adminLevelList, sortByAdminLevel):
         filterString=self.createSQLFilterStringForIN(adminLevelList)
 
@@ -456,19 +453,19 @@ class OSMDataSQLite():
             sql='SELECT osmId, tags, adminLevel, AsText(geom) FROM adminAreaTable WHERE adminLevel IN %s'%(filterString)
 
         self.cursorAdmin.execute(sql)
-             
+
         allentries=self.cursorAdmin.fetchall()
         resultList=list()
         for x in allentries:
             resultList.append(self.adminAreaFromDBWithCoordsString(x))
-            
-        return resultList     
-    
+
+        return resultList
+
     def createSQLFilterStringForIN(self, typeIdList):
         filterString='('
         for typeId in typeIdList:
             filterString=filterString+str(typeId)+','
-            
+
         filterString=filterString[:-1]
         filterString=filterString+')'
         return filterString

@@ -10,6 +10,8 @@ import os
 import signal
 import urllib.request
 import io
+import time
+
 from collections import deque, OrderedDict
 from utils.env import getTileRoot, getImageRoot, getRoot
 from utils.gisutils import GISUtils
@@ -48,8 +50,8 @@ IMAGE_HEIGHT_TINY = 24
 
 MAX_TILE_CACHE = 1000
 TILE_CLEANUP_SIZE = 50
-WITH_CROSSING_DEBUG = True
-WITH_TIMING_DEBUG = True
+WITH_CROSSING_DEBUG = False
+WITH_TIMING_DEBUG = False
 SIDEBAR_WIDTH = 80
 CONTROL_WIDTH = 80
 SCREEN_BORDER_WIDTH = 50

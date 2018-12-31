@@ -8,11 +8,10 @@ Created on Jan 17, 2012
 from utils.fnmatch import fnmatch
 import re
 import os
-import time
-
+import sqlite3
 
 from PyQt5.QtWidgets import QCommonStyle, QPushButton, QWidget, QVBoxLayout, QDialog, QTabWidget, QStyle, QHBoxLayout, QTreeView, QRadioButton, QTabWidget, QFormLayout, QComboBox, QAbstractItemView, QCommonStyle, QStyle, QProgressBar, QInputDialog, QLineEdit, QHeaderView, QTableView, QDialog, QHBoxLayout, QApplication, QLabel, QMenu, QAction, QMainWindow, QTabWidget, QCheckBox, QVBoxLayout, QPushButton, QWidget, QSizePolicy
-from PyQt5.QtCore import pyqtSignal, QUrl, QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, pyqtSignal, QRect, QThread, QItemSelectionModel
+from PyQt5.QtCore import QThreadPool, QRunnable, pyqtSignal, QUrl, QModelIndex, QVariant, QAbstractItemModel, QAbstractTableModel, Qt, QPoint, QSize, pyqtSlot, pyqtSignal, QRect, QThread, QItemSelectionModel
 from PyQt5.QtGui import QDesktopServices, QValidator, QIcon, QPalette, QPixmap, QPainter, QPen
 from osmparser.osmdataaccess import OSMDataAccess, Constants
 from osmstyle import OSMStyle
@@ -52,38 +51,74 @@ def loadDialogSettings(config):
                         value=int(value)
                     except ValueError:
                         None
-                        
+
                 settings[key[7:]]=value
-    
+
 def saveDialogSettings(config):
     section="dialog"
     config.removeSection(section)
     config.addSection(section)
     for key, value in settings.items():
         config.set(section, section+"."+key, str(value))
-        
+
+class Worker(QRunnable):
+    '''
+    Worker thread
+
+    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
+
+    :param callback: The function callback to run on this worker thread. Supplied args and
+                     kwargs will be passed through to the runner.
+    :type callback: function
+    :param args: Arguments to pass to the callback function
+    :param kwargs: Keywords to pass to the callback function
+
+    '''
+
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+        # Store constructor arguments (re-used for processing)
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+
+    @pyqtSlot()
+    def run(self):
+        '''
+        Initialise the runner function with passed args, kwargs.
+        '''
+        self.fn(*self.args, **self.kwargs)
+
 class OSMAdressTableModel(QAbstractTableModel):
     def __init__(self, adminAreaDict, reverseAdminAreaDict, parent):
         QAbstractTableModel.__init__(self, parent)
         self.adminAreaDict=adminAreaDict
         self.reverseAdminAreaDict=reverseAdminAreaDict
-        
-    def rowCount(self, parent): 
+        self.loading = False
+
+    def rowCount(self, parent):
         return len(self.streetList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 3
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role != Qt.DisplayRole:
             return None
-        
+
+        if self.loading is True:
+            if index.column()==0:
+                return self.streetList[0]
+            return ""
         if index.row() >= len(self.streetList):
             return ""
         (_, _, _, cityId, _, streetName, houseNumber, lat, lon)=self.streetList[index.row()]
-        city=self.adminAreaDict[cityId]
+        try:
+            city=self.adminAreaDict[cityId]
+        except KeyError:
+            city=None
 
         if index.column()==0:
             return streetName
@@ -113,29 +148,40 @@ class OSMAdressTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, streetList):
         self.beginResetModel()
+        self.loading = False
         self.streetList=streetList
         self.endResetModel()
-        
+
+    def setLoading(self):
+        self.beginResetModel()
+        self.loading = True
+        self.streetList=list()
+        self.streetList.append("Loading...")
+        self.endResetModel()
+
+    def isLoading(self):
+        return self.loading
+
 class OSMAdressTableModelCity(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.cityList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 1
-    
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role != Qt.DisplayRole:
             return None
-        
+
         if index.row() >= len(self.cityList):
             return ""
         cityId, cityName=self.cityList[index.row()]
@@ -154,14 +200,14 @@ class OSMAdressTableModelCity(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, cityList, cityModel):
         self.beginResetModel()
         self.cityList=cityList
         self.cityModel=cityModel
         self.endResetModel()
-        
+
 class OSMCityModel():
     def __init__(self, osmParserData, countryId):
         self.root=dict()
@@ -169,7 +215,7 @@ class OSMCityModel():
         self.osmParserData=osmParserData
         self.cityDataCache=dict()
         self.buildModel(self.countryId, self.root)
-    
+
     def buildModel(self, currentCityId, data):
         cityList=self.osmParserData.getAdminChildsForId(currentCityId)
         for cityId, cityName, adminLevel in cityList:
@@ -177,51 +223,51 @@ class OSMCityModel():
             data[cityId]=(cityId, cityName, currentCityId, childs, adminLevel)
             self.cityDataCache[cityId]=(cityId, cityName, currentCityId, childs, adminLevel)
             self.buildModel(cityId, childs)
-            
+
     def getRootNodes(self):
         return list(self.root.values())
-        
+
     def getParent(self, currentCityId):
         cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return parentId
         return None
-    
+
     def getChilds(self, currentCityId):
         cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
         if parentId!=None:
             return list(childs.values())
         return None
-    
+
     def getCityData(self, currentCityId, data):
         return self.cityDataCache[currentCityId]
-        
+
 #        cityData=self.getCityDataRecursive(currentCityId, data)
 #        self.cityDataCache[currentCityId]=cityData
 #        return cityData
-    
+
 #    def getCityDataRecursive(self, currentCityId, data):
 #        for (cityId, cityName, parentId, childs) in data.values():
 #            if cityId==currentCityId:
 #                return (cityId, cityName, parentId, childs)
-#            
+#
 #            foundCityId, foundCityName, foundParent, foundChilds=self.getCityDataRecursive(currentCityId, childs)
 #            if foundCityId!=None:
 #                return foundCityId, foundCityName, foundParent, foundChilds
-#    
+#
 #        return None, None, None, None
-    
+
     def hasMatchingChilds(self, currentCityId, filteredCityList):
         cityId, cityName, parentId, childs, adminLevel=self.getCityData(currentCityId, self.root)
 
         if cityId in filteredCityList:
             return True
-            
-        for (cityId, _, _, _, _) in childs.values():            
+
+        for (cityId, _, _, _, _) in childs.values():
             matching=self.hasMatchingChilds(cityId, filteredCityList)
             if matching==True:
                 return matching
-    
+
         return False
 
 class OSMTreeItem(object):
@@ -231,7 +277,7 @@ class OSMTreeItem(object):
         self.parentItem=parentItem
         self.childItems=[]
         self.adminLevel=adminLevel
-        
+
     def appendChild(self, item):
         self.childItems.append(item)
 
@@ -240,7 +286,7 @@ class OSMTreeItem(object):
 
     def childCount(self):
         return len(self.childItems)
-    
+
     def data(self, column):
         if column == 0:
             return self.areaName
@@ -250,31 +296,31 @@ class OSMTreeItem(object):
 
     def parent(self):
         return self.parentItem
-    
+
     def row(self):
         if self.parentItem!=None:
             return self.parentItem.childItems.index(self)
         return 0
-        
+
     def __repr__(self):
         return "%d:%s"%(self.osmId, self.areaName)
-    
+
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
-        return self.osmId==other.osmId        
-    
+        return self.osmId==other.osmId
+
 class OSMAdressTreeModelCity(QAbstractItemModel):
     def __init__(self, parent):
         QAbstractItemModel.__init__(self, parent)
         self.rootItem=OSMTreeItem(-1, "ALL", None, 0)
-        
+
     def citySort(self, item):
         return item[1]
-    
+
     def update(self, filteredCityList, treeModel, saveState=True):
         self.layoutAboutToBeChanged.emit()
-        
+
         itemList=list()
 #        if saveState==True:
 #            for index in self.persistentIndexList():
@@ -282,11 +328,11 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
 #                    itemList.append((index.row(), index.column(), index.internalPointer()))
 
         self.rootItem=OSMTreeItem(-1, "ALL", None, 0)
-        
+
         filterdCitySet=set()
         for cityId, cityName, adminLevel in filteredCityList:
             filterdCitySet.add(cityId)
-            
+
         rootNodes=treeModel.getRootNodes()
         rootNodes.sort(key=self.citySort)
         for cityId, cityName, parentId, childs, adminLevel in rootNodes:
@@ -294,15 +340,15 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 treeItem=OSMTreeItem(cityId, cityName, self.rootItem, adminLevel)
                 self.rootItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
-             
+
 #        if saveState==True:
 #            for row, column, item in itemList:
 #                toIndex=self.searchModel(item.osmId)
 #                if toIndex!=None:
 #                    self.changePersistentIndex(self.createIndex(row, column, item), toIndex)
-        
+
         self.layoutChanged.emit()
-        
+
     def addChilds(self, filterdCitySet, parentTreeItem, treeModel):
         childNodes=treeModel.getChilds(parentTreeItem.osmId)
         childNodes.sort(key=self.citySort)
@@ -311,7 +357,7 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
                 treeItem=OSMTreeItem(cityId, cityName, parentTreeItem, adminLevel)
                 parentTreeItem.appendChild(treeItem)
                 self.addChilds(filterdCitySet, treeItem, treeModel)
-            
+
     def columnCount(self, parent=None):
         return 1
 
@@ -336,7 +382,7 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
+
     def index(self, row, column, parent=QModelIndex()):
         if not self.hasIndex(row, column, parent):
             return QModelIndex()
@@ -359,12 +405,12 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         childItem = index.internalPointer()
         if not childItem:
             return QModelIndex()
-        
+
         parentItem = childItem.parent()
-        
+
         if not parentItem:
             return QModelIndex()
-            
+
         if parentItem == self.rootItem:
             return QModelIndex()
 
@@ -378,39 +424,188 @@ class OSMAdressTreeModelCity(QAbstractItemModel):
         else:
             p_Item = parent.internalPointer()
         return p_Item.childCount()
-    
+
     def searchModel(self, osmId):
         def searchNode(node):
             for child in node.childItems:
                 if osmId == child.osmId:
                     return self.createIndex(child.row(), 0, child)
-                    
+
                 if child.childCount() > 0:
                     result = searchNode(child)
                     if result:
                         return result
-        
+
         return searchNode(self.rootItem)
 
 class OSMDialogWithSettings(QDialog):
     def __init__(self, parent):
-        QDialog.__init__(self, parent) 
-    
+        QDialog.__init__(self, parent)
+        self.pool = QThreadPool.globalInstance()
+        self.pool.setMaxThreadCount(1)
+
     def clearSettings(self):
         settings=dict()
-        
+
     def addSetting(self, key, value):
         settings[key]=value
-    
+
     def getSetting(self, key):
         if key in settings:
             return settings[key]
-        
+
         return None
-    
+
+    def openAdressDB(self):
+        self.connectionAdress=sqlite3.connect(self.osmParserData.getAdressDBFile(), check_same_thread=False)
+        self.cursorAdress=self.connectionAdress.cursor()
+
+    def openAdminDB(self):
+        self.connectionAdmin=sqlite3.connect(self.osmParserData.getAdminDBFile(), check_same_thread=False)
+        self.cursorAdmin=self.connectionAdmin.cursor()
+        self.connectionAdmin.enable_load_extension(True)
+        self.cursorAdmin.execute("SELECT load_extension('mod_spatialite.so')")
+
+    def openNodeDB(self):
+        self.connectionNode=sqlite3.connect(self.osmParserData.getNodeDBFile(), check_same_thread=False)
+        self.cursorNode=self.connectionNode.cursor()
+        self.connectionNode.enable_load_extension(True)
+        self.cursorNode.execute("SELECT load_extension('mod_spatialite.so')")
+
+    def closeAdressDB(self):
+        if self.connectionAdress!=None:
+            self.connectionAdress.commit()
+            self.cursorAdress.close()
+            self.connectionAdress=None
+            self.cursorAdress=None
+
+    def closeAdminDB(self):
+        if self.connectionAdmin!=None:
+            self.connectionAdmin.commit()
+            self.cursorAdmin.close()
+            self.connectionAdmin=None
+            self.cursorAdmin=None
+
+    def closeNodeDB(self):
+        if self.connectionNode!=None:
+            self.connectionNode.commit()
+            self.cursorNode.close()
+            self.connectionNode=None
+            self.cursorNode=None
+
+    def getAdressListForCity(self, countryId, cityId):
+        streetList=list()
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city=%d'%(countryId, cityId))
+        allentries=self.cursorAdress.fetchall()
+        for x in allentries:
+            streetList.append(self.addressFromDB(x))
+
+        return streetList
+
+    def getAdressListForCityRecursive(self, countryId, osmId):
+        streetList=list()
+        cityList=list()
+        self.getAdminChildsForIdRecursive(osmId, cityList)
+
+        # add self
+        cityList.append((osmId, None, None))
+
+        cityIdList=list()
+        for cityId, _, _ in cityList:
+            cityIdList.append(cityId)
+
+        filterString=self.osmParserData.createSQLFilterStringForIN(cityIdList)
+
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d AND city IN %s'%(countryId, filterString))
+        allentries=self.cursorAdress.fetchall()
+        for x in allentries:
+            streetList.append(self.osmParserData.addressFromDB(x))
+
+        return streetList
+
+    def getAdressListForCountry(self, countryId):
+        self.cursorAdress.execute('SELECT * FROM addressTable WHERE country=%d'%(countryId))
+        allentries=self.cursorAdress.fetchall()
+        streetList=list()
+        for x in allentries:
+            streetList.append(self.osmParserData.addressFromDB(x))
+
+        return streetList
+
+    def getAdminChildsForId(self, osmId):
+        childList=list()
+
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorAdmin.fetchall()
+        for x in allentries:
+            childId=int(x[0])
+            adminLevel=int(x[2])
+            tags=self.osmParserData.decodeTags(x[1])
+            if "name" in tags:
+                childList.append((childId, tags["name"], adminLevel))
+
+        return childList
+
+    def getAdminChildsForIdRecursive(self, osmId, childList):
+        self.cursorAdmin.execute('SELECT osmId, tags, adminLevel FROM adminAreaTable WHERE parent=%d'%(osmId))
+        allentries=self.cursorAdmin.fetchall()
+        for x in allentries:
+            childId=int(x[0])
+            adminLevel=int(x[2])
+            tags=self.osmParserData.decodeTags(x[1])
+            if "name" in tags:
+                childList.append((childId, tags["name"], adminLevel))
+                self.getAdminChildsForIdRecursive(childId, childList)
+
+    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId, cityId, recursive):
+        filterString=self.osmParserData.createSQLFilterStringForIN(nodeTypeList)
+        if countryId!=None:
+            if cityId!=None:
+                if recursive==True:
+                    cityList=list()
+                    self.getAdminChildsForIdRecursive(cityId, cityList)
+
+                    # add self
+                    cityList.append((cityId, None, None))
+
+                    cityIdList=list()
+                    for cityId, _, _ in cityList:
+                        cityIdList.append(cityId)
+
+                    cityFilterString=self.osmParserData.createSQLFilterStringForIN(cityIdList)
+                    self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND city IN %s AND type IN %s'%(lon, lat, countryId, cityFilterString, filterString))
+                else:
+                    self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND city=%d AND type IN %s'%(lon, lat, countryId, cityId, filterString))
+            else:
+                self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND type IN %s'%(lon, lat, countryId, filterString))
+        else:
+            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE type IN %s'%(lon, lat, filterString))
+
+        allentries=self.cursorNode.fetchall()
+        resultList=list()
+
+        for x in allentries:
+            refId=int(x[0])
+            tags=self.osmParserData.decodeTags(x[1])
+            nodeType=int(x[2])
+            layer=int(x[3])
+            if x[4]!=None:
+                cityId=int(x[4])
+            else:
+                cityId=None
+
+            pointStr=x[5]
+            lat, lon=self.osmParserData.getGISUtils().createPointFromPointString(pointStr)
+            distance=int(x[6])
+
+            displayString=self.osmParserData.getPOITagString(tags)
+            resultList.append((refId, lat, lon, tags, nodeType, cityId, distance, displayString))
+
+        return resultList
+
 class OSMAdressDialog(OSMDialogWithSettings):
     def __init__(self, parent, osmParserData, defaultCountryId):
-        OSMDialogWithSettings.__init__(self, parent) 
+        OSMDialogWithSettings.__init__(self, parent)
 
         self.osmParserData=osmParserData
         font = self.font()
@@ -424,63 +619,68 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.reverseCountryDict=dict()
         for osmId, countryName in self.countryDict.items():
             self.reverseCountryDict[countryName]=osmId
-            
+
         self.cityList=list()
         self.filteredCityList=list()
         self.filteredStreetList=list()
         self.streetList=list()
-        
+
         self.currentCountryId=None
         self.currentCityId=None
-        
+
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
         self.wayPointIcon=QIcon(self.style.getStylePixmap("wayPixmap"))
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
         self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
-        
+
         self.pointType=None
         self.selectedAddress=None
-        
+
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
         self.cityRecursive=False
         self.pointDict=dict()
+        self.openAdressDB()
+        self.openAdminDB()
         self.initUI()
-         
+
     def updateAdressListForCity(self):
         if self.currentCityId!=None:
             if self.cityRecursive==True:
-                self.streetList=sorted(self.osmParserData.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+                self.streetList=self.getAdressListForCityRecursive(self.currentCountryId, self.currentCityId)
+                #self.streetList=sorted(self.streetList, key=self.houseNumberSort)
             else:
-                self.streetList=sorted(self.osmParserData.getAdressListForCity(self.currentCountryId, self.currentCityId), key=self.houseNumberSort)
+                self.streetList=self.getAdressListForCity(self.currentCountryId, self.currentCityId)
+                #self.streetList=sorted(self.streetList, key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
-        
+
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
 
     def updateAddressListForCountry(self):
         if self.currentCountryId!=None:
-            self.streetList=sorted(self.osmParserData.getAdressListForCountry(self.currentCountryId), key=self.houseNumberSort)
+            self.streetList=self.getAdressListForCountry(self.currentCountryId)
+            #self.streetList=sorted(self.streetList, key=self.houseNumberSort)
             self.streetList=sorted(self.streetList, key=self.streetNameSort)
         else:
             self.streetList=list()
-        
+
         self.lastFilterValueText=None
         self.lastFilteredStreetList=None
 
     def updateCityListForCountry(self):
         if self.currentCountryId!=None:
             self.cityList=list()
-            self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
+            self.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
             self.cityList.sort(key=self.citySort)
 
         else:
             self.cityList=list()
-                
+
     def streetNameSort(self, item):
         if item[5]==None:
             return ""
@@ -489,7 +689,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
     def houseNumberSort(self, item):
         if item[6]==None:
             return 0
-        
+
         houseNumberStr=item[6]
         try:
             houseNumber=int(houseNumberStr)
@@ -499,10 +699,10 @@ class OSMAdressDialog(OSMDialogWithSettings):
             if len(numbers[0])!=0:
                 return int(numbers[0])
         return 0
-   
+
     def citySort(self, item):
         return item[1]
-    
+
     def getResult(self):
         return (self.selectedAddress, self.pointType)
 
@@ -513,7 +713,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         lastCountryId=self.getSetting("osmadressdialog.country")
         lastCityId=self.getSetting("osmadressdialog.city")
         lastCityFilter=self.getSetting("osmadressdialog.cityfilter")
@@ -523,13 +723,13 @@ class OSMAdressDialog(OSMDialogWithSettings):
 
         self.countryCombo=QComboBox(self)
         defaultCountryName=None
-        
+
         if lastCountryId==None or not lastCountryId in self.countryDict.keys():
             if self.defaultCountryId!=None:
                 defaultCountryName=self.countryDict[self.defaultCountryId]
         else:
             defaultCountryName=self.countryDict[lastCountryId]
-            
+
         countryList=sorted(self.reverseCountryDict.keys())
         i=0
         defaultIndex=0
@@ -538,28 +738,28 @@ class OSMAdressDialog(OSMDialogWithSettings):
             if countryName==defaultCountryName:
                 defaultIndex=i
             i=i+1
-            
+
         self.countryCombo.setCurrentIndex(defaultIndex)
-                
-        self.countryCombo.activated.connect(self._countryChanged)
+
+        self.countryCombo.activated.connect(self.countryChangedWorker)
         top.addWidget(self.countryCombo)
-        
-        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]        
+
+        self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
 
         dataArea=QHBoxLayout()
-        
+
         cityBox=QVBoxLayout()
         self.cityFilterEdit=QLineEdit(self)
         if lastCityFilter!=None:
             self.cityFilterEdit.setText(lastCityFilter)
         self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
         cityBox.addWidget(self.cityFilterEdit)
-        
+
         hbox=QHBoxLayout()
         self.ignoreCityButton=QCheckBox("No Area", self)
         if lastIgnoreCity!=None:
             self.ignoreCityButton.setChecked(lastIgnoreCity)
-        self.ignoreCityButton.clicked.connect(self._ignoreCity)
+        self.ignoreCityButton.clicked.connect(self.ignoreCityWprker)
         hbox.addWidget(self.ignoreCityButton)
 
         self.cityRecursiveButton=QCheckBox("Recursive", self)
@@ -572,10 +772,10 @@ class OSMAdressDialog(OSMDialogWithSettings):
 
         self.cityView=QTreeView(self)
         cityBox.addWidget(self.cityView)
-                
+
         self.cityViewModel=OSMAdressTreeModelCity(self)
         self.cityView.setModel(self.cityViewModel)
-        
+
         header=QHeaderView(Qt.Horizontal, self.cityView)
         header.setStretchLastSection(True)
         self.cityView.setHeader(header)
@@ -590,12 +790,12 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.streetFilterEdit.setText(lastStreetFilter)
         self.streetFilterEdit.textChanged.connect(self._applyFilterStreet)
         streetBox.addWidget(self.streetFilterEdit)
-                
+
         self.streetView=QTableView(self)
         streetBox.addWidget(self.streetView)
-        
+
         dataArea.addLayout(streetBox)
-        
+
         self.streetViewModel=OSMAdressTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self)
         self.streetViewModel.update(self.filteredStreetList)
         self.streetView.setModel(self.streetViewModel)
@@ -612,13 +812,13 @@ class OSMAdressDialog(OSMDialogWithSettings):
 
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.addFavButton=QPushButton("Favorite", self)
         self.addFavButton.clicked.connect(self._addFavPoint)
         self.addFavButton.setIcon(self.favoriteIcon)
         self.addFavButton.setEnabled(False)
         actionButtons.addWidget(self.addFavButton)
-        
+
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
         self.showPointButton.setIcon(self.mapPointIcon)
@@ -630,13 +830,13 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.setStartPointButton.setIcon(self.startPointIcon)
         self.setStartPointButton.setEnabled(False)
         actionButtons.addWidget(self.setStartPointButton)
-        
+
         self.setEndPointButton=QPushButton("Finish", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)
         actionButtons.addWidget(self.setEndPointButton)
-        
+
         self.setWayPointButton=QPushButton("Way", self)
         self.setWayPointButton.clicked.connect(self._setWayPoint)
         self.setWayPointButton.setIcon(self.wayPointIcon)
@@ -647,46 +847,44 @@ class OSMAdressDialog(OSMDialogWithSettings):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         style=QCommonStyle()
-                
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
         buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
-        
+
         selectionStreet = self.streetView.selectionModel()
         selectionStreet .selectionChanged.connect(self._selectionChanged)
         selectionCity = self.cityView.selectionModel()
-        selectionCity.selectionChanged.connect(self._cityChanged)
+        selectionCity.selectionChanged.connect(self.cityChangedWorker)
 
         self.setLayout(top)
         self.setWindowTitle('Addresses')
         self.setGeometry(0, 0, 850, 550)
-        
+
         self.initCityUI()
 
-        self._countryChanged()
+        self.countryChangedWorker()
         if lastCityId!=None:
             nodeIndex=self.cityViewModel.searchModel(lastCityId)
             if nodeIndex!=None and nodeIndex.isValid():
-                self.cityView.setCurrentIndex(nodeIndex);
-           
+                self.cityView.setCurrentIndex(nodeIndex)
+
     @pyqtSlot()
     def _setCityRecursive(self):
         self.cityRecursive=self.cityRecursiveButton.isChecked()
         if self.currentCityId!=None:
             self.updateAdressListForCity()
             self._applyFilterStreet()
-            
+
     def initCityUI(self):
         value=self.ignoreCityButton.isChecked()
         if value==True:
@@ -694,44 +892,61 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.cityFilterEdit.setDisabled(True)
         else:
             self.cityView.setDisabled(False)
-            self.cityFilterEdit.setDisabled(False) 
-        
+            self.cityFilterEdit.setDisabled(False)
+
         self.cityRecursive=self.cityRecursiveButton.isChecked()
+
+    @pyqtSlot()
+    def ignoreCityWprker(self):
+        worker = Worker(self._ignoreCity)
+        self.pool.start(worker)
 
     @pyqtSlot()
     def _ignoreCity(self):
         self._clearCityTableSelection()
         self._clearStreetTableSelection()
+        self.streetViewModel.setLoading()
 
         self.initCityUI()
         self.updateAddressListForCountry()
         self._applyFilterStreet()
-            
+
+    @pyqtSlot()
+    def countryChangedWorker(self):
+        worker = Worker(self._countryChanged)
+        self.pool.start(worker)
+
     @pyqtSlot()
     def _countryChanged(self):
         self._clearCityTableSelection()
         self._clearStreetTableSelection()
+        self.streetViewModel.setLoading()
 
         self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
-        
+
         self.updateCityListForCountry()
-        self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
+        self.cityModel=OSMCityModel(self, self.currentCountryId)
         self.cityViewModel.update(self.cityList, self.cityModel, False)
-        
+
         self.currentCityId=None
         value=self.ignoreCityButton.isChecked()
         if value==True:
             self.updateAddressListForCountry()
         else:
             self.updateAdressListForCity()
-        
+
         self._applyFilterCity()
         self._applyFilterStreet()
 
-        
+    @pyqtSlot()
+    def cityChangedWorker(self):
+        worker = Worker(self._cityChanged)
+        self.pool.start(worker)
+
     @pyqtSlot()
     def _cityChanged(self):
         self._clearStreetTableSelection()
+        self.streetViewModel.setLoading()
         selmodel = self.cityView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
@@ -739,18 +954,18 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.updateAdressListForCity()
             self._applyFilterStreet()
             print(self.currentCityId)
-                    
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.streetView.selectionModel()
         current = selmodel.currentIndex()
-#        self.okButton.setEnabled(current.isValid())
-        self.setEndPointButton.setEnabled(current.isValid())
-        self.setStartPointButton.setEnabled(current.isValid())
-        self.setWayPointButton.setEnabled(current.isValid())
-        self.showPointButton.setEnabled(current.isValid())
-        self.addFavButton.setEnabled(current.isValid())
-        
+        valid =  current.isValid() and not self.streetViewModel.isLoading()
+        self.setEndPointButton.setEnabled(valid)
+        self.setStartPointButton.setEnabled(valid)
+        self.setWayPointButton.setEnabled(valid)
+        self.showPointButton.setEnabled(valid)
+        self.addFavButton.setEnabled(valid)
+
     def done(self, code):
         self.addSetting("osmadressdialog.country", self.currentCountryId)
         self.addSetting("osmadressdialog.city", self.currentCityId)
@@ -758,7 +973,10 @@ class OSMAdressDialog(OSMDialogWithSettings):
         self.addSetting("osmadressdialog.streetfilter", self.streetFilterEdit.text())
         self.addSetting("osmadressdialog.ignorecity", self.ignoreCityButton.isChecked())
         self.addSetting("osmadressdialog.recursive", self.cityRecursiveButton.isChecked())
-        
+
+        self.closeAdressDB()
+        self.closeAdminDB()
+
         return super(OSMAdressDialog, self).done(code)
 
     @pyqtSlot()
@@ -768,14 +986,14 @@ class OSMAdressDialog(OSMDialogWithSettings):
     @pyqtSlot()
     def _ok(self):
         self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _showPoint(self):
         selmodel = self.streetView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
             self.selectedAddress=self.filteredStreetList[current.row()]
-            self.pointType=OSMRoutingPoint.TYPE_MAP         
+            self.pointType=OSMRoutingPoint.TYPE_MAP
             self.pointDict[self.pointType]=self.selectedAddress
         self.done(QDialog.Accepted)
 
@@ -788,7 +1006,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.pointType=OSMRoutingPoint.TYPE_FAVORITE
             self.pointDict[self.pointType]=self.selectedAddress
 #        self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _setWayPoint(self):
         selmodel = self.streetView.selectionModel()
@@ -818,24 +1036,23 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.pointType=OSMRoutingPoint.TYPE_END
             self.pointDict[self.pointType]=self.selectedAddress
 #        self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _clearStreetTableSelection(self):
         self.streetView.clearSelection()
-#        self.okButton.setEnabled(False)
         self.setWayPointButton.setEnabled(False)
         self.setStartPointButton.setEnabled(False)
         self.setEndPointButton.setEnabled(False)
         self.showPointButton.setEnabled(False)
+        self.addFavButton.setEnabled(False)
 
     @pyqtSlot()
     def _clearCityTableSelection(self):
         self.cityView.clearSelection()
         self.currentCityId=None
-        
+
     @pyqtSlot()
     def _applyFilterStreet(self):
-        start=time.time()
         self._clearStreetTableSelection()
         filterValueText=self.streetFilterEdit.text()
         if len(filterValueText)!=0:
@@ -852,7 +1069,7 @@ class OSMAdressDialog(OSMDialogWithSettings):
 #                print(self.lastFilterValueText)
                 if filterValueText[:len(self.lastFilterValueText)]==self.lastFilterValueText:
                     newFilterList=False
-                    
+
             if newFilterList==True:
 #                print("use all")
                 currentStreetList=self.streetList
@@ -866,16 +1083,15 @@ class OSMAdressDialog(OSMDialogWithSettings):
                     match=True
                 if match==False and filterValueMod!=None and fnmatch(streetName.upper(), filterValueMod.upper()):
                     match=True
-                
+
                 if match==True:
                     self.filteredStreetList.append((addressId, refId, country, city, postCode, streetName, houseNumber, lat, lon))
         else:
             self.filteredStreetList=self.streetList
-                
+
         self.streetViewModel.update(self.filteredStreetList)
         self.lastFilterValueText=filterValueText
         self.lastFilteredStreetList=self.filteredStreetList
-        print("%f"%(time.time()-start))
 
     @pyqtSlot()
     def _applyFilterCity(self):
@@ -888,17 +1104,17 @@ class OSMAdressDialog(OSMDialogWithSettings):
             filterValueMod=None
             if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
+
             for (cityId, cityName, adminLevel) in self.cityList:
                 match=False
                 if fnmatch(cityName.upper(), filterValue.upper()):
                     match=True
                 if match==False and filterValueMod!=None and fnmatch(cityName.upper(), filterValueMod.upper()):
                     match=True
-                
+
                 if match==True:
                     self.filteredCityList.append((cityId, cityName, adminLevel))
-        
+
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
             self.cityView.expandAll()
 
@@ -906,34 +1122,34 @@ class OSMAdressDialog(OSMDialogWithSettings):
             self.filteredCityList=self.cityList
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
             self.cityView.expandAll()
-        
+
 
 
 #----------------------------
 class OSMFavoriteTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.favoriteList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 1
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role != Qt.DisplayRole:
             return None
-        
+
         if index.row() >= len(self.favoriteList):
             return ""
         point=self.favoriteList[index.row()]
         name=point.getName()
-        
+
         if index.column()==0:
             return name
-       
+
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -942,16 +1158,16 @@ class OSMFavoriteTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, favoriteList):
         self.beginResetModel()
         self.favoriteList=favoriteList
         self.endResetModel()
-        
+
 class OSMFavoritesDialog(QDialog):
     def __init__(self, parent, favoriteList):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
@@ -971,30 +1187,30 @@ class OSMFavoritesDialog(QDialog):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
 
         self.initUI()
-         
+
     def nameSort(self, item):
         return item.getName()
-   
+
     def getResult(self):
         return (self.selectedFavorite, self.pointType, self.favoriteList)
 
     def getResult2(self):
         return (self.pointDict, self.favoriteList)
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
         self.filterEdit.returnPressed.connect(self._applyFilter)
         self.filterEdit.textChanged.connect(self._applyFilter)
         top.addWidget(self.filterEdit)
-        
+
         self.favoriteView=QTableView(self)
         top.addWidget(self.favoriteView)
-        
+
         self.favoriteViewModel=OSMFavoriteTableModel(self)
         self.favoriteViewModel.update(self.filteredFavoriteList)
         self.favoriteView.setModel(self.favoriteViewModel)
@@ -1008,10 +1224,9 @@ class OSMFavoritesDialog(QDialog):
 
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.deleteFavoriteButton=QPushButton("Delete", self)
         self.deleteFavoriteButton.clicked.connect(self._deleteFavorite)
-        self.deleteFavoriteButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
         self.deleteFavoriteButton.setEnabled(False)
         actionButtons.addWidget(self.deleteFavoriteButton)
 
@@ -1019,7 +1234,7 @@ class OSMFavoritesDialog(QDialog):
 
         actionButtons2=QHBoxLayout()
         actionButtons2.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
         self.showPointButton.setIcon(self.mapPointIcon)
@@ -1031,13 +1246,13 @@ class OSMFavoritesDialog(QDialog):
         self.setStartPointButton.setIcon(self.startPointIcon)
         self.setStartPointButton.setEnabled(False)
         actionButtons2.addWidget(self.setStartPointButton)
-        
+
         self.setEndPointButton=QPushButton("Finish", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)
         actionButtons2.addWidget(self.setEndPointButton)
-        
+
         self.setWayPointButton=QPushButton("Way", self)
         self.setWayPointButton.clicked.connect(self._setWayPoint)
         self.setWayPointButton.setIcon(self.wayPointIcon)
@@ -1045,22 +1260,20 @@ class OSMFavoritesDialog(QDialog):
         actionButtons2.addWidget(self.setWayPointButton)
 
         top.addLayout(actionButtons2)
-        
+
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         self.okButton.setDefault(True)
         buttons.addWidget(self.okButton)
-        
+
         top.addLayout(buttons)
 
         selection = self.favoriteView.selectionModel()
@@ -1069,7 +1282,7 @@ class OSMFavoritesDialog(QDialog):
         self.setLayout(top)
         self.setWindowTitle('Favorites')
         self.setGeometry(0, 0, 400, 500)
-        
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.favoriteView.selectionModel()
@@ -1079,7 +1292,7 @@ class OSMFavoritesDialog(QDialog):
         self.setWayPointButton.setEnabled(current.isValid())
         self.showPointButton.setEnabled(current.isValid())
         self.deleteFavoriteButton.setEnabled(current.isValid())
-        
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -1088,8 +1301,8 @@ class OSMFavoritesDialog(QDialog):
     def _ok(self):
 #        self.selectedFavorite=None
 #        self.pointType=42
-        self.done(QDialog.Accepted)      
-          
+        self.done(QDialog.Accepted)
+
     @pyqtSlot()
     def _showPoint(self):
         selmodel = self.favoriteView.selectionModel()
@@ -1099,7 +1312,7 @@ class OSMFavoritesDialog(QDialog):
             self.pointType=OSMRoutingPoint.TYPE_MAP
             self.pointDict[self.pointType]=self.selectedFavorite
         self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _setWayPoint(self):
         selmodel = self.favoriteView.selectionModel()
@@ -1129,7 +1342,7 @@ class OSMFavoritesDialog(QDialog):
             self.pointType=OSMRoutingPoint.TYPE_END
             self.pointDict[self.pointType]=self.selectedFavorite
 #        self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _clearTableSelection(self):
         self.favoriteView.clearSelection()
@@ -1138,7 +1351,7 @@ class OSMFavoritesDialog(QDialog):
         self.setEndPointButton.setEnabled(False)
         self.showPointButton.setEnabled(False)
         self.deleteFavoriteButton.setEnabled(False)
-        
+
     @pyqtSlot()
     def _applyFilter(self):
         self._clearTableSelection()
@@ -1148,7 +1361,7 @@ class OSMFavoritesDialog(QDialog):
                 self.filterValue=self.filterValue+"*"
             self.filteredFavoriteList=list()
             filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
+
             for point in self.favoriteList:
                 name=point.getName()
                 if not fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch(name.upper(), filterValueMod.upper()):
@@ -1156,9 +1369,9 @@ class OSMFavoritesDialog(QDialog):
                 self.filteredFavoriteList.append(point)
         else:
             self.filteredFavoriteList=self.favoriteList
-        
+
         self.favoriteViewModel.update(self.filteredFavoriteList)
-    
+
     @pyqtSlot()
     def _deleteFavorite(self):
         selmodel = self.favoriteView.selectionModel()
@@ -1172,7 +1385,7 @@ class OSMFavoritesDialog(QDialog):
 
 class OSMSaveFavoritesDialog(QDialog):
     def __init__(self, parent, favoriteList, defaultPointTag):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
@@ -1182,35 +1395,35 @@ class OSMSaveFavoritesDialog(QDialog):
         self.defaultPointTag=defaultPointTag
 
         self.initUI()
-   
+
     def nameSort(self, item):
         return item.getName()
-    
+
     def getResult(self):
         return self.text
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-                
+
         fields=QFormLayout()
         fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
 
         label=QLabel(self)
         label.setText("Name:")
-        
+
         self.textField=QLineEdit(self)
         self.textField.setText(self.defaultPointTag)
         self.textField.textChanged.connect(self._updateEnablement)
         self.textField.setMinimumWidth(300)
 
         fields.addRow(label, self.textField)
-        
+
         top.addLayout(fields)
         self.favoriteView=QTableView(self)
         top.addWidget(self.favoriteView)
-        
+
         self.favoriteViewModel=OSMFavoriteTableModel(self)
         self.favoriteViewModel.update(self.favoriteList)
         self.favoriteView.setModel(self.favoriteViewModel)
@@ -1222,21 +1435,19 @@ class OSMSaveFavoritesDialog(QDialog):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         style=QCommonStyle()
 
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
-        
+
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
         self.okButton.setEnabled(False)
 
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
@@ -1248,7 +1459,7 @@ class OSMSaveFavoritesDialog(QDialog):
         self.setWindowTitle('Save Favorite')
         self.setGeometry(0, 0, 400, 500)
         self._updateEnablement()
-        
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.favoriteView.selectionModel()
@@ -1257,47 +1468,47 @@ class OSMSaveFavoritesDialog(QDialog):
             self.textField.setText(self.favoriteList[current.row()].getName())
 
         self._updateEnablement()
-        
+
     @pyqtSlot()
     def _updateEnablement(self):
         self.okButton.setDisabled(len(self.textField.text())==0)
-   
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.text=self.textField.text()
         self.done(QDialog.Accepted)
-        
- 
+
+
 #----------------------------
 
 class OSMRouteListTableModel(QAbstractTableModel):
     def __init__(self, parent):
         QAbstractTableModel.__init__(self, parent)
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.routeList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 1
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role != Qt.DisplayRole:
             return None
-        
+
         if index.row() >= len(self.routeList):
             return ""
         route=self.routeList[index.row()]
         name=route.getName()
-        
+
         if index.column()==0:
             return name
-       
+
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -1306,17 +1517,17 @@ class OSMRouteListTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, routeList):
         self.beginResetModel()
         self.routeList=routeList
         self.endResetModel()
 
-#--------------------------------------------------        
+#--------------------------------------------------
 class OSMRouteListDialog(QDialog):
     def __init__(self, parent, routeList, withDelete, withClose):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
@@ -1330,27 +1541,27 @@ class OSMRouteListDialog(QDialog):
         self.withDelete=withDelete
         self.withClose=withClose
         self.initUI()
-         
+
     def nameSort(self, item):
         return item.getName()
-   
+
     def getResult(self):
         return (self.selectedRoute, self.routeList)
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         self.filterEdit=QLineEdit(self)
         self.filterEdit.setToolTip('Name Filter')
         self.filterEdit.returnPressed.connect(self._applyFilter)
         self.filterEdit.textChanged.connect(self._applyFilter)
         top.addWidget(self.filterEdit)
-        
+
         self.routeView=QTableView(self)
         top.addWidget(self.routeView)
-        
+
         self.routeViewModel=OSMRouteListTableModel(self)
         self.routeViewModel.update(self.filteredRouteList)
         self.routeView.setModel(self.routeViewModel)
@@ -1359,34 +1570,31 @@ class OSMRouteListDialog(QDialog):
         self.routeView.setHorizontalHeader(header)
         self.routeView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routeView.setColumnWidth(0, 300)
-        
+
         style=QCommonStyle()
 
         if self.withDelete==True:
             actionButtons=QHBoxLayout()
             actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-            
+
             self.deleteRouteButton=QPushButton("Delete", self)
             self.deleteRouteButton.clicked.connect(self._deleteRoute)
-            self.deleteRouteButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
             self.deleteRouteButton.setEnabled(False)
             actionButtons.addWidget(self.deleteRouteButton)
-    
+
             top.addLayout(actionButtons)
-        
+
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
-        
+
         if self.withClose==True:
             self.closeButton=QPushButton("Close", self)
             self.closeButton.clicked.connect(self._close)
-            self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
             buttons.addWidget(self.closeButton)
 
         self.okButton=QPushButton("Ok", self)
@@ -1394,7 +1602,6 @@ class OSMRouteListDialog(QDialog):
         self.okButton.setDefault(True)
         self.okButton.setEnabled(False)
 
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
@@ -1405,7 +1612,7 @@ class OSMRouteListDialog(QDialog):
         self.setLayout(top)
         self.setWindowTitle('Routes')
         self.setGeometry(0, 0, 400, 500)
-        
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.routeView.selectionModel()
@@ -1413,7 +1620,7 @@ class OSMRouteListDialog(QDialog):
         if self.withDelete==True:
             self.deleteRouteButton.setEnabled(current.isValid())
         self.okButton.setEnabled(current.isValid())
-        
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -1422,7 +1629,7 @@ class OSMRouteListDialog(QDialog):
     def _close(self):
         self.selectedRoute=None
         self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _ok(self):
         selmodel = self.routeView.selectionModel()
@@ -1440,7 +1647,7 @@ class OSMRouteListDialog(QDialog):
             selectedRoute=self.filteredRouteList[current.row()]
             self.routeList.remove(selectedRoute)
             self._applyFilter()
-        
+
     @pyqtSlot()
     def _clearTableSelection(self):
         self.routeView.clearSelection()
@@ -1457,7 +1664,7 @@ class OSMRouteListDialog(QDialog):
                 self.filterValue=self.filterValue+"*"
             self.filteredRouteList=list()
             filterValueMod=self.filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
+
             for route in self.routeList:
                 name=route.getName()
                 if not fnmatch(name.upper(), self.filterValue.upper()) and not fnmatch(name.upper(), filterValueMod.upper()):
@@ -1465,51 +1672,51 @@ class OSMRouteListDialog(QDialog):
                 self.filteredRouteList.append(route)
         else:
             self.filteredRouteList=self.routeList
-        
+
         self.routeViewModel.update(self.filteredRouteList)
-        
-#--------------------------------------------------        
+
+#--------------------------------------------------
 class OSMRouteSaveDialog(QDialog):
     def __init__(self, parent, routeList):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
 
         self.routeList=sorted(routeList, key=self.nameSort)
         self.text=None
-        
+
         self.initUI()
-         
+
     def nameSort(self, item):
         return item.getName()
-   
+
     def getResult(self):
         return self.text
-        
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         fields=QFormLayout()
         fields.setAlignment(Qt.AlignTop|Qt.AlignLeft)
 
         label=QLabel(self)
         label.setText("Name:")
-        
+
         self.textField=QLineEdit(self)
         self.textField.setText("")
         self.textField.textChanged.connect(self._updateEnablement)
         self.textField.setMinimumWidth(300)
 
         fields.addRow(label, self.textField)
-        
+
         top.addLayout(fields)
-                
+
         self.routeView=QTableView(self)
         top.addWidget(self.routeView)
-        
+
         self.routeViewModel=OSMRouteListTableModel(self)
         self.routeViewModel.update(self.routeList)
         self.routeView.setModel(self.routeViewModel)
@@ -1518,24 +1725,22 @@ class OSMRouteSaveDialog(QDialog):
         self.routeView.setHorizontalHeader(header)
         self.routeView.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.routeView.setColumnWidth(0, 300)
-        
+
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         style=QCommonStyle()
 
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         self.cancelButton.setDefault(True)
         buttons.addWidget(self.cancelButton)
-        
+
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
         self.okButton.setEnabled(False)
 
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
 
         top.addLayout(buttons)
@@ -1546,7 +1751,7 @@ class OSMRouteSaveDialog(QDialog):
         self.setLayout(top)
         self.setWindowTitle('Save Route')
         self.setGeometry(0, 0, 400, 500)
-        
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.routeView.selectionModel()
@@ -1555,20 +1760,20 @@ class OSMRouteSaveDialog(QDialog):
             self.textField.setText(self.routeList[current.row()].getName())
 
         self._updateEnablement()
-        
+
     @pyqtSlot()
     def _updateEnablement(self):
         self.okButton.setDisabled(len(self.textField.text())==0)
-   
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.text=self.textField.text()
         self.done(QDialog.Accepted)
-        
+
 #----------------------------
 class OSMRouteTableModel(QAbstractTableModel):
     def __init__(self, parent):
@@ -1578,17 +1783,17 @@ class OSMRouteTableModel(QAbstractTableModel):
         self.endPoint=self.style.getStylePixmap("finishPixmap")
         self.wayPoint=self.style.getStylePixmap("wayPixmap")
         self.heightHint=self.startPoint.height()+2
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.routingPointList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 1
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
-        
+
         elif role == Qt.DecorationRole:
             if index.row() >= len(self.routingPointList):
                 return None
@@ -1600,23 +1805,23 @@ class OSMRouteTableModel(QAbstractTableModel):
                 return self.endPoint
             elif pointType==OSMRoutingPoint.TYPE_WAY:
                 return self.wayPoint
-            return None  
-           
+            return None
+
         elif role == Qt.DisplayRole:
             if index.row() >= len(self.routingPointList):
                 return ""
             point=self.routingPointList[index.row()]
             name=point.getName()
-            
+
             if index.column()==0:
                 return name
-            
+
         elif role == Qt.SizeHintRole:
             if index.column()==0:
                 return QSize(1, self.heightHint)
-            
+
         return None
-       
+
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -1625,16 +1830,16 @@ class OSMRouteTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, routingPointList):
         self.beginResetModel()
         self.routingPointList=routingPointList
         self.endResetModel()
-        
+
 class OSMRouteDialog(QDialog):
     def __init__(self, parent, routingPointList, routeList):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
@@ -1644,23 +1849,23 @@ class OSMRouteDialog(QDialog):
         self.selectedRoutePoint=None
         self.routeList=list()
         self.routeList.extend(routeList)
- 
+
         self.initUI()
-      
+
     def getResult(self):
         return self.routingPointList, self.routeList
-    
+
     def getRouteList(self):
         return self.routeList
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-                
+
         self.routeView=QTableView(self)
         top.addWidget(self.routeView)
-        
+
         self.routeViewModel=OSMRouteTableModel(self)
         self.routeViewModel.update(self.routingPointList)
         self.routeView.setModel(self.routeViewModel)
@@ -1678,16 +1883,15 @@ class OSMRouteDialog(QDialog):
 
         self.removePointButton=QPushButton("Remove", self)
         self.removePointButton.clicked.connect(self._removePoint)
-        self.removePointButton.setIcon(style.standardIcon(QStyle.SP_DialogDiscardButton))
         self.removePointButton.setEnabled(False)
         editButtons.addWidget(self.removePointButton)
-        
+
         self.upPointButton=QPushButton("Up", self)
         self.upPointButton.clicked.connect(self._upPoint)
         self.upPointButton.setIcon(style.standardIcon(QStyle.SP_ArrowUp))
         self.upPointButton.setEnabled(False)
         editButtons.addWidget(self.upPointButton)
-        
+
         self.downPointButton=QPushButton("Down", self)
         self.downPointButton.clicked.connect(self._downPoint)
         self.downPointButton.setIcon(style.standardIcon(QStyle.SP_ArrowDown))
@@ -1709,7 +1913,7 @@ class OSMRouteDialog(QDialog):
         self.loadRoutButton=QPushButton("Load...", self)
         self.loadRoutButton.clicked.connect(self._loadRoute)
         routeButtons.addWidget(self.loadRoutButton)
-        
+
         self.saveRouteButton=QPushButton("Save...", self)
         self.saveRouteButton.clicked.connect(self._saveRoute)
         routeButtons.addWidget(self.saveRouteButton)
@@ -1718,26 +1922,24 @@ class OSMRouteDialog(QDialog):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
         top.addLayout(buttons)
-                
+
         selection = self.routeView.selectionModel()
         selection.selectionChanged.connect(self._selectionChanged)
 
         self.setLayout(top)
         self.setWindowTitle('Routing Point')
         self.setGeometry(0, 0, 400, 500)
-        
+
     @pyqtSlot()
     def _saveRoute(self):
         routeNameDialog=OSMRouteSaveDialog(self, self.routeList)
@@ -1746,7 +1948,7 @@ class OSMRouteDialog(QDialog):
             name=routeNameDialog.getResult()
             route=OSMRoute(name, self.routingPointList)
             self.routeList.append(route)
-        
+
     @pyqtSlot()
     def _loadRoute(self):
         loadRouteDialog=OSMRouteListDialog(self, self.routeList, False, False)
@@ -1758,14 +1960,14 @@ class OSMRouteDialog(QDialog):
                 self.routingPointList=route.getRoutingPointList()
                 self.routeViewModel.update(self.routingPointList)
                 self._selectionChanged()
-       
+
     @pyqtSlot()
     def _revertRoute(self):
         self.routingPointList.reverse()
         self.assignPointTypes()
         self.routeViewModel.update(self.routingPointList)
         self._selectionChanged()
-        
+
     @pyqtSlot()
     def _ok(self):
         self.done(QDialog.Accepted)
@@ -1778,17 +1980,17 @@ class OSMRouteDialog(QDialog):
             routingPoint=self.routingPointList[current.row()]
             self.removePointButton.setEnabled(len(self.routingPointList)>2)
             index=self.routingPointList.index(routingPoint)
-            self.downPointButton.setEnabled(index>=0 and index<=len(self.routingPointList)-2)                
+            self.downPointButton.setEnabled(index>=0 and index<=len(self.routingPointList)-2)
             self.upPointButton.setEnabled(index<=len(self.routingPointList)-1 and index>=1)
         else:
             self.removePointButton.setEnabled(current.isValid())
             self.upPointButton.setEnabled(current.isValid())
             self.downPointButton.setEnabled(current.isValid())
-        
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-        
+
     @pyqtSlot()
     def _removePoint(self):
         selmodel = self.routeView.selectionModel()
@@ -1810,7 +2012,7 @@ class OSMRouteDialog(QDialog):
             if index<=len(self.routingPointList)-1 and index>=1:
                 self.routingPointList.remove(routingPoint)
                 self.routingPointList.insert(index-1, routingPoint)
-            
+
             self.assignPointTypes()
             self.routeViewModel.update(self.routingPointList)
             selmodel.setCurrentIndex(self.routeViewModel.index(current.row()-1, current.column()), QItemSelectionModel.ClearAndSelect)
@@ -1836,8 +2038,8 @@ class OSMRouteDialog(QDialog):
         self.routingPointList[-1].changeType(OSMRoutingPoint.TYPE_END)
         for point in self.routingPointList[1:-1]:
             point.changeType(OSMRoutingPoint.TYPE_WAY)
-            
-            
+
+
     @pyqtSlot()
     def _clearTableSelection(self):
         self.routeView.clearSelection()
@@ -1845,12 +2047,12 @@ class OSMRouteDialog(QDialog):
         self.upPointButton.setEnabled(False)
         self.downPointButton.setEnabled(False)
         self.revertPointsButton.setEnabled(False)
-        
+
 #---------------------
 class FloatValueValidator(QValidator):
     def __init__(self, parent):
-        QValidator.__init__(self, parent) 
-        
+        QValidator.__init__(self, parent)
+
     def validate(self, input, pos):
         if len(input)==0:
             return (QValidator.Acceptable, input, pos)
@@ -1859,10 +2061,10 @@ class FloatValueValidator(QValidator):
         except ValueError:
             return (QValidator.Invalid, input, pos)
         return (QValidator.Acceptable, input, pos)
-    
+
 class OSMPositionDialog(QDialog):
     def __init__(self, parent, lat=None, lon=None):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         self.lat=0.0
         self.lon=0.0
         font = self.font()
@@ -1871,17 +2073,17 @@ class OSMPositionDialog(QDialog):
 
         self.initLat=lat
         self.initLon=lon
-        
+
         self.initUI()
 
     def getResult(self):
         return (self.lat, self.lon)
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         style=QCommonStyle()
 
         fields=QFormLayout()
@@ -1889,7 +2091,7 @@ class OSMPositionDialog(QDialog):
 
         label=QLabel(self)
         label.setText("Latitude:")
-        
+
         self.validator=FloatValueValidator(self)
         self.latField=QLineEdit(self)
         self.latField.setToolTip('Latitude')
@@ -1911,32 +2113,29 @@ class OSMPositionDialog(QDialog):
             self.lonField.setText("%.6f"%self.initLon)
 
         fields.addRow(label, self.lonField)
-        
+
         top.addLayout(fields)
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         if self.initLat==None and self.initLon==None:
             self.cancelButton=QPushButton("Cancel", self)
             self.cancelButton.clicked.connect(self._cancel)
-            self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
             buttons.addWidget(self.cancelButton)
-    
+
             self.okButton=QPushButton("Ok", self)
             self.okButton.clicked.connect(self._ok)
             self.okButton.setDisabled(True)
             self.okButton.setDefault(True)
-            self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
             buttons.addWidget(self.okButton)
         else:
             self.closeButton=QPushButton("Close", self)
             self.closeButton.clicked.connect(self._close)
-            self.closeButton.setIcon(style.standardIcon(QStyle.SP_DialogCloseButton))
-            buttons.addWidget(self.closeButton)            
-        
+            buttons.addWidget(self.closeButton)
+
         top.addLayout(buttons)
-                
+
         self.setLayout(top)
         self.setWindowTitle('Show Position')
         self.setGeometry(0, 0, 400, 100)
@@ -1945,7 +2144,7 @@ class OSMPositionDialog(QDialog):
     def _updateEnablement(self):
         if self.initLat==None and self.initLon==None:
             self.okButton.setDisabled(len(self.latField.text())==0 or len(self.lonField.text())==0)
-   
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -1953,7 +2152,7 @@ class OSMPositionDialog(QDialog):
     @pyqtSlot()
     def _close(self):
         self.done(QDialog.Rejected)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.lat=float(self.latField.text())
@@ -1962,8 +2161,8 @@ class OSMPositionDialog(QDialog):
 
 class IntValueValidator(QValidator):
     def __init__(self, parent):
-        QValidator.__init__(self, parent) 
-        
+        QValidator.__init__(self, parent)
+
     def validate(self, input, pos):
         if len(input)==0:
             return (QValidator.Acceptable, input, pos)
@@ -1972,12 +2171,12 @@ class IntValueValidator(QValidator):
         except ValueError:
             return (QValidator.Invalid, input, pos)
         return (QValidator.Acceptable, input, pos)
-    
+
 class OSMRoutingTab(OptionsDialogTab):
     def __init__(self, optionsConfig, parent):
         OptionsDialogTab.__init__(self, optionsConfig, parent)
         self.setFromOptionsConfig(self.getOptionsConfig())
-        
+
     def getTabName(self):
         return "Routing"
 
@@ -1994,7 +2193,7 @@ class OSMRoutingTab(OptionsDialogTab):
                 self.routingMode=self.routingModes[i]
             i=i+1
         self.optionsConfig["routingMode"]=self.routingMode
-                
+
     def addToLayout(self, layout):
         for routingMode in self.routingModes:
             routingModeId=routingMode["id"]
@@ -2002,14 +2201,14 @@ class OSMRoutingTab(OptionsDialogTab):
             self.routingModeButtons.append(routingModeButton)
             if routingModeId==self.routingModeId:
                 routingModeButton.setChecked(True)
-                
-            layout.addWidget(routingModeButton) 
-        
+
+            layout.addWidget(routingModeButton)
+
 class OSMDisplayTab(OptionsDialogTab):
     def __init__(self, optionsConfig, parent):
         OptionsDialogTab.__init__(self, optionsConfig, parent)
         self.setFromOptionsConfig(self.getOptionsConfig())
-        
+
     def getTabName(self):
         return "Display"
 
@@ -2030,58 +2229,58 @@ class OSMDisplayTab(OptionsDialogTab):
         self.optionsConfig["tileStartZoom"]=int(self.tileStartZoomField.text())
         self.optionsConfig["displayPOITypeList"]=self.displayPOITypeList
         self.optionsConfig["displayAreaTypeList"]=self.displayAreaTypeList
-                
+
     def addToLayout(self, layout):
         filler=QLabel(self)
         tab2Layout = QFormLayout()
         tab2Layout.setAlignment(Qt.AlignTop)
         layout.addLayout(tab2Layout)
-        
+
         label=QLabel(self)
         label.setText("Tile Server:")
-        
+
         self.validator=IntValueValidator(self)
         self.tileServerField=QLineEdit(self)
         self.tileServerField.setText("%s"%self.tileServer)
         self.tileServerField.setMinimumWidth(200)
 
-        tab2Layout.addRow(label, self.tileServerField)  
+        tab2Layout.addRow(label, self.tileServerField)
 
         label=QLabel(self)
         label.setText("Tile Dir:")
-        
+
         self.validator=IntValueValidator(self)
         self.tileHomeField=QLineEdit(self)
         self.tileHomeField.setToolTip("Relative to $HOME or absolute")
         self.tileHomeField.setText("%s"%self.tileHome)
         self.tileHomeField.setMinimumWidth(200)
 
-        tab2Layout.addRow(label, self.tileHomeField)   
-        
+        tab2Layout.addRow(label, self.tileHomeField)
+
         label=QLabel(self)
         label.setText("Tile Zoom:")
-        
+
         self.validator=IntValueValidator(self)
         self.tileStartZoomField=QLineEdit(self)
         self.tileStartZoomField.setToolTip('Zoom level until tiles are used')
         self.tileStartZoomField.setValidator(self.validator)
         self.tileStartZoomField.setText("%d"%self.tileStartZoom)
 
-        tab2Layout.addRow(label, self.tileStartZoomField)  
+        tab2Layout.addRow(label, self.tileStartZoomField)
 
         self.configureAreaButton=QPushButton("Configure...", self)
         self.configureAreaButton.clicked.connect(self._configureAreaDisplay)
 
         self.withShowAreasButton=QCheckBox("Show Environment", self)
         self.withShowAreasButton.setChecked(self.withShowAreas)
-        tab2Layout.addRow(self.withShowAreasButton, self.configureAreaButton)  
-        
+        tab2Layout.addRow(self.withShowAreasButton, self.configureAreaButton)
+
         self.configurePOIButton=QPushButton("Configure...", self)
         self.configurePOIButton.clicked.connect(self._configurePOIDisplay)
-        
+
         self.withShowPOIButton=QCheckBox("Show POIs", self)
         self.withShowPOIButton.setChecked(self.withShowPOI)
-        tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)  
+        tab2Layout.addRow(self.withShowPOIButton, self.configurePOIButton)
 
     @pyqtSlot()
     def _configurePOIDisplay(self):
@@ -2092,15 +2291,15 @@ class OSMDisplayTab(OptionsDialogTab):
     def _configureAreaDisplay(self):
         dialog=OSMAreaDisplayDialog(self, self.displayAreaTypeList)
         result=dialog.exec()
-        
+
 class OSM3DTab(OptionsDialogTab):
     def __init__(self, optionsConfig, parent):
         OptionsDialogTab.__init__(self, optionsConfig, parent)
         self.setFromOptionsConfig(self.getOptionsConfig())
-        
+
     def getTabName(self):
-        return "3D"    
-    
+        return "3D"
+
     def setFromOptionsConfig(self, optionsConfig):
         self.withShow3D=optionsConfig["withShow3D"]
         self.withShowSky=optionsConfig["withShowSky"]
@@ -2112,51 +2311,51 @@ class OSM3DTab(OptionsDialogTab):
         self.optionsConfig["withShowSky"]=self.withShowSkyButton.isChecked()
         self.optionsConfig["XAxisRotation"]=int(self.xAxisRoationField.text())
         self.optionsConfig["startZoom3D"]=int(self.startZoom3DField.text())
-                
+
     def addToLayout(self, layout):
         filler=QLabel(self)
         tab3Layout = QFormLayout()
         tab3Layout.setAlignment(Qt.AlignTop)
         layout.addLayout(tab3Layout)
-        
+
         self.withShow3DButton=QCheckBox("Use 3D View", self)
         self.withShow3DButton.setChecked(self.withShow3D)
-        tab3Layout.addRow(self.withShow3DButton, filler)  
+        tab3Layout.addRow(self.withShow3DButton, filler)
 
         self.withShowSkyButton=QCheckBox("Show Sky", self)
         self.withShowSkyButton.setChecked(self.withShowSky)
-        tab3Layout.addRow(self.withShowSkyButton, filler)  
-                       
+        tab3Layout.addRow(self.withShowSkyButton, filler)
+
         label=QLabel(self)
         label.setText("XAxis Rotation:")
-        
+
         self.validator=IntValueValidator(self)
         self.xAxisRoationField=QLineEdit(self)
         self.xAxisRoationField.setToolTip('Value in degrees')
         self.xAxisRoationField.setValidator(self.validator)
         self.xAxisRoationField.setText("%d"%self.XAxisRotation)
 
-        tab3Layout.addRow(label, self.xAxisRoationField)  
-                                      
+        tab3Layout.addRow(label, self.xAxisRoationField)
+
         label=QLabel(self)
         label.setText("Start Zoom:")
-        
+
         self.validator=IntValueValidator(self)
         self.startZoom3DField=QLineEdit(self)
         self.startZoom3DField.setValidator(self.validator)
         self.startZoom3DField.setText("%d"%self.startZoom3D)
 
-        tab3Layout.addRow(label, self.startZoom3DField)    
-        
+        tab3Layout.addRow(label, self.startZoom3DField)
+
 tabClassList=[OSMDisplayTab, OSM3DTab, OSMRoutingTab]
- 
+
 class OSMOptionsDialog(OptionsDialog):
     def __init__(self, optionsConfig, parent):
-        OptionsDialog.__init__(self, optionsConfig, tabClassList, parent)         
+        OptionsDialog.__init__(self, optionsConfig, tabClassList, parent)
 
 class OSMInputDialog(QDialog):
     def __init__(self, parent, defaultValue, windowTitle, labelText):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
@@ -2169,12 +2368,12 @@ class OSMInputDialog(QDialog):
 
     def getResult(self):
         return self.text
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         style=QCommonStyle()
 
         fields=QFormLayout()
@@ -2182,32 +2381,30 @@ class OSMInputDialog(QDialog):
 
         label=QLabel(self)
         label.setText(self.labelText)
-        
+
         self.textField=QLineEdit(self)
         self.textField.setText(self.defaultValue)
         self.textField.textChanged.connect(self._updateEnablement)
         self.textField.setMinimumWidth(300)
 
         fields.addRow(label, self.textField)
-        
+
         top.addLayout(fields)
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDisabled(True)
         self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
         top.addLayout(buttons)
-                
+
         self.setLayout(top)
         self.setWindowTitle(self.windowTitle)
         self.setGeometry(0, 0, 400, 50)
@@ -2216,17 +2413,17 @@ class OSMInputDialog(QDialog):
     @pyqtSlot()
     def _updateEnablement(self):
         self.okButton.setDisabled(len(self.textField.text())==0)
-   
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.text=self.textField.text()
         self.done(QDialog.Accepted)
-        
-        
+
+
 #----------------------------
 class OSMPOITableModel(QAbstractTableModel):
     dataChangedSignal = pyqtSignal(QModelIndex, QModelIndex)
@@ -2239,56 +2436,56 @@ class OSMPOITableModel(QAbstractTableModel):
         defaultPixmap=self.style.getStylePixmap("poiPixmap")
         self.heightHint=defaultPixmap.height()+2
 
-    def rowCount(self, parent): 
+    def rowCount(self, parent):
         return len(self.poiList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         if self.withZoom==True:
             return 2
         return 1
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role == Qt.DecorationRole:
             if index.row() >= len(self.poiList):
                 return None
-            
+
             if index.column()==0:
                 pixmapName=self.poiList[index.row()][2]
                 if pixmapName!=None:
                     return self.style.getStylePixmap(pixmapName)
-            
+
             return None
         elif role==Qt.CheckStateRole:
             if index.row() >= len(self.poiList):
                 return None
-            
+
             if index.column()==0:
                 poiType=self.poiList[index.row()][1]
                 if poiType in self.displayPOITypeList:
                     return Qt.Checked
                 return Qt.Unchecked
-            
+
             return None
-            
+
         elif role == Qt.DisplayRole:
             if index.row() >= len(self.poiList):
                 return ""
             desc=self.poiList[index.row()][3]
             zoom=self.poiList[index.row()][4]
-            
+
             if index.column()==0:
                 return desc
             if index.column()==1:
                 return zoom
-        
+
         elif role == Qt.SizeHintRole:
             if index.column()==0:
                 return QSize(1, self.heightHint)
 
         return None
-       
+
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -2300,10 +2497,10 @@ class OSMPOITableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
+
     def flags (self, index ):
         return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
-        
+
     def setData(self, index, value, role):
         if index.isValid() and role == Qt.CheckStateRole:
             if value==Qt.Unchecked:
@@ -2312,9 +2509,9 @@ class OSMPOITableModel(QAbstractTableModel):
                 self.displayPOITypeList.append(self.poiList[index.row()][1])
             self.dataChangedSignal.emit(index, index)
             return True
-     
+
         return False
-    
+
     def update(self, poiTypeList):
         self.beginResetModel()
         self.displayPOITypeList=poiTypeList
@@ -2322,24 +2519,24 @@ class OSMPOITableModel(QAbstractTableModel):
 
 class OSMPOIDisplayDialog(QDialog):
     def __init__(self, parent, poiTypeList):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
         self.displayPOITypeList=poiTypeList
         self.initUI()
-      
+
     def getResult(self):
         return None
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-                
+
         self.poiView=QTableView(self)
         top.addWidget(self.poiView)
-        
+
         self.poiViewModel=OSMPOITableModel(self, self.displayPOITypeList, True)
         self.poiView.setModel(self.poiViewModel)
         header=QHeaderView(Qt.Horizontal, self.poiView)
@@ -2353,27 +2550,25 @@ class OSMPOIDisplayDialog(QDialog):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
 #        self.cancelButton=QPushButton("Cancel", self)
 #        self.cancelButton.clicked.connect(self._cancel)
-#        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
 #        buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
         top.addLayout(buttons)
 
         self.setLayout(top)
         self.setWindowTitle('POI Display Selection')
         self.setGeometry(0, 0, 500, 500)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -2386,13 +2581,13 @@ class OSMAreaTableModel(QAbstractTableModel):
         self.style=OSMStyle()
         self.areaList=self.style.getAreaDictAsList()
         self.displayAreaTypeList=displayAreaTypeList
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.areaList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         return 2
-      
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
@@ -2400,15 +2595,15 @@ class OSMAreaTableModel(QAbstractTableModel):
         elif role==Qt.CheckStateRole:
             if index.row() >= len(self.areaList):
                 return None
-            
+
             if index.column()==0:
                 areaType=self.areaList[index.row()][1]
                 if areaType in self.displayAreaTypeList:
                     return Qt.Checked
                 return Qt.Unchecked
-            
+
             return None
-            
+
         elif role == Qt.DisplayRole:
             if index.row() >= len(self.areaList):
                 return ""
@@ -2418,9 +2613,9 @@ class OSMAreaTableModel(QAbstractTableModel):
                 return desc
             if index.column()==1:
                 return zoom
-        
+
         return None
-       
+
     def headerData(self, col, orientation, role):
         if orientation == Qt.Horizontal:
             if role == Qt.DisplayRole:
@@ -2431,11 +2626,11 @@ class OSMAreaTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
+
     def flags (self, index ):
         return Qt.ItemIsEnabled | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
 
-        
+
     def setData(self, index, value, role):
         if index.isValid() and role == Qt.CheckStateRole:
             if value==Qt.Unchecked:
@@ -2444,29 +2639,29 @@ class OSMAreaTableModel(QAbstractTableModel):
                 self.displayAreaTypeList.append(self.areaList[index.row()][1])
             self.dataChangedSignal.emit(index, index)
             return True
-     
+
         return False
 
 class OSMAreaDisplayDialog(QDialog):
     def __init__(self, parent, areaTypeList):
-        QDialog.__init__(self, parent) 
+        QDialog.__init__(self, parent)
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
         self.displayAreaTypeList=areaTypeList
         self.initUI()
-      
+
     def getResult(self):
         return None
-    
+
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-                
+
         self.areaView=QTableView(self)
         top.addWidget(self.areaView)
-        
+
         self.areaViewModel=OSMAreaTableModel(self, self.displayAreaTypeList)
         self.areaView.setModel(self.areaViewModel)
         header=QHeaderView(Qt.Horizontal, self.areaView)
@@ -2479,27 +2674,25 @@ class OSMAreaDisplayDialog(QDialog):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
 #        self.cancelButton=QPushButton("Cancel", self)
 #        self.cancelButton.clicked.connect(self._cancel)
-#        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
 #        buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         buttons.addWidget(self.okButton)
         top.addLayout(buttons)
 
         self.setLayout(top)
         self.setWindowTitle('POI Display Selection')
         self.setGeometry(0, 0, 400, 500)
-        
+
     @pyqtSlot()
     def _ok(self):
         self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -2512,21 +2705,21 @@ class OSMPOIListTableModel(QAbstractTableModel):
         self.reverseAdminAreaDict=reverseAdminAreaDict
         self.nearestMode=nearestMode
         self.style=style
-        
-    def rowCount(self, parent): 
+
+    def rowCount(self, parent):
         return len(self.poiList)
-    
-    def columnCount(self, parent): 
+
+    def columnCount(self, parent):
         if self.nearestMode==True:
             return 3
         return 2
-    
+
     def data(self, index, role):
         if role == Qt.TextAlignmentRole:
             return Qt.AlignLeft|Qt.AlignVCenter
         elif role != Qt.DisplayRole:
             return None
-        
+
         if index.row() >= len(self.poiList):
             return ""
         (refId, nodeLat, nodeLon, tags, nodeType, cityId, distance, displayString)=self.poiList[index.row()]
@@ -2545,7 +2738,7 @@ class OSMPOIListTableModel(QAbstractTableModel):
                 if city!=None:
                     return city
                 return ""
-                            
+
         elif index.column()==2:
             if city!=None:
                 return city
@@ -2565,8 +2758,8 @@ class OSMPOIListTableModel(QAbstractTableModel):
             elif role == Qt.TextAlignmentRole:
                 return Qt.AlignLeft
         return None
-    
-   
+
+
     def update(self, poiList):
         self.beginResetModel()
         self.poiList=poiList
@@ -2574,21 +2767,21 @@ class OSMPOIListTableModel(QAbstractTableModel):
 
 class OSMPOISearchDialog(OSMDialogWithSettings):
     def __init__(self, parent, osmParserData, mapPosition, defaultCountryId, nearestMode):
-        OSMDialogWithSettings.__init__(self, parent) 
+        OSMDialogWithSettings.__init__(self, parent)
 
         self.osmParserData=osmParserData
         font = self.font()
         font.setPointSize(14)
         self.setFont(font)
-        
+
         self.nearestMode=nearestMode
         self.currentCountryId=None
         self.defaultCountryId=defaultCountryId
         self.mapPosition=mapPosition
         self.usedPosition=self.mapPosition
-        
+
         self.currentPOITypeList=list()
-        
+
         self.adminAreaDict, self.reverseAdminAreaDict=osmParserData.getAdminAreaConversion()
 
         self.countryDict=osmParserData.getAdminCountryList()
@@ -2598,11 +2791,11 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         self.poiList=list()
         self.filteredPOIList=list()
-        
+
         self.pointType=None
         self.selectedPOI=None
         self.pointDict=dict()
-        
+
         self.style=OSMStyle()
         self.startPointIcon=QIcon(self.style.getStylePixmap("startPixmap"))
         self.endPointIcon=QIcon(self.style.getStylePixmap("finishPixmap"))
@@ -2610,19 +2803,21 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.mapPointIcon=QIcon(self.style.getStylePixmap("mapPointPixmap"))
         self.favoriteIcon=QIcon(self.style.getStylePixmap("favoritesPixmap"))
         self.googleIcon=QIcon(self.style.getStylePixmap("googlePixmap"))
-        
+
         self.cityList=list()
-        self.filteredCityList=list()        
+        self.filteredCityList=list()
         self.currentCityId=None
         self.cityRecursive=False
-        
+
+        self.openAdminDB()
+        self.openNodeDB()
         self.initUI()
 
     def initUI(self):
         top=QVBoxLayout()
         top.setAlignment(Qt.AlignTop)
         top.setSpacing(2)
-        
+
         lastCountryId=self.getSetting("osmpoisearchdialog.country")
         lastCityId=self.getSetting("osmpoisearchdialog.city")
         lastCityFilter=self.getSetting("osmpoisearchdialog.cityfilter")
@@ -2633,14 +2828,14 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         if self.nearestMode==False:
             self.countryCombo=QComboBox(self)
-            
+
             defaultCountryName=None
             if lastCountryId==None or not lastCountryId in self.countryDict.keys():
                 if self.defaultCountryId!=None:
                     defaultCountryName=self.countryDict[self.defaultCountryId]
             else:
                 defaultCountryName=self.countryDict[lastCountryId]
-                
+
             countryList=sorted(self.reverseCountryDict.keys())
             i=0
             defaultIndex=0
@@ -2649,18 +2844,18 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
                 if countryName==defaultCountryName:
                     defaultIndex=i
                 i=i+1
-                
+
             self.countryCombo.setCurrentIndex(defaultIndex)
-            self.countryCombo.activated.connect(self._countryChanged)
+            self.countryCombo.activated.connect(self.countryChangedWorker)
             top.addWidget(self.countryCombo)
-        
-            self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]        
+
+            self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
 
         dataArea=QHBoxLayout()
-        
+
         poiArea=QVBoxLayout()
         dataArea.addLayout(poiArea)
-        
+
         poiSelectArea=QHBoxLayout()
         poiArea.addLayout(poiSelectArea)
 
@@ -2671,10 +2866,10 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.selectNonePOIButton=QPushButton("None", self)
         self.selectNonePOIButton.clicked.connect(self._selectNonePOI)
         poiSelectArea.addWidget(self.selectNonePOIButton)
-            
+
         self.poiView=QTableView(self)
         poiArea.addWidget(self.poiView)
-        
+
         if lastPOIList!=None:
             self.currentPOITypeList=lastPOIList
         self.poiViewModel=OSMPOITableModel(self, self.currentPOITypeList, False)
@@ -2693,50 +2888,50 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
                 self.cityFilterEdit.setText(lastCityFilter)
             self.cityFilterEdit.textChanged.connect(self._applyFilterCity)
             cityBox.addWidget(self.cityFilterEdit)
-            
+
             hbox=QHBoxLayout()
             self.ignoreCityButton=QCheckBox("No Area", self)
             if lastIgnoreCity!=None:
                 self.ignoreCityButton.setChecked(lastIgnoreCity)
-            self.ignoreCityButton.clicked.connect(self._ignoreCity)
+            self.ignoreCityButton.clicked.connect(self.ignoreCityWprker)
             hbox.addWidget(self.ignoreCityButton)
-    
+
             self.cityRecursiveButton=QCheckBox("Recursive", self)
             if lastRecursive!=None:
                 self.cityRecursiveButton.setChecked(lastRecursive)
             self.cityRecursiveButton.clicked.connect(self._setCityRecursive)
             hbox.addWidget(self.cityRecursiveButton)
-    
+
             cityBox.addLayout(hbox)
-    
+
             self.cityView=QTreeView(self)
             cityBox.addWidget(self.cityView)
-        
+
             self.cityViewModel=OSMAdressTreeModelCity(self)
             self.cityView.setModel(self.cityViewModel)
-            
+
             header=QHeaderView(Qt.Horizontal, self.cityView)
             header.setStretchLastSection(True)
             self.cityView.setHeader(header)
-            
+
             dataArea.addLayout(cityBox)
         else:
             self.cityFilterEdit=None
             self.cityRecursiveButton=None
             self.ignoreCityButton=None
-            
-        poiArea=QVBoxLayout()    
+
+        poiArea=QVBoxLayout()
 
         self.poiFilterEdit=QLineEdit(self)
         if lastPOIFilter!=None:
             self.poiFilterEdit.setText(lastPOIFilter)
         self.poiFilterEdit.textChanged.connect(self._applyFilterPOI)
         poiArea.addWidget(self.poiFilterEdit)
-        
+
         self.poiEntryView=QTableView(self)
         poiArea.addWidget(self.poiEntryView)
         dataArea.addLayout(poiArea)
-        
+
         self.poiEntryViewModel=OSMPOIListTableModel(self.adminAreaDict, self.reverseAdminAreaDict, self.nearestMode, self.style, self)
         self.poiEntryViewModel.update(self.poiList)
         self.poiEntryView.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -2756,10 +2951,10 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             dataArea.setStretch(1, 3)
 
         top.addLayout(dataArea)
-        
+
         actionButtons=QHBoxLayout()
         actionButtons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         self.searchButton=SearchButton(self)
         self.searchButton.setText("Google")
         self.searchButton.setIcon(self.googleIcon)
@@ -2771,14 +2966,14 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.webButton.setText("WWW")
         self.webButton.setWebTags(None)
         self.webButton.setEnabled(False)
-        actionButtons.addWidget(self.webButton)    
-            
+        actionButtons.addWidget(self.webButton)
+
         self.addFavButton=QPushButton("Favorite", self)
         self.addFavButton.clicked.connect(self._addFavPoint)
         self.addFavButton.setIcon(self.favoriteIcon)
         self.addFavButton.setEnabled(False)
         actionButtons.addWidget(self.addFavButton)
-        
+
         self.showPointButton=QPushButton("Show", self)
         self.showPointButton.clicked.connect(self._showPoint)
         self.showPointButton.setIcon(self.mapPointIcon)
@@ -2790,13 +2985,13 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.setStartPointButton.setIcon(self.startPointIcon)
         self.setStartPointButton.setEnabled(False)
         actionButtons.addWidget(self.setStartPointButton)
-        
+
         self.setEndPointButton=QPushButton("Finish", self)
         self.setEndPointButton.clicked.connect(self._setEndPoint)
         self.setEndPointButton.setIcon(self.endPointIcon)
         self.setEndPointButton.setEnabled(False)
         actionButtons.addWidget(self.setEndPointButton)
-        
+
         self.setWayPointButton=QPushButton("Way", self)
         self.setWayPointButton.clicked.connect(self._setWayPoint)
         self.setWayPointButton.setIcon(self.wayPointIcon)
@@ -2807,37 +3002,35 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         buttons=QHBoxLayout()
         buttons.setAlignment(Qt.AlignBottom|Qt.AlignRight)
-        
+
         style=QCommonStyle()
-                
+
         self.cancelButton=QPushButton("Cancel", self)
         self.cancelButton.clicked.connect(self._cancel)
-        self.cancelButton.setIcon(style.standardIcon(QStyle.SP_DialogCancelButton))
         buttons.addWidget(self.cancelButton)
 
         self.okButton=QPushButton("Ok", self)
-        self.okButton.setIcon(style.standardIcon(QStyle.SP_DialogOkButton))
         self.okButton.clicked.connect(self._ok)
         self.okButton.setDefault(True)
         buttons.addWidget(self.okButton)
-        
+
         top.addLayout(buttons)
-        
+
         self.setLayout(top)
         self.setWindowTitle('POI Search')
         self.setGeometry(0, 0, 850, 550)
-        
+
         self.poiViewModel.dataChangedSignal.connect(self._poiListChanged)
         selectionPOI = self.poiEntryView.selectionModel()
         selectionPOI.selectionChanged.connect(self._selectionChanged)
 
         if self.nearestMode==False:
             selectionCity = self.cityView.selectionModel()
-            selectionCity.selectionChanged.connect(self._cityChanged)
+            selectionCity.selectionChanged.connect(self.cityChangedWorker)
 
         if self.nearestMode==False:
             self.initCityUI()
-            self._countryChanged()
+            self.countryChangedWorker()
             if lastCityId!=None:
                 nodeIndex=self.cityViewModel.searchModel(lastCityId)
                 if nodeIndex!=None and nodeIndex.isValid():
@@ -2845,7 +3038,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
 
         else:
             self._poiListChanged()
-            
+
     def initCityUI(self):
         value=self.ignoreCityButton.isChecked()
         if value==True:
@@ -2853,14 +3046,14 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.cityFilterEdit.setDisabled(True)
         else:
             self.cityView.setDisabled(False)
-            self.cityFilterEdit.setDisabled(False) 
-        
+            self.cityFilterEdit.setDisabled(False)
+
         self.cityRecursive=self.cityRecursiveButton.isChecked()
-        
+
     def done(self, code):
         self.addSetting("osmpoisearchdialog.poifilter", self.poiFilterEdit.text())
         self.addSetting("osmpoisearchdialog.poilist", self.currentPOITypeList)
-        
+
         if self.nearestMode==False:
             self.addSetting("osmpoisearchdialog.country", self.currentCountryId)
             self.addSetting("osmpoisearchdialog.city", self.currentCityId)
@@ -2868,14 +3061,16 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.addSetting("osmpoisearchdialog.ignorecity", self.ignoreCityButton.isChecked())
             self.addSetting("osmpoisearchdialog.recursive", self.cityRecursiveButton.isChecked())
 
+        self.closeAdminDB()
+        self.closeNodeDB()
         return super(OSMPOISearchDialog, self).done(code)
 
     def distanceSort(self, item):
         return item[6]
-    
+
     def displayStringSort(self, item):
         return item[7]
-    
+
     @pyqtSlot()
     def _applyFilterPOI(self):
         filterValue=self.poiFilterEdit.text()
@@ -2886,7 +3081,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             filterValueMod=None
             if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
+
             for (refId, lat, lon, tags, nodeType, cityId, distance, displayString) in self.poiList:
                 match=False
                 matchValue=displayString
@@ -2894,35 +3089,40 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
                     match=True
                 if match==False and filterValueMod!=None and fnmatch(matchValue.upper(), filterValueMod.upper()):
                     match=True
-                
+
                 if match==True:
                     self.filteredPOIList.append((refId, lat, lon, tags, nodeType, cityId, distance, displayString))
-        
+
             self.poiEntryViewModel.update(self.filteredPOIList)
 
         else:
             self.filteredPOIList=self.poiList
             self.poiEntryViewModel.update(self.filteredPOIList)
-        
+
     @pyqtSlot()
     def _useMapPosition(self):
         self.usedPosition=self.mapPosition
         self._poiListChanged()
 
     @pyqtSlot()
+    def countryChangedWorker(self):
+        worker = Worker(self._countryChanged)
+        self.pool.start(worker)
+
+    @pyqtSlot()
     def _countryChanged(self):
         self._clearCityTableSelection()
         if self.nearestMode==False:
             self.currentCountryId=self.reverseCountryDict[self.countryCombo.currentText()]
-            
+
             self.updateCityListForCountry()
             self.cityModel=OSMCityModel(self.osmParserData, self.currentCountryId)
             self.cityViewModel.update(self.cityList, self.cityModel, False)
             self._applyFilterCity()
 
-            if len(self.currentPOITypeList)!=0:    
+            if len(self.currentPOITypeList)!=0:
                 self._poiListChanged()
-                
+
     @pyqtSlot()
     def _cancel(self):
         self.done(QDialog.Rejected)
@@ -2930,13 +3130,13 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
     @pyqtSlot()
     def _ok(self):
         self.done(QDialog.Accepted)
-        
+
     def getResult(self):
         return (self.selectedPOI, self.pointType)
 
     def getResult2(self):
         return self.pointDict
-    
+
     @pyqtSlot()
     def _showPoint(self):
         selmodel = self.poiEntryView.selectionModel()
@@ -2956,7 +3156,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.pointType=OSMRoutingPoint.TYPE_FAVORITE
             self.pointDict[self.pointType]=self.selectedPOI
 #        self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _setWayPoint(self):
         selmodel = self.poiEntryView.selectionModel()
@@ -2986,7 +3186,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.pointType=OSMRoutingPoint.TYPE_END
             self.pointDict[self.pointType]=self.selectedPOI
 #        self.done(QDialog.Accepted)
-        
+
     @pyqtSlot()
     def _selectionChanged(self):
         selmodel = self.poiEntryView.selectionModel()
@@ -2996,7 +3196,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
         self.setWayPointButton.setEnabled(current.isValid())
         self.showPointButton.setEnabled(current.isValid())
         self.addFavButton.setEnabled(current.isValid())
-        
+
         selmodel = self.poiEntryView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
@@ -3013,7 +3213,7 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             else:
                 self.searchButton.setEnabled(False)
                 self.searchButton.setSearchString(None)
-                
+
             webTags=self.osmParserData.getPOIWebTags(tags)
             if len(webTags)!=0:
                 self.webButton.setWebTags(webTags)
@@ -3021,51 +3221,51 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             else:
                 self.webButton.setWebTags(None)
                 self.webButton.setEnabled(False)
-        
+
     @pyqtSlot()
     def _poiListChanged(self):
-        if len(self.currentPOITypeList)!=0:    
-            self.poiList=self.osmParserData.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId, self.currentCityId, self.cityRecursive)
+        if len(self.currentPOITypeList)!=0:
+            self.poiList=self.getPOIsOfNodeTypeWithDistance(self.usedPosition[0], self.usedPosition[1], self.currentPOITypeList, self.currentCountryId, self.currentCityId, self.cityRecursive)
             if self.nearestMode==True:
                 self.poiList=sorted(self.poiList, key=self.distanceSort)
             else:
                 self.poiList=sorted(self.poiList, key=self.displayStringSort)
-                
+
         else:
             self.poiList=list()
-        
+
         self._applyFilterPOI()
-          
+
 #    def event(self, event):
 #        if event.type()==QEvent.ToolTip:
 #            mousePos=QPoint(event.x(), event.y())
-#  
+#
 #        return True
 
     def citySort(self, item):
         return item[1]
-    
+
     def updateCityListForCountry(self):
         if self.currentCountryId!=None:
             self.cityList=list()
-            self.osmParserData.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
+            self.getAdminChildsForIdRecursive(self.currentCountryId, self.cityList)
             self.cityList.sort(key=self.citySort)
 
         else:
             self.cityList=list()
-    
+
     @pyqtSlot()
     def _selectAllPOI(self):
         self.currentPOITypeList=self.style.getAllPOIList()
         self.poiViewModel.update(self.currentPOITypeList)
         self._poiListChanged()
-        
+
     @pyqtSlot()
     def _selectNonePOI(self):
         self.currentPOITypeList=list()
         self.poiViewModel.update(self.currentPOITypeList)
         self._poiListChanged()
-        
+
     @pyqtSlot()
     def _applyFilterCity(self):
         self._clearCityTableSelection()
@@ -3077,17 +3277,17 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             filterValueMod=None
             if "ue" in filterValue or "ae" in filterValue or "oe" in filterValue:
                 filterValueMod=filterValue.replace("ue","ü").replace("ae","ä").replace("oe","ö")
-            
+
             for (cityId, cityName, adminLevel) in self.cityList:
                 match=False
                 if fnmatch(cityName.upper(), filterValue.upper()):
                     match=True
                 if match==False and filterValueMod!=None and fnmatch(cityName.upper(), filterValueMod.upper()):
                     match=True
-                
+
                 if match==True:
                     self.filteredCityList.append((cityId, cityName, adminLevel))
-        
+
             self.cityViewModel.update(self.filteredCityList, self.cityModel)
             self.cityView.expandAll()
 
@@ -3097,19 +3297,29 @@ class OSMPOISearchDialog(OSMDialogWithSettings):
             self.cityView.expandAll()
 
     @pyqtSlot()
+    def cityChangedWorker(self):
+        worker = Worker(self._cityChanged)
+        self.pool.start(worker)
+
+    @pyqtSlot()
     def _cityChanged(self):
         selmodel = self.cityView.selectionModel()
         current = selmodel.currentIndex()
         if current.isValid():
             self.currentCityId=self.cityViewModel.data(current, Qt.UserRole)
             self._poiListChanged()
-            
+
+    @pyqtSlot()
+    def ignoreCityWprker(self):
+        worker = Worker(self._ignoreCity)
+        self.pool.start(worker)
+
     @pyqtSlot()
     def _ignoreCity(self):
         self._clearCityTableSelection()
-        self.initCityUI()            
+        self.initCityUI()
         self._poiListChanged()
-            
+
     @pyqtSlot()
     def _setCityRecursive(self):
         self.cityRecursive=self.cityRecursiveButton.isChecked()
