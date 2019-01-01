@@ -232,12 +232,12 @@ class OSMDataImport(OSMDataSQLite):
             self.cursorAdress.execute('INSERT INTO addressTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.addressId, refId, country, city, None, streetName, houseNumber, lat, lon))
             self.addressId=self.addressId+1
 
-    def addToAddressTable2(self, refId, country, city, streetName, houseNumber, lat, lon):
-        self.cursorAdress.execute('INSERT INTO addressTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.addressId, refId, country, city, None, streetName, houseNumber, lat, lon))
+    def addToAddressTable2(self, refId, city, streetName, houseNumber, lat, lon):
+        self.cursorAdress.execute('INSERT INTO addressTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?)', (self.addressId, refId, None, city, None, streetName, houseNumber, lat, lon))
         self.addressId=self.addressId+1
 
-    def updateAddressEntry(self, addressId, country, city):
-        self.cursorAdress.execute('UPDATE OR IGNORE addressTable SET country=%d,city=%d WHERE id=%d'%(country, city, addressId))
+    def updateAddressCityEntry(self, addressId, city):
+        self.cursorAdress.execute('UPDATE OR IGNORE addressTable SET city=%d WHERE id=%d'%(city, addressId))
 
     def updateAddressCountryEntry(self, addressId, country):
         self.cursorAdress.execute('UPDATE OR IGNORE addressTable SET country=%d WHERE id=%d'%(country, addressId))
@@ -2669,7 +2669,6 @@ class OSMDataImport(OSMDataSQLite):
                     cPolygon=Polygon(coords)
                     polyList.append((osmId, cPolygon))
 
-        countryCache=dict()
         for x in allentries:
             addressId, _, _, storedCity, _, streetName, _, lat, lon=self.addressFromDB(x)
 
@@ -2680,28 +2679,10 @@ class OSMDataImport(OSMDataSQLite):
             if storedCity!=None:
                 continue
 
-            resolved=False
             for osmId, cPolygon in polyList:
                 if cPolygon.isInside(lat, lon):
-                    country=None
-                    if not osmId in countryCache.keys():
-                        adminDict=dict()
-                        self.getAdminListForId(osmId, adminDict)
-                        if 2 in adminDict.keys():
-                            country=adminDict[2]
-                            countryCache[osmId]=country
-                    else:
-                        country=countryCache[osmId]
-
-                    if country!=None:
-                        self.updateAddressEntry(addressId, country, osmId)
-#                    else:
-#                        self.log("unknown country for %d"%(osmId))
-                    resolved=True
+                    self.updateAddressCityEntry(addressId, osmId)
                     break
-
-#            if resolved==False:
-#                self.log("failed to resolve %s"%(streetName))
 
         print("")
 
@@ -2742,31 +2723,12 @@ class OSMDataImport(OSMDataSQLite):
                 refId, lat, lon=self.getCoordsEntry(refs[0])
 
                 if refId!=None:
-                    resolved=False
                     for osmId, cPolygon in polyList:
                         if cPolygon.isInside(lat, lon):
                             if not "%s-%d"%(streetName, osmId) in addressSet:
-                                country=None
-                                if not osmId in countryCache.keys():
-                                    adminDict=dict()
-                                    self.getAdminListForId(osmId, adminDict)
-                                    if 2 in adminDict.keys():
-                                        country=adminDict[2]
-                                        countryCache[osmId]=country
-                                else:
-                                    country=countryCache[osmId]
-
-                                if country!=None:
-                                    self.addToAddressTable2(refId, country, osmId, streetName, None, lat, lon)
-    #                            else:
-    #                                self.log("unknown country for %d"%(osmId))
+                                self.addToAddressTable2(refId, osmId, streetName, None, lat, lon)
                                 addressSet.add("%s-%s"%(streetName, osmId))
-
-                            resolved=True
                             break
-
-    #                if resolved==False:
-    #                    self.log("failed to resolve %s"%(streetName))
 
             print("")
 
@@ -2952,8 +2914,9 @@ class OSMDataImport(OSMDataSQLite):
                 for adminLevel2 in adminLevelList[i:]:
                     if resolved==True:
                         break
-                    for osmId2, cPolygon2, tags2 in polyList[adminLevel2]:
-                        if cPolygon2.overlaps(cPolygon):
+                    for osmId2, cPolygon2, _ in polyList[adminLevel2]:
+                        center = cPolygon.center()
+                        if cPolygon2.isInside(center[0], center[1]):
                             self.updateAdminAreaParent(osmId, osmId2)
                             resolved=True
                             break
