@@ -1337,7 +1337,7 @@ class OSMDataAccess(OSMDataSQLite):
 
         return resultList
 
-    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId, cityId, recursive):
+    def getPOIsOfNodeTypeWithDistance(self, lat, lon, nodeTypeList, countryId, cityId, recursive, distancekm = None):
         filterString=self.createSQLFilterStringForIN(nodeTypeList)
         if countryId!=None:
             if cityId!=None:
@@ -1359,7 +1359,8 @@ class OSMDataAccess(OSMDataSQLite):
             else:
                 self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE country=%d AND type IN %s'%(lon, lat, countryId, filterString))
         else:
-            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE type IN %s'%(lon, lat, filterString))
+            distanceDegree=distancekm/100
+            self.cursorNode.execute('SELECT refId, tags, type, layer, city, AsText(geom), GeodesicLength(MakeLine(geom, MakePoint(%f, %f, 4236))) FROM poiRefTable WHERE ROWID IN (SELECT rowid FROM idx_poiRefTable_geom WHERE rowid MATCH RTreeDistWithin(%f, %f, %f)) AND type IN %s'%(lon, lat, lon, lat, distanceDegree, filterString))
 
         allentries=self.cursorNode.fetchall()
         resultList=list()

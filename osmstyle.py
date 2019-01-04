@@ -18,7 +18,7 @@ class OSMStyle():
     SHOW_BRIDGES_START_ZOOM = 15
     SHOW_STREET_OVERLAY_START_ZOOM = 16
     USE_ANTIALIASING_START_ZOOM = 14
-    SHOW_BUILDING_START_ZOOM = 18
+    SHOW_BUILDING_START_ZOOM = 16
     SHOW_REF_LABEL_WAYS_START_ZOOM = 14
     SHOW_NAME_LABEL_WAYS_START_ZOOM = 17
     SHOW_POI_START_ZOOM = 14
@@ -29,8 +29,8 @@ class OSMStyle():
                    Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_PLACE:{"pixmap":None, "desc":"Place", "zoom":11},
-                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":None, "desc":"Motorway Exit", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_PLACE:{"pixmap":"poiPixmap", "desc":"Place", "zoom":11},
+                   Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"poiPixmap", "desc":"Motorway Exit", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_SUPERMARKET:{"pixmap":"supermarketPixmap", "desc":"Supermarket", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_AIRPORT:{"pixmap":"airportPixmap", "desc":"Airport", "zoom":SHOW_POI_START_ZOOM},
@@ -40,7 +40,7 @@ class OSMStyle():
                    Constants.POI_TYPE_PARK:{"pixmap":"parkPixmap", "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_DOG_PARK:{"pixmap":"dogLeashPixmap", "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOTEL:{"pixmap":"hotelPixmap", "desc":"Hotel", "zoom":SHOW_POI_START_ZOOM},
-                   Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":None, "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
+                   Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":"poiPixmap", "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
 
     AREA_INFO_DICT = {Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},
                     Constants.AREA_TYPE_BUILDING:{"desc":"Buildings", "zoom":SHOW_BUILDING_START_ZOOM},
@@ -88,6 +88,8 @@ class OSMStyle():
         self.pixmapDict["downloadPixmap"] = QPixmap(os.path.join(getImageRoot(), "download.png"))
         self.pixmapDict["followGPSPixmap"] = QPixmap(os.path.join(getImageRoot(), "gps.png"))
         self.pixmapDict["favoritesPixmap"] = QPixmap(os.path.join(getImageRoot(), "favorites.png"))
+        self.pixmapDict["favoritesBlackPixmap"] = QPixmap(os.path.join(getImageRoot(), "favorites_black.png"))
+
         self.pixmapDict["addressesPixmap"] = QPixmap(os.path.join(getImageRoot(), "addresses.png"))
         self.pixmapDict["routePixmap"] = QPixmap(os.path.join(getImageRoot(), "route.png"))
         self.pixmapDict["centerGPSPixmap"] = QPixmap(os.path.join(getImageRoot(), "center-gps.png"))
@@ -157,7 +159,7 @@ class OSMStyle():
         self.colorDict["nightModeColor"] = QColor(120, 120, 120, 70)
         self.colorDict["villageGreenAreaColor"] = QColor(0xcd, 0xeb, 0xb0)
         self.colorDict["cliffColor"] = QColor(Qt.darkGray)
-        self.colorDict["militaryColor"] = QColor(0xff, 0x55, 0x55)
+        self.colorDict["militaryColor"] = QColor(0xff, 0x55, 0x55, 128)
         self.colorDict["leisureUndefinedColor"] = Qt.red
         self.colorDict["farmyardColor"] = QColor(0xf5, 0xdc, 0xba)
         self.colorDict["rockColor"] = QColor(0xc1, 0xbf, 0xbf)
@@ -489,7 +491,7 @@ class OSMStyle():
         if zoom == 17:
             width = 3
         if adminLevel == 2:
-            width = width * 2
+            width = width * 3
         return width
 
     def getPenWithForPoints(self, zoom):

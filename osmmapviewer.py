@@ -959,8 +959,8 @@ class QtOSMWidget(QWidget):
     def displaySidebar(self):
         diff = 40 - 32
         if self.sidebarVisible == True:
-            textBackground = QRect(self.width() - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.height())
-            self.painter.fillRect(textBackground, self.style.getStyleColor("backgroundColor"))
+            self.sidebarRect = QRect(self.width() - SIDEBAR_WIDTH, 0, SIDEBAR_WIDTH, self.height())
+            self.painter.fillRect(self.sidebarRect, self.style.getStyleColor("backgroundColor"))
 
             self.painter.drawPixmap(self.width() - SIDEBAR_WIDTH + diff / 2, diff / 2, IMAGE_WIDTH, IMAGE_HEIGHT, self.style.getStylePixmap("minusPixmap"))
             self.minusRect = QRect(self.width() - SIDEBAR_WIDTH + diff / 2, diff / 2, IMAGE_WIDTH, IMAGE_HEIGHT)
@@ -2307,11 +2307,10 @@ class QtOSMWidget(QWidget):
 
         eventPos = QPoint(event.x(), event.y())
         if not self.moving:
-            if self.minusRect.contains(eventPos) or self.plusRect.contains(eventPos):
-                self.pointInsideZoomOverlay(event.x(), event.y())
-                return
-
-            if self.sidebarVisible == True:
+            if self.sidebarVisible == True and self.sidebarRect.contains(eventPos):
+                if self.minusRect.contains(eventPos) or self.plusRect.contains(eventPos):
+                    self.pointInsideZoomOverlay(event.x(), event.y())
+                    return
                 if self.searchRect.contains(eventPos):
                     self.osmWidget._showSearchMenu()
                     return
@@ -2329,8 +2328,7 @@ class QtOSMWidget(QWidget):
             self.lastMouseMoveY = event.y()
             self.showTrackOnMousePos(event.x(), event.y())
 
-        else:
-            self.moving = False
+        self.moving = False
 
     def pointInsideZoomOverlay(self, x, y):
         if self.minusRect.contains(x, y):
@@ -2360,9 +2358,12 @@ class QtOSMWidget(QWidget):
         self.mousePos = (event.x(), event.y())
 
     def mouseMoveEvent(self, event):
+        eventPos = QPoint(event.x(), event.y())
         if self.mousePressed == True:
-            self.moving = True
+            if self.sidebarVisible == True and self.sidebarRect.contains(eventPos):
+                return
 
+            self.moving = True
             dx = self.lastMouseMoveX - event.x()
             dy = self.lastMouseMoveY - event.y()
             self.osm_map_scroll(dx, dy)

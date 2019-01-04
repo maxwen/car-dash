@@ -73,7 +73,7 @@ class OSMDataSQLite():
             self.setPragmaForDB(self.cursorWay)
 
     def openNodeDB(self, pragmaImport=False):
-        self.connectionNode=sqlite3.connect(self.getNodeDBFile())
+        self.connectionNode=sqlite3.connect(self.getNodeDBFile(), check_same_thread=False)
         self.cursorNode=self.connectionNode.cursor()
         self.connectionNode.enable_load_extension(True)
         self.cursorNode.execute("SELECT load_extension('mod_spatialite.so')")
@@ -83,7 +83,7 @@ class OSMDataSQLite():
             self.setPragmaForDB(self.cursorNode)
 
     def openAdressDB(self, pragmaImport=False):
-        self.connectionAdress=sqlite3.connect(self.getAdressDBFile())
+        self.connectionAdress=sqlite3.connect(self.getAdressDBFile(), check_same_thread=False)
         self.cursorAdress=self.connectionAdress.cursor()
         if pragmaImport == True:
             self.setPragmaForDBImport(self.cursorAdress)
@@ -91,7 +91,7 @@ class OSMDataSQLite():
             self.setPragmaForDB(self.cursorAdress)
 
     def openAdminDB(self, pragmaImport=False):
-        self.connectionAdmin=sqlite3.connect(self.getAdminDBFile())
+        self.connectionAdmin=sqlite3.connect(self.getAdminDBFile(), check_same_thread=False)
         self.cursorAdmin=self.connectionAdmin.cursor()
         self.connectionAdmin.enable_load_extension(True)
         self.cursorAdmin.execute("SELECT load_extension('mod_spatialite.so')")
