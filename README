@@ -2,8 +2,19 @@ All build for python3
 
 Polygon3-3.0.7
 http://www.j-raedler.de/projects/polygon/
+sudo pip install Polygon3
 
 libspatialite-devel
 python3-sip
+
+import:
+
 imposm-parser
-https://github.com/lechup/imposm-parser
+https://github.com/maxwen/imposm-parser branch python3
+sudo python setup.py install
+
+check getOSMDataInfo for pbf files
+
+delete existing db
+export PYTHONPATH=`pwd`
+python osmparser/osmdataimport.py
