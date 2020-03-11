@@ -7,10 +7,11 @@ import sys
 import os
 import sqlite3
 from utils.osmutils import OSMUtils
-import pickle
+import json
 from utils.env import getDataRoot
 import re
 import cProfile
+import time
 
 #from pygraph-routing.dijkstrapygraph import DijkstraWrapperPygraph
 #from igraph.dijkstraigraph import DijkstraWrapperIgraph
@@ -78,6 +79,7 @@ class Constants():
     AREA_TYPE_AMENITY=7
     AREA_TYPE_BUILDING=8
     AREA_TYPE_LEISURE=9
+    AREA_TYPE_EXTRA_NATURAL_WATER=10
 
     LANDUSE_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "farmyard", "meadow", "residential", "greenfield", "brownfield", "commercial", "industrial", "railway", "water", "reservoir", "basin", "cemetery", "military", "recreation_ground", "village_green", "allotments", "orchard", "retail", "quarry"])
     LANDUSE_NATURAL_TYPE_SET=set(["forest", "grass", "field", "farm", "farmland", "meadow", "greenfield", "brownfield", "farmyard", "recreation_ground", "village_green", "allotments", "orchard"])
@@ -1416,7 +1418,7 @@ class OSMDataAccess(OSMDataSQLite):
             self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax))
         else:
             filterString=self.createSQLFilterStringForIN(streetTypeList)
-            self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))
+            self.cursorWay.execute('SELECT wayId, tags, refs, streetInfo, name, ref, maxspeed, poiList, layer, AsText(geom) FROM wayTable WHERE ROWID IN (SELECT rowid FROM idx_wayTable_geom WHERE rowid MATCH RTreeIntersects(%f, %f, %f, %f)) AND streetTypeId IN %s ORDER BY streetTypeId, layer'%(lonRangeMin, latRangeMin, lonRangeMax, latRangeMax, filterString))        
 
         wayIdSet=set()
         allentries=cursor.fetchall()
@@ -1429,17 +1431,19 @@ class OSMDataAccess(OSMDataSQLite):
         return resultList, wayIdSet
 
     def getAreaTagsWithId(self, osmId):
-        self.cursorArea.execute('SELECT tags FROM areaTable WHERE osmId=%d'%(osmId))
+        self.cursorArea.execute('SELECT type, tags FROM areaTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
         if len(allentries)==1:
-            tags=self.decodeTags(allentries[0][0])
-            return tags
+            areaType = allentries[0][0]
+            tags=self.decodeTags(allentries[0][1])
+            return areaType, tags
 
-        self.cursorArea.execute('SELECT tags FROM areaLineTable WHERE osmId=%d'%(osmId))
+        self.cursorArea.execute('SELECT type, tags FROM areaLineTable WHERE osmId=%d'%(osmId))
         allentries=self.cursorArea.fetchall()
         if len(allentries)==1:
-            tags=self.decodeTags(allentries[0][0])
-            return tags
+            areaType = allentries[0][0]
+            tags=self.decodeTags(allentries[0][1])
+            return areaType, tags
 
         return None
 

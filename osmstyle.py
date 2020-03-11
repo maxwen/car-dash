@@ -47,6 +47,7 @@ class OSMStyle():
                     Constants.AREA_TYPE_HIGHWAY_AREA:{"desc":"Highway Areas", "zoom":None},
                     Constants.AREA_TYPE_LANDUSE:{"desc":"Landuse", "zoom":None},
                     Constants.AREA_TYPE_NATURAL:{"desc":"Natural", "zoom":None},
+                    Constants.AREA_TYPE_EXTRA_NATURAL_WATER:{"desc":"Water", "zoom":None},
                     Constants.AREA_TYPE_RAILWAY:{"desc":"Railways", "zoom":None},
                     Constants.AREA_TYPE_AMENITY:{"desc":"Amenity", "zoom":None},
                     Constants.AREA_TYPE_TOURISM:{"desc":"Tourism", "zoom":None},

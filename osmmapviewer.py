@@ -1394,9 +1394,9 @@ class QtOSMWidget(QWidget):
             if geomType == 0:
                 painterPath = painterPath.translated(-map_x, -map_y)
                 if painterPath.contains(point0):
-                    tags = osmParserData.getAreaTagsWithId(osmId)
+                    areaType, tags = osmParserData.getAreaTagsWithId(osmId)
                     if tags != None:
-                        print("%d %s" % (osmId, tags))
+                        print("%d %d %s" % (osmId, areaType, tags))
 
     def event(self, event):
         if event.type() == QEvent.ToolTip:
@@ -1643,7 +1643,7 @@ class QtOSMWidget(QWidget):
             if areaType == Constants.AREA_TYPE_LANDUSE:
                 brush, pen = self.style.getBrushForLanduseArea(tags, self.map_zoom)
 
-            elif areaType == Constants.AREA_TYPE_NATURAL:
+            elif areaType == Constants.AREA_TYPE_NATURAL or areaType == Constants.AREA_TYPE_EXTRA_NATURAL_WATER:
                 brush, pen = self.style.getBrushForNaturalArea(tags, self.map_zoom)
                 # TODO: natural areas with landuse
                 if "landuse" in tags:

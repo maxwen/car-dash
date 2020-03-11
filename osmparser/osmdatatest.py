@@ -4,7 +4,7 @@ Created on Dec 13, 2011
 @author: maxl
 '''
 import sys
-import pickle
+import json
 import cProfile
 
 from utils.progress import ProgressBar
@@ -34,7 +34,7 @@ class OSMDataTest(OSMDataAccess):
 #        self.cursorNode.execute('SELECT refId, refType, tags, type, layer, country, city, AsText(geom) FROM poiRefTable')
         allentries=self.cursorNode.fetchall()
         for x in allentries:
-            print("%s %s %s"%(x[0], x[1], pickle.loads(x[2])))
+            print("%s %s %s"%(x[0], x[1], json.loads(x[2])))
 #            refId, lat, lon, tags, nodeType, layer, country, city=self.poiRefFromDB2(x)
 #            print("ref: " + str(refId) + "  lat: " + str(lat) + "  lon: " + str(lon) + " tags:"+str(tags) + " nodeType:"+str(nodeType) + " layer:"+str(layer) + " country:"+str(country)+" city:"+str(city))
         
@@ -138,7 +138,7 @@ class OSMDataTest(OSMDataAccess):
     def wayFromDBWithCoordsStringAll(self, x):
         wayId=int(x[0])
         tags=self.decodeTags(x[1])
-        refs=pickle.loads(x[2])
+        refs=json.loads(x[2])
         streetInfo=int(x[3])
         name=x[4]
         nameRef=x[5]

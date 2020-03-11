@@ -6,10 +6,10 @@ Created on Dec 13, 2011
 import sys
 import os
 import sqlite3
-import pickle
 import re
 import cProfile
 import time
+import json
 
 from utils.progress import ProgressBar
 from utils.env import getDataRoot, getPolyDataRoot
@@ -141,7 +141,7 @@ class OSMDataImport(OSMDataSQLite):
         return None, None, None
 
     def addToTmpWayRefTable(self, wayId, refs):
-        self.cursorTmp.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, pickle.dumps(refs)))
+        self.cursorTmp.execute('INSERT OR IGNORE INTO wayRefTable VALUES( ?, ?)', (wayId, json.dumps(refs)))
 
     def addToTmpRefWayTable(self, refid, wayId):
         storedRef, wayIdList=self.getTmpRefWayEntryForId(refid)
@@ -150,31 +150,31 @@ class OSMDataImport(OSMDataSQLite):
                 wayIdList=list()
             if not wayId in wayIdList:
                 wayIdList.append(wayId)
-            self.cursorTmp.execute('REPLACE INTO refWayTable VALUES( ?, ?)', (refid, pickle.dumps(wayIdList)))
+            self.cursorTmp.execute('REPLACE INTO refWayTable VALUES( ?, ?)', (refid, json.dumps(wayIdList)))
             return
 
         wayIdList=list()
         wayIdList.append(wayId)
-        self.cursorTmp.execute('INSERT INTO refWayTable VALUES( ?, ?)', (refid, pickle.dumps(wayIdList)))
+        self.cursorTmp.execute('INSERT INTO refWayTable VALUES( ?, ?)', (refid, json.dumps(wayIdList)))
 
     def getTmpWayRefEntry(self, wayId):
         self.cursorTmp.execute('SELECT * FROM wayRefTable WHERE wayId=%d'%(wayId))
         allentries=self.cursorTmp.fetchall()
         if len(allentries)==1:
-            return(allentries[0][0], pickle.loads(allentries[0][1]))
+            return(allentries[0][0], json.loads(allentries[0][1]))
         return None, None
 
     def getTmpRefWayEntryForId(self, ref):
         self.cursorTmp.execute('SELECT * FROM refWayTable WHERE refId=%d'%(ref))
         allentries=self.cursorTmp.fetchall()
         if len(allentries)==1:
-            return(allentries[0][0], pickle.loads(allentries[0][1]))
+            return(allentries[0][0], json.loads(allentries[0][1]))
         return None, None
 
     def createNodeDBTables(self):
         self.cursorNode.execute("SELECT InitSpatialMetaData(1)")
 
-        self.cursorNode.execute('CREATE TABLE poiRefTable (refId INTEGER, refType INTEGER, tags BLOB, type INTEGER, layer INTEGER, country INTEGER, city INTEGER, UNIQUE (refId, refType, type) ON CONFLICT IGNORE)')
+        self.cursorNode.execute('CREATE TABLE poiRefTable (refId INTEGER, refType INTEGER, tags JSON, type INTEGER, layer INTEGER, country INTEGER, city INTEGER, UNIQUE (refId, refType, type) ON CONFLICT IGNORE)')
         self.cursorNode.execute("CREATE INDEX poiRefId_idx ON poiRefTable (refId)")
         self.cursorNode.execute("CREATE INDEX type_idx ON poiRefTable (type)")
         self.cursorNode.execute("CREATE INDEX country_idx ON poiRefTable (country)")
@@ -183,17 +183,17 @@ class OSMDataImport(OSMDataSQLite):
 
     def createWayDBTables(self):
         self.cursorWay.execute("SELECT InitSpatialMetaData(1)")
-        self.cursorWay.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags BLOB, refs BLOB, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList BLOB, streetTypeId INTEGER, layer INTEGER)')
+        self.cursorWay.execute('CREATE TABLE wayTable (wayId INTEGER PRIMARY KEY, tags JSON, refs JSON, streetInfo INTEGER, name TEXT, ref TEXT, maxspeed INTEGER, poiList JSON, streetTypeId INTEGER, layer INTEGER)')
         self.cursorWay.execute("CREATE INDEX streetTypeId_idx ON wayTable (streetTypeId)")
         self.cursorWay.execute("SELECT AddGeometryColumn('wayTable', 'geom', 4326, 'LINESTRING', 2)")
 
-        self.cursorWay.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList BLOB)')
+        self.cursorWay.execute('CREATE TABLE crossingTable (id INTEGER PRIMARY KEY, wayId INTEGER, refId INTEGER, nextWayIdList JSON)')
         self.cursorWay.execute("CREATE INDEX wayId_idx ON crossingTable (wayId)")
         self.cursorWay.execute("CREATE INDEX refId_idx ON crossingTable (refId)")
 
     def createTmpTable(self):
-        self.cursorTmp.execute('CREATE TABLE refWayTable (refId INTEGER PRIMARY KEY, wayIdList BLOB)')
-        self.cursorTmp.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList BLOB)')
+        self.cursorTmp.execute('CREATE TABLE refWayTable (refId INTEGER PRIMARY KEY, wayIdList JSON)')
+        self.cursorTmp.execute('CREATE TABLE wayRefTable (wayId INTEGER PRIMARY KEY, refList JSON)')
 
     def createAddressTable(self):
         self.cursorAdress.execute('CREATE TABLE addressTable (id INTEGER PRIMARY KEY, refId INTEGER, country INTEGER, city INTEGER, postCode INTEGER, streetName TEXT, houseNumber TEXT, lat REAL, lon REAL)')
@@ -259,18 +259,18 @@ class OSMDataImport(OSMDataSQLite):
 
     def createAreaDBTables(self):
         self.cursorArea.execute("SELECT InitSpatialMetaData(1)")
-        self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER, areaId INTEGER, type INTEGER, tags BLOB, layer INTEGER, UNIQUE (osmId, areaId) ON CONFLICT IGNORE)')
+        self.cursorArea.execute('CREATE TABLE areaTable (osmId INTEGER, areaId INTEGER, type INTEGER, tags JSON, layer INTEGER, UNIQUE (osmId, areaId) ON CONFLICT IGNORE)')
         self.cursorArea.execute("CREATE INDEX osmId_idx ON areaTable (osmId)")
         self.cursorArea.execute("CREATE INDEX areaType_idx ON areaTable (type)")
         self.cursorArea.execute("SELECT AddGeometryColumn('areaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
 
-        self.cursorArea.execute('CREATE TABLE areaLineTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags BLOB, layer INTEGER)')
+        self.cursorArea.execute('CREATE TABLE areaLineTable (osmId INTEGER PRIMARY KEY, type INTEGER, tags JSON, layer INTEGER)')
         self.cursorArea.execute("CREATE INDEX areaLineType_idx ON areaLineTable (type)")
         self.cursorArea.execute("SELECT AddGeometryColumn('areaLineTable', 'geom', 4326, 'LINESTRING', 2)")
 
     def createAdminDBTables(self):
         self.cursorAdmin.execute("SELECT InitSpatialMetaData(1)")
-        self.cursorAdmin.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags BLOB, adminLevel INTEGER, parent INTEGER)')
+        self.cursorAdmin.execute('CREATE TABLE adminAreaTable (osmId INTEGER PRIMARY KEY, tags JSON, adminLevel INTEGER, parent INTEGER)')
         self.cursorAdmin.execute("CREATE INDEX adminLevel_idx ON adminAreaTable (adminLevel)")
         self.cursorAdmin.execute("CREATE INDEX parent_idx ON adminAreaTable (parent)")
         self.cursorAdmin.execute("SELECT AddGeometryColumn('adminAreaTable', 'geom', 4326, 'MULTIPOLYGON', 2)")
@@ -297,13 +297,13 @@ class OSMDataImport(OSMDataSQLite):
         wayId, tags, refs, streetInfo, name, nameRef, maxspeed, _, layer, coordsStr=self.getWayEntryForIdWithCoords(wayId)
         if wayId!=None:
             streetTypeId, _, _=self.decodeStreetInfo(streetInfo)
-            self.cursorWay.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, pickle.dumps(poiList), streetTypeId, layer))
+            self.cursorWay.execute('REPLACE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText("%s", 4326))'%(coordsStr), (wayId, self.encodeTags(tags), json.dumps(refs), streetInfo, name, nameRef, maxspeed, json.dumps(poiList), streetTypeId, layer))
 
     def addToWayTable(self, wayid, tags, refs, streetTypeId, name, nameRef, oneway, roundabout, maxspeed, tunnel, bridge, coords, layer):
         name=self.encodeStreetName(name)
         streetInfo=self.encodeStreetInfo2(streetTypeId, oneway, roundabout, tunnel, bridge)
         lineString=self.getGISUtils().createLineStringFromCoords(coords)
-        self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeTags(tags), pickle.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
+        self.cursorWay.execute('INSERT OR IGNORE INTO wayTable VALUES( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, LineFromText(%s, 4326))'%(lineString), (wayid, self.encodeTags(tags), json.dumps(refs), streetInfo, name, nameRef, maxspeed, None, streetTypeId, layer))
 
     def encodeStreetName(self, name):
         if name!=None:
@@ -311,7 +311,7 @@ class OSMDataImport(OSMDataSQLite):
         return name
 
     def addToCrossingsTable(self, wayid, refId, nextWaysList):
-        self.cursorWay.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, pickle.dumps(nextWaysList)))
+        self.cursorWay.execute('INSERT INTO crossingTable VALUES( ?, ?, ?, ?)', (self.crossingId, wayid, refId, json.dumps(nextWaysList)))
         self.crossingId=self.crossingId+1
 
     def addToEdgeTable(self, startRef, endRef, length, wayId, cost, reverseCost, streetInfo, coords):
@@ -900,8 +900,19 @@ class OSMDataImport(OSMDataSQLite):
 
                     if isNatural==True:
                         areaType=Constants.AREA_TYPE_NATURAL
+                        if "waterway" in tags:
+                             if tags["waterway"] in self.getWaterwayTypes():
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
+                        if "natural" in tags:
+                            if tags["natural"] in Constants.NATURAL_WATER_TYPE_SET:
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
+
                     elif isLanduse==True:
                         areaType=Constants.AREA_TYPE_LANDUSE
+                        if "landuse" in tags:
+                            if tags["landuse"] in Constants.LANDUSE_WATER_TYPE_SET:
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
+
                     elif isBuilding==True:
                         areaType=Constants.AREA_TYPE_BUILDING
                     elif isRailway==True:
@@ -1144,8 +1155,18 @@ class OSMDataImport(OSMDataSQLite):
                     areaType=None
                     if isNatural==True:
                         areaType=Constants.AREA_TYPE_NATURAL
+                        if "waterway" in tags:
+                             if tags["waterway"] in self.getWaterwayTypes():
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
+                        if "natural" in tags:
+                            if tags["natural"] in Constants.NATURAL_WATER_TYPE_SET:
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
+
                     elif isLanduse==True:
                         areaType=Constants.AREA_TYPE_LANDUSE
+                        if "landuse" in tags:
+                            if tags["landuse"] in Constants.LANDUSE_WATER_TYPE_SET:
+                                areaType=Constants.AREA_TYPE_EXTRA_NATURAL_WATER
                     elif isBuilding==True:
                         areaType=Constants.AREA_TYPE_BUILDING
                     elif isAeroway==True:
@@ -2307,9 +2328,9 @@ class OSMDataImport(OSMDataSQLite):
             wayResoled=False
             for x in allWays:
                 wayId=int(x[0])
-                refs=pickle.loads(x[1])
+                refs=json.loads(x[1])
                 if x[2]!=None:
-                    storedPOIList=pickle.loads(x[2])
+                    storedPOIList=json.loads(x[2])
                     poiList.extend(storedPOIList)
 
                 if refId in refs:
@@ -2331,7 +2352,7 @@ class OSMDataImport(OSMDataSQLite):
             #          relations_callback=self.parse_relations,
             #          coords_callback=self.parse_coords)
 
-            p = OSMParser(4, nodes_callback=None,
+            p = OSMParser(8, nodes_callback=None,
                       ways_callback=None,
                       relations_callback=None,
                       coords_callback=self.parse_coords)

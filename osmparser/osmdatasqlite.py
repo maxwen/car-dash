@@ -5,7 +5,7 @@ Created on Apr 30, 2012
 '''
 
 import sqlite3
-import pickle
+import json
 import os
 from utils.env import getDataRoot
 from utils.gisutils import GISUtils
@@ -160,7 +160,7 @@ class OSMDataSQLite():
 
     def wayFromDB(self, x):
         wayId=int(x[0])
-        refs=pickle.loads(x[2])
+        refs=json.loads(x[2])
         tags=self.decodeTags(x[1])
         streetInfo=int(x[3])
         name=x[4]
@@ -168,13 +168,13 @@ class OSMDataSQLite():
         maxspeed=int(x[6])
         poiList=None
         if x[7]!=None:
-            poiList=pickle.loads(x[7])
+            poiList=json.loads(x[7])
 
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList)
 
     def wayFromDBWithCoordsString(self, x):
         wayId=int(x[0])
-        refs=pickle.loads(x[2])
+        refs=json.loads(x[2])
         tags=self.decodeTags(x[1])
         streetInfo=int(x[3])
         name=x[4]
@@ -182,7 +182,7 @@ class OSMDataSQLite():
         maxspeed=int(x[6])
         poiList=None
         if x[7]!=None:
-            poiList=pickle.loads(x[7])
+            poiList=json.loads(x[7])
         layer=int(x[8])
         coordsStr=x[9]
         return (wayId, tags, refs, streetInfo, name, nameRef, maxspeed, poiList, layer, coordsStr)
@@ -201,7 +201,7 @@ class OSMDataSQLite():
         crossingEntryId=x[0]
         wayid=x[1]
         refId=x[2]
-        nextWayIdList=pickle.loads(x[3])
+        nextWayIdList=json.loads(x[3])
         return (crossingEntryId, wayid, refId, nextWayIdList)
 
     def edgeFromDB(self, x):
@@ -435,13 +435,13 @@ class OSMDataSQLite():
     def decodeTags(self, plainTags):
         if plainTags==None:
             return dict()
-        tags=pickle.loads(plainTags)
+        tags=json.loads(plainTags)
         return tags
 
     def encodeTags(self, tags):
         if len(tags.keys())==0:
             return None
-        pickeledTags=pickle.dumps(tags)
+        pickeledTags=json.dumps(tags)
         return pickeledTags
 
     def getAllAdminAreas(self, adminLevelList, sortByAdminLevel):
