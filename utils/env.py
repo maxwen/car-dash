@@ -8,6 +8,7 @@ import os
 
 DEFAULT_ROOT= os.path.join(os.environ['HOME'], "workspaces", "car-dash")
 defaultTileHome=os.path.join("Maps", "osm", "tiles")
+defaultDBHome=os.path.join("Maps", "osm", "db")
 
 def getRoot():
     if "CARDASH_ROOT" in os.environ:
@@ -28,4 +29,6 @@ def getPolyDataRootSimple():
 
 def getPolyDataRoot():
     return os.path.join(getRoot(), "poly")
-        
+
+def getDBRoot():
+    return os.path.join(os.environ['HOME'], defaultDBHome)

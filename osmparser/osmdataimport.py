@@ -2528,13 +2528,14 @@ class OSMDataImport(OSMDataSQLite):
             #self.log("vacuum address DB")
             #self.vacuumAddressDB()
 
-        self.log('removeUnnededPOIs ' + time.asctime(time.localtime(time.time())))
-        self.removeUnnededPOIs()
-        self.log('createPOIEntriesForWays ' + time.asctime(time.localtime(time.time())))
-        self.createPOIEntriesForWays()
-        self.log('resolvePOIRefs '+ time.asctime(time.localtime(time.time())))
-        self.resolvePOIRefs()
-        self.resolvePOICountry()
+        if createNodeDB==True:
+            self.log('removeUnnededPOIs ' + time.asctime(time.localtime(time.time())))
+            self.removeUnnededPOIs()
+            self.log('createPOIEntriesForWays ' + time.asctime(time.localtime(time.time())))
+            self.createPOIEntriesForWays()
+            self.log('resolvePOIRefs '+ time.asctime(time.localtime(time.time())))
+            self.resolvePOIRefs()
+            self.resolvePOICountry()
 
         #self.log("vaccum node DB")
         #self.vacuumNodeDB()

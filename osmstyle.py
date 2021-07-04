@@ -29,6 +29,9 @@ class OSMStyle():
                    Constants.POI_TYPE_GAS_STATION:{"pixmap":"gasStationPixmap", "desc":"Gas Station", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PARKING:{"pixmap":"parkingPixmap", "desc":"Parking", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOSPITAL:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_CLINIC:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_DOCTOR:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_PHARMACY:{"pixmap":"hospitalPixmap", "desc":"Hospital", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_PLACE:{"pixmap":"poiPixmap", "desc":"Place", "zoom":11},
                    Constants.POI_TYPE_MOTORWAY_JUNCTION:{"pixmap":"poiPixmap", "desc":"Motorway Exit", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_POLICE:{"pixmap":"policePixmap", "desc":"Police", "zoom":SHOW_POI_START_ZOOM},
@@ -40,6 +43,9 @@ class OSMStyle():
                    Constants.POI_TYPE_PARK:{"pixmap":"parkPixmap", "desc":"Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_DOG_PARK:{"pixmap":"dogLeashPixmap", "desc":"Dog Park", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_HOTEL:{"pixmap":"hotelPixmap", "desc":"Hotel", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_BANK:{"pixmap":"poiPixmap", "desc":"Hotel", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_ATM:{"pixmap":"poiPixmap", "desc":"Hotel", "zoom":SHOW_POI_START_ZOOM},
+                   Constants.POI_TYPE_POST:{"pixmap":"poiPixmap", "desc":"Hotel", "zoom":SHOW_POI_START_ZOOM},
                    Constants.POI_TYPE_NATURE_RESERVE:{"pixmap":"poiPixmap", "desc":"Nature Reserve", "zoom":SHOW_POI_START_ZOOM}}
 
     AREA_INFO_DICT = {Constants.AREA_TYPE_AEROWAY:{"desc":"Aeroways", "zoom":None},

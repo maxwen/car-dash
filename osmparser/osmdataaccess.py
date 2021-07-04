@@ -69,6 +69,13 @@ class Constants():
     POI_TYPE_DOG_PARK=17
     POI_TYPE_NATURE_RESERVE=18
     POI_TYPE_HOTEL=19
+    POI_TYPE_DOCTOR=20
+    POI_TYPE_PHARMACY=21
+    POI_TYPE_CLINIC=22
+    POI_TYPE_BANK=23
+    POI_TYPE_ATM=24
+    POI_TYPE_POST=25
+    POI_TYPE_EDUCATION=26
 
     AREA_TYPE_LANDUSE=1
     AREA_TYPE_NATURAL=2
@@ -110,7 +117,18 @@ class Constants():
                        "parking": POI_TYPE_PARKING,
                        "hospital": POI_TYPE_HOSPITAL,
                        "police": POI_TYPE_POLICE,
-                       "veterinary":POI_TYPE_VETERIANERY}
+                       "veterinary":POI_TYPE_VETERIANERY,
+                       "clinic": POI_TYPE_CLINIC,
+                       "doctor": POI_TYPE_DOCTOR,
+                       "pharmacy": POI_TYPE_PHARMACY,
+                       "atm" : POI_TYPE_ATM,
+                       "bank" : POI_TYPE_BANK,
+                       "post_office" : POI_TYPE_POST,
+                       "dentist" : POI_TYPE_DOCTOR,
+                       "school" : POI_TYPE_EDUCATION,
+                       "college" : POI_TYPE_EDUCATION,
+                       "kindergarten" : POI_TYPE_EDUCATION,
+                       "university" : POI_TYPE_EDUCATION}
     AMENITY_AREA_TYPE_SET=set(["parking", "grave_yard"])
 
     TOURISM_POI_TYPE_DICT={"camp_site": POI_TYPE_CAMPING,
@@ -125,7 +143,9 @@ class Constants():
                        "nature_reserve": POI_TYPE_NATURE_RESERVE}
     LEISURE_AREA_TYPE_SET=set(["dog_park", "park", "nature_reserve"])
 
-    SHOP_POI_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET}
+    SHOP_POI_TYPE_DICT={"supermarket": POI_TYPE_SUPERMARKET,
+    "convenience": POI_TYPE_SUPERMARKET,
+    "department_store": POI_TYPE_SUPERMARKET}
 
     HIGHWAY_POI_TYPE_DICT={"motorway_junction": POI_TYPE_MOTORWAY_JUNCTION,
                        "speed_camera": POI_TYPE_ENFORCEMENT}

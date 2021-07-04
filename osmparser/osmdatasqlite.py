@@ -7,7 +7,7 @@ Created on Apr 30, 2012
 import sqlite3
 import json
 import os
-from utils.env import getDataRoot
+from utils.env import getDataRoot, getDBRoot
 from utils.gisutils import GISUtils
 
 class OSMDataSQLite():
@@ -321,7 +321,7 @@ class OSMDataSQLite():
 
     # TODO: should be relativ to this dir by default
     def getDataDir(self):
-        return os.path.join(getDataRoot(), "data2")
+        return getDBRoot();
 
     def getEdgeDBFile(self):
         file="edge.db"
